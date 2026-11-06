@@ -67,6 +67,10 @@ list limit; legacy runs without advisory metadata are not warnings. The job deta
 screen explains all four factors. Health reads never change backup admission,
 leases, execution, or completion.
 
+### Idempotent job creation
+
+`POST /api/tenants/{id}/backup-jobs` honours an optional `Idempotency-Key` (1-128 printable ASCII). The job stores the key and a SHA-256 fingerprint of the normalised request; a typed database login enters the fingerprint only as a salted hash. An unconditional unique index on (tenant, key) backs it, so a disabled job keeps its key. Same key and same request answers `200` with the original job (no credential exchange, audit entry or schedule synchronisation happens again); same key and another request answers `409 idempotency_conflict`. Concurrent identical requests on any API node produce exactly one job. A typed login is stored under a reference derived from the request, so a retry reuses the one credential, and a request that creates nothing (validation error, conflict, unknown agent) removes the credential it stored. Without a key the request is not deduplicated. Jobs created before the migration have no key and stay valid. Other tenants' keys never match.
+
 ### Engine admission and SQL Server on Linux
 
 A backup run is admitted only if the job's agent reported `<engine>.backup.full` (`mssql`, `postgresql`, `file-system`) as Supported; otherwise the start answers `409 agent_engine_unsupported` and no run is created. A Windows agent always reports SQL Server. A **Linux agent reports SQL Server only with a valid `Mapped` staging area**: `Agent__Backup__Staging__Mapping=Mapped`, an existing, writable `AgentDirectory`, and a `ServerDirectory` (the same directory as the SQL Server process sees it) that differs from it. `SameHost` staging on Linux does not advertise SQL Server. This is capability only; the pre-check at the start of every SQL Server run still proves the login and that the server really sees the staging path (`server-unreachable`, `authentication-failed`, `staging-mapping-mismatch`, ...) and fails the run fast without an artifact.

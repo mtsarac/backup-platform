@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import { act, renderHook } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useRunBackupJob } from './hooks'
-import { startJobRun } from './api'
+import { useRunBackupJob, useSaveBackupJob } from './hooks'
+import { saveBackupJob, startJobRun } from './api'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: false }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
@@ -42,5 +42,25 @@ describe('manuel çalıştırma', () => {
     expect(calls[0][2]).toBe(calls[1][2])
     await act(async () => { await result.current.run('job-a') })
     expect(vi.mocked(startJobRun).mock.calls[2][2]).not.toBe(calls[0][2])
+  })
+})
+describe('job oluşturma', () => {
+  const input = { name: 'Gece' } as never
+  it('belirsiz hatadan sonra aynı anahtarla yeniden dener, başarıdan sonra yeni anahtar kullanır', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('Network failed')).mockResolvedValue({ id: 'job-a' } as never)
+    const { result } = renderHook(() => useSaveBackupJob(), { wrapper })
+    await act(async () => { await expect(result.current.mutateAsync(input)).rejects.toThrow('Network failed') })
+    await act(async () => { await result.current.mutateAsync(input) })
+    const calls = vi.mocked(saveBackupJob).mock.calls
+    expect(calls[0][3]).toMatch(/^[0-9a-f-]{36}$/i)
+    expect(calls[1][3]).toBe(calls[0][3])
+    await act(async () => { await result.current.mutateAsync(input) })
+    expect(vi.mocked(saveBackupJob).mock.calls[2][3]).not.toBe(calls[0][3])
+  })
+  it('düzenlemede (PUT) anahtar göndermez', async () => {
+    vi.mocked(saveBackupJob).mockResolvedValue({ id: 'job-a' } as never)
+    const { result } = renderHook(() => useSaveBackupJob('job-a'), { wrapper })
+    await act(async () => { await result.current.mutateAsync(input) })
+    expect(vi.mocked(saveBackupJob).mock.calls[0][3]).toBeUndefined()
   })
 })

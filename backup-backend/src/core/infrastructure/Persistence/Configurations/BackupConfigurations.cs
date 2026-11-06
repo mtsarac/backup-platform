@@ -74,6 +74,10 @@ internal sealed class BackupJobConfiguration : IEntityTypeConfiguration<BackupJo
         BackupMapping.Agent(builder);
         BackupMapping.Configuration(builder);
         builder.Property(job => job.Name).HasMaxLength(200).IsRequired();
+        builder.Property(job => job.IdempotencyKey).HasMaxLength(128);
+        builder.Property(job => job.RequestFingerprint).HasMaxLength(64);
+        // Unconditional: no filter on Enabled, so disabling a job never frees its key. Legacy jobs have NULL, which a unique index allows any number of times.
+        builder.HasIndex(job => new { job.TenantId, job.IdempotencyKey }).IsUnique();
         BackupMapping.RetryPolicy(builder, job => job.RetryPolicy);
         BackupMapping.RetentionPolicy(builder, job => job.RetentionPolicy);
         builder.Property(job => job.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();

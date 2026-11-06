@@ -3,6 +3,7 @@ import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
+import { useIdempotencyKey } from '@/lib/idempotency-key'
 import { getBackupJob, getBackupJobs, getOccurrences, saveBackupJob, setJobEnabled, startJobRun } from './api'
 import type { BackupJobInput } from './types'
 
@@ -30,10 +31,13 @@ function useInvalidateJobs() {
 export function useSaveBackupJob(id?: string) {
   const { tenantId, canOperate, canAdmin } = useTenant()
   const invalidate = useInvalidateJobs()
+  // A creation whose outcome is unknown (network error, 5xx) is retried with the same key, so the server never creates the job twice.
+  const idempotency = useIdempotencyKey()
   return useMutation({ mutationFn: (input: BackupJobInput) => {
     if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
-    return saveBackupJob(tenantId, { ...input, retention: canAdmin ? input.retention : undefined }, id)
-  }, onSuccess: invalidate, onError: invalidate })
+    const body = { ...input, retention: canAdmin ? input.retention : undefined }
+    return id ? saveBackupJob(tenantId, body, id) : saveBackupJob(tenantId, body, undefined, idempotency.keyFor(body))
+  }, onSuccess: invalidate, onError: invalidate, onSettled: (_data, error) => idempotency.settle(error ?? undefined) })
 }
 export function useToggleBackupJob() {
   const { tenantId, canOperate } = useTenant()

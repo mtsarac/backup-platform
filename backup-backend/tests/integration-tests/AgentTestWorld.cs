@@ -38,9 +38,10 @@ internal sealed class BrowserSession(HttpClient client)
 {
     public HttpClient Client { get; } = client;
 
-    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null, bool includeAntiforgery = true)
+    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null, bool includeAntiforgery = true, IReadOnlyDictionary<string, string>? headers = null)
     {
         using var request = new HttpRequestMessage(method, path);
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>()) request.Headers.Add(name, value);
         if (body is not null)
         {
             request.Content = JsonContent.Create(body);

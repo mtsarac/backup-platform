@@ -43,28 +43,63 @@ public static class BackupEndpoints
         BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
+        var keys = context.Request.Headers["Idempotency-Key"];
+        if (keys.Count > 1 || keys.Count == 1 && !BackupInputValidation.IsValidKey(keys[0])) return Invalid("The Idempotency-Key must be 1-128 printable ASCII characters.");
+        // Without a key the request is not deduplicated (the previous behaviour); with one, the whole creation below is idempotent per (tenant, key).
+        var idempotency = keys.Count == 1 && request.Configuration is not null ? BackupJobFingerprint.Compute(tenant.TenantId!, keys[0]!, request) : null;
+        string? minted = null;
         try
         {
-            request = request with { Configuration = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken) };
-            var job = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken, currentUser.UserId!);
-            if (job is null) return Results.NotFound();
-            if (job.Schedule is not null) await schedules.TrySynchronizeAsync(tenant.TenantId!, job.Id, cancellationToken);
-            return Results.Created($"/api/tenants/{tenant.TenantId!.Value}/backup-jobs/{job.Id}", job);
+            // The replay answer comes BEFORE any side effect: no credential is exchanged, nothing is audited, no schedule is touched for a repeat.
+            if (idempotency is not null && await service.FindReplayAsync(tenant.TenantId!, idempotency, cancellationToken) is { } replay) return ReplayResult(replay);
+            var exchanged = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken, idempotency?.Fingerprint);
+            if (request.Configuration?.DatabaseLogin is not null) minted = exchanged.DatabaseCredentialReference;
+            request = request with { Configuration = exchanged };
+            if (idempotency is null)
+            {
+                var plain = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken, currentUser.UserId!);
+                if (plain is null) { await DropMintedAsync(vault, minted); return Results.NotFound(); }
+                if (plain.Schedule is not null) await schedules.TrySynchronizeAsync(tenant.TenantId!, plain.Id, cancellationToken);
+                return Results.Created($"/api/tenants/{tenant.TenantId!.Value}/backup-jobs/{plain.Id}", plain);
+            }
+            var created = await service.CreateJobAsync(tenant.TenantId!, request, idempotency, cancellationToken, currentUser.UserId!);
+            switch (created.Outcome)
+            {
+                case BackupJobCreateOutcome.NotFound:
+                    await DropMintedAsync(vault, minted);
+                    return Results.NotFound();
+                case BackupJobCreateOutcome.Conflict:
+                    await DropMintedAsync(vault, minted);
+                    return ReplayResult(created);
+                case BackupJobCreateOutcome.Replayed:
+                    // Lost a race against an identical request: the seeded reference is the winner's own, so the credential stays.
+                    return ReplayResult(created);
+                default:
+                    if (created.Job!.Schedule is not null) await schedules.TrySynchronizeAsync(tenant.TenantId!, created.Job.Id, cancellationToken);
+                    return Results.Created($"/api/tenants/{tenant.TenantId!.Value}/backup-jobs/{created.Job.Id}", created.Job);
+            }
         }
-        catch (InvalidBackupScheduleException exception) { return InvalidSchedule(exception); }
-        catch (InvalidBackupJobException exception) { return InvalidJob(exception); }
-        catch (ArgumentException) { return Invalid("Invalid backup job configuration."); }
+        // These are all raised before anything is committed: a credential minted for the request is dropped, never left unreferenced.
+        catch (InvalidBackupScheduleException exception) { await DropMintedAsync(vault, minted); return InvalidSchedule(exception); }
+        catch (InvalidBackupJobException exception) { await DropMintedAsync(vault, minted); return InvalidJob(exception); }
+        catch (ArgumentException) { await DropMintedAsync(vault, minted); return Invalid("Invalid backup job configuration."); }
     }
 
+    private static IResult ReplayResult(BackupJobCreation answer) => answer.Outcome == BackupJobCreateOutcome.Replayed
+        ? Results.Ok(answer.Job)
+        : Results.Conflict(new { error = "idempotency_conflict", message = "This Idempotency-Key was already used for a different backup job request." });
+
+    private static Task DropMintedAsync(DatabaseCredentialVault vault, string? reference) => reference is null ? Task.CompletedTask : vault.DeleteAsync(reference, CancellationToken.None);
+
     /// <summary>Turns a typed login into a platform-minted reference (and drops the typed value); a reference must already belong to the job's agent.</summary>
-    private static async Task<BackupExecutionConfiguration> ExchangeLoginAsync(DatabaseCredentialVault vault, Guid agentId, BackupExecutionConfiguration? configuration, CancellationToken cancellationToken)
+    private static async Task<BackupExecutionConfiguration> ExchangeLoginAsync(DatabaseCredentialVault vault, Guid agentId, BackupExecutionConfiguration? configuration, CancellationToken cancellationToken, string? referenceSeed = null)
     {
         if (configuration is null) return configuration!;
         try
         {
             return configuration with
             {
-                DatabaseCredentialReference = await vault.PrepareAsync(agentId, configuration.IntegratedSecurity, configuration.DatabaseLogin, configuration.DatabaseCredentialReference, cancellationToken),
+                DatabaseCredentialReference = await vault.PrepareAsync(agentId, configuration.IntegratedSecurity, configuration.DatabaseLogin, configuration.DatabaseCredentialReference, cancellationToken, referenceSeed),
                 DatabaseLogin = null
             };
         }

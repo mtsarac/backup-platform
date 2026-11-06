@@ -60,7 +60,33 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(120);
 
+    /// <summary>The answer a key the tenant already used gets, decided before any side effect: the original job for the same request, a conflict for another. Null when the key is new.</summary>
+    public async Task<BackupJobCreation?> FindReplayAsync(TenantId tenantId, BackupJobIdempotency idempotency, CancellationToken cancellationToken)
+    {
+        var existing = await store.FindJobByIdempotencyKeyAsync(tenantId, idempotency.Key, cancellationToken);
+        return existing is null ? null : Replay(existing, idempotency);
+    }
+
+    private BackupJobCreation Replay(BackupJob existing, BackupJobIdempotency idempotency) => existing.RequestFingerprint == idempotency.Fingerprint
+        ? new(BackupJobCreateOutcome.Replayed, ToView(existing, time.GetUtcNow()))
+        : new(BackupJobCreateOutcome.Conflict, null);
+
+    /// <summary>Creates the job under <paramref name="idempotency"/>: of any number of concurrent identical requests (on any node) exactly one creates, audits and wins.</summary>
+    public async Task<BackupJobCreation> CreateJobAsync(TenantId tenantId, CreateBackupJobRequest request, BackupJobIdempotency idempotency, CancellationToken cancellationToken, UserId? actor = null)
+    {
+        var candidate = NewJob(tenantId, request, idempotency);
+        var job = await store.CreateJobAsync(candidate, cancellationToken, actor);
+        if (job is null) return new(BackupJobCreateOutcome.NotFound, null);
+        return job.Id == candidate.Id ? new(BackupJobCreateOutcome.Created, ToView(job, time.GetUtcNow())) : Replay(job, idempotency);
+    }
+
     public async Task<BackupJobView?> CreateJobAsync(TenantId tenantId, CreateBackupJobRequest request, CancellationToken cancellationToken, UserId? actor = null)
+    {
+        var job = await store.CreateJobAsync(NewJob(tenantId, request, null), cancellationToken, actor);
+        return job is null ? null : ToView(job, time.GetUtcNow());
+    }
+
+    private BackupJob NewJob(TenantId tenantId, CreateBackupJobRequest request, BackupJobIdempotency? idempotency)
     {
         BackupInputValidation.Validate(request);
         var configuration = ToDomain(request.Configuration);
@@ -71,8 +97,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         var newJob = new BackupJob(Guid.NewGuid(), tenantId, request.Name.Trim(), new AgentId(request.AgentId), configuration, now,
             ToDomain(request.RetryPolicy), overlap, schedule, ToDomain(request.Retention, retention ?? new BackupRetentionOptions(), null));
         if (request.Enabled is false) newJob.Disable();
-        var job = await store.CreateJobAsync(newJob, cancellationToken, actor);
-        return job is null ? null : ToView(job, now);
+        if (idempotency is not null) newJob.RecordCreationRequest(idempotency.Key, idempotency.Fingerprint);
+        return newJob;
     }
 
     /// <summary>
