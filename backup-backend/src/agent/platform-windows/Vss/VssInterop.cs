@@ -60,7 +60,7 @@ internal interface IVssBackupComponents
     [PreserveSig] int SetAdditionalRestores(); // layout only
     [PreserveSig] int SetPreviousBackupStamp(); // layout only
     [PreserveSig] int SaveAsXML(); // layout only
-    [PreserveSig] int BackupComplete(); // layout only
+    [PreserveSig] int BackupComplete(out IVssAsync async);
     [PreserveSig] int AddAlternativeLocationMapping(); // layout only
     [PreserveSig] int AddRestoreSubcomponent(); // layout only
     [PreserveSig] int SetFileRestoreStatus(); // layout only

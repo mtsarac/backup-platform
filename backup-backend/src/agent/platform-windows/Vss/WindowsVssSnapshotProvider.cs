@@ -54,6 +54,8 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
         if (!Path.IsPathFullyQualified(snapshotDirectory)) throw new ArgumentException("Snapshot directory must be absolute.", nameof(snapshotDirectory));
         var ledger = Path.Combine(snapshotDirectory, LedgerDirectory);
         if (!Directory.Exists(ledger)) return Task.FromResult(0);
+        // A ledger anybody else could write is not proof of ownership: refuse to act on it at all.
+        ProtectedLedger.Verify(ledger);
         return OnComThread(() =>
         {
             var removed = 0;
@@ -62,6 +64,7 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(entry), "N", out var id) || Live.ContainsKey(id)) continue;
+                if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 || !ProtectedLedger.IsEntry(entry)) continue;
                 try
                 {
                     using var requester = Requester.Open(VssNative.ContextAll);
@@ -117,6 +120,28 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
             catch { Marshal.FinalReleaseComObject(components); throw; }
         }
 
+        /// <summary>
+        /// Tells the writers the backup finished. This is a copy backup with no components selected, so it truncates nothing; it is the protocol's closing
+        /// notification and its failure never fails a backup that already read its data.
+        /// </summary>
+        public void Complete()
+        {
+            try
+            {
+                if (components.BackupComplete(out var async) < 0) return;
+                try
+                {
+                    var deadline = DateTime.UtcNow.AddSeconds(30);
+                    while (DateTime.UtcNow < deadline && async.QueryStatus(out var status, out _) >= 0 && status == VssNative.AsyncPending) _ = async.Wait(250);
+                }
+                finally { Marshal.FinalReleaseComObject(async); }
+            }
+            catch (COMException) { }
+        }
+
+        /// <summary>Tells the writers the backup did not finish (creation failed or was cancelled).</summary>
+        public void Abort() { try { _ = components.AbortBackup(); } catch (COMException) { } }
+
         /// <summary>Deletes one snapshot by id; false when it no longer exists.</summary>
         public bool Delete(Guid snapshot)
         {
@@ -157,6 +182,7 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
             Guid snapshot = default;
             string? entry = null;
             Exception? cleanupFailure = null;
+            var failed = false;
             var apartment = VssNative.CoInitializeEx(IntPtr.Zero, 0 /* COINIT_MULTITHREADED */) >= 0;
             try
             {
@@ -166,19 +192,20 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
                 {
                     snapshot = id;
                     Live[id] = 0;
-                    Directory.CreateDirectory(ledger);
+                    ProtectedLedger.Ensure(ledger);
                     entry = Path.Combine(ledger, id.ToString("N") + LedgerExtension);
-                    File.WriteAllText(entry, DateTimeOffset.UtcNow.ToString("O"));
+                    File.WriteAllText(entry, ProtectedLedger.Marker + "\n" + DateTimeOffset.UtcNow.ToString("O"));
                 });
                 created.SetResult(path);
                 release.Wait();
             }
-            catch (Exception exception) { created.TrySetException(exception); }
+            catch (Exception exception) { failed = true; created.TrySetException(exception); }
             finally
             {
                 if (requester is not null)
                 {
-                    try { if (snapshot != default) requester.Delete(snapshot); if (entry is not null) File.Delete(entry); }
+                    // Explicit delete (not only the auto-release of the context): the result is reported to the caller and the ledger entry is dropped only once the snapshot is gone.
+                    try { if (failed) requester.Abort(); else requester.Complete(); if (snapshot != default) requester.Delete(snapshot); if (entry is not null) File.Delete(entry); }
                     catch (Exception exception) { cleanupFailure = exception; }
                     finally { requester.Dispose(); }
                 }

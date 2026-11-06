@@ -131,6 +131,11 @@ $creation = Invoke-CimMethod -ClassName Win32_Service -MethodName Create -Argume
 }
 if ($creation.ReturnValue -ne 0) { throw 'Windows Service registration failed.' }
 $serviceSid = (New-Object Security.Principal.NTAccount $account).Translate([Security.Principal.SecurityIdentifier])
+$stage = "$store.enrollment-$([Guid]::NewGuid().ToString('N'))"
+$registered = $true
+$addedBackupOperators = $false
+$completed = $false
+try {
 if ($EnableVss) {
     Write-Warning ("-EnableVss: adding $account to the local Backup Operators group. Its token will then carry SeBackupPrivilege and SeRestorePrivilege (the agent does not enable them, " +
         "but the group can read and write any file once they are enabled). The account is NOT made a local administrator. Uninstall removes the membership again only if this installer added it.")
@@ -141,11 +146,9 @@ if ($EnableVss) {
         if ($LASTEXITCODE -ne 0) { throw 'The service account could not be added to Backup Operators.' }
         # Remembered so that uninstall removes only a membership this installer created.
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -Type DWord -Value 1
+        $addedBackupOperators = $true
     }
 }
-$stage = "$store.enrollment-$([Guid]::NewGuid().ToString('N'))"
-$registered = $true
-try {
     # Existing store protection is checked by the service itself, not rewritten by the interactive installer.
     if (-not (Test-Path -LiteralPath $store)) { New-ProtectedDirectory $store $serviceSid }
     New-ProtectedDirectory $stage $serviceSid
@@ -213,9 +216,15 @@ try {
     & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
     & sc.exe failureflag $ServiceName 1 | Out-Null
     Start-Service $ServiceName
+    $completed = $true
     Write-Host 'BackupAgent identity verified and service started as NT SERVICE\BackupAgent. The backend will show Online after heartbeat and capability sync.'
 }
 finally {
+    # A failed install must not leave the extra group membership behind; one that was already there (not added here) is never touched.
+    if ($addedBackupOperators -and -not $completed) {
+        & net.exe localgroup $backupOperators $account /delete | Out-Null
+        Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -ErrorAction SilentlyContinue
+    }
     # Remove the secret staging request even on failure; retain identity and the stopped service for diagnosis/reinstall.
     if ($registered -and (Test-Path -LiteralPath $stage)) {
         $running = Get-Service $ServiceName -ErrorAction SilentlyContinue

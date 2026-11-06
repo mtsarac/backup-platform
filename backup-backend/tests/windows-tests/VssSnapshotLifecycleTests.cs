@@ -78,4 +78,32 @@ public sealed class VssSnapshotLifecycleTests
         }
         finally { Directory.Delete(directory, true); }
     }
+
+    [WindowsFact]
+    public async Task A_ledger_that_other_accounts_can_write_is_refused_and_a_forged_entry_deletes_nothing()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "bp-vss-ledger-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var ledger = Path.Combine(directory, ".bp-vss");
+            BackupPlatform.Agent.Platform.Windows.Vss.ProtectedLedger.Ensure(ledger);
+            BackupPlatform.Agent.Platform.Windows.Vss.ProtectedLedger.Verify(ledger);
+
+            var forged = Path.Combine(ledger, Guid.NewGuid().ToString("N") + ".owned");
+            await File.WriteAllTextAsync(forged, "not the marker");
+            Assert.False(BackupPlatform.Agent.Platform.Windows.Vss.ProtectedLedger.IsEntry(forged));
+            Assert.Equal(0, await new WindowsVssSnapshotProvider().SweepLeftoversAsync(directory, default));
+            Assert.True(File.Exists(forged), "an entry without the agent's marker is ignored, not consumed");
+
+            var users = new System.Security.AccessControl.FileSystemAccessRule(new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+                System.Security.AccessControl.FileSystemRights.Write, System.Security.AccessControl.AccessControlType.Allow);
+            var security = new DirectoryInfo(ledger).GetAccessControl();
+            security.AddAccessRule(users);
+            new DirectoryInfo(ledger).SetAccessControl(security);
+            Assert.Throws<UnauthorizedAccessException>(() => BackupPlatform.Agent.Platform.Windows.Vss.ProtectedLedger.Verify(ledger));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new WindowsVssSnapshotProvider().SweepLeftoversAsync(directory, default));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
 }
