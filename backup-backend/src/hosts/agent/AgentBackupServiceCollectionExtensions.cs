@@ -46,8 +46,14 @@ public static class AgentBackupServiceCollectionExtensions
         // Shared by the pipeline (which holds the staged names of running attempts) and the staging cleanup (which must skip them).
         services.TryAddSingleton<StagingUsageRegistry>();
         services.AddSingleton<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotCommandRunner, BackupPlatform.SnapshotProviders.Abstractions.SnapshotCommandRunner>();
+#if AGENT_PLATFORM_WINDOWS
+        services.AddSingleton<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotProvider, BackupPlatform.Agent.Platform.Windows.Vss.WindowsVssSnapshotProvider>();
+#endif
         foreach (var kind in Enum.GetValues<BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind>())
         {
+#if AGENT_PLATFORM_WINDOWS
+            if (kind == BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Vss) continue;
+#endif
             services.AddSingleton<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotProvider>(provider =>
                 new BackupPlatform.SnapshotProviders.Abstractions.NativeSnapshotProvider(kind,
                     provider.GetRequiredService<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotCommandRunner>()));
@@ -89,7 +95,7 @@ public static class AgentBackupServiceCollectionExtensions
             var snapshotKinds = fileSources?.Values.Select(source => source.SnapshotKind).OfType<BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind>().Distinct().ToArray() ?? [];
             if (snapshotKinds.Length > 0)
                 services.AddHostedService(provider => new AgentSnapshotSweepHostedService(
-                    provider.GetServices<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotProvider>().OfType<BackupPlatform.SnapshotProviders.Abstractions.NativeSnapshotProvider>()
+                    provider.GetServices<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotProvider>().OfType<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotSweeper>()
                         .Where(native => snapshotKinds.Contains(native.Kind)).ToArray(),
                     staging.AgentDirectory.Value, provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILogger<AgentSnapshotSweepHostedService>>()));
             if (AgentBackupOptionsValidation.TryCreateCleanup(options.Staging?.Cleanup, out var cleanup))

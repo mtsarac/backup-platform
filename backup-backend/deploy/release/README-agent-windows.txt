@@ -30,6 +30,19 @@ Existing identity and uninstall
   .\Uninstall-BackupAgentService.ps1 -RemoveIdentity
     Explicitly deletes local enrollment (alias -PurgeIdentity). Does not delete/revoke the backend Agent record.
 
+Windows VSS snapshots (optional, off by default)
+  A file source with SnapshotKind "Vss" reads a point-in-time shadow copy through the native VSS requester API. That needs two things:
+    - Features__windowsVss=true in the service environment, and
+    - NT SERVICE\BackupAgent in the local Backup Operators group. The agent never runs as an administrator.
+  Install with the group membership:  .\Install-BackupAgentService.ps1 -BinaryDirectory .\bin -EnableVss
+  The installer prints a warning first: Backup Operators carries SeBackupPrivilege and SeRestorePrivilege (any file can be read or
+  written once they are enabled; the agent leaves them disabled). Without -EnableVss the group is never touched, and the first
+  VSS backup fails with the cause "PermissionDenied" instead of a generic staging error.
+  Uninstall-BackupAgentService.ps1 removes the membership again only if the installer added it. A membership you added by hand stays.
+  The shadow copy is created for the backup, owned by the agent process and released when the backup ends; if the agent is killed
+  Windows removes it. No other shadow copy on the machine is ever touched.
+  Verified on Windows 11. Windows Server has not been verified.
+
 Backup-specific setup is separate from onboarding: staging/storage and SQL Server credentials are documented in
 config\agent.settings.example.json. Never put Agent permanent credentials in that file.
 

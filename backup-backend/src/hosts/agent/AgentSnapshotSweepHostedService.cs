@@ -5,11 +5,11 @@ using Microsoft.Extensions.Logging;
 namespace BackupPlatform.Agent.Host;
 
 /// <summary>
-/// Removes native snapshots (LVM, Btrfs, ZFS) a crashed agent or a failed rollback left behind, once at start and then hourly. Providers skip snapshots
+/// Removes native snapshots (VSS, LVM, Btrfs, ZFS) a crashed agent or a failed rollback left behind, once at start and then hourly. Providers skip snapshots
 /// a running backup still owns. Housekeeping: a failed sweep is logged by exception type only and never takes the agent down.
 /// </summary>
 internal sealed partial class AgentSnapshotSweepHostedService(
-    IReadOnlyList<NativeSnapshotProvider> providers,
+    IReadOnlyList<ISnapshotSweeper> providers,
     string snapshotDirectory,
     TimeProvider time,
     ILogger<AgentSnapshotSweepHostedService> logger) : BackgroundService

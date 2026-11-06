@@ -22,6 +22,7 @@ const messages: Record<string, string> = {
   get verification_failed() { return tx("Fiziksel dosyanın silindiği doğrulanamadı.") },
   get PermissionDenied() { return tx("İşlem için gerekli izinler bulunmuyor.") },
   get AuthenticationFailed() { return tx("Database kimlik doğrulaması başarısız oldu. Credential referansını kontrol edin.") },
+  get SnapshotFailed() { return tx("Kaynağın anlık görüntüsü (snapshot) alınamadı.") },
   get StagingInvalid() { return tx("Staging dizini veya SQL Server dosya eşlemesi geçersiz.") },
   get AgentLost() { return tx("Agent bağlantısı kaybedildi; bu attempt tamamlanamadı.") },
   get ScheduleGraceExpired() { return tx("Zamanlanan backup için tolerans süresi doldu.") },

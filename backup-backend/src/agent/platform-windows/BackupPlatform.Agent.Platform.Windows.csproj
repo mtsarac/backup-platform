@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\core\BackupPlatform.Agent.Core.csproj" />
     <ProjectReference Include="..\..\providers\backup\abstractions\BackupPlatform.BackupProviders.Abstractions.csproj" />
+    <ProjectReference Include="..\..\providers\snapshot\abstractions\BackupPlatform.SnapshotProviders.Abstractions.csproj" />
     <ProjectReference Include="..\..\providers\storage\abstractions\BackupPlatform.StorageProviders.Abstractions.csproj" />
   </ItemGroup>
 

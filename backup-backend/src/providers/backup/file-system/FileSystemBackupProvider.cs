@@ -58,7 +58,7 @@ public sealed class FileSystemBackupProvider(IEnumerable<ISnapshotProvider> snap
             {
                 var provider = snapshots.SingleOrDefault(candidate => candidate.Kind == kind) ?? throw new InvalidOperationException("The configured snapshot provider is unavailable.");
                 var nativeSource = source.SnapshotSource ?? (kind == SnapshotKind.Vss ? Path.GetPathRoot(root)! : root);
-                var relative = kind == SnapshotKind.Vss ? Path.GetRelativePath(nativeSource, root) : source.SnapshotRelativePath;
+                var relative = kind == SnapshotKind.Vss ? Path.GetRelativePath(nativeSource, root).Replace('\\', '/') : source.SnapshotRelativePath;
                 lease = await provider.CreateAsync(new SnapshotRequest(nativeSource, staging, "bp_" + Guid.NewGuid().ToString("N"), source.LvmSize), cancellationToken).ConfigureAwait(false);
                 root = CheckedPath(lease.Path, Normalize(relative, allowRoot: true));
             }

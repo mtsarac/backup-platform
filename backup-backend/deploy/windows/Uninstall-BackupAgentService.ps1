@@ -49,6 +49,13 @@ if (Get-ScheduledTask -TaskName 'BackupAgentUpdate' -ErrorAction SilentlyContinu
 }
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($service) {
+    # Only a Backup Operators membership the installer added (-EnableVss) is removed, and before the service key (and its marker) disappears.
+    $marker = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -ErrorAction SilentlyContinue).BackupOperatorsAddedByInstaller
+    if ($marker -eq 1) {
+        $backupOperators = (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-551').Translate([Security.Principal.NTAccount]).Value.Split('\')[1]
+        & net.exe localgroup $backupOperators "NT SERVICE\$ServiceName" /delete | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Warning 'The Backup Operators membership of the service account was already gone or could not be removed; check the group.' }
+    }
     if ($service.Status -ne 'Stopped') {
         Stop-Service -Name $ServiceName -Force
         $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(60))

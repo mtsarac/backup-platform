@@ -113,7 +113,10 @@ public enum BackupFailureCause
     StagingInvalid,
 
     /// <summary>A storage destination could not be reached or written.</summary>
-    StorageUnavailable
+    StorageUnavailable,
+
+    /// <summary>The point-in-time snapshot of the source (VSS, LVM, Btrfs, ZFS) could not be created or released.</summary>
+    SnapshotFailed
 }
 
 /// <summary>

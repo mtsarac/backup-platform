@@ -174,7 +174,7 @@ A feature that can be switched off is one line in `Features` (`src/core/contract
 | `supportSessions` | off | `/api/platform/support-sessions*` and `/api/tenants/{id}/support-access*` not registered; no UI entry |
 | `smb` | off | SMB connections are hidden or rejected, new backup admissions and credential issuance are blocked, and SMB is not offered as a provider |
 | `sizeAnomaly` | off | runs are not evaluated, the health summary lists none, the `backup_size_anomaly` event cannot be selected |
-| `windowsVss` / `linuxSnapshots` | off | agent-side: the agent refuses to start with a file source whose `SnapshotKind` is `Vss` / `Lvm`, `Btrfs` or `Zfs` (set `Features__windowsVss=true` in the agent's environment) |
+| `windowsVss` / `linuxSnapshots` | off | agent-side: the agent refuses to start with a file source whose `SnapshotKind` is `Vss` / `Lvm`, `Btrfs` or `Zfs` (set `Features__windowsVss=true` in the agent's environment). Windows VSS uses the native requester API and needs `NT SERVICE\BackupAgent` in Backup Operators (`Install-BackupAgentService.ps1 -EnableVss`, see `deploy/release/README-agent-windows.txt`); a missing membership is reported as `PermissionDenied`, other snapshot errors as `SnapshotFailed` / `InvalidConfiguration`, never as `StagingInvalid` |
 | `externalSecrets` | off | `Secrets:Provider` other than `Database` (Vault, AWS Secrets Manager) stops the API from starting |
 | `replicaRepair` | **on** | policy exception so multi-destination repair keeps working; off removes the manual repair routes and stops automatic repair |
 
