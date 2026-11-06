@@ -321,6 +321,8 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         AgentCapabilityReport[] capabilities =
         [
             new() { Identifier = BackupTaskProtocol.MultiDestinationCapability, Support = "Supported" },
+            new() { Identifier = "mssql.backup.full", Support = "Supported" },
+            new() { Identifier = "postgres.backup.full", Support = "Supported" },
             new() { Identifier = BackupTaskProtocol.UploadBandwidthLimitCapability, Support = "Supported" },
             new() { Identifier = CapacityProbeProtocol.Capability, Support = "Supported" }
         ];

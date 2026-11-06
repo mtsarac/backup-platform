@@ -67,6 +67,10 @@ list limit; legacy runs without advisory metadata are not warnings. The job deta
 screen explains all four factors. Health reads never change backup admission,
 leases, execution, or completion.
 
+### Engine admission and SQL Server on Linux
+
+A backup run is admitted only if the job's agent reported `<engine>.backup.full` (`mssql`, `postgresql`, `file-system`) as Supported; otherwise the start answers `409 agent_engine_unsupported` and no run is created. A Windows agent always reports SQL Server. A **Linux agent reports SQL Server only with a valid `Mapped` staging area**: `Agent__Backup__Staging__Mapping=Mapped`, an existing, writable `AgentDirectory`, and a `ServerDirectory` (the same directory as the SQL Server process sees it) that differs from it. `SameHost` staging on Linux does not advertise SQL Server. This is capability only; the pre-check at the start of every SQL Server run still proves the login and that the server really sees the staging path (`server-unreachable`, `authentication-failed`, `staging-mapping-mismatch`, ...) and fails the run fast without an artifact.
+
 ### Capacity task routing and history
 
 On-prem probes return HTTP 202 with `status: "Pending"` and a task identifier.

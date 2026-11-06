@@ -42,19 +42,20 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
     public ValueTask DisposeAsync() => Backup.DisposeAsync();
 
     // A snapshot sync replaces the agent's capability rows, and every backup run needs this one.
-    private static AgentCapabilityReport MultiDestination => AgentWorld.CapabilityReport(BackupTaskProtocol.MultiDestinationCapability);
+    private static AgentCapabilityReport[] BackupCapabilities { get; } =
+        [AgentWorld.CapabilityReport(BackupTaskProtocol.MultiDestinationCapability), AgentWorld.CapabilityReport("mssql.backup.full")];
 
     /// <summary>The agent reports (as a capability sync does) that it can restore.</summary>
     public async Task SyncCapabilityAsync(EnrolledAgent agent, string support = "Supported")
     {
-        using var response = await World.SyncCapabilitiesAsync(agent, AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport(Capability, support), MultiDestination));
+        using var response = await World.SyncCapabilitiesAsync(agent, AgentWorld.CapabilitySnapshot([AgentWorld.CapabilityReport(Capability, support), .. BackupCapabilities]));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     public async Task SyncCapabilitiesAsync(EnrolledAgent agent, params string[] capabilities)
     {
         using var response = await World.SyncCapabilitiesAsync(agent,
-            AgentWorld.CapabilitySnapshot(capabilities.Select(capability => AgentWorld.CapabilityReport(capability)).Append(MultiDestination).ToArray()));
+            AgentWorld.CapabilitySnapshot(capabilities.Select(capability => AgentWorld.CapabilityReport(capability)).Concat(BackupCapabilities).ToArray()));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 

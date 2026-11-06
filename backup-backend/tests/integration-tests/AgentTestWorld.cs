@@ -340,6 +340,9 @@ internal sealed class AgentWorld : IAsyncDisposable
             BackupPlatform.Contracts.Backups.BackupTaskProtocol.UploadBandwidthLimitCapability, CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
         context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
             "file-system.backup.full", CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
+        foreach (var engineCapability in new[] { BackupPlatform.Domain.Backups.DatabaseEngines.MsSql + ".backup.full" })
+            context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
+                engineCapability, CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
         context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
             "file-system.restore.full", CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
         context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
