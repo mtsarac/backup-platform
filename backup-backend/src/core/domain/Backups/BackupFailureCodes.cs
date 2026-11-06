@@ -26,6 +26,7 @@ public static class BackupFailureCodes
     public const string AuthenticationFailed = "AuthenticationFailed";
     public const string PermissionDenied = "PermissionDenied";
     public const string StagingInvalid = "StagingInvalid";
+    public const string SnapshotFailed = "SnapshotFailed";
     public const string QuotaExceeded = "QuotaExceeded";
     /// <summary>A job whose policy is Required produced (or reported) an artifact that is not encrypted. Never retried: another attempt would be given the same instruction.</summary>
     public const string EncryptionRequired = "EncryptionRequired";
@@ -56,7 +57,9 @@ public static class BackupFailureCodes
         [PermissionDenied] = false,
         [QuotaExceeded] = false,
         [EncryptionRequired] = false,
-        [StagingInvalid] = false
+        [StagingInvalid] = false,
+        // VSS and the volume managers fail transiently (another snapshot set in progress, a writer not answering); a new attempt takes a new snapshot.
+        [SnapshotFailed] = true
     };
 
     /// <summary>Codes an agent may report together with a Failed outcome.</summary>

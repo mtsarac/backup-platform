@@ -278,6 +278,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Fiziksel dosyanın silindiği doğrulanamadı.": {"tr":"Fiziksel dosyanın silindiği doğrulanamadı.","en":"Deletion of the physical file could not be verified."},
   "İşlem için gerekli izinler bulunmuyor.": {"tr":"İşlem için gerekli izinler bulunmuyor.","en":"The required permissions for this operation are missing."},
   "Database kimlik doğrulaması başarısız oldu. Credential referansını kontrol edin.": {"tr":"Veritabanı kimlik doğrulaması başarısız oldu. Kimlik bilgisi başvurusunu kontrol edin.","en":"Database authentication failed. Check the credential reference."},
+  "Kaynağın anlık görüntüsü (snapshot) alınamadı.": {"tr":"Kaynağın anlık görüntüsü (snapshot) alınamadı.","en":"The point-in-time snapshot of the source could not be created."},
   "Staging dizini veya SQL Server dosya eşlemesi geçersiz.": {"tr":"Hazırlama dizini veya SQL Server dosya eşlemesi geçersiz.","en":"The staging directory or SQL Server file mapping is invalid."},
   "Agent bağlantısı kaybedildi; bu attempt tamamlanamadı.": {"tr":"Yedekleme bilgisayarı bağlantısı kaybedildi; bu deneme tamamlanamadı.","en":"The backup computer connection was lost; this attempt could not be completed."},
   "Zamanlanan backup için tolerans süresi doldu.": {"tr":"Zamanlanan yedekleme için tolerans süresi doldu.","en":"The grace period for the scheduled backup expired."},

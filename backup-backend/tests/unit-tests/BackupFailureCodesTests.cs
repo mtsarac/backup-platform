@@ -10,7 +10,8 @@ public sealed class BackupFailureCodesTests
         BackupFailureCodes.DatabaseUnavailable,
         BackupFailureCodes.OperationTimedOut,
         BackupFailureCodes.StorageUnavailable,
-        BackupFailureCodes.ReplicaVerificationFailed
+        BackupFailureCodes.ReplicaVerificationFailed,
+        BackupFailureCodes.SnapshotFailed
     ];
 
     private static readonly string[] NonRetryable =
@@ -39,7 +40,7 @@ public sealed class BackupFailureCodesTests
     [
         "PreCheckFailed", "SqlBackupFailed", "VerificationFailed", "HashFailed", "StorageWriteFailed", "ReplicaVerificationFailed", "InternalError",
         "DatabaseUnavailable", "OperationTimedOut", "StorageUnavailable", "DatabaseNotFound", "InvalidConfiguration", "UnsupportedCapability",
-        "AuthenticationFailed", "PermissionDenied", "StagingInvalid", "QuotaExceeded", "EncryptionRequired"
+        "AuthenticationFailed", "PermissionDenied", "StagingInvalid", "QuotaExceeded", "EncryptionRequired", "SnapshotFailed"
     ];
 
     private static IEnumerable<string> AllDeclaredCodes() => typeof(BackupFailureCodes)

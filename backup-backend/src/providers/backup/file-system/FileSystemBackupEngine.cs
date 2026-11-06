@@ -75,10 +75,9 @@ public sealed class FileSystemBackupEngine(IReadOnlyDictionary<string, FileSyste
         {
             var cancelled = error is OperationCanceledException && cancellationToken.IsCancellationRequested;
             var cleanup = Cleanup(archivePath, cancelled || request.OnFailure == StagingFailurePolicy.Delete);
+            var (reason, cause) = FailureOf(error);
             var failure = new BackupFailure(cancelled ? BackupFailureKind.Cancelled : BackupFailureKind.VerificationFailed,
-                BackupExecutionStage.BackingUp, cancelled ? "cancelled" : "file-backup-failed", "The file backup did not complete; original source files were not changed.",
-                error is ArgumentException or FileNotFoundException or DirectoryNotFoundException or System.IO.InvalidDataException ? BackupFailureCause.InvalidConfiguration
-                : error is OperationCanceledException ? BackupFailureCause.Timeout : BackupFailureCause.StagingInvalid);
+                BackupExecutionStage.BackingUp, cancelled ? "cancelled" : reason, "The file backup did not complete; original source files were not changed.", cause);
             return new(cancelled ? FullBackupStatus.Cancelled : FullBackupStatus.Failed, failure, null, null, started, time.GetUtcNow(), started, null, null, BackupVerification.NotRun, [], cleanup);
         }
     }
@@ -168,6 +167,17 @@ public sealed class FileSystemBackupEngine(IReadOnlyDictionary<string, FileSyste
             throw new ArgumentException("File sources use local agent references without database credentials.");
     }
     private static BackupPreCheckReport Failed(string code, string message) => new([new("file-system.source", BackupPreCheckStatus.Failed, code, message, BackupFailureCause.InvalidConfiguration)]);
+    /// <summary>Snapshot failures keep their own cause; only an unclassified I/O failure is blamed on staging.</summary>
+    public static (string Reason, BackupFailureCause Cause) FailureOf(Exception error) => error switch
+    {
+        SnapshotException { Kind: SnapshotFailureKind.AccessDenied } => ("snapshot-access-denied", BackupFailureCause.PermissionDenied),
+        SnapshotException { Kind: SnapshotFailureKind.InvalidConfiguration } => ("snapshot-invalid-configuration", BackupFailureCause.InvalidConfiguration),
+        SnapshotException => ("snapshot-failed", BackupFailureCause.SnapshotFailed),
+        ArgumentException or FileNotFoundException or DirectoryNotFoundException or System.IO.InvalidDataException => ("file-backup-failed", BackupFailureCause.InvalidConfiguration),
+        OperationCanceledException => ("file-backup-failed", BackupFailureCause.Timeout),
+        _ => ("file-backup-failed", BackupFailureCause.StagingInvalid)
+    };
+
     private static StagingCleanup Cleanup(string? path, bool delete)
     {
         if (path is null || !File.Exists(path)) return StagingCleanup.NotNeeded;

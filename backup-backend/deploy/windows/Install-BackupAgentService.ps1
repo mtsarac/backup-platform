@@ -6,6 +6,7 @@ Run elevated from the published agent folder. One-time enrollment is performed b
 never by the interactive administrator: permanent identity uses DPAPI CurrentUser of NT SERVICE\BackupAgent.
 The one-time request is DPAPI LocalMachine encrypted, staged with only service/SYSTEM/Administrators access,
 and removed after completion. Tokens and permanent credentials are never placed in service arguments or registry.
+-EnableVss adds NT SERVICE\BackupAgent to the local Backup Operators group, which the Windows VSS snapshot feature needs; read the warning it prints. Without it the group is never touched.
 Omit EnrollmentToken to prompt securely for a new identity. An existing identity is preserved and verified instead;
 supplying a token with an existing identity is refused before contacting the backend. BackendUri is only needed for new enrollment.
 .EXAMPLE
@@ -19,7 +20,8 @@ param(
     [string] $EnrollmentToken,
     [string] $AgentName,
     [string] $StoreDirectory = (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent'),
-    [hashtable] $TrustedUpdateKeys = @{}
+    [hashtable] $TrustedUpdateKeys = @{},
+    [switch] $EnableVss
 )
 
 $ErrorActionPreference = 'Stop'
@@ -131,7 +133,23 @@ if ($creation.ReturnValue -ne 0) { throw 'Windows Service registration failed.' 
 $serviceSid = (New-Object Security.Principal.NTAccount $account).Translate([Security.Principal.SecurityIdentifier])
 $stage = "$store.enrollment-$([Guid]::NewGuid().ToString('N'))"
 $registered = $true
+$addedBackupOperators = $false
+$completed = $false
 try {
+if ($EnableVss) {
+    Write-Warning ("-EnableVss: adding $account to the local Backup Operators group. Its token will then carry SeBackupPrivilege and SeRestorePrivilege (the agent does not enable them, " +
+        "but the group can read and write any file once they are enabled). The account is NOT made a local administrator. Uninstall removes the membership again only if this installer added it.")
+    $backupOperators = (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-551').Translate([Security.Principal.NTAccount]).Value.Split('\')[1]
+    $already = @(Get-LocalGroupMember -Group $backupOperators -ErrorAction SilentlyContinue | Where-Object { $_.SID -eq $serviceSid })
+    if ($already.Count -eq 0) {
+        & net.exe localgroup $backupOperators $account /add | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'The service account could not be added to Backup Operators.' }
+        # Armed before anything else can fail, so the finally block always knows this installer owns the membership.
+        $addedBackupOperators = $true
+        # Remembered so that uninstall removes only a membership this installer created.
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -Type DWord -Value 1
+    }
+}
     # Existing store protection is checked by the service itself, not rewritten by the interactive installer.
     if (-not (Test-Path -LiteralPath $store)) { New-ProtectedDirectory $store $serviceSid }
     New-ProtectedDirectory $stage $serviceSid
@@ -199,9 +217,20 @@ try {
     & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
     & sc.exe failureflag $ServiceName 1 | Out-Null
     Start-Service $ServiceName
+    $completed = $true
     Write-Host 'BackupAgent identity verified and service started as NT SERVICE\BackupAgent. The backend will show Online after heartbeat and capability sync.'
 }
 finally {
+    # A failed install must not leave the extra group membership behind; one that was already there (not added here) is never touched.
+    if ($addedBackupOperators -and -not $completed) {
+        & net.exe localgroup $backupOperators $account /delete | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            # Keep the marker so uninstall retries the removal; the operator must know the account is still privileged.
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -Type DWord -Value 1 -ErrorAction SilentlyContinue
+            Write-Error "Install failed AND $account could not be removed from $backupOperators. Remove it manually (net localgroup `"$backupOperators`" `"$account`" /delete) or run Uninstall-BackupAgentService.ps1." -ErrorAction Continue
+        }
+        else { Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -ErrorAction SilentlyContinue }
+    }
     # Remove the secret staging request even on failure; retain identity and the stopped service for diagnosis/reinstall.
     if ($registered -and (Test-Path -LiteralPath $stage)) {
         $running = Get-Service $ServiceName -ErrorAction SilentlyContinue

@@ -25,7 +25,8 @@ public enum BackupTaskFailureCode
     AuthenticationFailed,
     PermissionDenied,
     StagingInvalid,
-    QuotaExceeded
+    QuotaExceeded,
+    SnapshotFailed
 }
 
 internal static class BackupTaskResultMapper
@@ -100,6 +101,7 @@ internal static class BackupTaskResultMapper
             BackupFailureCause.PermissionDenied => BackupTaskFailureCode.PermissionDenied,
             BackupFailureCause.StagingInvalid => BackupTaskFailureCode.StagingInvalid,
             BackupFailureCause.StorageUnavailable => BackupTaskFailureCode.StorageUnavailable,
+            BackupFailureCause.SnapshotFailed => BackupTaskFailureCode.SnapshotFailed,
             _ => MapKind(failure?.Kind)
         };
 
