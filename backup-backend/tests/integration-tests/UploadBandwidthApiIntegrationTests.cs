@@ -233,7 +233,7 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task A_job_profile_replaces_every_static_ceiling_including_unlimited_outside_windows(bool insideWindow)
+    public async Task A_job_profile_never_lifts_a_static_ceiling_inside_or_outside_its_window(bool insideWindow)
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(DateTimeOffset.Parse(insideWindow ? "2026-06-15T10:00:00Z" : "2026-06-15T19:00:00Z")));
         var jobId = await scenario.CreateJobAsync();
@@ -257,12 +257,11 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
         await scenario.StartAttemptAsync(claim);
         using var response = await PolicyAsync(scenario, claim);
         var policy = AgentWorld.ReadJson(response).Deserialize<UploadPolicyResponse>(JsonSerializerOptions.Web)!;
-        Assert.Equal(insideWindow ? 5_000_000L : (long?)null, policy.JobBytesPerSecond);
-        Assert.Equal(policy.JobBytesPerSecond, policy.EffectiveBytesPerSecond);
-        Assert.Null(policy.AgentBytesPerSecond);
-        Assert.Null(policy.TenantShareBytesPerSecond);
-        await using var context = fixture.CreatePlatformContext();
-        Assert.False(await context.UploadBandwidthGrants.AnyAsync(g => g.AttemptId == claim.AttemptId));
+        // The profile's 5 MB/s lies above the static job ceiling, so the lower one holds in both cases; the other ceilings stay in force too.
+        Assert.Equal(16_000, policy.JobBytesPerSecond);
+        Assert.Equal(16_000, policy.EffectiveBytesPerSecond);
+        Assert.Equal(32_000, policy.AgentBytesPerSecond);
+        Assert.Equal(48_000, policy.TenantShareBytesPerSecond);
         using var unassigned = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/jobs/{jobId}/profile", new { profileId = (Guid?)null });
         Assert.Equal(HttpStatusCode.OK, unassigned.StatusCode);
         using var fallback = await PolicyAsync(scenario, claim);

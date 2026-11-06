@@ -154,6 +154,7 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
             ?? assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Tenant);
 
         TimeSpan? nextTransition = null;
+        long? profileJob = null, profileAgent = null, profileTenant = null;
         if (assignment is not null)
         {
             var profile = await context.BandwidthProfiles.Include(p => p.Windows).AsNoTracking().SingleOrDefaultAsync(p => p.TenantId == tenantId && p.Id == assignment.ProfileId, cancellationToken);
@@ -165,16 +166,17 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
                     var remaining = transitionInstant.Value - now;
                     if (remaining > TimeSpan.Zero) nextTransition = remaining;
                 }
-                return new AttemptUploadLimits(
-                    assignment.Scope == UploadBandwidthScope.Job ? profileLimit : null,
-                    assignment.Scope == UploadBandwidthScope.Agent ? profileLimit : null,
-                    assignment.Scope == UploadBandwidthScope.Tenant ? profileLimit : null,
-                    NextTransition: nextTransition);
+                if (assignment.Scope == UploadBandwidthScope.Job) profileJob = profileLimit;
+                else if (assignment.Scope == UploadBandwidthScope.Agent) profileAgent = profileLimit;
+                else profileTenant = profileLimit;
             }
         }
 
-        return new AttemptUploadLimits(staticJob, staticAgent, staticTenant, NextTransition: nextTransition);
+        // A static ceiling is a hard cap: a profile only ever lowers the ceiling of its own scope (a zero window still pauses), and the other scopes stay in force.
+        return new AttemptUploadLimits(Lower(profileJob, staticJob), Lower(profileAgent, staticAgent), Lower(profileTenant, staticTenant), NextTransition: nextTransition);
     }
+
+    private static long? Lower(long? profile, long? ceiling) => profile is null ? ceiling : ceiling is null ? profile : Math.Min(profile.Value, ceiling.Value);
 
     public async Task<IReadOnlyList<BandwidthProfileView>> ListProfilesAsync(TenantId tenantId, CancellationToken cancellationToken)
     {

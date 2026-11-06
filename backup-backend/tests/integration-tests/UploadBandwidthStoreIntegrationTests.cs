@@ -128,6 +128,48 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(0, await TotalGrantedAsync(tenant));
     }
 
+    public static TheoryData<UploadBandwidthScope, UploadBandwidthScope> StaticAndProfileScopes()
+    {
+        var pairs = new TheoryData<UploadBandwidthScope, UploadBandwidthScope>();
+        foreach (var ceiling in Enum.GetValues<UploadBandwidthScope>())
+            foreach (var profile in Enum.GetValues<UploadBandwidthScope>()) pairs.Add(ceiling, profile);
+        return pairs;
+    }
+
+    [Theory]
+    [MemberData(nameof(StaticAndProfileScopes))]
+    public async Task A_profile_only_lowers_the_ceiling_of_its_own_scope_and_never_lifts_a_static_one(UploadBandwidthScope ceilingScope, UploadBandwidthScope profileScope)
+    {
+        const long Static = 300_000, Higher = 4_000_000, Lower = 100_000;
+        var tenant = await _kit.AddTenantAsync();
+        var (claim, agent, job) = await RunningAsync(tenant, T0);
+        Guid IdOf(UploadBandwidthScope scope) => scope switch { UploadBandwidthScope.Tenant => tenant.Value, UploadBandwidthScope.Agent => agent.AgentId.Value, _ => job.Id };
+        await SetAsync(tenant, ceilingScope, IdOf(ceilingScope), Static);
+
+        // T0 is a Monday 00:00 UTC and the attempt is observed 1 s later: the morning window covers that moment, the afternoon one does not.
+        async Task<AttemptUploadLimits> LimitsWithProfileAsync(long windowRate, bool inside = true)
+        {
+            var window = inside ? new TransferScheduleWindowDto(DayOfWeek.Monday, new TimeOnly(0, 0), new TimeOnly(12, 0), windowRate)
+                : new TransferScheduleWindowDto(DayOfWeek.Monday, new TimeOnly(12, 0), new TimeOnly(23, 0), windowRate);
+            var profile = await Bandwidth.SaveProfileAsync(tenant, null, "p" + Guid.NewGuid().ToString("N")[..6], "UTC", [window], UserId.New(), T0, default);
+            Assert.True(await Bandwidth.AssignProfileAsync(tenant, profileScope, IdOf(profileScope), profile.Id, UserId.New(), T0, default));
+            return (await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(1)), UploadSliceAction.Observe, Ttl, default))!;
+        }
+        long? Expect(UploadBandwidthScope scope, long? profileValue) =>
+            (scope == profileScope ? profileValue : null) is { } fromProfile ? (scope == ceilingScope ? Math.Min(fromProfile, Static) : fromProfile) : scope == ceilingScope ? Static : null;
+        void AssertLimits(AttemptUploadLimits limits, long? profileValue)
+        {
+            Assert.Equal(Expect(UploadBandwidthScope.Job, profileValue), limits.Job);
+            Assert.Equal(Expect(UploadBandwidthScope.Agent, profileValue), limits.Agent);
+            Assert.Equal(Expect(UploadBandwidthScope.Tenant, profileValue), limits.Tenant);
+        }
+
+        AssertLimits(await LimitsWithProfileAsync(Higher), Higher);
+        AssertLimits(await LimitsWithProfileAsync(Lower), Lower);
+        AssertLimits(await LimitsWithProfileAsync(Higher, inside: false), null);
+        Assert.True((await LimitsWithProfileAsync(0)).PauseRequested);
+    }
+
     [Fact]
     public async Task Two_uploads_of_one_tenant_never_hold_more_than_the_tenant_limit_and_converge_on_equal_slices()
     {

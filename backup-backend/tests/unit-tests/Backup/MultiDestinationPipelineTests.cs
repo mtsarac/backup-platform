@@ -79,6 +79,30 @@ public sealed class MultiDestinationPipelineTests : IDisposable
         Assert.All(stores, store => Assert.Empty(store.Objects));
     }
 
+    /// <summary>The agent upload ceiling is the aggregate of the agent's uploads only because a run writes its destinations one after another; this fails when they start to overlap.</summary>
+    [Fact]
+    public async Task Destinations_are_uploaded_one_after_another_never_at_the_same_time()
+    {
+        var running = 0;
+        var highest = 0;
+        var puts = 0;
+        var stores = Enumerable.Range(0, 3).Select(_ => NewStorage()).ToArray();
+        foreach (var store in stores)
+            store.OnPut = async (_, _, _, ct) =>
+            {
+                highest = Math.Max(highest, Interlocked.Increment(ref running));
+                Interlocked.Increment(ref puts);
+                try { await Task.Delay(50, ct); }
+                finally { Interlocked.Decrement(ref running); }
+                throw new StorageException(StorageFailureKind.Io, "stop after measuring");
+            };
+
+        await _h.RunAsync(Request([Destination("local", stores[0], true), Destination("sftp", stores[1]), Destination("central", stores[2])]));
+
+        Assert.Equal(3, puts);
+        Assert.Equal(1, highest);
+    }
+
     [Fact]
     public async Task Resume_after_a_pause_verifies_the_destination_that_finished_instead_of_failing_or_re_uploading_it()
     {

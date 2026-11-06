@@ -542,3 +542,67 @@ def perf_summary():
 
 if __name__=='__main__' and len(sys.argv)>1 and sys.argv[1]=='perf':
     lib.scenario('gap/PERF-05/cap-and-pause')(perf_summary)()
+
+def agent_multi_destination():
+    """One agent ceiling, one job writing three destinations (local, S3, SFTP): the destinations' bytes divided by the upload stage stay under the ceiling,
+    which they would not if the destinations uploaded in parallel."""
+    import api
+    t=G.GT('bwr'); G.ensure_agent('bwr','bwr'); base=lib.Tenant('a'); items=base.call('GET','/storage-connections')['items']
+    s3cfg=next(c for c in items if c['id']==lib.ST['connections']['s3'])['configuration']; sftpcfg=next(c for c in items if c['id']==lib.ST['connections']['sftp'])['configuration']
+    conns=[t.call('POST','/storage-connections',{'providerType':'s3','name':'gap-sp-bw-md-s3-'+uuid.uuid4().hex[:4],'configuration':s3cfg,'secret':{'accessKey':api.env['E2E_MINIO_USER'],'secretKey':api.env['E2E_MINIO_PASSWORD']}}),
+           t.call('POST','/storage-connections',{'providerType':'sftp','name':'gap-sp-bw-md-sftp-'+uuid.uuid4().hex[:4],'configuration':sftpcfg,'secret':{'password':lib.ST['fedora']['sftp_password']}})]
+    j=None; d=None; scope='agents/'+t.agents()['gap-sp-bwr']['agentId']; size=8*MB
+    try:
+        G.put_file('bwr','multi/source.bin',size)
+        dests=[G.gdest('local',primary=True),G.gdest('s3',conn=conns[0]['id'],loc='Backend',primary=False),G.gdest('sftp',conn=conns[1]['id'],loc='Backend',primary=False)]
+        j=G.new_job(t,t.agents()['gap-sp-bwr'],'bw-multi',G.gcfg(dests,paths=['multi']))
+        policy(t,scope,MB); rid=G.start_run(t,j); stages=[]; deadline=time.time()+400
+        while time.time()<deadline:
+            d=t.call('GET','/backup-runs/'+rid); a=d['attempts'][-1]
+            stages.append((time.time(),d['status'],a.get('progressStage'),a.get('progressAt')))
+            if d['status'] in lib.TERMINAL or d['status']=='Paused': break
+            time.sleep(.5)
+        else: raise TimeoutError(rid)
+        assert d['status']=='Succeeded',(d['status'],d.get('reason'))
+        art=G.arts(d)[0]; started=next(x[0] for x in stages if x[2]=='Uploading'); ended=next(x[0] for x in stages if x[0]>started and x[2]!='Uploading')
+        data={'run':rid,'destinations':len(dests),'artifact_bytes':art['sizeBytes'],'upload_stage_seconds':round(ended-started,2),'ceiling_Bps':MB,
+              'summed_Bps':round(len(dests)*art['sizeBytes']/(ended-started))}
+        assert ended-started>=20,'measurement window too short: '+json.dumps(data)
+        assert data['summed_Bps']<=1.2*MB,data
+        return data
+    finally:
+        policy(t,scope,None)
+        if j: cleanup(t,j,d)
+        shutil.rmtree(ROOT('bwr')/'files'/'multi',ignore_errors=True)
+        for c in conns: t.raw('DELETE','/storage-connections/'+c['id'])
+
+def tenant_three_agents():
+    """Three concurrent uploads from three agents of one tenant sum to at most the tenant ceiling over a window of at least 20 s."""
+    t=G.GT('bw'); names=['bw','bw2','bw3']; [G.ensure_agent('bw',n) for n in names]
+    jobs=[job(t,n,'tri-'+n,10*MB) for n in names]; out={}; policy(t,'tenant',512*1024)
+    def run(n,j):
+        try: out[n]=monitor(G.GT('bw'),j,n,timeout=300)
+        except Exception as e: out[n]=e
+    try:
+        th=[threading.Thread(target=run,args=(n,j)) for n,j in zip(names,jobs)]; [x.start() for x in th]; [x.join() for x in th]
+        assert not any(isinstance(v,Exception) for v in out.values()),str(out)
+        assert all(v[1]['status']=='Succeeded' for v in out.values()),[v[1]['status'] for v in out.values()]
+        series=[v[2] for v in out.values()]
+        start=max(next(x for x,y in s if y>0) for s in series)+8
+        end=min(next(x for x,y in s if y==max(z for _,z in s)) for s in series)-1
+        assert end-start>=20,f'all three uploads overlap for only {end-start:.1f}s'
+        combined=sorted(sum(at(s,x+5)-at(s,x) for s in series)/5 for x in range(math.ceil(start),math.floor(end)-4))
+        mean=sum(at(s,end)-at(s,start) for s in series)/(end-start)
+        data={'runs':[v[0] for v in out.values()],'overlap_s':round(end-start,1),'combined_mean_Bps':round(mean),'combined_p95_5s_Bps':round(combined[math.ceil(.95*len(combined))-1]),'limit_Bps':512*1024,'tolerance':'mean<=1.10x, p95(5s)<=1.15x'}
+        save('tenant-three-agents',series[0],{'others':series[1:],**data})
+        assert mean<=1.1*512*1024 and data['combined_p95_5s_Bps']<=1.15*512*1024,data
+        return data
+    finally:
+        policy(t,'tenant',None)
+        for n,j in zip(names,jobs):
+            cleanup(t,j,out[n][1] if isinstance(out.get(n),tuple) else None); shutil.rmtree(ROOT(n)/'files'/('tri-'+n),ignore_errors=True)
+
+if __name__=='__main__' and len(sys.argv)>1 and sys.argv[1]=='ceilings':
+    for n in ('bw','bw2'): G.ensure_agent('bw',n)
+    for name,fn in [('POL-08/static-with-active-profile',lambda:static_profile(False)),('POL-08/static-with-outside-profile',lambda:static_profile(True)),
+                    ('POL-07/tenant-three-agents',tenant_three_agents),('POL-08/agent-ceiling-multi-destination',agent_multi_destination)]: lib.scenario('gap/'+name)(fn)()
