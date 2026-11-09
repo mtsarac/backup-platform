@@ -33,7 +33,9 @@ public sealed class StagingCleanupHostedServiceTests : IDisposable
         var factory = _logs.CreateFactory();
         var cleaner = new StagingCleaner(
             new AgentStagingDirectory(new AgentPath(StagingPath)), _registry, _time, factory.CreateLogger<StagingCleaner>());
-        return new AgentStagingCleanupHostedService(cleaner, options ?? _options, _time, factory.CreateLogger<AgentStagingCleanupHostedService>());
+        var partials = new LocalPartialCleaner(new BackupPlatform.Agent.Core.Tasks.LocalVolumes(null, new Dictionary<string, BackupPlatform.StorageProviders.Abstractions.IStorageProvider>()),
+            (_, _) => Task.FromResult(false), _time, factory.CreateLogger<LocalPartialCleaner>());
+        return new AgentStagingCleanupHostedService(cleaner, partials, options ?? _options, _time, factory.CreateLogger<AgentStagingCleanupHostedService>());
     }
 
     private string WriteOldManagedFile(string database)

@@ -15,6 +15,9 @@ public sealed class LocalVolumes(IStorageProvider? defaultStorage, IReadOnlyDict
     public IStorageProvider? Resolve(string? volume) =>
         string.IsNullOrEmpty(volume) || volume == DefaultName ? defaultStorage : volumes.GetValueOrDefault(volume);
 
+    /// <summary>Every configured local disk, the default one included.</summary>
+    public IEnumerable<IStorageProvider> All() => volumes.Values.Concat(defaultStorage is null ? [] : [defaultStorage]);
+
     /// <summary>A volume name: one lowercase key segment (letters, digits, '-'), not the reserved default name.</summary>
     public static bool IsValidName(string? name) =>
         name is { Length: >= 1 and <= 32 } && name != DefaultName && name[0] != '-' && name[^1] != '-'

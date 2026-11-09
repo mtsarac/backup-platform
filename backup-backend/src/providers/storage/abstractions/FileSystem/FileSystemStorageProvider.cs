@@ -247,6 +247,26 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         });
     }
 
+    /// <summary>
+    /// Removes the retained <c>.partial</c> file named by <paramref name="providerState"/>, which must be a temporary name of <paramref name="key"/> itself (same directory, same final
+    /// name): ownership comes from the key, never from a name pattern over the directory. An already-gone file is success; a link or directory under that name is left alone and refused.
+    /// </summary>
+    public Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return Execute(cancellationToken, () =>
+        {
+            if (!IsTemporaryName(providerState) || !providerState.StartsWith("." + key.FileName + ".", StringComparison.Ordinal))
+                throw new StorageException(StorageFailureKind.InvalidConfiguration, "Invalid retained upload identity.");
+            var temporaryPath = Path.Combine(Path.GetDirectoryName(ResolveCheckedPath(key))!, providerState);
+            if (!TryGetAttributes(temporaryPath, out var attributes)) return true;
+            if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
+                throw new StorageException(StorageFailureKind.AccessDenied, "The retained upload is not a regular file.");
+            File.Delete(temporaryPath);
+            return true;
+        });
+    }
+
     /// <summary>Deletes only the object file. Directories created for its key are left in place (they hold no data, and removing them would race with concurrent writes into the same directory).</summary>
     public Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken)
     {
