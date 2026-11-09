@@ -9,7 +9,7 @@ const tabClass = (active: boolean) => cn('relative inline-flex min-h-9 pointer-c
 /** Tabs that are real routes (NavLinks in a labelled nav, current tab gets aria-current): `label` names the nav; `items` are `{ to, label, end? }` — set `end` on an index tab. Render it above an `<Outlet />` in a layout route, as pages/storage/storage-layout.tsx does. */
 export function RouteTabs({ label, items }: { label: string; items: readonly { to: string; label: ReactNode; end?: boolean }[] }) {
   useLanguage()
-  return <nav aria-label={label} className="-mb-px overflow-x-auto border-b border-border">
+  return <nav aria-label={label} className="mb-4 overflow-x-auto border-b border-border">
     <ul className="flex min-w-max gap-1">{items.map((item) => <li key={item.to}>
       <NavLink to={item.to} end={item.end} className={({ isActive }) => tabClass(isActive)}>{tx(item.label)}</NavLink>
     </li>)}</ul>
@@ -33,7 +33,7 @@ export function Tabs<T extends string>({ label, value, onChange, items, idPrefix
     onChange(next.value)
     refs.current.get(next.value)?.focus()
   }
-  return <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="-mb-px flex overflow-x-auto border-b border-border">
+  return <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="mb-4 flex overflow-x-auto border-b border-border">
     {items.map((item) => <button key={item.value} ref={(node) => { if (node) refs.current.set(item.value, node); else refs.current.delete(item.value) }} type="button" role="tab" id={`${idPrefix}-tab-${item.value}`}
       disabled={item.disabled} aria-selected={item.value === value} aria-controls={`${idPrefix}-panel-${item.value}`} tabIndex={item.value === value && !item.disabled ? 0 : -1}
       onClick={() => onChange(item.value)} className={cn(tabClass(item.value === value), 'disabled:cursor-not-allowed disabled:opacity-50')}>{tx(item.label)}</button>)}

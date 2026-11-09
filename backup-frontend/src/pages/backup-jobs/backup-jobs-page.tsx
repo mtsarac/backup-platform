@@ -50,7 +50,7 @@ export function BackupJobsPage() {
       <Link to={`${base}/backup-runs?jobId=${encodeURIComponent(job.id)}`} className={`block text-sm ${linkClass}`}>{tx("Tüm denemeler")}</Link>
     </div> : <span className="text-text-muted">{tx("Henüz çalıştırılmadı")}</span> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: job => canOperate ? <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" {...describedBy(runHint)} disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx("Şimdi çalıştır")}</Button>
+      <Button size="sm" variant="outline" {...describedBy(runHint)} disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx("Şimdi çalıştır")}</Button>
       <Button size="sm" variant="outline" {...describedBy(job.enabled ? disableHint : enableHint)} disabled={toggle.isPending} onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}>{job.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
     </div> : <span className="text-text-muted">{tx("Yöneticinize danışın")}</span> },
   ]

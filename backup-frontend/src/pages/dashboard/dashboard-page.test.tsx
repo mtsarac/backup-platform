@@ -1,5 +1,4 @@
 import { screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -49,7 +48,6 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 
 function renderDashboard() {
   return render(<MemoryRouter><DashboardPage /></MemoryRouter>)
 }
-const openDetails = () => userEvent.click(screen.getByText('Ayrıntılar'))
 
 beforeEach(() => {
   setFeatureFlags({ sizeAnomaly: true })
@@ -194,7 +192,6 @@ describe('dashboard information ownership', () => {
     const stale = { freshness: { score: 0, maxScore: 40, status: 'Degraded', reason: 'backup_stale' } }
     state.observability = { ...state.observability, state: 'Degraded', degraded: 5, jobs: ['a', 'b', 'c', 'd', 'e'].map((id, index) => jobHealth(id, `İş ${id}`, 'Degraded', 60 + index, stale)) }
     renderDashboard()
-    await openDetails()
     for (const id of ['a', 'b', 'c', 'd', 'e']) expect(screen.getAllByRole('link', { name: new RegExp(`İş ${id}`) })).toHaveLength(1)
     expect(within(screen.getByRole('list', { name: 'Öneriler' })).getAllByRole('link')).toHaveLength(3)
   })
@@ -219,7 +216,6 @@ describe('dashboard information ownership', () => {
   it('hides the health breakdown for a tenant without jobs', async () => {
     state.observability = emptyObservability()
     renderDashboard()
-    await openDetails()
     expect(screen.queryByText('Ortalama sağlık puanı')).not.toBeInTheDocument()
     expect(screen.queryByText('Sağlık değerlendirmesi için henüz iş yok.')).not.toBeInTheDocument()
   })
@@ -235,7 +231,6 @@ describe('dashboard missing-copy ownership', () => {
     ] }
     state.data.runs.replicationInsufficientLast24Hours = 4
     renderDashboard()
-    await openDetails()
     const risk = screen.getByRole('region', { name: 'Doğrulanmış kopyalar' })
     expect(within(risk).getByRole('alert')).toHaveTextContent('Son 24 saatte 4 yedekleme')
     expect(within(risk).getByRole('alert')).toHaveTextContent('Yedekler kullanılabilir durumda ama gereken kopya sayısına ulaşılamadı.')
@@ -260,14 +255,10 @@ describe('dashboard missing-copy ownership', () => {
 })
 
 describe('dashboard details', () => {
-  it('keeps the counters, observability panels and average score collapsed until opened', async () => {
+  it('shows the counters, observability panels and average score as plain sections, not behind a toggle', async () => {
     state.observability = { ...state.observability, averageScore: 70, capacityRisks: [{ connectionId: 'disk-risk', connectionName: 'Dolu disk', status: 'Critical', totalBytes: 1_000_000_000, usedBytes: 920_000_000, freeBytes: 80_000_000, reportedAt: '2026-10-21T12:00:00Z' }] }
     renderDashboard()
-    expect(screen.getByText('Ayrıntılar')).toBeVisible()
-    expect(screen.getByText('Dolu disk')).not.toBeVisible()
-    expect(screen.getByText('Ortalama sağlık puanı')).not.toBeVisible()
-    expect(screen.getByText('Çevrimdışı')).not.toBeVisible()
-    await openDetails()
+    expect(screen.queryByText('Ayrıntılar')).not.toBeInTheDocument()
     expect(screen.getByText('Dolu disk')).toBeVisible()
     expect(screen.getByText('Ortalama sağlık puanı')).toBeVisible()
     expect(screen.getByText('Çevrimdışı')).toBeVisible()
@@ -276,8 +267,6 @@ describe('dashboard details', () => {
   it('shows enabled and scheduled job counts as distinct facts once each', async () => {
     state.data.jobs = { total: 9, enabled: 7, scheduled: 3 }
     renderDashboard()
-    expect(screen.getByText('Etkin yedekleme işleri')).not.toBeVisible()
-    await openDetails()
     expect(screen.getAllByText('Etkin yedekleme işleri')).toHaveLength(1)
     expect(screen.getByText('Etkin yedekleme işleri').nextElementSibling).toHaveTextContent(/^7$/)
     expect(screen.getAllByText('Planlı yedekleme işleri')).toHaveLength(1)
@@ -293,7 +282,6 @@ describe('dashboard replication monitoring', () => {
       status: 'InsufficientReplicas', policySatisfied: false, destinations: [],
     } })]
     renderDashboard()
-    await openDetails()
     expect(screen.getByRole('alert')).toHaveTextContent('Son 24 saatte 1 yedekleme kullanılabilir yedek oluşturdu, ancak gereken doğrulanmış kopya sayısına ulaşamadı.')
     expect(screen.getByRole('link', { name: "Çoğaltma sonuçlarını inceleyin." })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
@@ -304,7 +292,6 @@ describe('dashboard replication monitoring', () => {
   it('alerts from the tenant-wide count even when the insufficient run is outside recent history', async () => {
     state.data.runs.replicationInsufficientLast24Hours = 9
     renderDashboard()
-    await openDetails()
     expect(screen.getByRole('alert')).toHaveTextContent('Son 24 saatte 9 yedekleme')
   })
 
@@ -358,7 +345,6 @@ describe('dashboard sentences and labels', () => {
 
   it('names the counters in plain words instead of raw state names', async () => {
     renderDashboard()
-    await openDetails()
     for (const label of ['Planlı yedekleme işleri', 'Yeniden denenecek', 'İptal isteniyor', 'Etkin yedekleme denemeleri', 'Silinmeyi bekleyen yedek dosyaları']) expect(screen.getByText(label)).toBeInTheDocument()
     for (const jargon of ['Scheduled Jobs', 'RetryPending', 'CancellationRequested', 'Aktif Runs', 'Etkin Jobs']) expect(screen.queryByText(jargon)).not.toBeInTheDocument()
   })
@@ -401,7 +387,6 @@ describe('observability dashboard', () => {
     setFeatureFlags({})
     state.observability = { ...emptyObservability(), totalJobs: 1, averageScore: 70, state: 'Degraded', degraded: 1, jobs: [jobHealth('job-risk', 'Riskli veritabanı', 'Degraded', 70)] }
     renderDashboard()
-    await openDetails()
     expect(screen.queryByText('Son 7 günün boyut anomalileri')).not.toBeInTheDocument()
   })
 
@@ -415,7 +400,6 @@ describe('observability dashboard', () => {
     }
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
     renderDashboard()
-    await openDetails()
     expect(screen.getAllByRole('link', { name: /Riskli veritabanı/ }).map(link => link.getAttribute('href'))).toContain('/tenants/tenant-a/backup-jobs/job-risk/edit')
     expect(screen.getByRole('link', { name: 'Dolu disk' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/disk-risk')
     expect(screen.getByRole('link', { name: 'Küçülen yedek' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-anomaly')

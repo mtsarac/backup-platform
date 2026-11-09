@@ -206,6 +206,14 @@ body {
     min-width: 1.5rem;
   }
 
+  /* Standalone links are a 24 px target with a mouse; links inside a paragraph keep their line box (running text). */
+  a[href]:not(p a, .sr-only) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    overflow-wrap: anywhere;
+  }
+
   @media (pointer: coarse) {
     [data-slot="button"], button, summary {
       min-height: 2.75rem;
@@ -218,8 +226,6 @@ body {
 
     /* Standalone links get the same target as buttons; links inside a paragraph keep their line box (running text). */
     a[href]:not(p a, .sr-only) {
-      display: inline-flex;
-      align-items: center;
       min-height: 2.75rem;
       min-width: 2.75rem;
     }
@@ -228,10 +234,6 @@ body {
     label:has(> input:is([type="checkbox"], [type="radio"])) {
       min-height: 2.75rem;
     }
-  }
-
-  a[href]:not(p a, .sr-only) {
-    overflow-wrap: anywhere;
   }
 
   @media (prefers-reduced-motion: reduce) {

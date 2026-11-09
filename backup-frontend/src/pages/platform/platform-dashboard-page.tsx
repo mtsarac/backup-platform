@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
 import { StatusPill } from '@/components/data/status-pill'
 import { PageHeader } from '@/components/ui/page-header'
-import { Section } from '@/components/ui/section'
 import { usePlatformSummary } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
 import { DashboardStorage } from '@/features/platform/storage/dashboard-storage'
@@ -33,7 +32,7 @@ export function PlatformDashboardPage() {
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <>
         <DashboardAttention data={data} />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-x-6 gap-y-4 grid-cols-2 xl:grid-cols-4">
           <Link to={platformPaths.tenants} className="block rounded-lg"><KpiCard label={tx("Çalışma alanları")} value={data.tenants} className="h-full hover:bg-surface-2" /></Link>
           <Link to={platformPaths.users} className="block rounded-lg"><KpiCard label={tx("Kullanıcılar")} value={data.users} className="h-full hover:bg-surface-2" /></Link>
           <Link to={platformPaths.agents()} className="block rounded-lg"><KpiCard label={tx("Yedekleme bilgisayarları")} value={data.agents.total} hint={tx("{0} çevrimiçi · {1} iptal edilmiş", { "0": data.agents.online, "1": data.agents.revoked })} className="h-full hover:bg-surface-2" /></Link>
@@ -48,12 +47,12 @@ export function PlatformDashboardPage() {
 function DashboardAttention({ data }: { data: PlatformSummary }) {
   useLanguage()
   const items = attentionItems(data)
-  return <Section title={tx("Platform sağlıklı mı?")}>
-    <div role="status" className="space-y-2">
+  return <section>
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <StatusPill level={items.length > 0 ? 'attention' : 'safe'} />
-      <p className="text-body text-text-muted">{items.length > 0 ? tx("Önce bunlara bakın.") : tx("Dikkat gerektiren bir durum yok.")}</p>
+      <h2 className="text-base font-semibold text-text-heading">{items.length > 0 ? tx("{0} konu ilgi bekliyor", { "0": items.length }) : tx("Dikkat gerektiren bir durum yok.")}</h2>
     </div>
-    {items.length > 0 && <ul aria-label={tx("Dikkat gerektirenler")} className="mt-4 divide-y divide-border rounded-lg border border-border">
+    {items.length > 0 && <ul aria-label={tx("Dikkat gerektirenler")} className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
       {items.map((item) => <li key={item.key}>
         <Link className="flex min-h-9 pointer-coarse:min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-3" to={item.to}>
           <span className="min-w-0 break-words">{item.text}</span>
@@ -61,5 +60,5 @@ function DashboardAttention({ data }: { data: PlatformSummary }) {
         </Link>
       </li>)}
     </ul>}
-  </Section>
+  </section>
 }
