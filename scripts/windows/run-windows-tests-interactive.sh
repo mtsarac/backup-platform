@@ -4,14 +4,14 @@
 # The tests are built here (Linux can compile the net10.0-windows project), shipped as a zip, and started by a one-shot scheduled task
 # registered for the logged-on console user with -LogonType Interactive; that is what puts the process in the console session.
 #
-# Usage: run-windows-tests-interactive.sh [--filter VSTEST_FILTER] [--results-dir LOCALDIR] [--plain-ssh]
+# Usage: run-windows-tests-interactive.sh [--filter VSTEST_FILTER (default Category!=Frozen, as tests/default.runsettings)] [--results-dir LOCALDIR] [--plain-ssh]
 # Needs: the VM's console user logged on (check: ssh virtual-win11 query user), the SDK at C:\dotnet-sdk (dotnet test needs it; the VM
 # only has the runtime in Program Files), ssh alias WINDOWS_SSH_TARGET (default virtual-win11), python3 (zip), dotnet.
 # Everything it creates on the VM (C:\e2e\wintest-<id>, the scheduled task) is removed afterwards, also on failure.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-filter=''
+filter='Category!=Frozen'
 results=''
 plain=0
 while [[ $# -gt 0 ]]; do
@@ -38,8 +38,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-dotnet build backup-backend/tests/windows-tests -c Release --nologo -v quiet
-out=backup-backend/tests/windows-tests/bin/Release/net10.0-windows
+# win-x64 so the probe gets a Windows apphost (.exe); a Linux build has none.
+dotnet build backup-backend/tests/windows-tests -c Release -r win-x64 --self-contained false --nologo -v quiet
+out=backup-backend/tests/windows-tests/bin/Release/net10.0-windows/win-x64
 python3 - "$out" "$work/tests.zip" <<'PY'
 import os, sys, zipfile
 src, dst = sys.argv[1:]
