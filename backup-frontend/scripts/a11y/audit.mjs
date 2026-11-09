@@ -15,6 +15,8 @@ const OUT = env.A11Y_OUT ?? path.join(here, 'results/audit.json')
 const CHROMIUM = env.A11Y_CHROMIUM ?? '/usr/bin/chromium'
 const ROLE = env.A11Y_ROLE ?? 'a'
 const AXE = createRequire(import.meta.url).resolve('axe-core/axe.min.js')
+const COLOR_LIB = path.join(here, 'lib/color.cjs')
+const { validateDeep } = createRequire(import.meta.url)(COLOR_LIB)
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']
 const TARGET = 44 // design target in CSS px
 const WCAG_MIN = 24 // WCAG 2.5.8 AA minimum, used by the spacing exemption
@@ -86,13 +88,11 @@ function measureInPage() {
 
 /** Runs in the page under forced-colors: text and controls must stay distinguishable using computed (system-colour) styles. */
 function visibleInForcedColors() {
-  const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
-  ctx.canvas.width = ctx.canvas.height = 1
-  const rgba = (css) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = css; ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data; const a = d[3] / 255; return [a ? d[0] / a : 0, a ? d[1] / a : 0, a ? d[2] / a : 0, a] }
-  const over = (t, b) => { const a = t[3] + b[3] * (1 - t[3]); return a === 0 ? [0, 0, 0, 0] : [0, 1, 2].map(i => (t[i] * t[3] + b[i] * b[3] * (1 - t[3])) / a).concat(a) }
-  const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b) }
-  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
-  const bgOf = (el) => { const layers = []; for (let n = el; n; n = n.parentElement) { const c = rgba(getComputedStyle(n).backgroundColor); layers.push(c); if (c[3] === 1) break } let acc = over(rgba(getComputedStyle(document.documentElement).backgroundColor), [255, 255, 255, 1]); for (const l of layers.reverse()) acc = over(l, acc); return acc }
+  const C = window.__a11yColor
+  const rgba = C.parse
+  const over = C.over
+  const ratio = C.ratio
+  const bgOf = (el) => C.backgroundOf(el).color
   const css = (el) => (el.id ? `#${el.id}` : `${el.localName}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''}`)
   const findings = []
   let texts = 0
@@ -104,9 +104,9 @@ function visibleInForcedColors() {
     seen.add(el)
     const cs = getComputedStyle(el); const r = el.getBoundingClientRect()
     if (cs.display === 'none' || cs.visibility === 'hidden' || r.width <= 1 || r.height <= 1 || el.matches(':disabled, [aria-disabled=true]')) continue
-    let opacity = 1; for (let m = el; m; m = m.parentElement) opacity *= Number(getComputedStyle(m).opacity)
+    const opacity = C.inheritedOpacity(el)
     const bg = bgOf(el); const fg = rgba(cs.color)
-    const rr = ratio(over([fg[0], fg[1], fg[2], fg[3] * opacity], bg), bg)
+    const rr = ratio(over(C.withOpacity(fg, opacity), bg), bg)
     texts++
     if (rr < 3) findings.push({ kind: 'text-indistinguishable', element: css(el), text: n.textContent.trim().slice(0, 40), color: cs.color, background: `rgb(${bg.slice(0, 3).map(Math.round)})`, opacity: Number(opacity.toFixed(2)), ratio: Number(rr.toFixed(2)) })
   }
@@ -131,6 +131,94 @@ function visibleInForcedColors() {
     el.blur()
   }
   return { textElements: texts, controls: controls.length, focusChecked, findings }
+}
+
+
+/** Runs in the page: scrolls the element into view and returns its text runs (rects, colour, size, weight, opacity). */
+function probeText(selector) {
+  const C = window.__a11yColor
+  const el = document.querySelector(selector)
+  if (!el) return { error: `selector not found: ${selector}` }
+  el.scrollIntoView({ block: 'center', inline: 'nearest' })
+  const own = [...el.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim())
+  const nodes = own.length ? own : (() => { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); const out = []; for (let n = w.nextNode(); n; n = w.nextNode()) if (n.textContent.trim()) out.push(n); return out })()
+  const runs = nodes.map(n => {
+    const range = document.createRange(); range.selectNodeContents(n)
+    const cs = getComputedStyle(n.parentElement)
+    return {
+      text: n.textContent.trim().slice(0, 60), color: cs.color, fontSize: parseFloat(cs.fontSize), fontWeight: Number(cs.fontWeight) || 400,
+      opacity: C.inheritedOpacity(n.parentElement),
+      rects: [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0).map(r => ({ x: r.x, y: r.y, w: r.width, h: r.height })),
+      // what is stacked at the centre of the text (topmost first), for the record
+      stack: (() => { const r = range.getBoundingClientRect(); return document.elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2).slice(0, 4).map(e => `${e.localName}${e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : ''}`) })(),
+    }
+  })
+  return { runs, viewport: { w: innerWidth, h: innerHeight } }
+}
+
+/** Runs in the page: worst contrast of `color` over the screenshot pixels inside each rect (text was hidden when the screenshot was taken). */
+async function sampleBackground({ png, clip, runs }) {
+  const C = window.__a11yColor
+  const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = `data:image/png;base64,${png}` })
+  const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height
+  const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0)
+  const sx = img.width / clip.width, sy = img.height / clip.height
+  return runs.map(run => {
+    const fg = C.parse(run.color)
+    let worst = null, pixels = 0
+    for (const r of run.rects) {
+      const x0 = Math.max(0, Math.floor((r.x - clip.x) * sx)), y0 = Math.max(0, Math.floor((r.y - clip.y) * sy))
+      const x1 = Math.min(img.width, Math.ceil((r.x + r.w - clip.x) * sx)), y1 = Math.min(img.height, Math.ceil((r.y + r.h - clip.y) * sy))
+      if (x1 <= x0 || y1 <= y0) continue
+      const d = ctx.getImageData(x0, y0, x1 - x0, y1 - y0).data
+      for (let i = 0; i < d.length; i += 4) {
+        pixels++
+        const bg = [d[i], d[i + 1], d[i + 2], 1]
+        const rr = C.ratio(C.over(C.withOpacity(fg, run.opacity), bg), bg)
+        if (!worst || rr < worst.ratio) worst = { ratio: rr, bg: C.rgbString(bg), fg: C.rgbString(C.over(C.withOpacity(fg, run.opacity), bg)) }
+      }
+    }
+    return { text: run.text, pixels, worst }
+  })
+}
+
+/**
+ * axe reports `incomplete` color-contrast when it cannot find the background (text partly covered by another element).
+ * Resolve each node from real pixels: hide all text, screenshot the area, and measure the actual rendered background
+ * behind every text run against its own colour, size and weight (WCAG 1.4.3: 3:1 for large text, else 4.5:1).
+ */
+async function resolveIncompleteContrast(page, nodes, where) {
+  await page.addScriptTag({ path: COLOR_LIB })
+  const out = []
+  for (const node of nodes) {
+    const selector = node.target.length === 1 ? node.target[0] : null
+    const base = { ...where, selector: node.target.join(' >>> ') }
+    if (!selector) { out.push({ ...base, pass: false, reason: 'selector crosses a frame or shadow root; not resolvable' }); continue }
+    const probe = await page.evaluate(probeText, selector)
+    if (probe.error || !probe.runs.length || probe.runs.every(r => !r.rects.length)) { out.push({ ...base, pass: false, reason: probe.error ?? 'no visible text found' }); continue }
+    const handle = await page.addStyleTag({ content: '*, *::before, *::after { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; caret-color: transparent !important; transition: none !important; animation: none !important; }' })
+    await page.waitForTimeout(100)
+    const rects = probe.runs.flatMap(r => r.rects)
+    const x = Math.max(0, Math.floor(Math.min(...rects.map(r => r.x)))), y = Math.max(0, Math.floor(Math.min(...rects.map(r => r.y))))
+    const clip = { x, y, width: Math.max(1, Math.min(probe.viewport.w - x, Math.ceil(Math.max(...rects.map(r => r.x + r.w)) - x))), height: Math.max(1, Math.min(probe.viewport.h - y, Math.ceil(Math.max(...rects.map(r => r.y + r.h)) - y))) }
+    const png = (await page.screenshot({ clip, animations: 'disabled' })).toString('base64')
+    await handle.evaluate(el => el.remove())
+    await page.waitForTimeout(400) // colours transition back from transparent; the next node must read the settled colour
+    const sampled = await page.evaluate(sampleBackground, { png, clip, runs: probe.runs })
+    for (const [i, run] of probe.runs.entries()) {
+      const worst = sampled[i].worst
+      const large = run.fontSize >= 24 || (run.fontSize >= 18.66 && run.fontWeight >= 700)
+      const threshold = large ? 3 : 4.5
+      out.push({
+        ...base, text: run.text, fg: worst?.fg ?? null, bg: worst?.bg ?? null, ratio: worst?.ratio ?? null, threshold,
+        pass: worst !== null && worst.ratio >= threshold,
+        fontSize: `${run.fontSize}px`, fontWeight: run.fontWeight, opacity: Number(run.opacity.toFixed(3)), sampledPixels: sampled[i].pixels, stackAtText: run.stack,
+        ...(worst === null && { reason: 'no pixels sampled' }),
+      })
+    }
+  }
+  await page.evaluate(() => scrollTo(0, 0))
+  return out
 }
 
 /** Classify undersized targets: 'inline' | 'disabled' | 'sr-only' | 'spacing' (WCAG 2.5.8) | null. Needs all targets of the page. */
@@ -191,6 +279,7 @@ async function auditPage(context, spec, cond) {
 
 async function auditState(page, name, url, cond) {
   await page.addScriptTag({ path: AXE })
+  await page.addScriptTag({ path: COLOR_LIB })
   const disabled = cond.forced ? AXE_DISABLED_IN_FORCED : []
   const axe = await page.evaluate(({ tags, disabled }) => window.axe.run(document, { runOnly: { type: 'tag', values: tags }, rules: Object.fromEntries(disabled.map(id => [id, { enabled: false }])), resultTypes: ['violations', 'incomplete'] }), { tags: AXE_TAGS, disabled })
   // A keypress first: after a mouse click (wizard steps) Chromium would not match :focus-visible for programmatic focus.
@@ -200,11 +289,14 @@ async function auditState(page, name, url, cond) {
   const targets = await page.evaluate(measureInPage)
   const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches)
   classify(targets, coarse)
+  const incompleteNodes = axe.incomplete.filter(v => v.id === 'color-contrast').flatMap(v => v.nodes)
+  const incompleteResolved = incompleteNodes.length ? await resolveIncompleteContrast(page, incompleteNodes, { page: name, condition: cond.name, viewport: cond.viewport }) : []
   const slim = (v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary?.split('\n').slice(0, 3).join(' ').trim() })) })
   return {
     page: name, url, coarsePointer: coarse, forcedColorsActive: forcedActive, axeDisabledRules: disabled,
     ...(forcedColors && { forcedColorsVisibility: forcedColors }),
     axe: { violations: axe.violations.map(slim), incomplete: axe.incomplete.map(slim) },
+    incompleteResolved,
     targets: { total: targets.length, pass: targets.filter(t => t.status === 'pass').length, exempt: targets.filter(t => t.status === 'exempt').length, fail: targets.filter(t => t.status === 'fail').length, elements: targets.filter(t => t.status !== 'pass') },
   }
 }
@@ -251,7 +343,7 @@ try {
         localStorage.setItem('backup-theme', c.dark ? 'dark' : 'light')
         localStorage.setItem('backup-high-contrast', c.hc ? '1' : '0')
       }, { c })
-      const cond = { ...c, viewport: vpName, shotDir: SHOTS && path.join(SHOTS, condName) }
+      const cond = { ...c, name: condName, viewport: vpName, shotDir: SHOTS && path.join(SHOTS, condName) }
       for (const spec of pageSpecs(`/tenants/${tenant}`, agentId, vp)) for (const r of await auditPage(context, spec, cond)) results.push({ condition: condName, viewport: vpName, ...r })
       await context.close()
     }
@@ -259,15 +351,21 @@ try {
 } finally { await browser.close() }
 
 const serious = results.flatMap(r => r.axe.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => ({ condition: r.condition, viewport: r.viewport, page: r.page, id: v.id, impact: v.impact, nodes: v.nodes.length })))
+const resolved = results.flatMap(r => r.incompleteResolved)
+const incompleteContrast = { nodes: resolved.length, pass: resolved.filter(n => n.pass).length, fail: resolved.filter(n => !n.pass).length, failing: resolved.filter(n => !n.pass) }
 const summary = {
+  incompleteContrast,
   generatedAt: new Date().toISOString(), base: BASE, targetPx: TARGET, wcagMinPx: WCAG_MIN, tags: AXE_TAGS,
   conditions: CONDITION_NAMES, axeDisabledInForcedColors: AXE_DISABLED_IN_FORCED,
   seriousOrCriticalAxe: serious, undersizedWithoutExemption: results.reduce((n, r) => n + r.targets.fail, 0),
   forcedColorsFindings: results.flatMap(r => (r.forcedColorsVisibility?.findings ?? []).map(f => ({ condition: r.condition, viewport: r.viewport, page: r.page, ...f }))),
   perCondition: Object.fromEntries(CONDITION_NAMES.map(cn => [cn, Object.fromEntries(Object.keys(VIEWPORTS).map(v => { const rs = results.filter(r => r.condition === cn && r.viewport === v); return [v, { states: rs.length, axeSeriousOrCritical: rs.reduce((n, r) => n + r.axe.violations.filter(x => ['serious', 'critical'].includes(x.impact)).length, 0), axeOther: rs.reduce((n, r) => n + r.axe.violations.filter(x => !['serious', 'critical'].includes(x.impact)).length, 0), undersized: rs.reduce((n, r) => n + r.targets.fail, 0), forcedVisibility: rs.reduce((n, r) => n + (r.forcedColorsVisibility?.findings.length ?? 0), 0) }] }))])),
 }
+// Impossible colours or ratios mean a measurement bug: fail without writing.
+const invalid = validateDeep({ summary, results })
+if (invalid.length) { console.error(`INVALID MEASUREMENTS (${invalid.length}), results not written:\n${invalid.slice(0, 20).join('\n')}`); process.exit(1) }
 fs.mkdirSync(path.dirname(OUT), { recursive: true })
 fs.writeFileSync(OUT, JSON.stringify({ summary, results }, null, 2))
 for (const r of results) console.log(`${r.condition.padEnd(18)} ${r.viewport.padEnd(7)} ${r.page.padEnd(22)} axe violations ${r.axe.violations.length} (serious+ ${r.axe.violations.filter(v => ['serious', 'critical'].includes(v.impact)).length}) forced-vis ${r.forcedColorsVisibility?.findings.length ?? '-'} | targets ${r.targets.total}: pass ${r.targets.pass} exempt ${r.targets.exempt} FAIL ${r.targets.fail}`)
 console.log(JSON.stringify(summary))
-process.exit(serious.length || summary.undersizedWithoutExemption || summary.forcedColorsFindings.length ? 1 : 0)
+process.exit(serious.length || summary.undersizedWithoutExemption || summary.forcedColorsFindings.length || incompleteContrast.fail ? 1 : 0)

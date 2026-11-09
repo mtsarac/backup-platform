@@ -1,7 +1,13 @@
 {
   "summary": {
-    "generatedAt": "2026-11-09T12:47:01.842Z",
-    "base": "http://127.0.0.1:5391",
+    "incompleteContrast": {
+      "nodes": 20,
+      "pass": 20,
+      "fail": 0,
+      "failing": []
+    },
+    "generatedAt": "2026-11-09T14:24:28.936Z",
+    "base": "http://127.0.0.1:5393",
     "targetPx": 44,
     "wcagMinPx": 24,
     "tags": [
@@ -138,6 +144,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 512,
         "pass": 510,
@@ -196,6 +203,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 536,
         "pass": 518,
@@ -558,6 +566,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 149,
         "pass": 97,
@@ -1562,6 +1571,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 35,
         "pass": 33,
@@ -1620,6 +1630,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 27,
@@ -1678,6 +1689,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 39,
         "pass": 37,
@@ -1736,6 +1748,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 26,
         "pass": 24,
@@ -1794,6 +1807,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 20,
@@ -1985,6 +1999,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 126,
         "pass": 24,
@@ -3943,6 +3958,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 306,
         "pass": 304,
@@ -4001,6 +4017,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 512,
         "pass": 510,
@@ -4059,6 +4076,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 536,
         "pass": 518,
@@ -4421,6 +4439,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 149,
         "pass": 97,
@@ -5425,6 +5444,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 35,
         "pass": 33,
@@ -5483,6 +5503,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 27,
@@ -5541,6 +5562,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 39,
         "pass": 37,
@@ -5599,6 +5621,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 26,
         "pass": 24,
@@ -5657,6 +5680,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 20,
@@ -5848,6 +5872,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 126,
         "pass": 24,
@@ -7806,6 +7831,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 306,
         "pass": 304,
@@ -7864,6 +7890,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 512,
         "pass": 510,
@@ -7922,6 +7949,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 536,
         "pass": 518,
@@ -8284,6 +8312,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 149,
         "pass": 97,
@@ -9288,6 +9317,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 35,
         "pass": 33,
@@ -9346,6 +9376,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 27,
@@ -9404,6 +9435,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 39,
         "pass": 37,
@@ -9462,6 +9494,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 26,
         "pass": 24,
@@ -9520,6 +9553,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 20,
@@ -9711,6 +9745,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 126,
         "pass": 24,
@@ -11669,6 +11704,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 306,
         "pass": 304,
@@ -11727,6 +11763,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 512,
         "pass": 510,
@@ -11785,6 +11822,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 536,
         "pass": 518,
@@ -12147,6 +12185,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 149,
         "pass": 97,
@@ -13151,6 +13190,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 35,
         "pass": 33,
@@ -13209,6 +13249,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 27,
@@ -13267,6 +13308,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 39,
         "pass": 37,
@@ -13325,6 +13367,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 26,
         "pass": 24,
@@ -13383,6 +13426,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 20,
@@ -13574,6 +13618,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 126,
         "pass": 24,
@@ -15532,6 +15577,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 306,
         "pass": 304,
@@ -15598,6 +15644,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 512,
         "pass": 510,
@@ -15664,6 +15711,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 536,
         "pass": 518,
@@ -16034,6 +16082,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 149,
         "pass": 97,
@@ -17046,6 +17095,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 35,
         "pass": 33,
@@ -17112,6 +17162,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 27,
@@ -17178,6 +17229,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 39,
         "pass": 37,
@@ -17244,6 +17296,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 26,
         "pass": 24,
@@ -17310,6 +17363,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 20,
@@ -17509,6 +17563,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 126,
         "pass": 24,
@@ -19475,6 +19530,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 306,
         "pass": 304,
@@ -19541,6 +19597,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 512,
         "pass": 510,
@@ -19607,6 +19664,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 536,
         "pass": 518,
@@ -19977,6 +20035,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 149,
         "pass": 97,
@@ -20989,6 +21048,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 35,
         "pass": 33,
@@ -21055,6 +21115,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 27,
@@ -21121,6 +21182,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 39,
         "pass": 37,
@@ -21187,6 +21249,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 26,
         "pass": 24,
@@ -21253,6 +21316,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 29,
         "pass": 20,
@@ -21452,6 +21516,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 126,
         "pass": 24,
@@ -23418,6 +23483,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 306,
         "pass": 304,
@@ -23476,6 +23542,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 501,
         "pass": 500,
@@ -23515,6 +23582,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 525,
         "pass": 524,
@@ -23554,6 +23622,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 514,
         "pass": 513,
@@ -23627,6 +23696,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "jobs",
+          "condition": "light",
+          "viewport": "mobile",
+          "selector": "li:nth-child(3) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(70, 84, 79)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 7.04,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "jobs",
+          "condition": "light",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(70, 84, 79)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 7.04,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 138,
         "pass": 137,
@@ -23666,6 +23781,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 24,
         "pass": 23,
@@ -23705,6 +23821,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -23758,6 +23875,30 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "wizard:schedule",
+          "condition": "light",
+          "viewport": "mobile",
+          "selector": ".hover\\:bg-muted > span:nth-child(4)",
+          "text": "EN",
+          "fg": "rgb(70, 84, 79)",
+          "bg": "rgb(255, 255, 255)",
+          "ratio": 7.95,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "12px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 1056,
+          "stackAtText": [
+            "span",
+            "button.group/button.min-w-11",
+            "div.flex.min-w-0",
+            "header.sticky.top-0"
+          ]
+        }
+      ],
       "targets": {
         "total": 28,
         "pass": 27,
@@ -23797,6 +23938,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 15,
         "pass": 14,
@@ -23836,6 +23978,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -23909,6 +24052,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "artifacts",
+          "condition": "light",
+          "viewport": "mobile",
+          "selector": ".border-primary",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(10, 20, 19)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 16.57,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "artifacts",
+          "condition": "light",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(70, 84, 79)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 7.04,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 115,
         "pass": 114,
@@ -23948,6 +24137,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 295,
         "pass": 294,
@@ -23987,6 +24177,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 501,
         "pass": 500,
@@ -24026,6 +24217,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 525,
         "pass": 524,
@@ -24065,6 +24257,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 514,
         "pass": 513,
@@ -24138,6 +24331,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "jobs",
+          "condition": "dark",
+          "viewport": "mobile",
+          "selector": "li:nth-child(3) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(174, 189, 186)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 9.85,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "jobs",
+          "condition": "dark",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(174, 189, 186)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 9.85,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 138,
         "pass": 137,
@@ -24177,6 +24416,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 24,
         "pass": 23,
@@ -24216,6 +24456,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -24269,6 +24510,30 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "wizard:schedule",
+          "condition": "dark",
+          "viewport": "mobile",
+          "selector": ".hover\\:bg-muted > span:nth-child(4)",
+          "text": "EN",
+          "fg": "rgb(174, 189, 186)",
+          "bg": "rgb(18, 28, 28)",
+          "ratio": 8.92,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "12px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 1056,
+          "stackAtText": [
+            "span",
+            "button.group/button.min-w-11",
+            "div.flex.min-w-0",
+            "header.sticky.top-0"
+          ]
+        }
+      ],
       "targets": {
         "total": 28,
         "pass": 27,
@@ -24308,6 +24573,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 15,
         "pass": 14,
@@ -24347,6 +24613,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -24420,6 +24687,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "artifacts",
+          "condition": "dark",
+          "viewport": "mobile",
+          "selector": ".border-primary",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(246, 251, 250)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 18.35,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "artifacts",
+          "condition": "dark",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(174, 189, 186)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 9.85,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 115,
         "pass": 114,
@@ -24459,6 +24772,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 295,
         "pass": 294,
@@ -24498,6 +24812,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 501,
         "pass": 500,
@@ -24537,6 +24852,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 525,
         "pass": 524,
@@ -24576,6 +24892,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 514,
         "pass": 513,
@@ -24649,6 +24966,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "jobs",
+          "condition": "high-contrast",
+          "viewport": "mobile",
+          "selector": "li:nth-child(3) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(16, 27, 26)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 15.58,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "jobs",
+          "condition": "high-contrast",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(16, 27, 26)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 15.58,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 138,
         "pass": 137,
@@ -24688,6 +25051,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 24,
         "pass": 23,
@@ -24727,6 +25091,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -24780,6 +25145,30 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "wizard:schedule",
+          "condition": "high-contrast",
+          "viewport": "mobile",
+          "selector": ".hover\\:bg-muted > span:nth-child(4)",
+          "text": "EN",
+          "fg": "rgb(16, 27, 26)",
+          "bg": "rgb(255, 255, 255)",
+          "ratio": 17.59,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "12px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 1056,
+          "stackAtText": [
+            "span",
+            "button.group/button.min-w-11",
+            "div.flex.min-w-0",
+            "header.sticky.top-0"
+          ]
+        }
+      ],
       "targets": {
         "total": 28,
         "pass": 27,
@@ -24819,6 +25208,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 15,
         "pass": 14,
@@ -24858,6 +25248,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -24931,6 +25322,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "artifacts",
+          "condition": "high-contrast",
+          "viewport": "mobile",
+          "selector": ".border-primary",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(0, 0, 0)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 18.6,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "artifacts",
+          "condition": "high-contrast",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(16, 27, 26)",
+          "bg": "rgb(238, 242, 241)",
+          "ratio": 15.58,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 115,
         "pass": 114,
@@ -24970,6 +25407,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 295,
         "pass": 294,
@@ -25009,6 +25447,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 501,
         "pass": 500,
@@ -25048,6 +25487,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 525,
         "pass": 524,
@@ -25087,6 +25527,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 514,
         "pass": 513,
@@ -25160,6 +25601,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "jobs",
+          "condition": "high-contrast-dark",
+          "viewport": "mobile",
+          "selector": "li:nth-child(3) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(248, 250, 252)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 18.32,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "jobs",
+          "condition": "high-contrast-dark",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(248, 250, 252)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 18.32,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 138,
         "pass": 137,
@@ -25199,6 +25686,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 24,
         "pass": 23,
@@ -25238,6 +25726,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -25291,6 +25780,30 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "wizard:schedule",
+          "condition": "high-contrast-dark",
+          "viewport": "mobile",
+          "selector": ".hover\\:bg-muted > span:nth-child(4)",
+          "text": "EN",
+          "fg": "rgb(248, 250, 252)",
+          "bg": "rgb(18, 28, 28)",
+          "ratio": 16.6,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "12px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 1056,
+          "stackAtText": [
+            "span",
+            "button.group/button.min-w-11",
+            "div.flex.min-w-0",
+            "header.sticky.top-0"
+          ]
+        }
+      ],
       "targets": {
         "total": 28,
         "pass": 27,
@@ -25330,6 +25843,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 15,
         "pass": 14,
@@ -25369,6 +25883,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -25442,6 +25957,52 @@
           }
         ]
       },
+      "incompleteResolved": [
+        {
+          "page": "artifacts",
+          "condition": "high-contrast-dark",
+          "viewport": "mobile",
+          "selector": ".border-primary",
+          "text": "Yedek dosyaları",
+          "fg": "rgb(255, 255, 255)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 19.17,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        },
+        {
+          "page": "artifacts",
+          "condition": "high-contrast-dark",
+          "viewport": "mobile",
+          "selector": "li:nth-child(4) > .hover\\:border-border-strong.relative.whitespace-nowrap",
+          "text": "Geri yüklemeler",
+          "fg": "rgb(248, 250, 252)",
+          "bg": "rgb(10, 16, 17)",
+          "ratio": 18.32,
+          "threshold": 4.5,
+          "pass": true,
+          "fontSize": "16px",
+          "fontWeight": 500,
+          "opacity": 1,
+          "sampledPixels": 10148,
+          "stackAtText": [
+            "a.relative.inline-flex",
+            "li",
+            "ul.flex.min-w-max",
+            "nav.-mb-px.overflow-x-auto"
+          ]
+        }
+      ],
       "targets": {
         "total": 115,
         "pass": 114,
@@ -25481,6 +26042,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 295,
         "pass": 294,
@@ -25528,6 +26090,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 501,
         "pass": 500,
@@ -25575,6 +26138,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 525,
         "pass": 524,
@@ -25622,6 +26186,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 514,
         "pass": 513,
@@ -25683,6 +26248,7 @@
         ],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 138,
         "pass": 137,
@@ -25730,6 +26296,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 24,
         "pass": 23,
@@ -25777,6 +26344,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -25824,6 +26392,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 28,
         "pass": 27,
@@ -25871,6 +26440,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 15,
         "pass": 14,
@@ -25918,6 +26488,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -25979,6 +26550,7 @@
         ],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 115,
         "pass": 114,
@@ -26026,6 +26598,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 295,
         "pass": 294,
@@ -26073,6 +26646,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 501,
         "pass": 500,
@@ -26120,6 +26694,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 525,
         "pass": 524,
@@ -26167,6 +26742,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 514,
         "pass": 513,
@@ -26228,6 +26804,7 @@
         ],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 138,
         "pass": 137,
@@ -26275,6 +26852,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 24,
         "pass": 23,
@@ -26322,6 +26900,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -26369,6 +26948,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 28,
         "pass": 27,
@@ -26416,6 +26996,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 15,
         "pass": 14,
@@ -26463,6 +27044,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 18,
         "pass": 17,
@@ -26524,6 +27106,7 @@
         ],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 115,
         "pass": 114,
@@ -26571,6 +27154,7 @@
         "violations": [],
         "incomplete": []
       },
+      "incompleteResolved": [],
       "targets": {
         "total": 295,
         "pass": 294,

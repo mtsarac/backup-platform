@@ -19,6 +19,16 @@ In forced-colors axe's `color-contrast` rule is disabled (axe does not model sys
 
 Extra states: dashboard with all `<details>` open (technical drawers), mobile dashboard with the navigation drawer open.
 
+## Resolving axe `incomplete` contrast nodes
+
+axe reports `color-contrast` as `incomplete` when it cannot determine the background (text partly covered by another element). `audit.mjs` never treats those as a pass: for each node it scrolls the text into view, hides all text with a temporary style, takes a real screenshot of the area, and measures the actual rendered pixels behind every text run against that run's own computed colour (inherited opacity included). The threshold is 3:1 for large text (>= 24 px, or >= 18.66 px and bold) and 4.5:1 otherwise. Each node is written to `results[].incompleteResolved` as `{page, condition, viewport, selector, text, fg, bg, ratio, threshold, pass, fontSize, fontWeight, opacity, sampledPixels, stackAtText}` (`bg`/`fg` are the worst pixel). `summary.incompleteContrast` counts them; any node below its threshold, or not resolvable, fails the run.
+
+## Colour maths
+
+`lib/color.cjs` holds the shared parser, alpha compositing and WCAG ratio (loaded into the page by both scripts, `require`d by Node for validation; unit tests in `lib/color.test.ts`). Every channel must be 0..255 and every ratio 1..21: the helpers throw otherwise, and both scripts run `validateDeep()` over the finished results and exit 1 without writing the JSON if any value is out of range. Ratios are truncated to two decimals (never rounded up), like axe-core.
+
+`contrast-audit.mjs` (language switcher only) measures default, mouse-hover and keyboard-focus (Tab) states in six conditions and both languages: text 4.5:1 for label, separator and active label, and the focus outline against the background it is drawn on, 3:1. Under forced-colors axe's contrast result is recorded but not trusted; the verdict comes from the computed styles.
+
 ## Run
 
 ```sh
@@ -52,6 +62,6 @@ A checkbox/radio counts with its associated label box, because the label activat
 
 ## Limits
 
-- `incomplete` axe results (for example contrast on overlapping text) are recorded but are not failures.
+- Other `incomplete` axe results are recorded but are not failures. `color-contrast` incompletes are resolved, see below.
 - Forced-colors visibility is a heuristic on computed styles (see above), not a pixel check; the screenshots are the visual evidence. The switcher's forced-colors contrast is also measured by `contrast-audit.mjs`.
 - `heading-order` (moderate) in the mobile card lists is reported, not gated.
