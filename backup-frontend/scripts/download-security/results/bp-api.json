@@ -1,0 +1,1011 @@
+{
+  "meta": {
+    "node": "bp-api",
+    "api": "https://192.168.122.1:5252",
+    "ui": "https://192.168.122.1:5173",
+    "peer": "https://192.168.122.1:5255",
+    "startedAt": "2026-11-09T21:40:30.240Z",
+    "chromium": "156.0.8078.79",
+    "attackerOrigins": {
+      "cross-site": "https://evil.test:39951",
+      "same-site": "https://192.168.122.1:39951"
+    },
+    "artifact": {
+      "id": "5e5c54fa-9718-4cc3-b979-ae2f976088ec",
+      "sizeBytes": 1162714,
+      "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+      "replicaProvider": "s3"
+    },
+    "largeArtifact": "b957848e-2941-4eda-bc1f-f05e6ad5affd",
+    "finishedAt": "2026-11-09T21:55:52.066Z"
+  },
+  "summary": {
+    "total": 18,
+    "passed": 17,
+    "failed": [],
+    "informationalNotPassing": [
+      "same-site.residual-risk"
+    ]
+  },
+  "tests": [
+    {
+      "id": "cross-site.fetch-no-cors",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "fetch-no-cors",
+        "sessionId": "b6ef2a56-da3e-4335-85a0-0e22d6fd78a4",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "fetch",
+            "failure": "net::ERR_ABORTED",
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "no-cors",
+            "secFetchDest": "empty",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.fetch-cors",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "fetch-cors",
+        "sessionId": "021089a5-1ea5-4fc8-a3cf-e880ff55c5e0",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "fetch",
+            "failure": "net::ERR_FAILED",
+            "cookieSent": null,
+            "secFetchSite": null,
+            "secFetchMode": null,
+            "secFetchDest": null,
+            "status": null,
+            "contentType": null,
+            "bodyBytes": null
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.img",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "img",
+        "sessionId": "2b90f413-3b1b-4ba6-8ce6-e9d99e74baec",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "image",
+            "failure": null,
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "no-cors",
+            "secFetchDest": "image",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.iframe",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "iframe",
+        "sessionId": "94b8f42e-49f9-4513-84f8-91933ab4b2ee",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "document",
+            "failure": null,
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "navigate",
+            "secFetchDest": "iframe",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.form-get",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "form-get",
+        "sessionId": "5cf11471-77a2-438a-831e-250dfc545fba",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "document",
+            "failure": null,
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "navigate",
+            "secFetchDest": "iframe",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.form-post",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "form-post",
+        "sessionId": "23b734e9-c2ae-414e-b0ec-e4a4e441b03d",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "POST",
+            "resourceType": "document",
+            "failure": null,
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "navigate",
+            "secFetchDest": "iframe",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.top-navigation",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "top-navigation",
+        "sessionId": "67d996eb-c87c-4388-a4eb-09601e505fe1",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "document",
+            "failure": "net::ERR_HTTP_RESPONSE_CODE_FAILURE",
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "navigate",
+            "secFetchDest": "document",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.window-open",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "window-open",
+        "sessionId": "ef4c9784-f323-486a-8d45-3543494640cf",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "document",
+            "failure": "net::ERR_HTTP_RESPONSE_CODE_FAILURE",
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "navigate",
+            "secFetchDest": "document",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "cross-site.anchor-download",
+      "criterion": "1,4",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "origin": "cross-site",
+        "vector": "anchor-download",
+        "sessionId": "9e397dc8-a0e0-4de8-873d-206a73dfc7cc",
+        "before": "Ready",
+        "after": "Ready",
+        "afterTransferred": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "resourceType": "document",
+            "failure": "net::ERR_HTTP_RESPONSE_CODE_FAILURE",
+            "cookieSent": false,
+            "secFetchSite": "cross-site",
+            "secFetchMode": "navigate",
+            "secFetchDest": "document",
+            "status": 401,
+            "contentType": null,
+            "bodyBytes": 0
+          }
+        ],
+        "downloadEvents": [],
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 0
+    },
+    {
+      "id": "same-site.positive-control",
+      "criterion": "1 (harness validity)",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "vectorsWithCookie": [
+          "fetch-no-cors",
+          "img",
+          "iframe",
+          "form-get",
+          "form-post",
+          "top-navigation",
+          "anchor-download"
+        ],
+        "perVector": [
+          {
+            "vector": "fetch-no-cors",
+            "cookieSent": [
+              true
+            ],
+            "secFetchSite": [
+              "same-site"
+            ],
+            "status": [
+              200
+            ],
+            "after": "Completed",
+            "ownerDownloadAfterStatus": 409
+          },
+          {
+            "vector": "fetch-cors",
+            "cookieSent": [
+              null
+            ],
+            "secFetchSite": [
+              null
+            ],
+            "status": [
+              null
+            ],
+            "after": "Cancelled",
+            "ownerDownloadAfterStatus": 409
+          },
+          {
+            "vector": "img",
+            "cookieSent": [
+              true
+            ],
+            "secFetchSite": [
+              "same-site"
+            ],
+            "status": [
+              200
+            ],
+            "after": "Cancelled",
+            "ownerDownloadAfterStatus": 409
+          },
+          {
+            "vector": "iframe",
+            "cookieSent": [
+              true
+            ],
+            "secFetchSite": [
+              "same-site"
+            ],
+            "status": [
+              200
+            ],
+            "after": "Completed",
+            "ownerDownloadAfterStatus": 409
+          },
+          {
+            "vector": "form-get",
+            "cookieSent": [
+              true
+            ],
+            "secFetchSite": [
+              "same-site"
+            ],
+            "status": [
+              200
+            ],
+            "after": "Completed",
+            "ownerDownloadAfterStatus": 409
+          },
+          {
+            "vector": "form-post",
+            "cookieSent": [
+              true
+            ],
+            "secFetchSite": [
+              "same-site"
+            ],
+            "status": [
+              400
+            ],
+            "after": "Ready",
+            "ownerDownloadAfterStatus": 200
+          },
+          {
+            "vector": "top-navigation",
+            "cookieSent": [
+              true
+            ],
+            "secFetchSite": [
+              "same-site"
+            ],
+            "status": [
+              200
+            ],
+            "after": "Completed",
+            "ownerDownloadAfterStatus": 409
+          },
+          {
+            "vector": "window-open",
+            "cookieSent": [
+              null
+            ],
+            "secFetchSite": [
+              null
+            ],
+            "status": [
+              null
+            ],
+            "after": "Completed",
+            "ownerDownloadAfterStatus": 409
+          },
+          {
+            "vector": "anchor-download",
+            "cookieSent": [
+              true
+            ],
+            "secFetchSite": [
+              "same-site"
+            ],
+            "status": [
+              200
+            ],
+            "after": "Completed",
+            "ownerDownloadAfterStatus": 409
+          }
+        ]
+      },
+      "ms": 0
+    },
+    {
+      "id": "same-site.residual-risk",
+      "criterion": "1,4 (informational)",
+      "informational": true,
+      "pass": false,
+      "evidence": {
+        "vectorsThatConsumedSession": [
+          "fetch-no-cors",
+          "fetch-cors",
+          "img",
+          "iframe",
+          "form-get",
+          "top-navigation",
+          "window-open",
+          "anchor-download"
+        ],
+        "note": "A script on a same-site origin (any port of the same host) that already knows the unguessable session URL can consume it; SameSite=Strict does not separate ports."
+      },
+      "ms": 0
+    },
+    {
+      "id": "denied.principals",
+      "criterion": "2",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "sessionBeforeOwnerDownload": {
+          "sessionId": "b5116bac-d2c2-4332-a033-36c23ad752c0",
+          "state": "Ready",
+          "failureCode": null,
+          "transferredBytes": 0
+        },
+        "ownerDownloadAfter": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        },
+        "rows": [
+          {
+            "actor": "admin-a (same tenant, other user)",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 404,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "admin-a (same tenant, other user)",
+            "method": "POST",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 404,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "admin-a (same tenant, other user)",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 404,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "operator-a (same tenant)",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "operator-a (same tenant)",
+            "method": "POST",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "operator-a (same tenant)",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "viewer-a (Viewer, same tenant)",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "viewer-a (Viewer, same tenant)",
+            "method": "POST",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "viewer-a (Viewer, same tenant)",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "owner-b on tenant A path",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "owner-b on tenant A path",
+            "method": "POST",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "owner-b on tenant A path",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "owner-b on own tenant path, A artifact+session",
+            "method": "GET",
+            "path": "/api/tenants/{tenantB}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 404,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "owner-b on own tenant path, A artifact+session",
+            "method": "POST",
+            "path": "/api/tenants/{tenantB}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 404,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "owner-b on own tenant path, A artifact+session",
+            "method": "GET",
+            "path": "/api/tenants/{tenantB}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 404,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "admin-b on tenant A path",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "admin-b on tenant A path",
+            "method": "POST",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "admin-b on tenant A path",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "viewer-b on own tenant path",
+            "method": "GET",
+            "path": "/api/tenants/{tenantB}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "viewer-b on own tenant path",
+            "method": "POST",
+            "path": "/api/tenants/{tenantB}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "viewer-b on own tenant path",
+            "method": "GET",
+            "path": "/api/tenants/{tenantB}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 403,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "anonymous",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 401,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "anonymous",
+            "method": "POST",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}/content",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 401,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          },
+          {
+            "actor": "anonymous",
+            "method": "GET",
+            "path": "/api/tenants/{tenantA}/backup-artifacts/5e5c54fa-9718-4cc3-b979-ae2f976088ec/downloads/{sessionId}",
+            "ok": true,
+            "leakedMarkers": [],
+            "status": 401,
+            "contentType": null,
+            "contentDisposition": null,
+            "bodyBytes": 0,
+            "body": ""
+          }
+        ]
+      },
+      "ms": 1516
+    },
+    {
+      "id": "replay.completed",
+      "criterion": "3",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "first": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        },
+        "statusAfter": {
+          "sessionId": "90fdeb15-c8f3-4435-9aa9-8e26f2780608",
+          "state": "Completed",
+          "failureCode": null,
+          "transferredBytes": 1162714
+        },
+        "replayGet": {
+          "status": 409,
+          "contentType": "application/json; charset=utf-8",
+          "contentDisposition": null,
+          "bodyBytes": 30,
+          "body": "{\"error\":\"download_not_ready\"}"
+        },
+        "replayPost": {
+          "status": 400,
+          "contentType": null,
+          "contentDisposition": null,
+          "bodyBytes": 0,
+          "body": ""
+        },
+        "replayOnPeerNode": {
+          "api": "https://192.168.122.1:5255",
+          "status": 409,
+          "contentType": "application/json; charset=utf-8",
+          "contentDisposition": null,
+          "bodyBytes": 30,
+          "body": "{\"error\":\"download_not_ready\"}"
+        },
+        "peerOk": true
+      },
+      "ms": 291
+    },
+    {
+      "id": "replay.interrupted-transfer",
+      "criterion": "3",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "artifact": "b957848e-2941-4eda-bc1f-f05e6ad5affd",
+        "sizeBytes": 67129911,
+        "aborted": {
+          "status": 200,
+          "bytesBeforeAbort": 278153
+        },
+        "finalState": {
+          "sessionId": "6aff2b40-7e38-439b-961e-a004d7e9ccdd",
+          "state": "Cancelled",
+          "failureCode": "download_cancelled",
+          "transferredBytes": 737280
+        },
+        "replay": {
+          "status": 409,
+          "contentType": "application/json; charset=utf-8",
+          "contentDisposition": null,
+          "bodyBytes": 30,
+          "body": "{\"error\":\"download_cancelled\"}"
+        }
+      },
+      "ms": 1072
+    },
+    {
+      "id": "replay.after-logout",
+      "criterion": "3",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "logout": 204,
+        "replayWithRevokedCookie": {
+          "status": 401,
+          "contentType": null,
+          "contentDisposition": null,
+          "bodyBytes": 0,
+          "body": ""
+        },
+        "sessionAfter": "Ready",
+        "ownerDownloadWithNewLogin": {
+          "status": 200,
+          "bytes": 1162714,
+          "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+          "ok": true,
+          "contentType": "application/octet-stream"
+        }
+      },
+      "ms": 586
+    },
+    {
+      "id": "replay.wrong-binding",
+      "criterion": "3",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "sessionOnOtherArtifactPath": {
+          "status": 404,
+          "contentType": null,
+          "contentDisposition": null,
+          "bodyBytes": 0,
+          "body": ""
+        },
+        "unknownSession": {
+          "status": 404,
+          "contentType": null,
+          "contentDisposition": null,
+          "bodyBytes": 0,
+          "body": ""
+        },
+        "sessionAfter": "Ready"
+      },
+      "ms": 43
+    },
+    {
+      "id": "replay.expired",
+      "criterion": "3",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "ageSeconds": 920,
+        "content": {
+          "status": 409,
+          "contentType": "application/json; charset=utf-8",
+          "contentDisposition": null,
+          "bodyBytes": 28,
+          "body": "{\"error\":\"download_expired\"}"
+        },
+        "status": {
+          "sessionId": "ac54b47b-a37e-48c3-b703-be2626f07717",
+          "state": "Failed",
+          "failureCode": "download_expired",
+          "transferredBytes": 0
+        }
+      },
+      "ms": 878447
+    },
+    {
+      "id": "anchor.download",
+      "criterion": "6",
+      "informational": false,
+      "pass": true,
+      "evidence": {
+        "mode": "ui-button",
+        "suggestedFilename": "backup-5e5c54fa97184cc3b979ae2f976088ec.dump",
+        "downloadFailure": null,
+        "bytes": 1162714,
+        "expectedBytes": 1162714,
+        "sha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+        "expectedSha256": "e15eff35698434a1ed0172b806a3a888bba029019933ab5eaf223bc4355233f1",
+        "sessionId": "612012ba-6c34-464a-966c-af4cfa840361",
+        "sessionState": {
+          "sessionId": "612012ba-6c34-464a-966c-af4cfa840361",
+          "state": "Completed",
+          "failureCode": null,
+          "transferredBytes": 1162714
+        }
+      },
+      "ms": 1660
+    }
+  ]
+}
