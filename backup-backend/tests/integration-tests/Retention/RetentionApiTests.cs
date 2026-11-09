@@ -63,6 +63,9 @@ public sealed class RetentionApiTests(PostgreSqlFixture fixture) : IClassFixture
         Assert.Equal("invalid_request", body.GetProperty("error").GetString());
         Assert.Equal("retention", body.GetProperty("field").GetString());
         Assert.Equal("invalid_value", body.GetProperty("code").GetString());
+        using var jobs = await scenario.Admin.GetAsync(scenario.Root + "/backup-jobs");
+        Assert.Equal(HttpStatusCode.OK, jobs.StatusCode);
+        Assert.Empty(AgentWorld.ReadJson(jobs).EnumerateArray());
     }
 
     [Fact]
