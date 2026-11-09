@@ -49,7 +49,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
       {rows.map((row) => (
         <Card as="li" key={keyExtractor(row)} className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            {title && <h3 className="min-w-0 break-words text-base font-semibold text-text-heading">{title.render(row)}</h3>}
+            {title && <h2 className="min-w-0 break-words text-base font-semibold text-text-heading">{title.render(row)}</h2>}
             {statuses.length > 0 && <div className="flex flex-wrap items-center gap-2">{statuses.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
           </div>
           {fields.length > 0 && (
@@ -83,7 +83,7 @@ function Table<T>({ rows, columns, keyExtractor, className, caption }: ListProps
           {rows.map((row) => (
             <tr key={keyExtractor(row)} className="border-b border-border last:border-b-0 hover:bg-surface-2/70">
               {columns.map((column) => (
-                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-8 [&_button]:py-1 [&_button]:text-sm pointer-coarse:[&_button]:min-h-11', column.wrap ? 'min-w-40 max-w-80 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
+                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-8 [&_button]:py-1 [&_button]:text-sm pointer-coarse:[&_button]:min-h-11', column.card === 'actions' ? 'whitespace-nowrap [&>div]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
               ))}
             </tr>
           ))}
