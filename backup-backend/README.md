@@ -360,6 +360,13 @@ After cancellation or another terminal outcome, the next successful sweep
 releases the journal and applies the usual staging minimum-age cleanup.
 Keep staging cleanup enabled to reclaim cancelled retained transfers.
 
+Local volumes (the default store and every `Agent:Backup:LocalStorage:Volumes` entry) keep a checkpointed `.partial`
+upload only while its attempt can still resume. A cancelled or failed destination removes its own retained file
+immediately; the file is identified by the destination key and the checkpoint's temporary name, never by a pattern
+over the directory. If the agent is killed, the same staging sweep removes a leftover `.{name}.{hex}.partial` once it
+is older than the staging minimum age, nobody has it open, its key names an attempt of this agent in the managed
+layout, and the backend reports that attempt terminal. Paused, queued and unknown attempts keep their partial file.
+
 S3 resumes verify every checkpointed part across all `ListParts` pages.
 Temporary service failures (HTTP 500/502/503/504/429), request timeouts, and
 response-body disconnects enter the same checkpoint-based network recovery

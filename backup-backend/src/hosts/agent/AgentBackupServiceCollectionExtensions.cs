@@ -25,6 +25,15 @@ namespace BackupPlatform.Agent.Host;
 /// </summary>
 public static class AgentBackupServiceCollectionExtensions
 {
+    /// <summary>Asks the backend whether an attempt of this agent is terminal; anything but a clear yes (unknown attempt, no identity, backend down) keeps the files.</summary>
+    private static Func<Guid, CancellationToken, Task<bool>> AttemptIsTerminal(IServiceProvider provider) => async (attemptId, token) =>
+    {
+        var identity = await provider.GetRequiredService<IAgentCredentialStore>().LoadAsync(token).ConfigureAwait(false);
+        if (identity is null) return false;
+        var result = await provider.GetRequiredService<IBackupTaskClient>().CanReleaseRetainedTransferAsync(identity, attemptId, token).ConfigureAwait(false);
+        return result.IsSuccess && result.Value;
+    };
+
     public static IServiceCollection AddAgentBackupExecution(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -110,15 +119,12 @@ public static class AgentBackupServiceCollectionExtensions
                         // Cleanup age is judged against file timestamps written by this machine's own clock.
                         time is ServerAlignedTimeProvider aligned ? aligned.Local : time,
                         provider.GetRequiredService<ILogger<StagingCleaner>>(),
-                        async (attemptId, token) =>
-                        {
-                            var identity = await provider.GetRequiredService<IAgentCredentialStore>().LoadAsync(token).ConfigureAwait(false);
-                            if (identity is null) return false;
-                            var result = await provider.GetRequiredService<IBackupTaskClient>().CanReleaseRetainedTransferAsync(identity, attemptId, token).ConfigureAwait(false);
-                            return result.IsSuccess && result.Value;
-                        },
+                        AttemptIsTerminal(provider),
                         provider.GetService<IRetainedUploadAborter>());
                 });
+                services.AddSingleton(provider => new LocalPartialCleaner(provider.GetRequiredService<LocalVolumes>(), AttemptIsTerminal(provider),
+                    provider.GetRequiredService<TimeProvider>() is ServerAlignedTimeProvider aligned ? aligned.Local : provider.GetRequiredService<TimeProvider>(),
+                    provider.GetRequiredService<ILogger<LocalPartialCleaner>>()));
                 services.AddHostedService<AgentStagingCleanupHostedService>();
             }
         }

@@ -11,6 +11,7 @@ namespace BackupPlatform.Agent.Host;
 /// </summary>
 internal sealed partial class AgentStagingCleanupHostedService(
     StagingCleaner cleaner,
+    LocalPartialCleaner partials,
     StagingCleanupOptions options,
     TimeProvider time,
     ILogger<AgentStagingCleanupHostedService> logger) : BackgroundService
@@ -47,6 +48,7 @@ internal sealed partial class AgentStagingCleanupHostedService(
         try
         {
             await cleaner.RunAsync(options, stoppingToken).ConfigureAwait(false);
+            await partials.RunAsync(options.MinimumAge, stoppingToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
