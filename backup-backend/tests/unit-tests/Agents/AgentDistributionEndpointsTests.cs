@@ -145,6 +145,24 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
             return Task.CompletedTask;
         }
     }
+    // The refusal over an existing install is the same sentence on both platforms (documented in the root README). The Windows script cannot run here,
+    // so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
+    private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.";
+    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hiçbir şey değiştirilmedi. Önce mevcut ajanı kaldırın, ardından bu kurulumu yeniden çalıştırın.";
+
+    [Theory]
+    [InlineData("install.sh", "refuse_existing() { fail ")]
+    [InlineData("install.ps1", "Fail ")]
+    public async Task Linux_and_Windows_installers_refuse_an_existing_install_with_the_same_documented_message(string script, string call)
+    {
+        var text = await _client.GetStringAsync($"/api/agent-dist/{script}");
+
+        Assert.Contains($"{call}'{ExistingInstallEnglish}' '{ExistingInstallTurkish}'", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("service is already registered", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("will not be reused", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Existing agent binaries", text, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("--non-interactive", "Server and enrollment token are required")]
     [InlineData("--non-interactive --server", "Missing option value")]

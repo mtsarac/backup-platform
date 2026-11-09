@@ -175,6 +175,28 @@ public sealed class BackupOrchestratorMappingTests
     }
 
     [Fact]
+    public void ViewOfAStorageLoginRejectionAndOfAChangedHostKeyAreDistinctFromEachOtherAndFromAMissingPermission()
+    {
+        var views = new[] { BackupFailureCodes.PermissionDenied, BackupFailureCodes.StorageAuthenticationFailed, BackupFailureCodes.StorageHostKeyMismatch }.Select(code =>
+        {
+            var run = NewRun();
+            Fail(run, code, Now);
+            return BackupOrchestrator.ToView(run);
+        }).ToArray();
+
+        Assert.Equal(3, views.Select(view => view.ReasonCode).Distinct().Count());
+        Assert.Equal(3, views.Select(view => view.Reason).Distinct().Count());
+        Assert.All(views.Skip(1), view =>
+        {
+            Assert.Equal("NotRetryable", view.Retry.State);
+            Assert.DoesNotContain("password", view.Reason!, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("private key", view.Reason!, StringComparison.OrdinalIgnoreCase);
+        });
+        Assert.Contains("host key", views[2].Reason!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("credentials", views[1].Reason!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ViewOfAnExhaustedRunReportsMaxAttemptsAsTotalAttemptsUsed()
     {
         var run = NewRun(Policy(maxAttempts: 2));

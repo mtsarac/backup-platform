@@ -93,6 +93,8 @@ usable statvfs falls back to the server's own `df -Pk` over an SSH exec channel
 (same pinned host key); if that fails too it reports CapacityUnavailable. The
 Agent never substitutes its own host filesystem's capacity.
 
+SFTP login and host-key failures are reported apart, in the connection test and in a run. The client sends no credentials until the server's key matches the pinned `hostKeyFingerprint`. A key that does not match gives the test code `host_key_mismatch` and the run failure code `StorageHostKeyMismatch` (reason `storage-host-key-mismatch`); a server that refuses the user, password or key gives `authentication_failed` and `StorageAuthenticationFailed` (reason `storage-authentication-failed`). Neither is retried, and neither message carries a credential, the fingerprint or the library's exception text. `PermissionDenied` stays for a missing permission (for example on the remote directory). `AuthenticationFailed` is the database login only.
+
 S3 and SMB expose no capacity or quota to the platform, so their probe and GET
 return `status: "NotMeasurable"` immediately: nothing is queued to an Agent and
 no snapshot is stored. Capacity whose total or used/free amount is unknown is
