@@ -1,0 +1,6442 @@
+{
+  "before": {
+    "baseUrl": "https://192.168.122.1:5173",
+    "measuredAt": "2026-11-09T12:18:36.792Z",
+    "minRequiredRatio": 4.5,
+    "results": [
+      {
+        "surface": "login",
+        "condition": "light",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 6.64
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(171,179,176)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 1.9
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(137,147,144)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 2.8
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#899390",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 2.8
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 6.64
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 1.9,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "light",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(137,147,144)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 2.8
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(171,179,176)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 1.9
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 6.64
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#899390",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 2.8
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 6.64
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 1.9,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "dark",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 10.47
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(76,85,85)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 2.5
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(108,120,118)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 4.19
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#6c7876",
+                "bgColor": "#0a1011",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#0a1011",
+                "contrastRatio": 10.47
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.5,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "dark",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(108,120,118)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 4.19
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(76,85,85)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 2.5
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 10.47
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#6c7876",
+                "bgColor": "#0a1011",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#0a1011",
+                "contrastRatio": 10.47
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.5,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "light-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 10.31
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(149,156,155)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 2.48
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(105,113,112)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 4.44
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#697170",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 4.43
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 10.3
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.48,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "light-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(105,113,112)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 4.44
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(149,156,155)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 2.48
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 10.31
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#697170",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 4.43
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 10.3
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.48,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "dark-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 13.68
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(105,110,111)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 3.69
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,156,158)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 6.96
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#0a1011",
+                "contrastRatio": 13.67
+              },
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#999c9e",
+                "bgColor": "#0a1011",
+                "contrastRatio": 6.94
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 3.69,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "dark-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,156,158)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 6.96
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(105,110,111)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 3.69
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 13.68
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#999c9e",
+                "bgColor": "#0a1011",
+                "contrastRatio": 6.94
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#0a1011",
+                "contrastRatio": 13.67
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 3.69,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-light",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 2.85
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 5.74
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#ffffff",
+                "contrastRatio": 2.95
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 6,
+              "firstTarget": [
+                ".text-lg"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 2.85,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-light",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 5.74
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 2.85
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#ffffff",
+                "contrastRatio": 2.95
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 6,
+              "firstTarget": [
+                ".text-lg"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 2.85,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-dark",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 3.66
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 7.37
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#687170",
+                "bgColor": "#000000",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 2,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 3.66,
+        "pass": false
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-dark",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 7.37
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 3.66
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#687170",
+                "bgColor": "#000000",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 2,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 3.66,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(188,194,192)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(149,157,154)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 3.07
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#fefefe",
+                "contrastRatio": 2.92
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(149,157,154)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 3.07
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(188,194,192)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#fefefe",
+                "contrastRatio": 2.92
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(81,94,93)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 2.51
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(112,126,124)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.99
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#707d7b",
+                "bgColor": "#131c1d",
+                "contrastRatio": 4.05
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.51,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(112,126,124)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.99
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(81,94,93)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 2.51
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#707d7b",
+                "bgColor": "#131c1d",
+                "contrastRatio": 4.05
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.51,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(167,171,171)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2.57
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(116,123,123)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 4.77
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              },
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#6f7675",
+                "bgColor": "#fefefe",
+                "contrastRatio": 4.6
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.57,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(116,123,123)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 4.77
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(167,171,171)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2.57
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#6f7675",
+                "bgColor": "#fefefe",
+                "contrastRatio": 4.6
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.57,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(111,118,119)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.67
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(157,162,164)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 6.56
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              },
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#9ca1a3",
+                "bgColor": "#131c1d",
+                "contrastRatio": 6.63
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 3.67,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(157,162,164)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 6.56
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(111,118,119)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.67
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#9ca1a3",
+                "bgColor": "#131c1d",
+                "contrastRatio": 6.63
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 3.67,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-light",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(161,161,161)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 2.89
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(107,107,107)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 5.92
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#ffffff",
+                "contrastRatio": 2.95
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 17,
+              "firstTarget": [
+                "aside > .h-16.px-5.justify-between > .gap-3.flex.items-center > .leading-tight.min-w-0 > .block.font-semibold.text-sidebar-foreground"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 2.89,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-light",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(107,107,107)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 5.92
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(161,161,161)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 2.89
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#ffffff",
+                "contrastRatio": 2.95
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 17,
+              "firstTarget": [
+                "aside > .h-16.px-5 > .gap-3 > .leading-tight.min-w-0 > .block.text-sidebar-foreground.font-semibold"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 2.89,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-dark",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 3.66
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 7.37
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#687170",
+                "bgColor": "#000000",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 2,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 3.66,
+        "pass": false
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-dark",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 7.37
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 3.66
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#687170",
+                "bgColor": "#000000",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 2,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 3.66,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(188,194,192)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(149,157,154)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 3.07
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#fefefe",
+                "contrastRatio": 2.92
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(149,157,154)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 3.07
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(188,194,192)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#fefefe",
+                "contrastRatio": 2.92
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(81,94,93)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 2.51
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(112,126,124)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.99
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#707d7b",
+                "bgColor": "#131c1d",
+                "contrastRatio": 4.05
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.51,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(112,126,124)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.99
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(81,94,93)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 2.51
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#707d7b",
+                "bgColor": "#131c1d",
+                "contrastRatio": 4.05
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.51,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(167,171,171)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2.57
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(116,123,123)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 4.77
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              },
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#6f7675",
+                "bgColor": "#fefefe",
+                "contrastRatio": 4.6
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.57,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(116,123,123)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 4.77
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(167,171,171)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 2.57
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#6f7675",
+                "bgColor": "#fefefe",
+                "contrastRatio": 4.6
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 2.57,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(111,118,119)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.67
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(157,162,164)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 6.56
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              },
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#9ca1a3",
+                "bgColor": "#131c1d",
+                "contrastRatio": 6.63
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 3.67,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(157,162,164)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 6.56
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(111,118,119)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 3.67
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#9ca1a3",
+                "bgColor": "#131c1d",
+                "contrastRatio": 6.63
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": true,
+        "minRatio": 3.67,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-light",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(161,161,161)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 2.89
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(107,107,107)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 5.92
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#ffffff",
+                "contrastRatio": 2.95
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 18,
+              "firstTarget": [
+                "aside > .h-16.px-5.justify-between > .gap-3.flex.items-center > .leading-tight.min-w-0 > .block.font-semibold.text-sidebar-foreground"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 2.89,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-light",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(107,107,107)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 5.92
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(161,161,161)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 2.89
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#909895",
+                "bgColor": "#ffffff",
+                "contrastRatio": 2.95
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 18,
+              "firstTarget": [
+                "aside > .h-16.px-5.justify-between > .gap-3.flex.items-center > .leading-tight.min-w-0 > .block.font-semibold.text-sidebar-foreground"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 2.89,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-dark",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 3.66
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 7.37
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#687170",
+                "bgColor": "#000000",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 2,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 3.66,
+        "pass": false
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-dark",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 36
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.6,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(153,153,153)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 7.37
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 0.4,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(102,102,102)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 3.66
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [
+              {
+                "target": [
+                  ".opacity-60"
+                ],
+                "fgColor": "#687170",
+                "bgColor": "#000000",
+                "contrastRatio": 4.18
+              }
+            ],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 2,
+              "firstTarget": [
+                ".opacity-60"
+              ]
+            },
+            {
+              "id": "label-content-name-mismatch",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-muted"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 3.66,
+        "pass": false
+      }
+    ]
+  },
+  "after": {
+    "baseUrl": "http://127.0.0.1:5287",
+    "measuredAt": "2026-11-09T12:22:55.471Z",
+    "minRequiredRatio": 4.5,
+    "results": [
+      {
+        "surface": "login",
+        "condition": "light",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 6.64
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 7.04
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 7.04
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 6.64
+              },
+              {
+                "target": [
+                  "span:nth-child(4)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 7.04
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 6.64,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "light",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 7.04
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 7.04
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 6.64
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 7.04
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 6.64
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 6.64,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "dark",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 10.47
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 9.85
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 9.85
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#0a1011",
+                "contrastRatio": 10.47
+              },
+              {
+                "target": [
+                  "span:nth-child(4)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#0a1011",
+                "contrastRatio": 9.85
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 9.85,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "dark",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 9.85
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 9.85
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 10.47
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#0a1011",
+                "contrastRatio": 9.85
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#0a1011",
+                "contrastRatio": 10.47
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 9.85,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "light-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 10.31
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 15.59
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 15.59
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 10.3
+              },
+              {
+                "target": [
+                  "span:nth-child(4)"
+                ],
+                "fgColor": "#101b1a",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 15.58
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 10.31,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "light-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 15.59
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 15.59
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(238,242,241)",
+            "backgroundHasImage": false,
+            "ratio": 10.31
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#101b1a",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 15.58
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#eef2f1",
+                "contrastRatio": 10.3
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 10.31,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "dark-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 13.68
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 18.33
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 18.33
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#0a1011",
+                "contrastRatio": 13.67
+              },
+              {
+                "target": [
+                  "span:nth-child(4)"
+                ],
+                "fgColor": "#f8fafc",
+                "bgColor": "#0a1011",
+                "contrastRatio": 18.32
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 13.68,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "dark-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 18.33
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 18.33
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(10,16,17)",
+            "backgroundHasImage": false,
+            "ratio": 13.68
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#f8fafc",
+                "bgColor": "#0a1011",
+                "contrastRatio": 18.32
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#0a1011",
+                "contrastRatio": 13.67
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 13.68,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-light",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              },
+              {
+                "target": [
+                  "span:nth-child(4)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.95
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 5,
+              "firstTarget": [
+                ".text-lg"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-light",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(255,255,255)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.95
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 5,
+              "firstTarget": [
+                ".text-lg"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-dark",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              },
+              {
+                "target": [
+                  "span:nth-child(4)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#000000",
+                "contrastRatio": 10.78
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".inline-flex"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      },
+      {
+        "surface": "login",
+        "condition": "forced-colors-dark",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#000000",
+                "contrastRatio": 10.78
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".inline-flex"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.88
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.3,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.88
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.3,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#131c1d",
+                "contrastRatio": 8.9
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.68,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#131c1d",
+                "contrastRatio": 8.9
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.68,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#101b1a",
+                "bgColor": "#fefefe",
+                "contrastRatio": 17.44
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.89,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "light-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#101b1a",
+                "bgColor": "#fefefe",
+                "contrastRatio": 17.44
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.89,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#f8fafc",
+                "bgColor": "#131c1d",
+                "contrastRatio": 16.56
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.06,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "dark-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#f8fafc",
+                "bgColor": "#131c1d",
+                "contrastRatio": 16.56
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.06,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-light",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.95
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 16,
+              "firstTarget": [
+                "aside > .h-16.px-5.justify-between > .gap-3.flex.items-center > .leading-tight.min-w-0 > .block.font-semibold.text-sidebar-foreground"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 23.4,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-light",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.95
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 16,
+              "firstTarget": [
+                "aside > .h-16.px-5 > .gap-3 > .leading-tight.min-w-0 > .block.text-sidebar-foreground.font-semibold"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 23.4,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-dark",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#000000",
+                "contrastRatio": 10.78
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-primary-hover"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      },
+      {
+        "surface": "tenant-select",
+        "condition": "forced-colors-dark",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#000000",
+                "contrastRatio": 10.78
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-primary-hover"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.88
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.3,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(70, 84, 79)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(70,84,79)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.81
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(15, 94, 99)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(15,94,99)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 8.3
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.88
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#fefefe",
+                "contrastRatio": 7.43
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.3,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#131c1d",
+                "contrastRatio": 8.9
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.68,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(174, 189, 186)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(174,189,186)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 8.68
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(94, 208, 214)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(94,208,214)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 9.23
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#131c1d",
+                "contrastRatio": 8.9
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#131c1d",
+                "contrastRatio": 9.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 8.68,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#101b1a",
+                "bgColor": "#fefefe",
+                "contrastRatio": 17.44
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.89,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "light-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(16, 27, 26)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(16,27,26)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 19.49
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(10, 63, 67)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(10,63,67)",
+            "background": "rgb(267,267,267)",
+            "backgroundHasImage": false,
+            "ratio": 12.89
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#101b1a",
+                "bgColor": "#fefefe",
+                "contrastRatio": 17.44
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0a3f43",
+                "bgColor": "#fefefe",
+                "contrastRatio": 11.53
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.89,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark-high-contrast",
+        "language": "tr",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#f8fafc",
+                "bgColor": "#131c1d",
+                "contrastRatio": 16.56
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.06,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "dark-high-contrast",
+        "language": "en",
+        "forcedColorsMatches": false,
+        "rootClasses": "hc dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(248, 250, 252)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(248,250,252)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 16.15
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(159, 230, 234)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(159,230,234)",
+            "background": "rgb(20,31,31)",
+            "backgroundHasImage": false,
+            "ratio": 12.06
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#f8fafc",
+                "bgColor": "#131c1d",
+                "contrastRatio": 16.56
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#9fe6ea",
+                "bgColor": "#131c1d",
+                "contrastRatio": 12.36
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": []
+        },
+        "axeReliable": true,
+        "minRatio": 12.06,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-light",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.95
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 17,
+              "firstTarget": [
+                "aside > .h-16.px-5 > .gap-3 > .leading-tight.min-w-0 > .block.font-semibold.text-sidebar-foreground"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 23.4,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-light",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(0, 0, 0)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(0,0,0)",
+            "background": "rgb(268,268,268)",
+            "backgroundHasImage": false,
+            "ratio": 23.4
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#46544f",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.95
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#0f5e63",
+                "bgColor": "#ffffff",
+                "contrastRatio": 7.49
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 17,
+              "firstTarget": [
+                "aside > .h-16.px-5 > .gap-3 > .leading-tight.min-w-0 > .block.font-semibold.text-sidebar-foreground"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 23.4,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-dark",
+        "language": "tr",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": "true",
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              },
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(4)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#000000",
+                "contrastRatio": 10.78
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-primary-hover"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      },
+      {
+        "surface": "dashboard",
+        "condition": "forced-colors-dark",
+        "language": "en",
+        "forcedColorsMatches": true,
+        "rootClasses": "dark",
+        "buttonSize": {
+          "width": 93,
+          "height": 44
+        },
+        "labels": [
+          {
+            "text": "TR",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "/",
+            "ariaCurrent": null,
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "500",
+            "textDecorationLine": "none",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          },
+          {
+            "text": "EN",
+            "ariaCurrent": "true",
+            "color": "rgb(255, 255, 255)",
+            "opacity": 1,
+            "fontWeight": "700",
+            "textDecorationLine": "underline",
+            "fontSize": "12px",
+            "foreground": "rgb(255,255,255)",
+            "background": "rgb(0,0,0)",
+            "backgroundHasImage": false,
+            "ratio": 21
+          }
+        ],
+        "axe": {
+          "switcherContrast": {
+            "violations": [],
+            "passes": [
+              {
+                "target": [
+                  ".hover\\:bg-muted > span:nth-child(2)"
+                ],
+                "fgColor": "#aebdba",
+                "bgColor": "#000000",
+                "contrastRatio": 10.78
+              },
+              {
+                "target": [
+                  ".font-bold"
+                ],
+                "fgColor": "#5ed0d6",
+                "bgColor": "#000000",
+                "contrastRatio": 11.46
+              }
+            ],
+            "incomplete": []
+          },
+          "pageViolations": [
+            {
+              "id": "color-contrast",
+              "impact": "serious",
+              "nodes": 1,
+              "firstTarget": [
+                ".hover\\:bg-primary-hover"
+              ]
+            }
+          ]
+        },
+        "axeReliable": false,
+        "minRatio": 21,
+        "pass": true
+      }
+    ]
+  }
+}
