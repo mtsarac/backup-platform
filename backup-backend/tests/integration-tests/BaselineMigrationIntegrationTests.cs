@@ -5,10 +5,12 @@ namespace BackupPlatform.IntegrationTests;
 public sealed class BaselineMigrationIntegrationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
     [Fact]
-    public async Task AFreshDatabaseFromTheSingleBaselineMatchesTheCurrentModel()
+    public async Task AFreshDatabaseAppliesTheBaselineFirstAndMatchesTheCurrentModel()
     {
         await using var context = fixture.CreatePlatformContext();
-        Assert.Equal(["Baseline"], (await context.Database.GetAppliedMigrationsAsync()).Select(m => m[(m.IndexOf('_') + 1)..]));
+        // The baseline is always first; later migrations are incremental and must all be applied on a fresh database.
+        Assert.Equal("Baseline", (await context.Database.GetAppliedMigrationsAsync()).Select(m => m[(m.IndexOf('_') + 1)..]).First());
+        Assert.Equal(context.Database.GetMigrations().Count(), (await context.Database.GetAppliedMigrationsAsync()).Count());
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         Assert.False(context.Database.HasPendingModelChanges());
     }

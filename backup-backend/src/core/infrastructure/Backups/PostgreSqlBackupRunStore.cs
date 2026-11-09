@@ -42,6 +42,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
 
     public async Task<BackupJob?> CreateJobAsync(BackupJob job, CancellationToken cancellationToken, UserId? actor = null)
     {
+        // A key already used by this tenant answers with its job before anything else is looked at (the agent may have been revoked since).
+        if (job.IdempotencyKey is not null && await FindJobByIdempotencyKeyAsync(job.TenantId, job.IdempotencyKey, cancellationToken) is { } replayed) return replayed;
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await LockAgentAsync(context, job.TenantId, job.AgentId, cancellationToken)) return null;
@@ -49,9 +51,20 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await StorageTargetGate.EnsureJobTargetAsync(context, job.TenantId, job.Configuration, cancellationToken);
         context.BackupJobs.Add(job);
         BackupAudit.AddJobEvent(context, job, actor, job.CreatedAt, AuditActions.BackupJobCreated);
-        await context.SaveChangesAsync(cancellationToken);
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException exception) when (job.IdempotencyKey is not null && IsUniqueViolation(exception))
+        {
+            // Another request (any node) won the unconditional (tenant, key) index: this one creates and audits nothing and answers with the winner.
+            await transaction.RollbackAsync(CancellationToken.None);
+            return await FindJobByIdempotencyKeyAsync(job.TenantId, job.IdempotencyKey, cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
         return job;
+    }
+    public async Task<BackupJob?> FindJobByIdempotencyKeyAsync(TenantId tenantId, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.BackupJobs.AsNoTracking().SingleOrDefaultAsync(job => job.TenantId == tenantId && job.IdempotencyKey == idempotencyKey, cancellationToken);
     }
     public async Task<BackupJob?> GetJobAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken)
     {

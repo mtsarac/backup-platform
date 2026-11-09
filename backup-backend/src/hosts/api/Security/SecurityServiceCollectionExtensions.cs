@@ -89,7 +89,11 @@ public static class SecurityServiceCollectionExtensions
         AddAgentSecurity(services);
         AddAgentConnectivity(services);
         services.AddScoped<IDiscoveryStore, PostgreSqlDiscoveryStore>();
+        services.AddSingleton<BackupPlatform.Application.Backups.IJobCredentialClaims, BackupPlatform.Infrastructure.Backups.PostgreSqlJobCredentialClaims>();
+        services.AddSingleton<BackupPlatform.Application.Backups.IIdempotencyFingerprintKey, BackupPlatform.Api.Databases.IdempotencyFingerprintKey>();
         services.AddSingleton<BackupPlatform.Api.Databases.DatabaseCredentialVault>();
+        services.AddSingleton<BackupPlatform.Api.Databases.JobCredentialSweepWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Databases.JobCredentialSweepWorker>());
         services.AddScoped<DiscoveryService>();
         services.TryAddSingleton(provider =>
         {

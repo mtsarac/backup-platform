@@ -339,6 +339,7 @@ public sealed class ArtifactEncryptionPolicyTests
     private sealed class Store(BackupRun run) : IBackupRunStore
     {
         public BackupRun Run => run;
+        public Task<BackupJob?> FindJobByIdempotencyKeyAsync(TenantId tenantId, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public BackupCompletion? Completed;
         public Task<IReadOnlyList<TransferCheckpoint>> GetCheckpointsAsync(TenantId tenantId, Guid attemptId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<TransferCheckpoint>>([]);
         public Task<TenantId?> FindRunTenantAsync(Guid runId, CancellationToken cancellationToken) => Task.FromResult<TenantId?>(run.Id == runId ? run.TenantId : null);
