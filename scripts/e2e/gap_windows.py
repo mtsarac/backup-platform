@@ -96,6 +96,7 @@ def agt08_verify(t):
             if checked and (not previous or datetime.datetime.fromisoformat(checked.replace("Z", "+00:00")) > datetime.datetime.fromisoformat(previous.replace("Z", "+00:00"))): break
             time.sleep(2)
         else: raise TimeoutError(f"verify {eng} did not produce a fresh database check")
+        assert d["access"] == "Authenticated", f"verify {eng}: access={d['access']} reason={d['accessReasonCode']}"
         out[eng] = {"access": d["access"], "reason": d["accessReasonCode"], "counts": d["databaseCounts"], "dbs": sorted(x.get("name") or x.get("databaseName") for x in d["databases"])}
     real_ms = sorted(sql("select name from sys.databases where database_id>4").split())
     pgcmd = f"$env:PGPASSWORD='{pgc['password']}'; & 'C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe' -h 127.0.0.1 -U {pgc['user']} -d postgres -tAc \"select datname from pg_database where not datistemplate and datname<>'postgres'\""
