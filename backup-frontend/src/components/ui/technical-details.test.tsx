@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TechnicalDetails } from './technical-details'
 
@@ -30,6 +30,18 @@ describe('TechnicalDetails', () => {
     expect(screen.getByText('Kopya tablosu')).not.toBeVisible()
     await userEvent.click(screen.getByText('Teknik ayrıntılar'))
     expect(screen.getByText('Kopya tablosu')).toBeVisible()
+  })
+
+  it.each([['accordion', true], ['drawer', false]])('keeps its %s a valid description list: only term/definition groups, copy button inside a dd', (_mode, accordion) => {
+    const { container } = render(<TechnicalDetails items={items} defaultOpen accordion={accordion}><p>Ek içerik</p></TechnicalDetails>)
+    const list = container.querySelector('dl')!
+    expect(list.children).toHaveLength(items.length)
+    for (const group of list.children) {
+      expect(group.tagName).toBe('DIV')
+      expect([...group.children].map(child => child.tagName)).toEqual(['DT', 'DD', 'DD'])
+      expect(group.lastElementChild).toContainElement(within(group as HTMLElement).getByRole('button'))
+    }
+    expect(list).not.toContainElement(screen.getByText('Ek içerik'))
   })
 
   it('renders nothing when there is nothing technical to show', () => {
