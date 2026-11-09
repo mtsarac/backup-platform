@@ -190,6 +190,24 @@ public sealed class ConnectionTesterTests : IDisposable
 
     // ---- scripted providers ------------------------------------------------------------------------------------------------
 
+    [Theory]
+    [InlineData(StorageFailureKind.HostKeyMismatch, StorageTestCodes.HostKeyMismatch)]
+    [InlineData(StorageFailureKind.AuthenticationFailed, StorageTestCodes.AuthenticationFailed)]
+    public async Task AnSftpHostKeyMismatchAndARejectedLoginAreDifferentCodesAndNeitherRepeatsTheProvidersInnerError(StorageFailureKind kind, string code)
+    {
+        var provider = new ScriptedProvider([StorageCapabilityIds.Delete]) { OnPut = _ => throw new StorageException(kind, "SFTP failed.", new InvalidOperationException("password=hunter2 key=-----BEGIN")) };
+        var connection = new StorageConnection(Guid.NewGuid(), _tenant, "Sftp", StorageProviderTypes.Sftp, StorageOwnership.TenantManaged, null, null, true, Now);
+
+        var result = await new SftpConnectionTester((_, _) => provider).TestAsync(connection, _secrets, CancellationToken.None);
+
+        Assert.Equal(StorageTestStatus.Failed, result.Status);
+        Assert.Equal(code, result.Code);
+        Assert.DoesNotContain("hunter2", result.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("BEGIN", result.Message, StringComparison.Ordinal);
+        Assert.NotEqual(StorageTestMessages.For(StorageTestCodes.HostKeyMismatch), StorageTestMessages.For(StorageTestCodes.AuthenticationFailed));
+        Assert.Contains("host key", StorageTestMessages.For(StorageTestCodes.HostKeyMismatch), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task AProviderThatCannotDeleteFailsAsNotSupportedWithoutWritingAProbe()
     {

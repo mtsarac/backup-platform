@@ -10,6 +10,8 @@ WORK=''
 declare -A SEEN=()
 text() { if [[ "$LANGUAGE" == tr ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 fail() { text "$1" "$2" >&2; printf '\n' >&2; exit 1; }
+# The same sentence as install.ps1 (a unit test compares them); every existing-install check ends here.
+refuse_existing() { fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.' 'Mevcut bir ajan kurulumu bulundu; hiçbir şey değiştirilmedi. Önce mevcut ajanı kaldırın, ardından bu kurulumu yeniden çalıştırın.'; }
 cleanup() { unset TOKEN BACKUP_AGENT_ENROLLMENT_TOKEN; [[ -z "$WORK" ]] || rm -rf -- "$WORK"; }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -92,12 +94,10 @@ for path in /opt /var /var/lib /etc /etc/systemd /etc/systemd/system; do
     (( (8#$permissions & 0022) == 0 )) || fail 'Installation parents must not be writable by other users.' 'Diğer kullanıcılar üst kurulum dizinlerine yazamamalıdır.'
 done
 for path in "$INSTALL_DIR" "$STATE_DIR" "$UNIT" /run/systemd/system/backup-agent.service /usr/lib/systemd/system/backup-agent.service /lib/systemd/system/backup-agent.service; do
-    [[ ! -e "$path" && ! -L "$path" ]] || fail 'Existing agent binaries, identity or service found; nothing was replaced.' 'Mevcut ajan dosyası, kimliği veya hizmeti bulundu; hiçbir şey değiştirilmedi.'
+    [[ ! -e "$path" && ! -L "$path" ]] || refuse_existing
 done
-[[ $(systemctl show backup-agent.service --property=LoadState --value) == not-found ]] || fail 'An agent service is already registered.' 'Ajan hizmeti zaten kayıtlı.'
-if getent passwd backup-agent >/dev/null || getent group backup-agent >/dev/null; then
-    fail 'The backup-agent account or group already exists; it will not be reused.' 'backup-agent hesabı veya grubu zaten var; yeniden kullanılmayacak.'
-fi
+[[ $(systemctl show backup-agent.service --property=LoadState --value) == not-found ]] || refuse_existing
+if getent passwd backup-agent >/dev/null || getent group backup-agent >/dev/null; then refuse_existing; fi
 if [[ "$MODE" == interactive ]]; then
     printf '\n%s\n  %s\n  %s\n  %s\n  %s\n' "$(text '3. Installation summary (token hidden)' '3. Kurulum özeti (kayıt anahtarı gizli)')" "$SERVER" "$AGENT_NAME" "$INSTALL_DIR" 'backup-agent.service / backup-agent' >&3
     printf '%s\n' "$(text 'The service uses a dedicated unprivileged account; grant source access separately.' 'Hizmet ayrı, yetkisiz bir hesap kullanır; kaynak erişimini ayrıca verin.')" >&3

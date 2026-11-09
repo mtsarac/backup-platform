@@ -40,6 +40,7 @@ public static class SecurityApplicationBuilderExtensions
         app.UseRateLimiter();
         app.UseMiddleware<AgentProtocolMiddleware>();
         app.UseMiddleware<ApiAntiforgeryMiddleware>();
+        app.UseMiddleware<RequestBoundaryMiddleware>();
         return app;
     }
 }

@@ -116,7 +116,13 @@ public enum BackupFailureCause
     StorageUnavailable,
 
     /// <summary>The point-in-time snapshot of the source (VSS, LVM, Btrfs, ZFS) could not be created or released.</summary>
-    SnapshotFailed
+    SnapshotFailed,
+
+    /// <summary>A storage destination rejected the credentials (wrong user, password or key).</summary>
+    StorageAuthenticationFailed,
+
+    /// <summary>An SFTP destination presented a host key that does not match the pinned fingerprint; no credentials were sent.</summary>
+    StorageHostKeyMismatch
 }
 
 /// <summary>

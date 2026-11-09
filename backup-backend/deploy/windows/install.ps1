@@ -83,7 +83,7 @@ $Server = $uri.AbsoluteUri.TrimEnd('/')
 $installPath = Assert-SafePath (Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'BackupAgent')
 $storePath = Assert-SafePath (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent')
 if ((Get-Service -Name BackupAgent -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath $installPath) -or (Test-Path -LiteralPath $storePath)) {
-    Fail 'Existing agent binaries, identity or service found; nothing was replaced.' 'Mevcut ajan dosyası, kimliği veya hizmeti bulundu; hiçbir şey değiştirilmedi.'
+    Fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.' 'Mevcut bir ajan kurulumu bulundu; hiçbir şey değiştirilmedi. Önce mevcut ajanı kaldırın, ardından bu kurulumu yeniden çalıştırın.'
 }
 if ($guided) {
     Write-Host (Text '3. Installation summary (token hidden)' '3. Kurulum özeti (kayıt anahtarı gizli)')

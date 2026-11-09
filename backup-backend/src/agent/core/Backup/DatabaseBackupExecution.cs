@@ -905,7 +905,9 @@ internal sealed class DatabaseBackupExecution
 
     private static BackupFailureCause StorageCause(StorageFailureKind kind) => kind switch
     {
-        StorageFailureKind.AccessDenied or StorageFailureKind.AuthenticationFailed or StorageFailureKind.HostKeyMismatch => BackupFailureCause.PermissionDenied,
+        StorageFailureKind.AccessDenied => BackupFailureCause.PermissionDenied,
+        StorageFailureKind.AuthenticationFailed => BackupFailureCause.StorageAuthenticationFailed,
+        StorageFailureKind.HostKeyMismatch => BackupFailureCause.StorageHostKeyMismatch,
         StorageFailureKind.InvalidConfiguration => BackupFailureCause.InvalidConfiguration,
         StorageFailureKind.NotSupported => BackupFailureCause.Unsupported,
         StorageFailureKind.InsufficientSpace or StorageFailureKind.AlreadyExists => BackupFailureCause.Unclassified,
@@ -918,7 +920,8 @@ internal sealed class DatabaseBackupExecution
         StorageFailureKind.IntegrityMismatch => BackupPipelineReasons.StorageIntegrityMismatch,
         StorageFailureKind.InsufficientSpace => BackupPipelineReasons.StorageInsufficientSpace,
         StorageFailureKind.AccessDenied => BackupPipelineReasons.StorageAccessDenied,
-        StorageFailureKind.AuthenticationFailed or StorageFailureKind.HostKeyMismatch => BackupPipelineReasons.StorageAuthenticationFailed,
+        StorageFailureKind.AuthenticationFailed => BackupPipelineReasons.StorageAuthenticationFailed,
+        StorageFailureKind.HostKeyMismatch => BackupPipelineReasons.StorageHostKeyMismatch,
         StorageFailureKind.NotSupported => BackupPipelineReasons.StorageNotSupported,
         StorageFailureKind.InvalidConfiguration => BackupPipelineReasons.StorageInvalidConfiguration,
         StorageFailureKind.Io => BackupPipelineReasons.StorageIoError,

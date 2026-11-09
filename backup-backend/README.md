@@ -73,6 +73,13 @@ leases, execution, or completion.
 
 A typed login is stored under a reference derived from the request, after a claim row in `job_credential_claims` was written. A retry reuses the one credential. A request that creates nothing (validation error, conflict, unknown agent) deletes the credential it stored; a creation that is interrupted after storing it and never retried is removed by `JobCredentialSweepWorker` (every minute, every node) once its claim is older than one hour and no job references the credential. The sweep locks each stale claim row (`FOR UPDATE SKIP LOCKED`) from selection until the credential is deleted and the claim removed, in one transaction; a retry's claim waits on that row, then claims and rewrites the credential afresh, and a claim refreshed before the selection is not stale at all. A job therefore never ends up referencing a credential a sweep deleted. `PUT` is not idempotent. Jobs created before the migration have no key and stay valid. Other tenants' keys never match.
 
+### Request boundary
+
+Hostile input is refused at the edge with a controlled `400`, after authentication and authorization (an anonymous or unauthorized caller still gets `401`/`403` first, whatever the id) and before any handler or database call. The body is always `{ "error": "invalid_request", "field": …, "code": "invalid_value" }`; nothing about the database or an exception is ever returned.
+
+- **NUL characters.** PostgreSQL text cannot store U+0000, so a NUL in any JSON string or dictionary key (`NulFreeStringConverter`, registered for every JSON body of a user-facing route; `/api/agent/` bodies are validated by their own handlers, which name the offending field) or in any query-string name or value (`RequestBoundaryMiddleware`) answers `400`. Kestrel itself already refuses a NUL in the path. The login identifier is additionally limited to 3-128 ASCII username characters; an identifier no account can have is answered `401` like an unknown user and is never counted by the login throttle.
+- **All-zero ids.** The all-zero Guid is never issued and every typed id rejects it, so it answers `400` (`field` names the route or query parameter) in any route or query value, on every route, agent routes included. A resource that merely does not exist, or belongs to another tenant, still answers `404`. Ids inside a JSON body (agent, plan, user, job, artifact…) are checked by their handlers and never answer `500`.
+
 ### Engine admission and SQL Server on Linux
 
 A backup run is admitted only if the job's agent reported `<engine>.backup.full` (`mssql`, `postgresql`, `file-system`) as Supported; otherwise the start answers `409 agent_engine_unsupported` and no run is created. A Windows agent always reports SQL Server. A **Linux agent reports SQL Server only with a valid `Mapped` staging area**: `Agent__Backup__Staging__Mapping=Mapped`, an existing, writable `AgentDirectory`, and a `ServerDirectory` (the same directory as the SQL Server process sees it) that differs from it. `SameHost` staging on Linux does not advertise SQL Server. This is capability only; the pre-check at the start of every SQL Server run still proves the login and that the server really sees the staging path (`server-unreachable`, `authentication-failed`, `staging-mapping-mismatch`, ...) and fails the run fast without an artifact.
@@ -92,6 +99,8 @@ SFTP private-network access requires the operator's narrow
 usable statvfs falls back to the server's own `df -Pk` over an SSH exec channel
 (same pinned host key); if that fails too it reports CapacityUnavailable. The
 Agent never substitutes its own host filesystem's capacity.
+
+SFTP login and host-key failures are reported apart, in the connection test and in a run. The client sends no credentials until the server's key matches the pinned `hostKeyFingerprint`. A key that does not match gives the test code `host_key_mismatch` and the run failure code `StorageHostKeyMismatch` (reason `storage-host-key-mismatch`); a server that refuses the user, password or key gives `authentication_failed` and `StorageAuthenticationFailed` (reason `storage-authentication-failed`). Neither is retried, and neither message carries a credential, the fingerprint or the library's exception text. `PermissionDenied` stays for a missing permission (for example on the remote directory). `AuthenticationFailed` is the database login only.
 
 S3 and SMB expose no capacity or quota to the platform, so their probe and GET
 return `status: "NotMeasurable"` immediately: nothing is queued to an Agent and

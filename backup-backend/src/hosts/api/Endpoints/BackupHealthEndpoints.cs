@@ -40,7 +40,6 @@ public static class BackupHealthEndpoints
     private static async Task<IResult> GetSummaryV1Async(Guid tenantId, BackupHealthEvaluator evaluator, ICurrentUser user,
         TenantResolutionService resolution, IUserAccessStore access, CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty) return Results.BadRequest();
         var target = new TenantId(tenantId);
         if (!await CanReadAsync(target, user, resolution, access, cancellationToken)) return Results.NotFound();
         return Results.Ok(await evaluator.GetSummaryAsync(target, cancellationToken));

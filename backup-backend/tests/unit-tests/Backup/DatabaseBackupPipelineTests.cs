@@ -361,6 +361,8 @@ public sealed class DatabaseBackupPipelineTests : IDisposable
     [InlineData(StorageFailureKind.IntegrityMismatch, BackupPipelineReasons.StorageIntegrityMismatch, BackupFailureCause.StorageUnavailable)]
     [InlineData(StorageFailureKind.InsufficientSpace, BackupPipelineReasons.StorageInsufficientSpace, BackupFailureCause.Unclassified)]
     [InlineData(StorageFailureKind.AccessDenied, BackupPipelineReasons.StorageAccessDenied, BackupFailureCause.PermissionDenied)]
+    [InlineData(StorageFailureKind.AuthenticationFailed, BackupPipelineReasons.StorageAuthenticationFailed, BackupFailureCause.StorageAuthenticationFailed)]
+    [InlineData(StorageFailureKind.HostKeyMismatch, BackupPipelineReasons.StorageHostKeyMismatch, BackupFailureCause.StorageHostKeyMismatch)]
     [InlineData(StorageFailureKind.Io, BackupPipelineReasons.StorageIoError, BackupFailureCause.StorageUnavailable)]
     [InlineData(StorageFailureKind.Unexpected, BackupPipelineReasons.StorageUnexpected, BackupFailureCause.StorageUnavailable)]
     [InlineData(StorageFailureKind.NotFound, BackupPipelineReasons.StorageUnexpected, BackupFailureCause.StorageUnavailable)]

@@ -123,6 +123,32 @@ public sealed class SftpStorageProviderIntegrationTests
         }
     }
 
+    // The two failures are told apart by what the client saw (the host key callback rejecting the key, or the server refusing the login), not by message text.
+    [Fact]
+    public async Task AChangedHostKeyAndAWrongPasswordAreDifferentFailureKindsAndNeitherLeaksTheCredential()
+    {
+        var wrongPassword = Guid.NewGuid().ToString("N");
+        var otherFingerprint = "SHA256:" + Convert.ToBase64String(SHA256.HashData([1, 2, 3])).TrimEnd('=');
+        var network = new SftpNetworkOptions(allowedPrivateNetworks: AllowedNetworks);
+        var tenantId = Guid.NewGuid();
+        var key = new StorageObjectKey($"{tenantId:N}/object.bak");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        var changedKey = new SftpStorageProvider(new SftpStorageOptions(Host, Port, Username, "password", BaseDir, otherFingerprint, tenantId, Guid.NewGuid()),
+            _ => ValueTask.FromResult(new SftpCredential(Password, null, null)), network);
+        var badLogin = new SftpStorageProvider(new SftpStorageOptions(Host, Port, Username, "password", BaseDir, Fingerprint, tenantId, Guid.NewGuid()),
+            _ => ValueTask.FromResult(new SftpCredential(wrongPassword, null, null)), network);
+
+        var hostKey = await Assert.ThrowsAsync<StorageException>(() => changedKey.ExistsAsync(key, deadline.Token));
+        var login = await Assert.ThrowsAsync<StorageException>(() => badLogin.ExistsAsync(key, deadline.Token));
+
+        Assert.Equal(StorageFailureKind.HostKeyMismatch, hostKey.Kind);
+        Assert.Equal(StorageFailureKind.AuthenticationFailed, login.Kind);
+        Assert.DoesNotContain(Password, hostKey.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(wrongPassword, login.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(Fingerprint, hostKey.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

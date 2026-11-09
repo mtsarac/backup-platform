@@ -28,6 +28,10 @@ public static class BackupFailureCodes
     public const string StagingInvalid = "StagingInvalid";
     public const string SnapshotFailed = "SnapshotFailed";
     public const string QuotaExceeded = "QuotaExceeded";
+    /// <summary>A storage destination rejected the credentials. Distinct from <see cref="AuthenticationFailed"/>, which is the database login.</summary>
+    public const string StorageAuthenticationFailed = "StorageAuthenticationFailed";
+    /// <summary>An SFTP destination's host key does not match the pinned fingerprint (changed server or interception); never retried, an operator must verify the key.</summary>
+    public const string StorageHostKeyMismatch = "StorageHostKeyMismatch";
     /// <summary>A job whose policy is Required produced (or reported) an artifact that is not encrypted. Never retried: another attempt would be given the same instruction.</summary>
     public const string EncryptionRequired = "EncryptionRequired";
 
@@ -56,6 +60,8 @@ public static class BackupFailureCodes
         [AuthenticationFailed] = false,
         [PermissionDenied] = false,
         [QuotaExceeded] = false,
+        [StorageAuthenticationFailed] = false,
+        [StorageHostKeyMismatch] = false,
         [EncryptionRequired] = false,
         [StagingInvalid] = false,
         // VSS and the volume managers fail transiently (another snapshot set in progress, a writer not answering); a new attempt takes a new snapshot.

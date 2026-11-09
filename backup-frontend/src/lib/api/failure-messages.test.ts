@@ -93,6 +93,16 @@ describe('three-part error description', () => {
     expect(errorMessage(new ApiError(500), 'restore')).toBe(errorMessage(new ApiError(500)))
   })
 
+  it('tells a rejected storage login from a changed SFTP host key and does not call either a database or generic permission problem', () => {
+    const login = failureMessage('StorageAuthenticationFailed')
+    const hostKey = failureMessage('StorageHostKeyMismatch')
+    expect(login).toMatch(/reddedildi/)
+    expect(hostKey).toMatch(/parmak iziyle uyuşmuyor/)
+    expect(login).not.toBe(hostKey)
+    expect([login, hostKey]).not.toContain(failureMessage('PermissionDenied'))
+    expect([login, hostKey]).not.toContain(failureMessage('AuthenticationFailed'))
+  })
+
   it('looks up a bare failure code in the scope too', () => {
     expect(failureMessage('NotClaimed', 'restore')).toContain('Hedef değiştirilmedi')
   })

@@ -107,10 +107,6 @@ public static class PlatformEndpoints
     private static async Task<IResult> GetTenantAsync(
         Guid tenantId, IPlatformAdministrationStore store, PlatformAgentQueryService agents, CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return TenantNotFound();
-        }
         var id = new TenantId(tenantId);
         var tenant = await store.GetTenantAsync(id, cancellationToken);
         if (tenant is null)
@@ -132,10 +128,6 @@ public static class PlatformEndpoints
     private static async Task<IResult> RenameTenantAsync(
         Guid tenantId, PlatformTenantRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return TenantNotFound();
-        }
         try
         {
             var change = await service.RenameTenantAsync(new TenantId(tenantId), request?.Name, currentUser.UserId!, cancellationToken);
@@ -154,10 +146,6 @@ public static class PlatformEndpoints
         {
             return InvalidPaging();
         }
-        if (tenantId == Guid.Empty)
-        {
-            return TenantNotFound();
-        }
         var result = await store.ListMembershipsAsync(new TenantId(tenantId), p, size, cancellationToken);
         return result is null ? TenantNotFound() : Results.Ok(Page(result, ToResponse));
     }
@@ -172,10 +160,6 @@ public static class PlatformEndpoints
         if (!TryParseRole(request.Role, out var role))
         {
             return Invalid(new InvalidPlatformRequestException("role", "invalid_value"));
-        }
-        if (tenantId == Guid.Empty)
-        {
-            return TenantNotFound();
         }
         var change = await service.AddMembershipAsync(new TenantId(tenantId), new UserId(request.UserId), role, currentUser.UserId!, cancellationToken);
         return change.Outcome switch
@@ -195,10 +179,6 @@ public static class PlatformEndpoints
         {
             return Invalid(new InvalidPlatformRequestException("role", "invalid_value"));
         }
-        if (tenantId == Guid.Empty || userId == Guid.Empty)
-        {
-            return MembershipNotFound();
-        }
         var change = await service.ChangeMembershipRoleAsync(new TenantId(tenantId), new UserId(userId), role, currentUser.UserId!, cancellationToken);
         return change.Outcome == PlatformChangeOutcome.MembershipNotFound ? MembershipNotFound() : Results.Ok(ToResponse(change.Value!));
     }
@@ -206,10 +186,6 @@ public static class PlatformEndpoints
     private static async Task<IResult> RemoveMembershipAsync(
         Guid tenantId, Guid userId, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty || userId == Guid.Empty)
-        {
-            return MembershipNotFound();
-        }
         var change = await service.RemoveMembershipAsync(new TenantId(tenantId), new UserId(userId), currentUser.UserId!, cancellationToken);
         return change.Outcome == PlatformChangeOutcome.MembershipNotFound ? MembershipNotFound() : Results.NoContent();
     }
@@ -264,10 +240,6 @@ public static class PlatformEndpoints
             }
             statusFilter = parsed;
         }
-        if (tenantId == Guid.Empty)
-        {
-            return Invalid(new InvalidPlatformRequestException("tenantId", "invalid_value"));
-        }
         var filter = new PlatformAgentFilter(tenantId is null ? null : new TenantId(tenantId.Value), connectivityFilter, statusFilter, search);
         var result = await agents.ListAsync(filter, p, size, cancellationToken);
         return Results.Ok(Page(result, view => ToResponse(view.Agent.Agent.TenantId.Value, view.TenantName, view.Agent, view.CapabilityCount, view.CapabilityRevision, view.CapabilitiesReportedAt)));
@@ -276,10 +248,6 @@ public static class PlatformEndpoints
     private static async Task<IResult> GetAgentAsync(
         Guid tenantId, Guid agentId, IPlatformAdministrationStore store, AgentConnectivityQueryService connectivity, CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty || agentId == Guid.Empty)
-        {
-            return Results.NotFound(new { error = "agent_not_found" });
-        }
         var id = new TenantId(tenantId);
         var tenant = await store.GetTenantAsync(id, cancellationToken);
         var view = tenant is null ? null : await connectivity.GetAsync(id, new AgentId(agentId), cancellationToken);
@@ -324,10 +292,6 @@ public static class PlatformEndpoints
         if (!TryPaging(page, pageSize, out var p, out var size))
         {
             return InvalidPaging();
-        }
-        if (tenantId == Guid.Empty)
-        {
-            return Invalid(new InvalidPlatformRequestException("tenantId", "invalid_value"));
         }
         var result = await store.ListAuditAsync(tenantId is null ? null : new TenantId(tenantId.Value), p, size, cancellationToken);
         return Results.Ok(Page(result, item => new
