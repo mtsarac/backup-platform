@@ -59,7 +59,10 @@ public sealed class RetentionApiTests(PostgreSqlFixture fixture) : IClassFixture
         using var response = await scenario.CreateJobRawAsync(JobBody(scenario, Policy(keepForSeconds: keep, deleteGracePeriodSeconds: grace)));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("invalid_request", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+        var body = AgentWorld.ReadJson(response);
+        Assert.Equal("invalid_request", body.GetProperty("error").GetString());
+        Assert.Equal("retention", body.GetProperty("field").GetString());
+        Assert.Equal("invalid_value", body.GetProperty("code").GetString());
     }
 
     [Fact]
