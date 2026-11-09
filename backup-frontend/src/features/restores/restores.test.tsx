@@ -1086,4 +1086,18 @@ describe('precheck verdict', () => {
     expect(screen.getAllByText('Hedefte yeterli disk alanı yok.').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Devam et/ })).toBeDisabled()
   })
+
+  it('shows a repeated check once, however many times the agent reported it', async () => {
+    await showVerdict(withChecks('Succeeded', [check('restore.target-sessions', 'Passed', 'ok'), check('server.reachable', 'Passed', 'ok'), check('restore.target-sessions', 'Passed', 'ok')]))
+    await screen.findByRole('button', { name: /Kopyala: server.reachable/ })
+    expect(screen.getAllByRole('button', { name: 'Kopyala: restore.target-sessions' })).toHaveLength(1)
+  })
+
+  it('keeps the worse status when one check is reported twice with different results', async () => {
+    await showVerdict(withChecks('Failed', [check('restore.disk-space', 'Passed', 'ok'), check('restore.disk-space', 'Failed', 'InsufficientDiskSpace')]))
+    await screen.findByRole('button', { name: /Kopyala: restore.disk-space/ })
+    expect(screen.getAllByRole('button', { name: 'Kopyala: restore.disk-space' })).toHaveLength(1)
+    expect(screen.getAllByText('Hedefte yeterli disk alanı yok.').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Devam et/ })).toBeDisabled()
+  })
 })

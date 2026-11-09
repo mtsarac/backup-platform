@@ -107,6 +107,14 @@ export function describeStartFailure(error: unknown) {
     action: tx('Aynı işlemi tekrar deneyin; yeniden denemeler ikinci bir geri yükleme oluşturmaz.'),
   }
 }
+const checkSeverity = { Skipped: 0, Passed: 1, Warning: 2, Failed: 3 } as const
+/** One row per check id at its first position, carrying the worst status reported for it; nothing is hidden, a failure always survives. */
+export function dedupeChecks(items: RestoreResult['preCheck']): RestoreResult['preCheck'] {
+  const worst = new Map<string, RestoreResult['preCheck'][number]>()
+  for (const item of items) { const kept = worst.get(item.checkId); if (!kept || checkSeverity[item.status] > checkSeverity[kept.status]) worst.set(item.checkId, item) }
+  return [...worst.values()]
+}
+
 /** The engines' own wording and codes for each check; the table above says the same thing in everyday words. */
 export function technicalChecks(items: RestoreResult['preCheck']): TechnicalItem[] {
   const seen = new Map<string, number>()

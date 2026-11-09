@@ -223,6 +223,43 @@ public sealed class DatabaseRestorePipelineTests : IDisposable
         Assert.All(result.PreCheck, item => Assert.NotEqual(BackupPreCheckStatus.Failed, item.Status));
     }
 
+    [Theory]
+    [InlineData("postgresql.restore-permission", "postgresql.target")]
+    [InlineData("permission.restore", "database.exists")]
+    public async Task ACheckThePlanRepeatsFromThePreCheckIsReportedOnce(string permissionId, string targetId)
+    {
+        BackupPreCheckItem[] items =
+        [
+            new(permissionId, BackupPreCheckStatus.Passed, "ok", "The login may restore."),
+            new(targetId, BackupPreCheckStatus.Passed, "ok", "The target matches the mode.")
+        ];
+        _h.Provider.PreCheck = RestorePipelineHarness.Report(items);
+        _h.Provider.PlanAsync = (_, _) => Task.FromResult(new RestorePlanResult(
+            RestorePipelineHarness.Report([.. items, new BackupPreCheckItem("plan.version", BackupPreCheckStatus.Passed, "ok", "Fine.")]), _h.Provider.DefaultPlan));
+
+        var result = await _h.RunAsync();
+
+        Assert.Equal(DatabaseRestoreStatus.Succeeded, result.Status);
+        Assert.Single(result.PreCheck, item => item.CheckId == permissionId);
+        Assert.Single(result.PreCheck, item => item.CheckId == targetId);
+        Assert.Single(result.PreCheck, item => item.CheckId == "plan.version");
+    }
+
+    [Fact]
+    public async Task ACheckThatGotWorseWhilePlanningKeepsTheWorseStatusAndStillStopsTheRestore()
+    {
+        _h.Provider.PreCheck = RestorePipelineHarness.Report(new BackupPreCheckItem("database.exists", BackupPreCheckStatus.Passed, "ok", "Fine."));
+        _h.Provider.PlanAsync = (_, _) => Task.FromResult(new RestorePlanResult(
+            RestorePipelineHarness.Report(RestorePipelineHarness.Failed(RestoreReasonCodes.TargetVersionTooOld, checkId: "database.exists")), null));
+
+        var result = await _h.RunAsync();
+
+        Assert.Equal(DatabaseRestoreStatus.Failed, result.Status);
+        Assert.Equal(RestoreExecutionStage.InspectingBackup, result.Failure!.Stage);
+        Assert.Single(result.PreCheck, item => item.CheckId == "database.exists");
+        Assert.Contains(result.PreCheck, item => item is { CheckId: "database.exists", Status: BackupPreCheckStatus.Failed });
+    }
+
     [Fact]
     public async Task APlansWarningsAndTheInspectionsWarningsAreRecorded()
     {

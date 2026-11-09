@@ -8,7 +8,7 @@ import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
 import { TextInput } from '@/components/ui/text-input'
-import { isActiveRestore, safeRestoreCode } from '@/features/restores/presentation'
+import { dedupeChecks, isActiveRestore, safeRestoreCode } from '@/features/restores/presentation'
 import type { SupportRestoreTargets, SupportSession } from './types'
 import { useSupportRestore, useSupportRestoreActions, useSupportRestoreTargets } from './hooks'
 import { supportScope } from './presentation'
@@ -88,7 +88,7 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     {validation && <p role="alert" className="text-sm text-error">{validation}</p>}
     <QueryState forbiddenMessage={errorMessage} isPending={false} error={precheck.error || start.error || operation.error} />
     <Button variant="outline" disabled={!eligible || busy || !scope.enabled || !databaseName.trim()} onClick={runPrecheck}>{busy && !start.isPending ? tx('Ön Kontrol çalışıyor…') : checked ? tx('Ön Kontrolü tekrar çalıştır') : tx('Ön Kontrol')}</Button>
-    {checked && operation.data && <section aria-label={tx("Precheck sonucu")} className="space-y-2 rounded-lg border border-border bg-surface-2 p-4"><StatusPill status={operation.data.status} />{!matching && <p role="status">{tx("Ayarlar değişti. Start için yeniden başarılı Precheck gerekir.")}</p>}<ul className="space-y-1 text-sm">{operation.data.result?.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {tx(check.status)} · {check.status === 'Failed' ? failureMessage(check.reasonCode, 'restore') : check.message || safeRestoreCode(check.reasonCode)}</li>)}</ul>{operation.data.failureCode && <p className="text-sm text-error">{failureMessage(operation.data.failureCode, 'restore')}</p>}{passed && <p className="text-sm text-success">{tx("Precheck başarılı. Canlı ortam uyarısını onaylayarak başlatabilirsiniz.")}</p>}</section>}
+    {checked && operation.data && <section aria-label={tx("Precheck sonucu")} className="space-y-2 rounded-lg border border-border bg-surface-2 p-4"><StatusPill status={operation.data.status} />{!matching && <p role="status">{tx("Ayarlar değişti. Start için yeniden başarılı Precheck gerekir.")}</p>}<ul className="space-y-1 text-sm">{dedupeChecks(operation.data.result?.preCheck ?? []).map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {tx(check.status)} · {check.status === 'Failed' ? failureMessage(check.reasonCode, 'restore') : check.message || safeRestoreCode(check.reasonCode)}</li>)}</ul>{operation.data.failureCode && <p className="text-sm text-error">{failureMessage(operation.data.failureCode, 'restore')}</p>}{passed && <p className="text-sm text-success">{tx("Precheck başarılı. Canlı ortam uyarısını onaylayarak başlatabilirsiniz.")}</p>}</section>}
     <CheckField className="items-start rounded-lg border border-warning/30 p-4" checked={acknowledged} disabled={!scope.enabled || start.isPending} onChange={event => setAcknowledged(event.target.checked)} label={tx("Bu işlemin müşterinin canlı ortamında çalışabileceğini anladım ve yeni Database geri yüklemesini onaylıyorum.")} />
     <Button disabled={!scope.enabled || !eligible || !passed || !acknowledged || busy || Boolean(operation.error)} onClick={startRestore}>{start.isPending ? tx('Geri yükleme başlatılıyor…') : tx('Geri Yüklemeyi başlat')}</Button>
     </div>

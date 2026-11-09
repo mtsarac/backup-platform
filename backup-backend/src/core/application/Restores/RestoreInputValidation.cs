@@ -151,7 +151,7 @@ public static class RestoreInputValidation
         if (request.Result is { } result)
         {
             ValidateResult(result);
-            resultJson = JsonSerializer.Serialize(result, JsonOptions);
+            resultJson = JsonSerializer.Serialize(DedupePreCheck(result), JsonOptions);
             if (resultJson.Length > RestoreOperation.MaxResultJsonLength) throw new ArgumentException("The restore result is too large.");
         }
         // A verification's disposable database is gone only when the agent says so; every other report (or none) leaves its removal owed and tracked.
@@ -163,9 +163,21 @@ public static class RestoreInputValidation
     public static RestoreTaskResult? ReadResult(string? json)
     {
         if (json is null) return null;
-        try { return JsonSerializer.Deserialize<RestoreTaskResult>(json, JsonOptions); }
+        try { return JsonSerializer.Deserialize<RestoreTaskResult>(json, JsonOptions) is { } result ? DedupePreCheck(result) : null; }
         catch (JsonException) { return null; }
     }
+
+    /// <summary>One item per check id, at the id's first position, carrying the worst status reported for it; also repairs results stored before the agent stopped re-emitting checks.</summary>
+    private static RestoreTaskResult DedupePreCheck(RestoreTaskResult result)
+    {
+        if (result.PreCheck is null || result.PreCheck.Select(item => item.CheckId).Distinct(StringComparer.Ordinal).Count() == result.PreCheck.Count) return result;
+        var worst = new Dictionary<string, RestorePreCheckItemResult>(StringComparer.Ordinal);
+        foreach (var item in result.PreCheck)
+            if (!worst.TryGetValue(item.CheckId, out var kept) || Severity(item.Status) > Severity(kept.Status)) worst[item.CheckId] = item;
+        return result with { PreCheck = [.. result.PreCheck.Select(item => item.CheckId).Distinct(StringComparer.Ordinal).Select(id => worst[id])] };
+    }
+
+    private static int Severity(string status) => status switch { "Failed" => 3, "Warning" => 2, "Passed" => 1, _ => 0 };
 
     private static RestoreTargetState ParseTargetState(string? value)
     {
