@@ -18,7 +18,7 @@ import { useAgents } from '@/features/agents/hooks'
 import { useArtifact } from '@/features/artifacts/hooks'
 import { useCancelRestore, useRestore } from '@/features/restores/hooks'
 import { RollbackCopyPanel, VerificationDetail } from '@/features/restores/verification-detail'
-import { canCancelRestore, databaseStateLabel, isActiveRestore, precheckLabel, restoreModeLabel, restoreProgressPercent, restoreStageLabel, safeRestoreCode, targetStateDescription, targetStateLabel, technicalChecks } from '@/features/restores/presentation'
+import { canCancelRestore, databaseStateLabel, isActiveRestore, precheckLabel, restoreModeLabel, restoreProgressPercent, restoreStageLabel, safeRestoreCode, targetStateDescription, targetStateLabel, technicalChecks, dedupeChecks } from '@/features/restores/presentation'
 import type { RestoreView } from '@/features/restores/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDateTime, formatDuration } from '@/lib/format'
@@ -51,7 +51,7 @@ function technicalItems(restore: RestoreView): TechnicalItem[] {
     { label: tx('Oluşturulma'), value: formatDateTime(restore.createdAt) },
     ...(restore.cancellationRequestedAt ? [{ label: tx('İptal isteği'), value: formatDateTime(restore.cancellationRequestedAt) }] : []),
     { label: tx('Deneme sayısı'), value: String(restore.attempts.length) },
-    ...(restore.result ? technicalChecks(restore.result.preCheck) : []),
+    ...(restore.result ? technicalChecks(dedupeChecks(restore.result.preCheck)) : []),
     ...(restore.result?.warnings.map((warning, index) => ({ label: index === 0 ? warning.code : `${warning.code} (${index + 1})`, value: warning.message || safeRestoreCode(warning.code) })) ?? []),
   ]
 }
@@ -155,7 +155,7 @@ function RestoreDetail({ id }: { id: string }) {
           {tab === 'checks' && <Section title={tx("Doğrulama sonucu")}>
             {restore.result ? <div className="space-y-4">
               <Facts><Fact label={tx("Dosya bütünlüğü doğrulandı")}>{yesNo(restore.result.checksumVerified)}</Fact><Fact label={tx("Yedek doğrulandı")}>{yesNo(restore.result.backupVerified)}</Fact></Facts>
-              <ul className="divide-y divide-border text-sm">{restore.result.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`} className="flex flex-wrap justify-between gap-2 py-3"><span className="min-w-0 break-words">{precheckLabel(check.checkId)}</span><span className="font-medium">{({ Passed: tx('Geçti'), Warning: tx('Uyarı'), Failed: tx('Başarısız'), Skipped: tx('Atlandı') })[check.status]}</span></li>)}</ul>
+              <ul className="divide-y divide-border text-sm">{dedupeChecks(restore.result.preCheck).map((check, index) => <li key={`${check.checkId}:${index}`} className="flex flex-wrap justify-between gap-2 py-3"><span className="min-w-0 break-words">{precheckLabel(check.checkId)}</span><span className="font-medium">{({ Passed: tx('Geçti'), Warning: tx('Uyarı'), Failed: tx('Başarısız'), Skipped: tx('Atlandı') })[check.status]}</span></li>)}</ul>
               {restore.result.warnings.length > 0 && <Notice tone="warning">{tx("Geri yükleme sırasında uyarılar bildirildi; ayrıntıları aşağıdaki teknik ayrıntılarda bulabilirsiniz.")}</Notice>}
             </div> : <EmptyState message={tx("Doğrulama sonucu henüz bildirilmedi; yedekleme bilgisayarı sonucu gönderince kontrol ayrıntıları burada görünür.")} />}
           </Section>}

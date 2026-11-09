@@ -604,11 +604,40 @@ internal sealed class DatabaseRestoreExecution
                 "The restore could not be planned. Details are in the agent log.", exception);
         }
 
-        _preCheck.AddRange(result.Report.Items);
+        MergePlanItems(result.Report.Items);
         FailOnFailedItem(result.Report, stage);
         _plan = result.Plan!;
         _warnings.AddRange(_plan.Warnings);
     }
+
+    /// <summary>
+    /// The plan repeats target checks the pre-check already ran (same ids). Each id is reported once: the worse status wins, so a check that got worse
+    /// while planning still shows and still stops the restore; an unchanged repeat adds nothing.
+    /// </summary>
+    private void MergePlanItems(IEnumerable<BackupPreCheckItem> items)
+    {
+        foreach (var item in items)
+        {
+            var index = _preCheck.FindIndex(existing => existing.CheckId == item.CheckId);
+            if (index < 0)
+            {
+                _preCheck.Add(item);
+            }
+            else if (Severity(item.Status) > Severity(_preCheck[index].Status))
+            {
+                _preCheck[index] = item;
+            }
+        }
+    }
+
+    // Skipped is "not evaluated": it never hides a real answer.
+    private static int Severity(BackupPreCheckStatus status) => status switch
+    {
+        BackupPreCheckStatus.Skipped => 0,
+        BackupPreCheckStatus.Passed => 1,
+        BackupPreCheckStatus.Warning => 2,
+        _ => 3
+    };
 
     // ---- PreparingTarget / Restoring / Finalizing -----------------------------------------------------------------------------
 

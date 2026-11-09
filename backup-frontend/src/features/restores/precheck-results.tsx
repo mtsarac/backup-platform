@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { precheckLabel, precheckWarningText, technicalChecks } from './presentation'
+import { dedupeChecks, precheckLabel, precheckWarningText, technicalChecks } from './presentation'
 import type { RestoreResult, RestoreView } from './types'
 import { describeFailure, failureMessage } from '@/lib/api/failure-messages'
 
@@ -34,7 +34,7 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
   data: RestoreView; failed: boolean; passed: boolean; onRecheck: () => void; recheckDisabled: boolean; fileArchive?: boolean
 }) {
   useLanguage()
-  const items = data.result?.preCheck ?? []
+  const items = dedupeChecks(data.result?.preCheck ?? [])
   const warnings = items.filter((item) => item.status === 'Warning')
   const source = data.result?.sourceBackup
   return <div className="space-y-4">

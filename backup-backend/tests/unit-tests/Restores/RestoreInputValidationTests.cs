@@ -622,6 +622,54 @@ public sealed class RestoreInputValidationTests
     }
 
     [Fact]
+    public void ARepeatedCheckIdIsReportedOnceAtItsFirstPosition()
+    {
+        var result = ValidResult() with
+        {
+            PreCheck =
+            [
+                new RestorePreCheckItemResult("restore-permission", "Passed", "ok", "Allowed."),
+                new RestorePreCheckItemResult("target-matches-mode", "Passed", "ok", "Matches."),
+                new RestorePreCheckItemResult("restore-permission", "Passed", "ok", "Allowed."),
+                new RestorePreCheckItemResult("target-matches-mode", "Passed", "ok", "Matches.")
+            ]
+        };
+
+        var read = RestoreInputValidation.ReadResult(ResultJsonOf(result))!;
+
+        Assert.Equal(["restore-permission", "target-matches-mode"], read.PreCheck.Select(item => item.CheckId));
+    }
+
+    [Fact]
+    public void AConflictingRepeatedCheckKeepsTheWorstStatusAndStillBlocks()
+    {
+        var result = ValidResult() with
+        {
+            PreCheck =
+            [
+                new RestorePreCheckItemResult("restore-permission", "Passed", "ok", "Allowed."),
+                new RestorePreCheckItemResult("restore-permission", "Failed", "permission-denied", "Denied."),
+                new RestorePreCheckItemResult("restore-permission", "Warning", "w", "Careful.")
+            ]
+        };
+
+        var item = Assert.Single(RestoreInputValidation.ReadResult(ResultJsonOf(result))!.PreCheck);
+        Assert.Equal("Failed", item.Status);
+        Assert.Equal("permission-denied", item.ReasonCode);
+    }
+
+    [Fact]
+    public void AResultStoredWithDuplicatesIsDedupedWhenRead()
+    {
+        var json = JsonSerializer.Serialize(new RestoreTaskResult
+        {
+            PreCheck = [new("a", "Passed", "ok", "m"), new("a", "Passed", "ok", "m")]
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Single(RestoreInputValidation.ReadResult(json)!.PreCheck);
+    }
+
+    [Fact]
     public void TheStoredResultUsesCamelCaseNamesAndIsWithinTheDomainLimit()
     {
         var json = ResultJsonOf(ValidResult());
