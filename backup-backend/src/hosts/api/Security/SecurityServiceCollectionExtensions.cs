@@ -62,7 +62,8 @@ public static class SecurityServiceCollectionExtensions
     public static IServiceCollection AddPlatformSecurity(this IServiceCollection services)
     {
         services.AddHttpContextAccessor();
-        services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new NulFreeStringConverter()));
+        services.AddOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>()
+            .Configure<IHttpContextAccessor>((options, accessor) => options.SerializerOptions.Converters.Add(new NulFreeStringConverter(accessor)));
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<AuditSealKeys>();
         services.AddSingleton<LoginThrottle>();
