@@ -17,7 +17,11 @@ public sealed class WindowsFilePermissions : IWindowsFilePermissions
             : new FileInfo(path).GetAccessControl(AccessControlSections.Access);
         // Freeze effective inherited rules; another parent must never broaden access to restored data.
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: true);
-        var descriptor = security.GetSecurityDescriptorSddlForm(AccessControlSections.Access);
+        var raw = new RawSecurityDescriptor(security.GetSecurityDescriptorSddlForm(AccessControlSections.Access));
+        // A protected DACL has no parent link, and applying it makes the OS store every inherited ACE as explicit.
+        // Record that explicit form so a restored file captures back to the identical descriptor.
+        if (raw.DiscretionaryAcl is { } dacl) foreach (var ace in dacl) ace.AceFlags &= ~AceFlags.Inherited;
+        var descriptor = raw.GetSddlForm(AccessControlSections.Access);
         ValidateAccessControl(descriptor);
         return descriptor;
     }
