@@ -117,6 +117,8 @@ scripts/windows/copy-to-vm.sh local-file 'C:\Temp\remote-file'
 scripts/windows/test-agent-service.sh status
 ```
 
+`windows-tests` must run in the interactive console session: over plain SSH, DPAPI (`CurrentUser`) is refused and 20+ unrelated tests fail. `scripts/windows/run-windows-tests-interactive.sh [--filter VSTEST_FILTER] [--results-dir DIR] [--plain-ssh]` builds the project here, ships it to `C:\e2e\wintest-<id>`, runs `C:\dotnet-sdk\dotnet.exe test` through a one-shot `-LogonType Interactive` scheduled task for the logged-on console user, prints the log and exit code, and removes the task and directory. The console user must be logged on (`ssh virtual-win11 query user`). The session is not elevated, so `WindowsAdminFact` tests skip. `--plain-ssh` runs the same dll in the SSH session instead, to show the DPAPI-only difference.
+
 ## Credentials
 
 Local connection values live in the private file:
