@@ -77,6 +77,29 @@ class QuotaRuns(unittest.TestCase):
 
 
 
+class ConcurrentAdmissionCleanup(unittest.TestCase):
+    def test_override_is_removed_on_success_and_failure(self):
+        modules = {'gap_sp_common': module('gap_sp_common', MB=1024 * 1024),
+                   'api': module('api', login=Mock()),
+                   'lib': module('lib', scenario=scenario, TERMINAL=()),
+                   'flows': module('flows')}
+        with patch.dict(sys.modules, modules):
+            fn = runpy.run_path(str(HERE / 'gap_quota.py'))['pol03_concurrent']
+        for fail in (False, True):
+            with self.subTest(fail=fail):
+                tenant, agent = object(), object()
+                inner = Mock(side_effect=AssertionError('admission failed') if fail else None, return_value={'ok': True})
+                override = Mock()
+                with patch.dict(fn.__globals__, {'_pol03_concurrent': inner, 'ov': override}):
+                    if fail:
+                        with self.assertRaisesRegex(AssertionError, 'admission failed'):
+                            fn(tenant, agent)
+                    else:
+                        self.assertEqual({'ok': True}, fn(tenant, agent))
+                inner.assert_called_once_with(tenant, agent)
+                override.assert_called_once_with(tenant, 'none')
+
+
 class BreakGlassAdmin(unittest.TestCase):
     def test_stale_admin_is_recreated_before_login(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -136,6 +136,11 @@ def pol03_boundary(t, ag):
 
 @scenario("gap/POL-03/concurrent-admission-reservation")
 def pol03_concurrent(t, ag):
+    try: return _pol03_concurrent(t, ag)
+    finally: ov(t, "none")
+
+
+def _pol03_concurrent(t, ag):
     ov(t, "none")
     j1 = mkjob(t, ag, "c1", 48, name="pol03-c1"); j2 = mkjob(t, ag, "c2", 48, name="pol03-c2")
     E1 = seed(t, j1); E2 = seed(t, j2); out = {"E1": E1, "E2": E2, "rounds": []}
@@ -169,7 +174,6 @@ def pol03_concurrent(t, ag):
         q = settle(t); r["usedDelta"] = q["usedBytes"] - U; r["reservedAfter"] = q["reservedBytes"]; r["artifactBytes"] = real
         assert r["usedDelta"] == real and r["reservedAfter"] == 0, r
         out["rounds"].append(r)
-    ov(t, "none")
     return out
 
 
