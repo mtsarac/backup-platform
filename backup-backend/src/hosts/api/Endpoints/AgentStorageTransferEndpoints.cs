@@ -68,7 +68,7 @@ public static class AgentStorageTransferEndpoints
     private static async Task<IResult> UnwrapArtifactKeyAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore restoreStore,
         IDownloadStore downloadStore, ITenantWrapKeyStore keys, CancellationToken cancellationToken)
     {
-        if (attemptId == Guid.Empty || agent.Identity is null) return Results.Unauthorized();
+        if (agent.Identity is null) return Results.Unauthorized();
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty
             || !Guid.TryParse(request.Headers[TaskStorageProtocol.RestoreHeader], out var operationId))
             return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease or operation header." });
@@ -105,7 +105,7 @@ public static class AgentStorageTransferEndpoints
         Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
         IStorageConnectionStore connections, string? requiredProvider, CancellationToken cancellationToken)
     {
-        if (attemptId == Guid.Empty || agent.Identity is null)
+        if (agent.Identity is null)
             return (Results.Unauthorized(), null, null, null, null, null);
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty)
             return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease header." }), null, null, null, null, null);
@@ -132,7 +132,7 @@ public static class AgentStorageTransferEndpoints
         Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore store,
         IDownloadStore downloadStore, IStorageConnectionStore connections, string? requiredProvider, CancellationToken cancellationToken)
     {
-        if (attemptId == Guid.Empty || agent.Identity is null)
+        if (agent.Identity is null)
             return (Results.Unauthorized(), null, null, null, null);
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty
             || !Guid.TryParse(request.Headers[TaskStorageProtocol.RestoreHeader], out var operationId))
@@ -186,7 +186,7 @@ public static class AgentStorageTransferEndpoints
         IStorageConnectionStore connections, ISecretProvider secrets,
         GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
-        if (attemptId == Guid.Empty || agent.Identity is null) return Results.Unauthorized();
+        if (agent.Identity is null) return Results.Unauthorized();
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.DestinationHeader].FirstOrDefault(), out var named) || named == Guid.Empty)
             return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "The destination header is missing or invalid." });
 

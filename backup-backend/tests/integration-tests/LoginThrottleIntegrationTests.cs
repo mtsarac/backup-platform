@@ -46,6 +46,19 @@ public sealed class LoginThrottleIntegrationTests(PostgreSqlFixture fixture) : I
     }
 
     [Fact]
+    public async Task An_identifier_no_account_can_have_is_never_counted_or_stored_and_never_throws()
+    {
+        var throttle = Instance(new MutableClock());
+
+        foreach (var identifier in new[] { "a\u0000b", "\u0000", "a b", "\ud800", new string('a', 129), string.Empty })
+        {
+            for (var i = 0; i <= LoginThrottle.MaxFailures; i++) await throttle.FailedAsync(identifier, default);
+            Assert.Null(await throttle.RetryAfterAsync(identifier, default));
+            await throttle.SucceededAsync(identifier, default);
+        }
+    }
+
+    [Fact]
     public async Task Several_instances_share_one_counter_even_when_failures_arrive_together()
     {
         var clock = new MutableClock();
