@@ -1,6 +1,6 @@
 """WindowsSpecial gap checks on win11-e2e: AGT-08 discovery, AGT-02 service/ACL/DPAPI, AGT-12 reinstall refusal, VSS file backups, RST-11 MSSQL pre-restore, JOB-12 failure injection.
 Run: python3 gap_windows.py [name-filter,...]. Scenario names are gap/<id>...; results go to results.jsonl. Secrets are only read in code, never printed."""
-import hashlib, json, re, subprocess, sys, time, uuid
+import datetime, hashlib, json, re, subprocess, sys, time, uuid
 import api, lib, flows
 from lib import CRED, scenario
 
@@ -50,7 +50,9 @@ def wait_rescan(t, agent_id, timeout=120):
 @scenario("gap/AGT-08/windows-discovery-real-instances")
 def agt08(t):
     ag = win_agent(t); scan = wait_rescan(t, ag["agentId"])
-    insts = [i for i in t.call("GET", f"/discovery/instances?agentId={ag['agentId']}")["items"]]
+    all_insts = t.call("GET", f"/discovery/instances?agentId={ag['agentId']}")["items"]
+    scanned_at = datetime.datetime.fromisoformat(scan["lastScanAt"].replace("Z", "+00:00"))
+    insts = [i for i in all_insts if datetime.datetime.fromisoformat(i["lastSeenAt"].replace("Z", "+00:00")) >= scanned_at]
     keys = sorted((i["engine"], i["source"], i["instanceName"], i["port"], i["version"], i["edition"]) for i in insts)
     # ground truth from the VM itself
     rc, gt = winx(r"""(Get-Service | ? { $_.Name -like 'MSSQL$*' -or $_.Name -eq 'MSSQLSERVER' -or $_.Name -like 'postgresql*' } | % { $_.Name + '=' + $_.Status }) -join ';'
@@ -75,10 +77,13 @@ def agt08(t):
 def agt08_verify(t):
     """Binds the lab logins to both discovered instances, verifies and compares the database list with the engines themselves."""
     ag = win_agent(t); out = {}
-    insts = {i["engine"]: i for i in t.call("GET", f"/discovery/instances?agentId={ag['agentId']}")["items"]}
+    services = [i for i in t.call("GET", f"/discovery/instances?agentId={ag['agentId']}")["items"] if i["source"] == "Service"]
+    assert len([i for i in services if i["engine"] == "mssql"]) == 1 and len([i for i in services if i["engine"] == PGE]) == 1, "expected one service instance per engine"
+    insts = {i["engine"]: i for i in services}
     pgc = CRED["windows11_vm"]["postgresql"]
     for eng, (user, pwd) in {"mssql": (MS["user"], MS["password"]), PGE: (pgc["user"], pgc["password"])}.items():
         ref = flows.login_ref(t, ag, user, pwd); i = insts[eng]
+        previous = i.get("databasesCheckedAt")
         t.call("PUT", f"/discovery/instances/{i['id']}/credential", {"credentialReference": ref, "integratedSecurity": False, "encrypt": eng == "mssql", "trustServerCertificate": True})
         for _ in range(20):
             r = t.raw("POST", f"/discovery/instances/{i['id']}/verify", {})
@@ -87,8 +92,10 @@ def agt08_verify(t):
         assert r.status_code == 202, f"verify {eng} -> {r.status_code} {r.text[:200]}"
         for _ in range(60):
             d = t.call("GET", f"/discovery/instances/{i['id']}")
-            if d["databasesCheckedAt"] and d["access"] in ("Accessible", "Verified", "Authenticated") or d["access"] not in ("CredentialsRequired", "Unknown", None) and d["databasesCheckedAt"]: break
+            checked = d.get("databasesCheckedAt")
+            if checked and (not previous or datetime.datetime.fromisoformat(checked.replace("Z", "+00:00")) > datetime.datetime.fromisoformat(previous.replace("Z", "+00:00"))): break
             time.sleep(2)
+        else: raise TimeoutError(f"verify {eng} did not produce a fresh database check")
         out[eng] = {"access": d["access"], "reason": d["accessReasonCode"], "counts": d["databaseCounts"], "dbs": sorted(x.get("name") or x.get("databaseName") for x in d["databases"])}
     real_ms = sorted(sql("select name from sys.databases where database_id>4").split())
     pgcmd = f"$env:PGPASSWORD='{pgc['password']}'; & 'C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe' -h 127.0.0.1 -U {pgc['user']} -d postgres -tAc \"select datname from pg_database where not datistemplate and datname<>'postgres'\""
