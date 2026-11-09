@@ -143,10 +143,15 @@ def art02():
 @scenario('gap/ART-02/csrf-less-authenticated-content')
 def csrf_content():
     a=choose('s3',False,'host-e2e','postgres'); s=role('admin-a'); p=prep(s,a)
+    anonymous=requests.Session(); anonymous.verify=False
+    assert content(anonymous,p).status_code in (401,403,404)
+    assert content(T.s,p).status_code in (401,403,404)
     s.headers.clear()
     r=content(s,p)
-    assert r.status_code in (401,403,404), f"artifact={a['id']} session={p['sessionId']} CSRF-less content HTTP={r.status_code} bytes={len(r.content)} hashMatches={sha(r.content)==a['artifactChecksum']}"
-    return {'artifactId':a['id'],'sessionId':p['sessionId'],'status':r.status_code}
+    assert r.status_code==200 and len(r.content)==a['sizeBytes'] and sha(r.content)==a['artifactChecksum'], f"CSRF-less content HTTP={r.status_code} bytes={len(r.content)}"
+    assert wait_download(a,p['sessionId'],session=s)['state']=='Completed'
+    assert content(s,p).status_code==409
+    return {'artifactId':a['id'],'sessionId':p['sessionId'],'status':r.status_code,'bytes':len(r.content)}
 
 @scenario('gap/ART-03/session-binding-reuse-parallel')
 def art03():
