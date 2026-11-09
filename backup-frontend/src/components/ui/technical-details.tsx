@@ -21,15 +21,18 @@ export function TechnicalDetails(props: TechnicalDetailsProps) {
   return props.accordion ? <TechnicalAccordion {...props} /> : <TechnicalDrawer {...props} />
 }
 
+/** A term and its value on the left, its copy button on the right; the button sits in a second `dd` so every `dl` child stays a valid term/definition group. */
+const rowClass = 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2'
+
 function TechnicalAccordion({ items, defaultOpen = false, children }: TechnicalDetailsProps) {
   useLanguage()
   if (items.length === 0 && !children) return null
   return <details open={defaultOpen || undefined} className="group rounded-lg border border-border bg-surface-2 text-sm">
     <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx('Teknik ayrıntılar')}</summary>
     {items.length > 0 && <dl className="space-y-2 border-t border-border px-3 py-2">
-      {items.map(item => <div key={item.label} className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0"><dt className="text-text-muted">{item.label}</dt><dd className="break-all font-mono text-text">{item.value}</dd></div>
-        <CopyButton value={item.value} label={tx('Kopyala: {0}', { '0': item.label })} />
+      {items.map(item => <div key={item.label} className={rowClass}>
+        <dt className="col-start-1 text-text-muted">{item.label}</dt><dd className="col-start-1 break-all font-mono text-text">{item.value}</dd>
+        <dd className="col-start-2 row-span-2 row-start-1"><CopyButton value={item.value} label={tx('Kopyala: {0}', { '0': item.label })} /></dd>
       </div>)}
     </dl>}
     {children && <div className="space-y-6 border-t border-border p-3">{children}</div>}
@@ -156,26 +159,26 @@ function TechnicalDrawer({ items, defaultOpen = false, children }: TechnicalDeta
         )}
 
         {/* Items in Drawer */}
-        <dl className="flex-1 overflow-y-auto p-5 space-y-2.5">
+        <div className="flex-1 overflow-y-auto p-5">
           {filteredItems.length === 0 ? (
             <p className="py-8 text-center text-xs text-text-muted">
               {tx('Aramayla eşleşen kayıt yok.')}
             </p>
           ) : (
-            filteredItems.map((item) => (
-              <div
-                key={item.label}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-surface-2/30 p-2.5 text-xs transition-colors hover:border-border hover:bg-surface-2/60"
-              >
-                <div className="min-w-0 flex-1">
-                  <dt className="font-medium text-text-heading">{item.label}</dt>
-                  <dd className="font-mono text-[11px] text-text break-all select-all text-text-muted mt-0.5">
+            <dl className="space-y-2.5">
+              {filteredItems.map((item) => (
+                <div
+                  key={item.label}
+                  className={`${rowClass} rounded-lg border border-border/70 bg-surface-2/30 p-2.5 text-xs transition-colors hover:border-border hover:bg-surface-2/60`}
+                >
+                  <dt className="col-start-1 font-medium text-text-heading">{item.label}</dt>
+                  <dd className="col-start-1 mt-0.5 break-all font-mono text-[11px] text-text-muted select-all">
                     {item.value}
                   </dd>
+                  <dd className="col-start-2 row-span-2 row-start-1"><CopyButton value={item.value} label={tx('Kopyala: {0}', { '0': item.label })} /></dd>
                 </div>
-                <CopyButton value={item.value} label={tx('Kopyala: {0}', { '0': item.label })} />
-              </div>
-            ))
+              ))}
+            </dl>
           )}
 
           {children && (
@@ -183,7 +186,7 @@ function TechnicalDrawer({ items, defaultOpen = false, children }: TechnicalDeta
               {children}
             </div>
           )}
-        </dl>
+        </div>
       </div>
     </details>
   )

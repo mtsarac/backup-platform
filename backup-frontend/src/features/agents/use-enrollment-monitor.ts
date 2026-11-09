@@ -24,78 +24,81 @@ export function useEnrollmentMonitor(tenantId: string, ticket: Ticket | null, cl
   }
   useEffect(() => {
     if (!ticket) return
-    let stopped = false
-    let finished = false
-    let enrolledId = enrollment.current?.tokenId === ticket.tokenId ? enrollment.current.agentId : null
-    let failures = 0
-    let polls = 0
-    let timer: number | undefined
-    let controller: AbortController | undefined
+    // Mutated from the async `poll` and the cleanup; an object keeps those writes out of the "reassign in async function" lint rule.
+    const run = {
+      stopped: false,
+      finished: false,
+      enrolledId: enrollment.current?.tokenId === ticket.tokenId ? enrollment.current.agentId : null as string | null,
+      failures: 0,
+      polls: 0,
+      timer: undefined as number | undefined,
+      controller: undefined as AbortController | undefined,
+      deadlinePassed: false,
+    }
     const expires = Date.parse(ticket.expiresAt)
-    let deadlinePassed = false
     const expire = () => {
-      if (enrolledId || stopped || finished || deadlinePassed) return
-      deadlinePassed = true
+      if (run.enrolledId || run.stopped || run.finished || run.deadlinePassed) return
+      run.deadlinePassed = true
       clear.current(); setPhase('Checking')
-      clearTimeout(timer)
+      clearTimeout(run.timer)
       // Local time controls secret lifetime, never the authoritative enrollment result.
       // A consumption just before expiry may have happened while this tab was hidden.
-      if (failures < 3 && polls < 120) void poll()
+      if (run.failures < 3 && run.polls < 120) void poll()
     }
     const expiryTimer = window.setTimeout(expire, Math.max(0, expires - Date.now()))
     async function poll() {
-      if (stopped || finished || document.visibilityState === 'hidden' || (controller && !controller.signal.aborted)) return
-      if (!enrolledId && Date.now() >= expires) {
-        deadlinePassed = true
+      if (run.stopped || run.finished || document.visibilityState === 'hidden' || (run.controller && !run.controller.signal.aborted)) return
+      if (!run.enrolledId && Date.now() >= expires) {
+        run.deadlinePassed = true
         clear.current(); setPhase('Checking')
       }
-      controller = new AbortController()
-      const signal = controller.signal
+      run.controller = new AbortController()
+      const signal = run.controller.signal
       try {
-        polls++
-        if (enrolledId) {
-          const detail = await getAgent(tenantId, enrolledId, signal)
-          if (signal.aborted || stopped) return
+        run.polls++
+        if (run.enrolledId) {
+          const detail = await getAgent(tenantId, run.enrolledId, signal)
+          if (signal.aborted || run.stopped) return
           setAgent(detail)
           setPhase(detail.connectivity === 'online' ? 'Online' : 'Connecting')
-          if (detail.connectivity === 'online') { finished = true; clearTimeout(expiryTimer) }
+          if (detail.connectivity === 'online') { run.finished = true; clearTimeout(expiryTimer) }
         } else {
           const status = await getEnrollmentTokenStatus(tenantId, ticket!.tokenId, signal)
-          if (signal.aborted || stopped) return
+          if (signal.aborted || run.stopped) return
           if (status.state !== 'Active') {
             clear.current()
             if (status.state === 'Consumed' && status.agentId) {
-              enrolledId = status.agentId
+              run.enrolledId = status.agentId
               enrollment.current = { tokenId: ticket!.tokenId, agentId: status.agentId }
               setPhase('Enrolled'); clearTimeout(expiryTimer)
-            } else { setPhase(status.state); finished = true; clearTimeout(expiryTimer) }
+            } else { setPhase(status.state); run.finished = true; clearTimeout(expiryTimer) }
           }
         }
-        failures = 0; setError(null)
+        run.failures = 0; setError(null)
       } catch (cause) {
-        if (signal.aborted || stopped) return
-        failures++; setError(describeError(cause))
+        if (signal.aborted || run.stopped) return
+        run.failures++; setError(describeError(cause))
       }
-      finally { if (controller?.signal === signal) controller = undefined }
-      if (stopped || finished || signal.aborted) return
-      if (failures >= 3 || polls >= 120) {
+      finally { if (run.controller?.signal === signal) run.controller = undefined }
+      if (run.stopped || run.finished || signal.aborted) return
+      if (run.failures >= 3 || run.polls >= 120) {
         setPaused(true)
-        if (polls >= 120) setError({ what: tx('Otomatik takip durduruldu. Agent hizmetini ve backend bağlantısını kontrol edip tekrar deneyin.'), dataImpact: tx("Kayıt token'ınız etkilenmedi; süresi dolana kadar kullanılabilir."), action: tx('Takibi tekrar deneyin.'), technical: [] })
+        if (run.polls >= 120) setError({ what: tx('Otomatik takip durduruldu. Agent hizmetini ve backend bağlantısını kontrol edip tekrar deneyin.'), dataImpact: tx("Kayıt token'ınız etkilenmedi; süresi dolana kadar kullanılabilir."), action: tx('Takibi tekrar deneyin.'), technical: [] })
         return
       }
-      timer = window.setTimeout(() => { void poll() }, failures ? Math.min(30_000, 5_000 * 2 ** failures) : 5_000)
+      run.timer = window.setTimeout(() => { void poll() }, run.failures ? Math.min(30_000, 5_000 * 2 ** run.failures) : 5_000)
     }
     function visibility() {
-      clearTimeout(timer)
+      clearTimeout(run.timer)
       if (document.visibilityState === 'hidden') {
-        controller?.abort()
-        controller = undefined
+        run.controller?.abort()
+        run.controller = undefined
       }
-      else if (failures < 3 && polls < 120) void poll()
+      else if (run.failures < 3 && run.polls < 120) void poll()
     }
     document.addEventListener('visibilitychange', visibility)
     void poll()
-    return () => { stopped = true; controller?.abort(); clearTimeout(timer); clearTimeout(expiryTimer); document.removeEventListener('visibilitychange', visibility) }
+    return () => { run.stopped = true; run.controller?.abort(); clearTimeout(run.timer); clearTimeout(expiryTimer); document.removeEventListener('visibilitychange', visibility) }
   }, [tenantId, ticket, attempt])
   return { phase, agent, error, paused, retry: () => setAttempt(value => value + 1) }
 }

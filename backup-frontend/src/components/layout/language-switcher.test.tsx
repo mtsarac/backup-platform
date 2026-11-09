@@ -34,4 +34,23 @@ describe('LanguageSwitcher', () => {
     expect(screen.getByTestId('current-lang')).toHaveTextContent('tr')
     expect(localStorage.getItem('bp_language')).toBe('tr')
   })
+
+  it('marks the active language by weight and underline, not colour or opacity alone, and keeps the visible text in the accessible name', () => {
+    const { container } = render(<LanguageSwitcher />)
+    const button = screen.getByRole('button', { name: /Dili değiştir/ })
+    expect(button).toHaveAccessibleName(expect.stringContaining('TR / EN'))
+    const [tr, en] = [screen.getByText('TR'), screen.getByText('EN')]
+    expect(tr).toHaveAttribute('aria-current', 'true')
+    expect(tr).toHaveClass('font-bold', 'underline')
+    expect(en).not.toHaveAttribute('aria-current')
+    expect(en).not.toHaveClass('underline')
+
+    fireEvent.click(button)
+    expect(screen.getByTitle('Change language')).toHaveAccessibleName('Change language: TR / EN')
+    expect(screen.getByText('EN')).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByText('TR')).not.toHaveAttribute('aria-current')
+    // opacity would dim the text below 4.5:1 on top of the muted token
+    for (const span of container.querySelectorAll('button > span')) expect(span.className).not.toMatch(/opacity/)
+    expect(container.querySelector('[aria-hidden="true"]:not(svg)')).toHaveTextContent('/')
+  })
 })
