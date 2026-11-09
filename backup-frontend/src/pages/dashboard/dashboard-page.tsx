@@ -73,8 +73,8 @@ export function DashboardPage() {
           <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />}
             hint={data.runs.failedLast24Hours > 0 || data.runs.storageFailedLast24Hours > 0 ? <>
               {data.runs.storageFailedLast24Hours > 0 && <>{tx("{0} tanesi depolamaya yazma veya kopya doğrulama hatası.", { "0": data.runs.storageFailedLast24Hours })}{' '}</>}
-              {tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")}{' '}
-              <Link className="font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
+              {tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")}
+              <Link className="flex min-h-11 w-fit items-center font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
             </> : undefined} />
         </div>}
         {!noJobs && <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">

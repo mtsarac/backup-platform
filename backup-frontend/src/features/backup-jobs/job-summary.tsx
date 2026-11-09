@@ -19,9 +19,10 @@ export function JobSummary({ values, agentLabel, canAdmin, connections, onGo }: 
   useLanguage()
   const { name, enabled, configuration: c, scheduled, schedule, overlap, retry, retention } = values
   const isFiles = c.engine === 'file-system'
-  const row = (label: string, step: JobStep, children: ReactNode) => <div key={label} className="flex flex-wrap items-start justify-between gap-3 border-b border-border py-3 last:border-b-0">
-    <div className="min-w-0"><dt className="text-sm text-text-muted">{label}</dt><dd className="mt-0.5 break-words text-body text-text">{children}</dd></div>
-    <Button type="button" variant="outline" size="sm" aria-label={tx("Değiştir: {0}", { "0": label })} onClick={() => onGo(step)}>{tx("Değiştir")}</Button>
+  // The change button sits in a second `dd` so every `dl` child stays a valid term/definition group.
+  const row = (label: string, step: JobStep, children: ReactNode) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 border-b border-border py-3 last:border-b-0">
+    <dt className="col-start-1 text-sm text-text-muted">{label}</dt><dd className="col-start-1 mt-0.5 break-words text-body text-text">{children}</dd>
+    <dd className="col-start-2 row-span-2 row-start-1"><Button type="button" variant="outline" size="sm" aria-label={tx("Değiştir: {0}", { "0": label })} onClick={() => onGo(step)}>{tx("Değiştir")}</Button></dd>
   </div>
   const retentionText = !canAdmin ? tx('Sunucunun varsayılan politikası uygulanır.') : retention.enabled ? keepForLabel(retention.keepForSeconds) : tx('Süresiz')
   const technical: TechnicalItem[] = [

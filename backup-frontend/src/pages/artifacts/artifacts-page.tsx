@@ -16,7 +16,7 @@ import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, BackupArtifact } from '@/features/artifacts/types'
 import { ReplicationSummary } from '@/features/backups/replication'
 import { LIST_PAGE_SIZE, dayParam, oneOf, useListParams } from '@/features/platform/use-list-params'
-import { linkClass } from '@/components/ui/form-styles'
+import { linkClass, rowLinkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatBytes, formatDateTime } from '@/lib/format'
 
@@ -40,8 +40,12 @@ export function ArtifactsPage() {
   const base = `/tenants/${tenantId}`
   const columns: Column<BackupArtifact>[] = [
     { key: 'database', header: tx('Backup'), wrap: true, render: (artifact) => <div className="space-y-0.5">
-      <Link className={linkClass} to={`${base}/artifacts/${artifact.id}`}>{artifact.databaseName || tx('Backup detayları')}</Link>
-      <p className="text-sm text-text-muted">{artifact.jobId ? <Link className="hover:underline" to={`${base}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işi')}</Link> : tx('Backup Job yok')}{artifact.runId && <> · <Link className="hover:underline" to={`${base}/backup-runs/${artifact.runId}`}>{tx("Çalıştırmayı aç")}</Link></>} · <Link className="hover:underline" to={`${base}/restores?artifactId=${encodeURIComponent(artifact.id)}`}>{tx("Bu yedeğin geri yüklemeleri")}</Link></p>
+      <Link className={`${linkClass} ${rowLinkClass}`} to={`${base}/artifacts/${artifact.id}`}>{artifact.databaseName || tx('Backup detayları')}</Link>
+      <p className="flex flex-wrap items-center gap-x-2 text-sm text-text-muted">
+        {artifact.jobId ? <Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işi')}</Link> : <span>{tx('Backup Job yok')}</span>}
+        {artifact.runId && <><span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-runs/${artifact.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}
+        <span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/restores?artifactId=${encodeURIComponent(artifact.id)}`}>{tx("Bu yedeğin geri yüklemeleri")}</Link>
+      </p>
     </div> },
     { key: 'state', card: 'status', header: tx('Durum'), render: (artifact) => <StatusPill status={artifactState(artifact)} /> },
     { key: 'size', header: tx('Boyut'), render: (artifact) => formatBytes(artifact.sizeBytes) },
