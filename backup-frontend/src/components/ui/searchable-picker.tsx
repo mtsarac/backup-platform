@@ -62,13 +62,13 @@ export function SearchablePicker({ label, options, value, onChange, selectedLabe
         onClick={() => setOpen(true)}
         onChange={event => { setQuery(event.target.value); onSearchChange?.(event.target.value); setOpen(true); setActive(0) }}
         onBlur={close} onKeyDown={onKeyDown} />
-      {value && !disabled && <button type="button" aria-label={tx("Seçimi temizle")} className="absolute inset-y-0 right-0 flex min-w-11 items-center justify-center rounded-r-lg text-text-muted hover:text-text"
+      {value && !disabled && <button type="button" aria-label={tx("Seçimi temizle")} className="absolute inset-y-0 right-0 flex min-w-9 pointer-coarse:min-w-11 items-center justify-center rounded-r-lg text-text-muted hover:text-text"
         onClick={() => { onChange(''); close(); input.current?.focus() }}><X aria-hidden="true" className="size-4" /></button>}
     </div>
     {expanded && <ul id={`${id}-list`} role="listbox" aria-label={tx(label)} onMouseDown={event => event.preventDefault()}
       className="absolute z-20 max-h-64 w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 font-normal text-text shadow-card">
       {matches.map((option, index) => <li key={option.value} id={`${id}-${index}`} role="option" aria-selected={option.value === value} onClick={() => pick(option)}
-        className={cn('min-h-11 cursor-pointer px-3 py-2', index === current && 'bg-surface-3', option.value === value && 'font-medium')}>
+        className={cn('min-h-9 pointer-coarse:min-h-11 cursor-pointer px-3 py-2', index === current && 'bg-surface-3', option.value === value && 'font-medium')}>
         <span className="block break-words">{option.label}</span>
         {option.description && <span className="block break-words text-xs text-text-muted">{option.description}</span>}
       </li>)}

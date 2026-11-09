@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Building2, ChevronRight, Database, Monitor, Users } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
 import { StatusPill } from '@/components/data/status-pill'
@@ -34,10 +34,10 @@ export function PlatformDashboardPage() {
       {data && <>
         <DashboardAttention data={data} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Link to={platformPaths.tenants} className="block rounded-lg"><KpiCard label={tx("Çalışma alanları")} value={data.tenants} icon={<Building2 className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
-          <Link to={platformPaths.users} className="block rounded-lg"><KpiCard label={tx("Kullanıcılar")} value={data.users} icon={<Users className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
-          <Link to={platformPaths.agents()} className="block rounded-lg"><KpiCard label={tx("Yedekleme bilgisayarları")} value={data.agents.total} hint={tx("{0} çevrimiçi · {1} iptal edilmiş", { "0": data.agents.online, "1": data.agents.revoked })} icon={<Monitor className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
-          <KpiCard label={tx("Etkin yedekleme işleri")} value={data.enabledBackupJobs} icon={<Database className="size-4" />} />
+          <Link to={platformPaths.tenants} className="block rounded-lg"><KpiCard label={tx("Çalışma alanları")} value={data.tenants} className="h-full hover:bg-surface-2" /></Link>
+          <Link to={platformPaths.users} className="block rounded-lg"><KpiCard label={tx("Kullanıcılar")} value={data.users} className="h-full hover:bg-surface-2" /></Link>
+          <Link to={platformPaths.agents()} className="block rounded-lg"><KpiCard label={tx("Yedekleme bilgisayarları")} value={data.agents.total} hint={tx("{0} çevrimiçi · {1} iptal edilmiş", { "0": data.agents.online, "1": data.agents.revoked })} className="h-full hover:bg-surface-2" /></Link>
+          <KpiCard label={tx("Etkin yedekleme işleri")} value={data.enabledBackupJobs} />
         </div>
         <DashboardStorage />
       </>}
@@ -55,7 +55,7 @@ function DashboardAttention({ data }: { data: PlatformSummary }) {
     </div>
     {items.length > 0 && <ul aria-label={tx("Dikkat gerektirenler")} className="mt-4 divide-y divide-border rounded-lg border border-border">
       {items.map((item) => <li key={item.key}>
-        <Link className="flex min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-3" to={item.to}>
+        <Link className="flex min-h-9 pointer-coarse:min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-3" to={item.to}>
           <span className="min-w-0 break-words">{item.text}</span>
           <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
         </Link>

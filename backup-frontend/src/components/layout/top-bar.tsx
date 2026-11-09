@@ -19,7 +19,7 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
   const [busy, setBusy] = useState(false)
   async function signOut() { setBusy(true); setError(null); try { await logout() } catch (error) { setError(describeError(error)) } finally { setBusy(false) } }
   return <>
-    <header className="sticky top-0 z-10 flex min-h-16 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-surface/95 px-4 py-2 backdrop-blur sm:px-6">
+    <header className="sticky top-0 z-10 flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-canvas px-4 py-2 sm:px-6">
       <div className="flex min-w-0 items-center gap-3 max-sm:w-full">
         <Button variant="outline" size="icon" className="lg:hidden" onClick={onMenuToggle} aria-label={tx("Menüyü aç")}><Menu aria-hidden="true" /></Button>
         {context}

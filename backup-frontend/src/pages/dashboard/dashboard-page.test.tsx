@@ -207,8 +207,8 @@ describe('dashboard information ownership', () => {
     expect(screen.getByText(/6 tanesi depolamaya yazma veya kopya doğrulama hatası/)).toBeVisible()
     expect(screen.getAllByRole('link', { name: 'Başarısız yedeklemeler' })).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Başarısız yedeklemeler' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Failed')
-    // Not an in-sentence link: its own 44 px row (it measured 18 px high inline).
-    expect(screen.getByRole('link', { name: 'Başarısız yedeklemeler' })).toHaveClass('flex', 'min-h-11')
+    // Not an in-sentence link: its own row, 44 px on touch (it measured 18 px high inline).
+    expect(screen.getByRole('link', { name: 'Başarısız yedeklemeler' })).toHaveClass('flex', 'pointer-coarse:min-h-11')
   })
 
   it('has one link to the run history, in the recent-runs section', () => {

@@ -76,14 +76,14 @@ function Table<T>({ rows, columns, keyExtractor, className, caption }: ListProps
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
           <tr className="border-b border-border bg-surface-2 text-left text-sm text-text-muted">
-            {columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.header}</th>)}
+            {columns.map((column) => <th key={column.key} className="whitespace-nowrap px-3 py-2 font-medium">{column.header}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={keyExtractor(row)} className="border-b border-border last:border-b-0 hover:bg-surface-2/70">
               {columns.map((column) => (
-                <td key={column.key} className={cn('px-4 py-3 align-top text-text', column.wrap ? 'min-w-28 max-w-64 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
+                <td key={column.key} className={cn('px-3 py-2 align-top text-text', column.wrap ? 'min-w-28 max-w-64 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
               ))}
             </tr>
           ))}

@@ -41,7 +41,7 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
   ]
   return <Section title={tx("Şifreleme anahtarları")} description={tx("Anahtarı döndürmek yeni yedeklerde yeni bir anahtar kullanılmasını sağlar. Eski yedekler önceki anahtarla açılmaya devam eder.")} flush className="overflow-hidden"
     actions={<>
-      <Link className={`${linkClass} inline-flex min-h-11 items-center text-sm`} to={`${platformPaths.breakGlass}?tenantId=${encodeURIComponent(tenantId)}`}>{tx("Acil destek erişimi istekleri")}</Link>
+      <Link className={`${linkClass} inline-flex min-h-9 pointer-coarse:min-h-11 items-center text-sm`} to={`${platformPaths.breakGlass}?tenantId=${encodeURIComponent(tenantId)}`}>{tx("Acil destek erişimi istekleri")}</Link>
       <Button onClick={() => { rotate.reset(); setRotating(true) }}>{tx("Anahtarı döndür")}</Button>
     </>}>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={keys.isPending} error={keys.error}>

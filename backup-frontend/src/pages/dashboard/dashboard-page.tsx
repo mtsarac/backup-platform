@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertCircle, HardDrive, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -69,12 +69,12 @@ export function DashboardPage() {
       {data && <>
         {data.artifacts.deleteFailed > 0 && <ErrorNotice what={tx("{0} yedek dosyası silinemedi.", { "0": data.artifacts.deleteFailed })} dataImpact={tx("Silinemeyen dosyalar depoda duruyor; diğer yedekleriniz etkilenmedi.")} action={tx("Nedenini inceleyip silmeyi yeniden deneyin.")} control={<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link>} />}
         {!noJobs && <div className="grid gap-4 sm:grid-cols-2">
-          <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
-          <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />}
+          <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" />
+          <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined}
             hint={data.runs.failedLast24Hours > 0 || data.runs.storageFailedLast24Hours > 0 ? <>
               {data.runs.storageFailedLast24Hours > 0 && <>{tx("{0} tanesi depolamaya yazma veya kopya doğrulama hatası.", { "0": data.runs.storageFailedLast24Hours })}{' '}</>}
               {tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")}
-              <Link className="flex min-h-11 w-fit items-center font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
+              <Link className="flex min-h-9 pointer-coarse:min-h-11 w-fit items-center font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
             </> : undefined} />
         </div>}
         {!noJobs && <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
