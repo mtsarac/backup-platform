@@ -83,7 +83,7 @@ function Table<T>({ rows, columns, keyExtractor, className, caption }: ListProps
           {rows.map((row) => (
             <tr key={keyExtractor(row)} className="border-b border-border last:border-b-0 hover:bg-surface-2/70">
               {columns.map((column) => (
-                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-8 [&_button]:py-1 [&_button]:text-sm pointer-coarse:[&_button]:min-h-11', column.card === 'actions' ? 'whitespace-nowrap [&>div]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
+                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-8 [&_button]:py-1 [&_button]:text-sm pointer-coarse:[&_button]:min-h-11', column.card === 'actions' ? 'whitespace-nowrap [&_.flex-wrap]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
               ))}
             </tr>
           ))}

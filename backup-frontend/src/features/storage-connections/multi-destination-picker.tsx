@@ -8,6 +8,7 @@ import type { ConnectionView, ProviderDescriptor } from './types'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from './job-connection-picker-utils'
 import { executionLocationLabel } from './labels'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 interface Props {
   configuration: BackupConfiguration
@@ -153,19 +154,19 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             const unavailable = connectionUnavailableReason(destConn, destProv)
 
             return (
-              <div key={`${dest.storageProvider}:${dest.storageConnectionId ?? 'default'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-md border border-border bg-surface-2 text-sm">
+              <div key={`${dest.storageProvider}:${dest.storageConnectionId ?? 'default'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border border-border bg-surface p-2.5 text-sm">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
                     {!dest.isPrimary && <span className="font-medium text-text-heading">{tx(destProv?.displayName ?? dest.storageProvider)}</span>}
                     {dest.isPrimary ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">{tx("Primary")}</span>
+                      <Badge tone="accent">{tx("Primary")}</Badge>
                     ) : (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] text-text-muted border border-border">{tx("Replica")}</span>
+                      <Badge>{tx("Replica")}</Badge>
                     )}
                     {!dest.isPrimary && unavailable && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-destructive/10 text-destructive border border-destructive/20">
+                      <Badge tone="error">
                         {unavailable}
-                      </span>
+                      </Badge>
                     )}
                   </div>
                   {!dest.isPrimary && <div className="text-xs text-text-muted">
