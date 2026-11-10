@@ -6,11 +6,11 @@ const labels: [keyof AgentCounts, string, string][] = [
   ['disabled', 'Devre dışı', 'text-text-heading'], ['revoked', 'İptal edilmiş', 'text-text-heading'],
 ]
 
-/** Connectivity and lifecycle counts as a row of tiles. Each `dd` directly follows its `dt`. */
+/** Connectivity and lifecycle counts as a row of plain figures. Each `dd` directly follows its `dt`. */
 export function AgentBreakdown({ counts }: { counts: AgentCounts }) {
   useLanguage()
-  return <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-    <div className="rounded-lg bg-surface-2 p-3"><dt className="text-sm text-text-muted">{tx("Toplam")}</dt><dd className="text-xl font-semibold text-text-heading">{counts.total}</dd></div>
-    {labels.map(([key, label, tone]) => <div key={key} className="rounded-lg bg-surface-2 p-3"><dt className="text-sm text-text-muted">{tx(label)}</dt><dd className={`text-xl font-semibold ${tone}`}>{counts[key]}</dd></div>)}
+  return <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="border-l-2 border-border pl-3"><dt className="text-sm text-text-muted">{tx("Toplam")}</dt><dd className="text-xl font-semibold text-text-heading">{counts.total}</dd></div>
+    {labels.map(([key, label, tone]) => <div key={key} className="border-l-2 border-border pl-3"><dt className="text-sm text-text-muted">{tx(label)}</dt><dd className={`text-xl font-semibold ${tone}`}>{counts[key]}</dd></div>)}
   </dl>
 }

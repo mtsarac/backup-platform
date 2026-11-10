@@ -8,6 +8,7 @@ import type { ConnectionView, ProviderDescriptor } from './types'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from './job-connection-picker-utils'
 import { executionLocationLabel } from './labels'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 interface Props {
   configuration: BackupConfiguration
@@ -16,12 +17,13 @@ interface Props {
   pending: boolean
   error: unknown
   fieldError?: string
+  replicaError?: string
   existingTarget: boolean
   onChange: (configuration: BackupConfiguration) => void
   onRefresh: () => void
 }
 
-export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, existingTarget, onChange, onRefresh }: Props) {
+export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, replicaError, existingTarget, onChange, onRefresh }: Props) {
   useLanguage()
   const destinations = configuration.destinations
   const primary = primaryDestination(configuration)
@@ -153,19 +155,19 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             const unavailable = connectionUnavailableReason(destConn, destProv)
 
             return (
-              <div key={`${dest.storageProvider}:${dest.storageConnectionId ?? 'default'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-md border border-border bg-surface-2 text-sm">
+              <div key={`${dest.storageProvider}:${dest.storageConnectionId ?? 'default'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border border-border bg-surface p-2.5 text-sm">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
                     {!dest.isPrimary && <span className="font-medium text-text-heading">{tx(destProv?.displayName ?? dest.storageProvider)}</span>}
                     {dest.isPrimary ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">{tx("Primary")}</span>
+                      <Badge tone="accent">{tx("Primary")}</Badge>
                     ) : (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] text-text-muted border border-border">{tx("Replica")}</span>
+                      <Badge>{tx("Replica")}</Badge>
                     )}
                     {!dest.isPrimary && unavailable && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-destructive/10 text-destructive border border-destructive/20">
+                      <Badge tone="error">
                         {unavailable}
-                      </span>
+                      </Badge>
                     )}
                   </div>
                   {!dest.isPrimary && <div className="text-xs text-text-muted">
@@ -246,12 +248,15 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
               min={configuration.enforceThreeTwoOne ? 3 : 1}
               max={destinations.length}
               value={requiredCount}
+              aria-invalid={Boolean(replicaError)}
+              aria-describedby={replicaError ? 'required-replica-count-error' : undefined}
              
               onChange={e => {
                 const count = Number(e.target.value)
                 if (!Number.isNaN(count)) updateDestinations(destinations, count)
               }}
             />
+            {replicaError && <p id="required-replica-count-error" role="alert" className="text-sm text-destructive">{replicaError}</p>}
             <p className="text-[11px] text-text-muted mt-1">
               {destinations.length}{' '}{tx("hedeften en az")}{' '}{requiredCount}{' '}{tx("tanesi doğrulanmalıdır.")}</p>
           </div>

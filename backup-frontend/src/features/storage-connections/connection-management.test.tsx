@@ -113,7 +113,7 @@ describe('Storage connections list and detail', () => {
     expect(screen.getByRole('list', { name: 'Local yetenekleri' })).not.toBeVisible()
     expect(screen.getByText('tenant')).not.toBeVisible()
     await userEvent.click(screen.getByText('Teknik ayrıntılar'))
-    expect(screen.getByRole('list', { name: 'Local yetenekleri' })).toHaveTextContent('OkumaSilme')
+    expect(screen.getByRole('list', { name: 'Local yetenekleri' })).toHaveTextContent('Okuma ·Silme')
     expect(screen.getByText('tenant')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Kopyala: Kota kapsamı' })).toBeInTheDocument()
   })

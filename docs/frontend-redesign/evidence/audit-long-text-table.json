@@ -1,0 +1,34 @@
+[
+  {
+    "name": "desktop",
+    "viewport": 1024,
+    "docWidth": 1024,
+    "table": true,
+    "scrollWidth": 1310,
+    "clientWidth": 686,
+    "afterFocus": {
+      "left": 849.703125,
+      "right": 979.015625,
+      "width": 1024
+    },
+    "scrollLeft": 624,
+    "afterScroll": {
+      "left": 849.703125,
+      "right": 979.015625,
+      "width": 1024
+    }
+  },
+  {
+    "name": "mobile",
+    "viewport": 390,
+    "docWidth": 390,
+    "table": false,
+    "scrollWidth": null,
+    "clientWidth": null,
+    "afterFocus": {
+      "left": 152.15625,
+      "right": 281.46875,
+      "width": 390
+    }
+  }
+]

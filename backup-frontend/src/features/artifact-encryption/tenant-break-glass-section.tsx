@@ -31,7 +31,7 @@ export function TenantBreakGlassSection({ tenantId }: { tenantId: string }) {
               <Fact label={tx('Karar veren')}>{event.decidedByName ?? tx('Henüz karar verilmedi')}</Fact>
               <Fact label={tx('Kullanıldı')}>{event.consumedAt ? <time dateTime={event.consumedAt} title={formatDateTime(event.consumedAt)} aria-label={formatDateTime(event.consumedAt)}>{formatRelativeTime(event.consumedAt)}</time> : tx('Hayır')}</Fact>
             </Facts>
-            <Link className={`${linkClass} inline-flex min-h-11 items-center`} to={`/tenants/${tenantId}/artifacts/${event.artifactId}`}>{tx('Yedek dosyasını görüntüle')}</Link>
+            <Link className={`${linkClass} inline-flex min-h-9 pointer-coarse:min-h-11 items-center`} to={`/tenants/${tenantId}/artifacts/${event.artifactId}`}>{tx('Yedek dosyasını görüntüle')}</Link>
             <TechnicalDetails items={[
               { label: tx('İstek kimliği'), value: event.id },
               { label: tx('Yedek dosyası kimliği'), value: event.artifactId },

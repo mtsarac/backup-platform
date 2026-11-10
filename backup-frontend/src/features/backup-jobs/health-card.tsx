@@ -1,6 +1,5 @@
 import { StatusPill } from '@/components/data/status-pill'
 import { Section, Facts } from '@/components/ui/section'
-import { Card } from '@/components/ui/card'
 import { tx, useLanguage } from '@/lib/i18n'
 import { useBackupHealth } from './health'
 import { formatDateTime } from '@/lib/format'
@@ -32,16 +31,16 @@ export function BackupHealthCard({ jobId }: { jobId: string }) {
     {query.isPending ? <p role="status" className="text-sm text-text-muted">{tx('Sağlık bilgisi yükleniyor…')}</p>
       : query.error || !health ? <p role="alert" className="text-sm text-error">{tx('Sağlık bilgisi alınamadı.')}</p>
       : <div className="space-y-4">
-        <p className="text-3xl font-semibold tabular-nums text-text-heading">{health.score} / 100</p>
+        <p className="text-2xl font-semibold tabular-nums text-text-heading">{health.score} / 100</p>
         <Facts>
           {(Object.keys(labels) as (keyof typeof labels)[]).map(key => {
             const factor = health.factors[key]
-            return <Card key={key} tone="subtle">
+            return <div key={key} className="border-l-2 border-border pl-3">
               <dt className="text-sm font-medium text-text-heading">{tx(labels[key])}</dt>
               <dd className="mt-1 space-y-1 text-sm"><p className="tabular-nums">{factor.score} / {factor.maxScore}</p>
                 <p className="text-text-muted">{tx(reasons[factor.reason] ?? 'Bu etken için açıklama bulunamadı.')}</p>
               </dd>
-            </Card>
+            </div>
           })}
         </Facts>
         <p className="text-xs text-text-muted">{tx('Değerlendirme zamanı:')}{' '}{formatDateTime(health.evaluatedAt)}</p>

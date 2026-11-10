@@ -21,9 +21,9 @@ function verdict(state: BackupHealthState): { level: StatusLevel; title: string;
 }
 
 function RecommendationList({ items, base, label = tx("Öneriler") }: { items: Recommendation[]; base: string; label?: string }) {
-  return items.length > 0 && <ul aria-label={label} className="mt-4 divide-y divide-border rounded-lg border border-border">
+  return items.length > 0 && <ul aria-label={label} className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
     {items.map(item => <li key={item.jobId}>
-      <Link to={`${base}/backup-jobs/${item.jobId}/edit`} className="flex min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body hover:bg-surface-3">
+      <Link to={`${base}/backup-jobs/${item.jobId}/edit`} className="flex min-h-9 pointer-coarse:min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body hover:bg-surface-3">
         <span className="min-w-0 break-words"><span className="font-medium text-text-heading">{item.jobName}</span>: {item.message}</span>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-text-muted" />
       </Link>
@@ -33,10 +33,10 @@ function RecommendationList({ items, base, label = tx("Öneriler") }: { items: R
 
 function Verdict({ items, state, base }: { items: Recommendation[]; state: BackupHealthState; base: string }) {
   const { level, title, text } = verdict(state)
-  return <Section>
-    <div role="status" className="space-y-1"><StatusPill level={level} className="text-sm" /><p className="pt-2 text-xl font-semibold text-text-heading">{title}</p><p className="text-body text-text-muted">{text}</p></div>
+  return <section>
+    <div role="status" className="space-y-1"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><StatusPill level={level} /><p className="text-base font-semibold text-text-heading">{title}</p></div><p className="text-body text-text-muted">{text}</p></div>
     <RecommendationList items={items} base={base} />
-  </Section>
+  </section>
 }
 
 /** The page's one question: are my backups safe? The state is the backend's; recommendations come from each unhealthy job's weakest factor. */

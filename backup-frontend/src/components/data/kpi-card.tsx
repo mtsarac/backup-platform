@@ -1,43 +1,25 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Card } from '@/components/ui/card'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 type Tone = 'primary' | 'success' | 'warning' | 'error' | 'info'
 
-const toneClasses: Record<Tone, string> = {
-  primary: 'text-primary',
-  success: 'text-success',
-  warning: 'text-warning',
-  error: 'text-error',
-  info: 'text-info',
-}
-
 interface KpiCardProps {
   label: string
   value: ReactNode
-  icon?: ReactNode
   tone?: Tone
   hint?: ReactNode
   className?: string
 }
 
-export function KpiCard({ label, value, icon, tone, hint, className }: KpiCardProps) {
+/** A plain figure with its label. Colour only when the number is a problem (`error`, `warning`). */
+export function KpiCard({ label, value, tone, hint, className }: KpiCardProps) {
   useLanguage()
   return (
-    <Card className={className}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-text-muted">{tx(label)}</span>
-        {icon && (
-          <span className={cn('text-text-muted', tone && toneClasses[tone])}>
-            {icon}
-          </span>
-        )}
-      </div>
-      <div className={cn('mt-1 text-3xl font-semibold tabular-nums', tone === 'error' || tone === 'warning' ? toneClasses[tone] : 'text-text-heading')}>
-        {value}
-      </div>
+    <div className={cn('border-l-2 border-border py-1 pl-3', tone === 'error' && 'border-error', tone === 'warning' && 'border-warning', className)}>
+      <div className={cn('text-2xl font-semibold tabular-nums', tone === 'error' ? 'text-error' : tone === 'warning' ? 'text-warning' : 'text-text-heading')}>{value}</div>
+      <div className="text-sm text-text-muted">{tx(label)}</div>
       {hint && <p className="mt-0.5 text-sm text-text-muted">{hint}</p>}
-    </Card>
+    </div>
   )
 }

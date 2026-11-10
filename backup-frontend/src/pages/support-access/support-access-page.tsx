@@ -127,7 +127,7 @@ function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId:
             <RelativeTime value={row.at} />
           </div>
           <Fact label={tx('Sonuç')}>{auditResultLabel(row.result)}</Fact>
-          {(row.targetType === 'Artifact' || row.targetType === 'backup_artifact') && <Link className={`${linkClass} inline-flex min-h-11 items-center`} to={`/tenants/${tenantId}/artifacts/${encodeURIComponent(row.targetId)}`}>{tx('Yedek dosyasını görüntüle')}</Link>}
+          {(row.targetType === 'Artifact' || row.targetType === 'backup_artifact') && <Link className={`${linkClass} inline-flex min-h-6 pointer-coarse:min-h-11 items-center`} to={`/tenants/${tenantId}/artifacts/${encodeURIComponent(row.targetId)}`}>{tx('Yedek dosyasını görüntüle')}</Link>}
           <TechnicalDetails items={[
             { label: tx('Etkinlik kimliği'), value: row.id },
             { label: tx('İşlem kodu'), value: row.action },

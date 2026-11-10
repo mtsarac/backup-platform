@@ -9,7 +9,7 @@ function resolve(theme: Theme): ResolvedTheme {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem('backup-theme')
-    return (stored as Theme) ?? 'system'
+    return (stored as Theme) ?? 'light'
   })
 
   const resolvedTheme = resolve(theme)

@@ -519,6 +519,18 @@ describe('adım adım sihirbaz', () => {
     expect(items.map(item => item.getAttribute('aria-current'))).toEqual(items.map((_, index) => index === target ? 'step' : null))
     expect(screen.queryAllByText(/Neden soruluyor\?/).length).toBeGreaterThan(0)
   })
+  it('blocks a fractional required replica count before leaving storage', async () => {
+    renderPage()
+    await reach(1)
+    await waitFor(() => expect(screen.getByLabelText('Depolama bağlantısı')).toBeEnabled())
+    fireEvent.change(screen.getByLabelText('Yeni Çoğaltma Hedefi Ekle'), { target: { value: 'conn-central' } })
+    const count = screen.getByLabelText('Gerekli Doğrulanmış Kopya Sayısı')
+    fireEvent.change(count, { target: { value: '1.5' } })
+    next()
+    expect(count).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('alert')).toHaveTextContent('1 ile 2 arasında bir tam sayı girin.')
+    expect(saveBackupJob).not.toHaveBeenCalled()
+  })
   it('asks for the name, the computer and the source together on the first step', async () => {
     renderPage()
     expect(screen.getByLabelText('İş adı')).toBeInTheDocument()
