@@ -45,10 +45,13 @@ public sealed class VssSnapshotLifecycleTests
         await File.WriteAllTextAsync(Path.Combine(folder, "a.txt"), "content");
         try
         {
-            var sut = new BackupPlatform.BackupProviders.FileSystem.FileSystemBackupProvider([new WindowsVssSnapshotProvider()], null);
+            var missingPermissions = new BackupPlatform.BackupProviders.FileSystem.FileSystemBackupProvider([new WindowsVssSnapshotProvider()], null);
+            var sut = new BackupPlatform.BackupProviders.FileSystem.FileSystemBackupProvider([new WindowsVssSnapshotProvider()], new WindowsFilePermissions());
             var source = new BackupPlatform.BackupProviders.FileSystem.FileSystemBackupSource(folder, ["**"], [], SnapshotKind: SnapshotKind.Vss);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => missingPermissions.CreateBackupAsync(source, staging, null, default));
             var (manifest, _) = await sut.CreateBackupAsync(source, staging, null, default);
             Assert.Equal("a.txt", Assert.Single(manifest.Files).RelativePath);
+            Assert.NotNull(Assert.Single(manifest.Files).WindowsAccessControl);
         }
         finally
         {
@@ -62,21 +65,23 @@ public sealed class VssSnapshotLifecycleTests
     {
         var directory = Path.Combine(Path.GetTempPath(), "bp-vss-sweep-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
+        var marker = Path.Combine(SystemRoot, "bp-vss-sweep-marker-" + Guid.NewGuid().ToString("N") + ".txt");
+        await File.WriteAllTextAsync(marker, "live snapshot");
         try
         {
             var provider = new WindowsVssSnapshotProvider();
             await using var live = await provider.CreateAsync(new SnapshotRequest(SystemRoot, directory, "attempt-4"), default);
             var ledger = Path.Combine(directory, ".bp-vss");
             var gone = Path.Combine(ledger, Guid.NewGuid().ToString("N") + ".owned");
-            await File.WriteAllTextAsync(gone, "x");
+            await File.WriteAllTextAsync(gone, ProtectedLedger.Marker + "\n" + DateTimeOffset.UtcNow.ToString("O"));
             Assert.Equal(0, await provider.SweepLeftoversAsync(directory, default));
             Assert.False(File.Exists(gone));
-            Assert.True(Directory.Exists(live.Path));
+            Assert.Equal("live snapshot", await File.ReadAllTextAsync(Path.Combine(live.Path, Path.GetFileName(marker))));
             Assert.Single(Directory.GetFiles(ledger));
             await live.DisposeAsync();
             Assert.Empty(Directory.GetFiles(ledger));
         }
-        finally { Directory.Delete(directory, true); }
+        finally { File.Delete(marker); Directory.Delete(directory, true); }
     }
 
     [WindowsFact]

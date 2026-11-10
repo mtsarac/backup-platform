@@ -136,6 +136,11 @@ def pol03_boundary(t, ag):
 
 @scenario("gap/POL-03/concurrent-admission-reservation")
 def pol03_concurrent(t, ag):
+    try: return _pol03_concurrent(t, ag)
+    finally: ov(t, "none")
+
+
+def _pol03_concurrent(t, ag):
     ov(t, "none")
     j1 = mkjob(t, ag, "c1", 48, name="pol03-c1"); j2 = mkjob(t, ag, "c2", 48, name="pol03-c2")
     E1 = seed(t, j1); E2 = seed(t, j2); out = {"E1": E1, "E2": E2, "rounds": []}
@@ -143,24 +148,32 @@ def pol03_concurrent(t, ag):
         U = settle(t)["usedBytes"]; E1 = est(t, j1); E2 = est(t, j2)
         # headroom for exactly one: limit = U + E1 + E2 - 1; the third round gives headroom for both (limit = U+E1+E2)
         both = rnd == 2; L = U + E1 + E2 - (0 if both else 1); ov(t, "limited", L)
-        bar = threading.Barrier(2); res = {}
-        def go(k, j):
-            bar.wait(); res[k] = (time.time(), post_run(t, j))
-        th = [threading.Thread(target=go, args=(k, j)) for k, j in (("a", a), ("b", b))]
-        [x.start() for x in th]; [x.join() for x in th]
-        outs = {k: v[1] for k, v in res.items()}; ok = [k for k, v in outs.items() if v[2]]; bad = [k for k, v in outs.items() if not v[2]]
-        q = Q(t); r = {"round": rnd, "limit": L, "U": U, "both": both, "admitted": ok, "refused": {k: outs[k][:2] for k in bad}, "reservedRightAfter": q["reservedBytes"]}
+        # Freeze execution at the exact admission limit because staged archives can grow by a few bytes
         if both:
-            assert len(ok) == 2, f"both fit the limit but {len(ok)} admitted: {outs}"
-        else:
-            assert len(ok) == 1 and outs[bad[0]][0] == 409 and "quota_exceeded" in outs[bad[0]][1], f"exactly one admission expected: {outs}"
+            rc, _ = g.stop_agent(AN)
+            assert rc == 0, "could not stop the private quota agent"
+        try:
+            bar = threading.Barrier(2); res = {}
+            def go(k, j):
+                bar.wait(); res[k] = (time.time(), post_run(t, j))
+            th = [threading.Thread(target=go, args=(k, j)) for k, j in (("a", a), ("b", b))]
+            [x.start() for x in th]; [x.join() for x in th]
+            outs = {k: v[1] for k, v in res.items()}; ok = [k for k, v in outs.items() if v[2]]; bad = [k for k, v in outs.items() if not v[2]]
+            q = Q(t); r = {"round": rnd, "limit": L, "U": U, "both": both, "admitted": ok, "refused": {k: outs[k][:2] for k in bad}, "reservedRightAfter": q["reservedBytes"]}
+            if both:
+                assert len(ok) == 2, f"both fit the limit but {len(ok)} admitted: {outs}"
+                assert q["reservedBytes"] == E1 + E2, r
+                ov(t, "limited", L + MB)
+            else:
+                assert len(ok) == 1 and outs[bad[0]][0] == 409 and "quota_exceeded" in outs[bad[0]][1], f"exactly one admission expected: {outs}"
+        finally:
+            if both: g.ensure_agent(AN, AN)
         real = 0
         for k in ok:
             d, s = watch(t, outs[k][2]); assert d["status"] == "Succeeded", f"{k} {d['status']} {reason(d)}"; real += art_of(d)["sizeBytes"]
         q = settle(t); r["usedDelta"] = q["usedBytes"] - U; r["reservedAfter"] = q["reservedBytes"]; r["artifactBytes"] = real
         assert r["usedDelta"] == real and r["reservedAfter"] == 0, r
         out["rounds"].append(r)
-    ov(t, "none")
     return out
 
 
