@@ -157,8 +157,8 @@ export function UploadBandwidthPage() {
     </div>
     <Section title={tx("Hangi sınır geçerli?")}>
       <ul className="list-disc space-y-2 pl-5 text-sm text-text">
-        <li>{tx("Profil atanmamışsa, yedeklemeye uygulanan sınırların en düşüğü geçerlidir: yedekleme işi, yedekleme bilgisayarı ve çalışma alanı sınırları birbirini aşamaz.")}</li>
-        <li>{tx("Bir profil (saate göre değişen sınırlar) atarsanız sabit sınırların yerine geçer. Önce yedekleme işinin, sonra yedekleme bilgisayarının, en son çalışma alanının profili kullanılır. Profildeki saatlerin dışında hız sınırsızdır.")}</li>
+        <li>{tx("Yedekleme işi, yedekleme bilgisayarı ve çalışma alanı için ayarlanan sabit sınırların tümü geçerlidir. Çalışma alanı sınırı, eşzamanlı yüklemelerin toplamını sınırlar.")}</li>
+        <li>{tx("Bir profil (saate göre değişen sınırlar) sabit sınırları yalnızca düşürebilir; tüm sabit sınırlar geçerliliğini korur. Önce yedekleme işinin, sonra yedekleme bilgisayarının, en son çalışma alanının profili kullanılır. Profil saatleri dışında yalnızca sabit sınırlar geçerlidir.")}</li>
         <li>{tx("Profilde duraklatılan aktarımlar kendiliğinden devam etmez; elle devam ettirmeniz gerekir.")}</li>
         <li>{tx("Sınırlanmayanlar: geri yükleme ve indirmeler, dosya doğrulama ve yedekleme bilgisayarlarının bağlantı kontrolleri.")}</li>
       </ul>

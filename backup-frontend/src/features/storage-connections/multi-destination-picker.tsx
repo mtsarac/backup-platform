@@ -17,12 +17,13 @@ interface Props {
   pending: boolean
   error: unknown
   fieldError?: string
+  replicaError?: string
   existingTarget: boolean
   onChange: (configuration: BackupConfiguration) => void
   onRefresh: () => void
 }
 
-export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, existingTarget, onChange, onRefresh }: Props) {
+export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, replicaError, existingTarget, onChange, onRefresh }: Props) {
   useLanguage()
   const destinations = configuration.destinations
   const primary = primaryDestination(configuration)
@@ -247,12 +248,15 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
               min={configuration.enforceThreeTwoOne ? 3 : 1}
               max={destinations.length}
               value={requiredCount}
+              aria-invalid={Boolean(replicaError)}
+              aria-describedby={replicaError ? 'required-replica-count-error' : undefined}
              
               onChange={e => {
                 const count = Number(e.target.value)
                 if (!Number.isNaN(count)) updateDestinations(destinations, count)
               }}
             />
+            {replicaError && <p id="required-replica-count-error" role="alert" className="text-sm text-destructive">{replicaError}</p>}
             <p className="text-[11px] text-text-muted mt-1">
               {destinations.length}{' '}{tx("hedeften en az")}{' '}{requiredCount}{' '}{tx("tanesi doğrulanmalıdır.")}</p>
           </div>
