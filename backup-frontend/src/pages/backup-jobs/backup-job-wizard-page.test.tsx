@@ -769,6 +769,7 @@ describe('kaydedilmemiş değişiklik uyarısı', () => {
     await act(async () => { await router.navigate(-1) })
     dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Değişiklikleri at' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(await screen.findByText('Computer list')).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/tenants/tenant-a/agents')
     await act(async () => { await router.navigate(1) })
