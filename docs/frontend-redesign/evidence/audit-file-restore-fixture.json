@@ -1,0 +1,71 @@
+{
+  "fixture": "isolated mock only; all mutation responses fulfilled in browser",
+  "viewport": "390x844 Chromium emulated touch",
+  "language": "tr",
+  "emptySelectionDisabled": true,
+  "invalidPathDisabled": true,
+  "precheckErrorVisible": true,
+  "precheckPassed": true,
+  "confirmShowsPaths": true,
+  "executionErrorVisible": true,
+  "oldCheckDiscarded": true,
+  "overwriteDisabled": true,
+  "focusTrapped": true,
+  "escapeCloses": true,
+  "exactNameEnables": true,
+  "overwriteErrorVisible": true,
+  "prechecks": 3,
+  "executions": 2,
+  "firstRequest": {
+    "agentId": "agent-1",
+    "target": {
+      "host": "localhost",
+      "port": null,
+      "integratedSecurity": true,
+      "databaseCredentialReference": null,
+      "encrypt": true,
+      "trustServerCertificate": false
+    },
+    "databaseName": "recovery",
+    "mode": "NewDatabase",
+    "options": {
+      "terminateActiveConnections": false,
+      "verifyChecksum": true,
+      "verifyBackup": true,
+      "files": {
+        "paths": [
+          "reports",
+          "notes.txt"
+        ],
+        "relativeDirectory": "restored/2026"
+      }
+    }
+  },
+  "lastRequest": {
+    "agentId": "agent-1",
+    "target": {
+      "host": "localhost",
+      "port": null,
+      "integratedSecurity": true,
+      "databaseCredentialReference": null,
+      "encrypt": true,
+      "trustServerCertificate": false
+    },
+    "databaseName": "SalesDB",
+    "mode": "ReplaceExistingDatabase",
+    "options": {
+      "terminateActiveConnections": false,
+      "verifyChecksum": true,
+      "verifyBackup": true,
+      "files": {
+        "paths": [
+          "other.txt"
+        ],
+        "relativeDirectory": ""
+      }
+    },
+    "precheckId": "file-precheck",
+    "confirmOverwrite": "SalesDB"
+  },
+  "blockedOther": 0
+}
