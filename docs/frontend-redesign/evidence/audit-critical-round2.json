@@ -1,0 +1,36 @@
+{
+  "sha": "9d0145a25d44e5cb83b8e68c5312c3be5ddf40f1",
+  "scope": "Headless Chromium against a local Vite server; all API responses synthetic, all unrelated writes aborted. UI evidence only, not backend authorization or actual backup/restore execution.",
+  "commands": ["bun run dev --host 127.0.0.1 --port 5195 --strictPort", "bun /tmp/critical92-boundaries.mjs", "bun /tmp/critical92-privileged.mjs", "bun /tmp/critical92-database.mjs"],
+  "fixtureLimitation": "The ad hoc browser scripts were created in /tmp and are not committed; command names identify this run, not a reproducible repository test suite.",
+  "roleUi": {
+    "Owner": {"jobWizard": true, "storageAdd": true, "download": true, "deleteRequest": true, "restore": true},
+    "Admin": {"jobWizard": true, "storageAdd": true, "download": true, "deleteRequest": true, "restore": true},
+    "Operator": {"jobWizard": true, "storageAdd": false, "download": false, "deleteRequest": false, "restore": true},
+    "Viewer": {"jobWizard": false, "storageAdd": false, "download": false, "deleteRequest": false, "restore": false, "directRestoreDenied": true},
+    "apiMutations": 0
+  },
+  "supportAndBreakGlassUi": {
+    "metadataOnly": {"downloadEnabled": false, "restoreEnabled": false, "downloadAvailabilityRequests": 0},
+    "metadataAndDownload": {"downloadEnabled": true, "restoreEnabled": false, "downloadAvailabilityRequests": 1},
+    "metadataAndRestore": {"downloadEnabled": false, "restoreEnabled": true, "downloadAvailabilityRequests": 0},
+    "nonOwnerAndExpired": "Metadata tab absent; zero customer resource GETs in both cases.",
+    "breakGlass": "Requester with synthetic canApprove=true has no approve action; different approver sees action and confirmation remains disabled for empty or wrong-case name, enabled for exact name.",
+    "apiMutations": 0
+  },
+  "databaseRestoreUi": {
+    "engines": ["MSSQL", "PostgreSQL"],
+    "result": "Each configured-target new-database flow sent one synthetic successful precheck and one intercepted execution only after confirmation; execution included matching precheckId, NewDatabase mode, expected port 1433/5432, and no overwrite confirmation. Navigated to synthetic execution detail.",
+    "otherMutations": 0,
+    "notCovered": "No real database, failed precheck, or overwrite path exercised in this new browser run; prior component tests cover general failed/stale precheck and MSSQL-style typed overwrite, but PostgreSQL overwrite was not specifically exercised end-to-end."
+  },
+  "existingEvidence": {
+    "jobCreateEdit": "Prior passing backup-job-wizard-page.test.tsx covers PostgreSQL job request, edit copy-only migration, file configuration, source validation and server field errors; prior fixture route tour checks rendering only, not successful persistence.",
+    "fileRestore": "audit-file-restore-fixture.json records mocked selection validation, failed/successful precheck, stale check invalidation, overwrite name, focus trap, execution errors and synthetic navigation.",
+    "storageReplication": "Prior passing multi-destination-picker.test.tsx and replication.test.tsx exercise selection and degraded/failed replica reporting; no actual provider write or replication was executed in this run.",
+    "download": "Prior passing artifact-download.test.tsx covers native download URL, Owner/Admin gating, errors and permission revocation; this run checks role-gated button visibility, not file bytes.",
+    "supportBreakGlass": "Prior passing platform-support-session-page.test.tsx, support/restore-form.test.tsx, break-glass-detail.test.tsx and platform-break-glass-pages.test.tsx cover permission combinations, precheck invalidation, self-approval refusal and typed confirmation with mocked APIs."
+  },
+  "securityLimitations": "Synthetic responses cannot establish server-side role enforcement, cross-tenant isolation, support permission checks, self-approval prevention or single-use break-glass enforcement. No live writes or direct authorization probes were made.",
+  "findings": []
+}
