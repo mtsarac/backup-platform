@@ -1,0 +1,198 @@
+{
+  "revision": "9d0145a25d44e5cb83b8e68c5312c3be5ddf40f1",
+  "method": "Isolated local Vite and headless Chromium; synthetic data; external requests blocked; only restore requests handled in browser fixtures. Screenshots full-page; no lab traffic.",
+  "screens": [
+    {
+      "name": "dashboard",
+      "path": "/tenants/demo",
+      "width": 390,
+      "height": 844,
+      "lang": "tr",
+      "theme": "light",
+      "title": "Genel Bakış · Yedekleme Platformu",
+      "h1": [
+        "Genel Bakış"
+      ],
+      "scroll": 390,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-dashboard.png"
+    },
+    {
+      "name": "jobs-long",
+      "path": "/tenants/demo/backup-jobs",
+      "width": 390,
+      "height": 844,
+      "lang": "en",
+      "theme": "light",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "scroll": 390,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-jobs-long.png"
+    },
+    {
+      "name": "wizard",
+      "path": "/tenants/demo/backup-jobs/new",
+      "width": 768,
+      "height": 1024,
+      "lang": "tr",
+      "theme": "dark",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "scroll": 768,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-wizard.png"
+    },
+    {
+      "name": "agents",
+      "path": "/tenants/demo/agents",
+      "width": 390,
+      "height": 844,
+      "lang": "tr",
+      "theme": "light",
+      "title": "Yedekleme bilgisayarları · Yedekleme Platformu",
+      "h1": [
+        "Yedekleme bilgisayarları"
+      ],
+      "scroll": 390,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-agents.png"
+    },
+    {
+      "name": "history",
+      "path": "/tenants/demo/backup-runs",
+      "width": 768,
+      "height": 1024,
+      "lang": "en",
+      "theme": "high",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "scroll": 768,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-history.png"
+    },
+    {
+      "name": "artifacts",
+      "path": "/tenants/demo/artifacts",
+      "width": 390,
+      "height": 844,
+      "lang": "en",
+      "theme": "light",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "scroll": 390,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-artifacts.png"
+    },
+    {
+      "name": "restores",
+      "path": "/tenants/demo/restores",
+      "width": 768,
+      "height": 1024,
+      "lang": "tr",
+      "theme": "light",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "scroll": 768,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-restores.png"
+    },
+    {
+      "name": "storage",
+      "path": "/tenants/demo/storage/providers",
+      "width": 390,
+      "height": 844,
+      "lang": "tr",
+      "theme": "light",
+      "title": "Depolama · Yedekleme Platformu",
+      "h1": [
+        "Depolama"
+      ],
+      "scroll": 390,
+      "alerts": [],
+      "missing": [],
+      "errors": [],
+      "screenshot": "round2-storage.png"
+    }
+  ],
+  "navigation": {
+    "initialLanguage": "Yedeklemeler",
+    "table": 1,
+    "tableDimensions": {
+      "client": 686,
+      "scroll": 999
+    },
+    "focus": {
+      "text": "Devre dışı bırak",
+      "visible": true,
+      "outline": "solid",
+      "boxShadow": "none",
+      "left": 850.125,
+      "right": 979.4375,
+      "viewport": 1024
+    },
+    "navHistory": "/tenants/demo/backup-runs",
+    "englishHeading": "Backups",
+    "navArtifacts": "/tenants/demo/artifacts",
+    "navRestores": "/tenants/demo/restores",
+    "turkishHeading": "Yedeklemeler"
+  },
+  "restore": {
+    "emptySelectionDisabled": true,
+    "invalidPathDisabled": true,
+    "precheckErrorVisible": true,
+    "precheckPassed": true,
+    "confirmShowsPaths": true,
+    "executionErrorVisible": true,
+    "oldCheckDiscarded": true,
+    "overwriteDisabled": true,
+    "focusTrapped": true,
+    "escapeCloses": true,
+    "escapeHidden": true,
+    "exactNameEnables": true,
+    "overwriteErrorVisible": true,
+    "mockExecutionNavigation": true,
+    "prechecks": 3,
+    "executions": 3,
+    "blockedOther": 0
+  },
+  "additionalScreenshots": [
+    "round2-wide-table.png",
+    "round2-restore-error.png",
+    "round2-restore-precheck.png",
+    "round2-restore-confirm.png",
+    "round2-restore-dialog.png"
+  ],
+  "findings": [],
+  "gaps": [
+    "Only representative fixtures, not every route, real backend, browser engine or physical device.",
+    "Dashboard has populated metrics but no recent run; storage providers has no connections.",
+    "Focus cycle and Escape exercised on one file-restore confirmation dialog only.",
+    "Dark and high-contrast sampled, not a complete theme matrix.",
+    "No fresh axe, broad suite, or assistive technology run."
+  ]
+}
