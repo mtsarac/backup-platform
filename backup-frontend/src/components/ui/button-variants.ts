@@ -1,20 +1,20 @@
 import { cva } from "class-variance-authority"
 
 export const buttonVariants = cva(
-  "group/button inline-flex min-h-9 pointer-coarse:min-h-11 min-w-9 pointer-coarse:min-w-11 max-w-full shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-center text-body font-medium whitespace-normal sm:whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 select-none active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
+  "group/button inline-flex min-h-9 pointer-coarse:min-h-11 min-w-9 pointer-coarse:min-w-11 max-w-full shrink-0 items-center justify-center rounded-lg border bg-clip-padding text-center text-body font-medium whitespace-normal sm:whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 select-none active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-card hover:bg-primary-hover",
+        default: "border-transparent bg-primary text-primary-foreground shadow-card hover:bg-primary-hover",
         outline:
           "border-border-strong/60 bg-surface text-text shadow-card hover:bg-surface-3 aria-expanded:bg-surface-3",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "border-transparent hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "border-destructive/40 bg-surface text-destructive hover:bg-error-subtle",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "border-transparent text-primary underline-offset-4 hover:underline",
       },
       size: {
         default:
