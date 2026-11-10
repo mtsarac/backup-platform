@@ -1,0 +1,124 @@
+{
+  "generatedAt": "2026-11-10T15:30:15.977Z",
+  "source": "guarded populated lab, account a, Turkish; login POST permitted, all other non-GET/HEAD/OPTIONS aborted",
+  "screenshots": "none; populated lab data is private",
+  "stateCount": 126,
+  "conditions": [
+    "light",
+    "dark",
+    "high-contrast",
+    "high-contrast-dark",
+    "forced-colors",
+    "forced-colors-dark"
+  ],
+  "viewportCounts": {
+    "desktop": 60,
+    "mobile": 66
+  },
+  "incompleteContrast": {
+    "nodes": 20,
+    "pass": 20,
+    "fail": 0
+  },
+  "seriousOrCriticalAxe": 0,
+  "undersizedWithoutExemption": 0,
+  "forcedColorsFindings": 0,
+  "perCondition": {
+    "light": {
+      "desktop": {
+        "states": 10,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      },
+      "mobile": {
+        "states": 11,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      }
+    },
+    "dark": {
+      "desktop": {
+        "states": 10,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      },
+      "mobile": {
+        "states": 11,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      }
+    },
+    "high-contrast": {
+      "desktop": {
+        "states": 10,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      },
+      "mobile": {
+        "states": 11,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      }
+    },
+    "high-contrast-dark": {
+      "desktop": {
+        "states": 10,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      },
+      "mobile": {
+        "states": 11,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      }
+    },
+    "forced-colors": {
+      "desktop": {
+        "states": 10,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      },
+      "mobile": {
+        "states": 11,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      }
+    },
+    "forced-colors-dark": {
+      "desktop": {
+        "states": 10,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      },
+      "mobile": {
+        "states": 11,
+        "axeSeriousOrCritical": 0,
+        "axeOther": 0,
+        "undersized": 0,
+        "forcedVisibility": 0
+      }
+    }
+  }
+}
