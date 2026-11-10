@@ -194,5 +194,46 @@
     "Focus cycle and Escape exercised on one file-restore confirmation dialog only.",
     "Dark and high-contrast sampled, not a complete theme matrix.",
     "No fresh axe, broad suite, or assistive technology run."
-  ]
+  ],
+  "followup": {
+    "errorText": "Failed to retrieve data\n\nThe server could not complete the request. Try again later.\n\nFor your data: Your existing backups were not affected; check the list to see whether the action went through.\n\nWhat to do: If the problem continues, send the technical details to support.\n\nTechnical details\nRetry",
+    "before": {
+      "left": 414.265625,
+      "right": 504.65625,
+      "viewport": 390
+    },
+    "keyboard": [
+      {
+        "text": "Backup attempts",
+        "href": "/tenants/demo/backup-runs",
+        "left": 136.328125,
+        "right": 290.4375
+      },
+      {
+        "text": "Backup files",
+        "href": "/tenants/demo/artifacts",
+        "left": 294.4375,
+        "right": 410.265625
+      },
+      {
+        "text": "Restores",
+        "href": "/tenants/demo/restores",
+        "left": 283.265625,
+        "right": 373.65625
+      }
+    ],
+    "keyboardDestination": "/tenants/demo/restores",
+    "scrollLeft": 131,
+    "touchAfter": {
+      "left": 283.265625,
+      "right": 373.65625,
+      "viewport": 390
+    },
+    "touchDestination": "/tenants/demo/restores",
+    "method": "390x844 EN light, isolated synthetic fixture; keyboard Tab/Enter and Chromium emulated touchscreen swipe/tap",
+    "screenshots": [
+      "round2-en-mobile-error.png",
+      "round2-mobile-restores-navigation.png"
+    ]
+  }
 }
