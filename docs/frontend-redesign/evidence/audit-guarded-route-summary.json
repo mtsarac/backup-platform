@@ -1,0 +1,314 @@
+{
+  "generatedAt": "2026-11-10T15:28:30.805Z",
+  "viewport": "1366x900",
+  "language": "tr",
+  "role": "a",
+  "blocked": 0,
+  "results": [
+    {
+      "name": "dashboard",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H3",
+        "H3",
+        "H3",
+        "H2",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "agents",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1"
+      ]
+    },
+    {
+      "name": "agent-detail",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H3",
+        "H3",
+        "H3"
+      ]
+    },
+    {
+      "name": "enrollment",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "jobs",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1"
+      ]
+    },
+    {
+      "name": "wizard",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "job-edit",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H2",
+        "H2",
+        "H3",
+        "H2",
+        "H2",
+        "H2",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "runs",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1"
+      ]
+    },
+    {
+      "name": "run-detail",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2"
+      ]
+    },
+    {
+      "name": "storage",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3"
+      ]
+    },
+    {
+      "name": "storage-usage",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "storage-providers",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3"
+      ]
+    },
+    {
+      "name": "storage-new",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2"
+      ]
+    },
+    {
+      "name": "storage-detail",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2"
+      ]
+    },
+    {
+      "name": "discovery",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H2",
+        "H2",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "instance-detail",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2"
+      ]
+    },
+    {
+      "name": "bandwidth",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "artifacts",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1"
+      ]
+    },
+    {
+      "name": "artifact-detail",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H2",
+        "H2",
+        "H3",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "restore-wizard",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2"
+      ]
+    },
+    {
+      "name": "restores",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1"
+      ]
+    },
+    {
+      "name": "restore-detail",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "support",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2"
+      ]
+    },
+    {
+      "name": "notifications",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2"
+      ]
+    },
+    {
+      "name": "encryption",
+      "h1": 1,
+      "overflow": false,
+      "headings": [
+        "H1",
+        "H2",
+        "H2",
+        "H2",
+        "H3",
+        "H3",
+        "H3",
+        "H3",
+        "H3"
+      ]
+    }
+  ]
+}
