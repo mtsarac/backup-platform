@@ -24,6 +24,8 @@ internal static class TestContainers
     private const string SftpUser = "testuser";
     private const string SftpPassword = "testpass";
 
+    private static readonly DotNet.Testcontainers.Networks.INetwork Network = new NetworkBuilder().WithName($"bp-integration-{Guid.NewGuid():N}").Build();
+
     private static readonly Lazy<PostgreSqlContainer> Postgres = new(StartPostgres);
     private static readonly Lazy<MsSqlServer> MsSql = new(() => StartMsSql(CreateMsSqlStagingDirectory()));
     private static readonly Lazy<MsSqlServer> MsSqlSecond = new(() => StartMsSql(MsSql.Value.StagingAgentDirectory));
@@ -57,6 +59,7 @@ internal static class TestContainers
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             var container = new PostgreSqlBuilder(PostgresImage)
+                .WithNetwork(Network)
                 // Docker's bridge is not container localhost; physical replication needs its own HBA rule.
                 // Tune connections and disable synchronous fsync for parallel test performance.
                 .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes(
@@ -110,7 +113,7 @@ internal static class TestContainers
     private static MsSqlServer StartMsSql(string stagingDirectory)
     {
         const string serverStaging = "/var/opt/mssql/staging";
-        var builder = new MsSqlBuilder(MsSqlImage).WithBindMount(stagingDirectory, serverStaging);
+        var builder = new MsSqlBuilder(MsSqlImage).WithNetwork(Network).WithBindMount(stagingDirectory, serverStaging);
         if (OperatingSystem.IsLinux())
         {
             builder = builder.WithCreateParameterModifier(parameters => (parameters.HostConfig ??= new()).GroupAdd = [getgid().ToString(System.Globalization.CultureInfo.InvariantCulture)]);
@@ -139,6 +142,7 @@ internal static class TestContainers
     private static SftpServer StartSftp()
     {
         var container = new ContainerBuilder(SftpImage)
+            .WithNetwork(Network)
             .WithPortBinding(22, assignRandomHostPort: true)
             .WithCommand($"{SftpUser}:{SftpPassword}:::upload")
             .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes("#!/bin/sh\necho 'PerSourcePenalties no' >> /etc/ssh/sshd_config\n"), "/etc/sftp.d/10-no-penalties.sh",
