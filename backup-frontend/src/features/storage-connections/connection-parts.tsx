@@ -1,5 +1,4 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { capabilityLabel, connectionHealth, secretStatusLabel, platformLockState, testMessage } from './labels'
@@ -35,8 +34,8 @@ export function ConnectionState({ connection }: { connection: Pick<ConnectionVie
 export function CapabilityChips({ capabilities, label = tx('Yetenekler') }: { capabilities: readonly string[]; label?: string }) {
   useLanguage()
   if (capabilities.length === 0) return <span className="text-xs text-text-muted">{tx("Bildirilen yetenek yok")}</span>
-  return <ul aria-label={label} className="flex flex-wrap gap-1">
-    {capabilities.map((capability) => <li key={capability}><Badge tone="neutral" className="font-mono text-[11px]"><span title={capability}>{capabilityLabel(capability)}</span></Badge></li>)}
+  return <ul aria-label={label} className="flex flex-wrap gap-x-1 text-sm text-text-muted">
+    {capabilities.map((capability, index) => <li key={capability}><span title={capability}>{capabilityLabel(capability)}</span>{index < capabilities.length - 1 && <span aria-hidden="true"> ·</span>}</li>)}
   </ul>
 }
 

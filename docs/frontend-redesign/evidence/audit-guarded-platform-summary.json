@@ -1,0 +1,134 @@
+{
+  "generatedAt": "2026-11-10T15:38:22.703Z",
+  "viewport": "1366x900",
+  "language": "tr",
+  "blocked": 0,
+  "results": [
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/tenants",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/plans",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/storage",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/storage/connections",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/quota-policies",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/users",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/agents",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/audit",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/support-sessions",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/break-glass",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/notification-transports",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/agent-settings",
+      "platformAdmin": true,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "platform-admin",
+      "area": "platform",
+      "route": "/platform/missing",
+      "platformAdmin": true,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    }
+  ]
+}

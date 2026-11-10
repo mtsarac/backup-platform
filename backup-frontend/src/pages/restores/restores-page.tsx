@@ -12,7 +12,6 @@ import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Filters, FilterField } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
-import { Tabs } from '@/components/ui/tabs'
 import { ErrorNotice } from '@/components/ui/notice'
 import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { useAgents } from '@/features/agents/hooks'
@@ -58,8 +57,8 @@ export function RestoresPage() {
     when,
   ]
   return <div className="space-y-6">
-    <Tabs label={tx("Liste türü")} idPrefix="restore-view" value={verification ? 'tests' : 'restores'} onChange={(value) => update({ view: value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })} items={[{ value: 'restores', label: tx('Geri yüklemeler') }, { value: 'tests', label: tx('Geri yükleme testleri') }]} />
     <Filters label={tx("Geri yükleme filtreleri")} onClear={filtering ? clearFilters : undefined}>
+      <FilterField label={tx("Liste türü")}><Select aria-label={tx("Liste türü")} value={verification ? 'tests' : 'restores'} onChange={(event) => update({ view: event.target.value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })}><option value="restores">{tx("Geri yüklemeler")}</option><option value="tests">{tx("Geri yükleme testleri")}</option></Select></FilterField>
       <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</Select></FilterField>
       <BackupPicker tenantId={tenantId} value={filters.artifactId ?? ''} onChange={(artifactId) => update({ artifactId })} />
       <SearchablePicker label={tx("Yedekleme bilgisayarı")} placeholder={tx("Tüm yedekleme bilgisayarları")} value={filters.agentId ?? ''} onChange={agentId => update({ agentId })}

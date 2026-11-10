@@ -1,0 +1,3160 @@
+{
+  "generatedAt": "2026-11-10T15:24:46.364Z",
+  "base": "isolated fixture: auth only, other API returns 503",
+  "blocked": 0,
+  "apiEndpoints": [
+    "/api/features",
+    "/api/me",
+    "/api/me/tenants",
+    "/api/tenants/demo/observability/health-summary",
+    "/api/tenants/demo/dashboard",
+    "/api/tenants/demo/agents",
+    "/api/tenants/demo/agents/item",
+    "/api/tenants/demo/agent-enrollment",
+    "/api/tenants/demo/agent-enrollment-tokens",
+    "/api/tenants/demo/backup-jobs",
+    "/api/tenants/demo/storage-connections",
+    "/api/tenants/demo/storage-providers",
+    "/api/tenants/demo/backup-jobs/item/health",
+    "/api/tenants/demo/backup-jobs/item",
+    "/api/tenants/demo/backup-runs",
+    "/api/tenants/demo/backup-runs/item",
+    "/api/tenants/demo/storage-quota",
+    "/api/tenants/demo/discovery/agents",
+    "/api/tenants/demo/discovery/instances/item",
+    "/api/tenants/demo/upload-bandwidth",
+    "/api/tenants/demo/bandwidth-profiles",
+    "/api/tenants/demo/backup-artifacts",
+    "/api/tenants/demo/backup-artifacts/item",
+    "/api/tenants/demo/backup-artifacts/item/restore-targets",
+    "/api/tenants/demo/restores",
+    "/api/tenants/demo/restores/item",
+    "/api/tenants/demo/notifications/policy",
+    "/api/tenants/demo/artifact-break-glass",
+    "/api/tenants/demo/encryption",
+    "/api/platform/summary",
+    "/api/platform/tenants",
+    "/api/platform/tenants/demo",
+    "/api/platform/tenants/demo/agents/item",
+    "/api/platform/plans",
+    "/api/platform/storage-usage",
+    "/api/platform/storage-connections",
+    "/api/platform/storage-providers",
+    "/api/platform/quota-policies",
+    "/api/platform/users",
+    "/api/platform/agents",
+    "/api/platform/audit",
+    "/api/platform/artifact-break-glass",
+    "/api/platform/artifact-break-glass/item",
+    "/api/platform/notification-transports",
+    "/api/platform/agent-settings"
+  ],
+  "results": [
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/",
+      "actual": "/tenants/demo",
+      "title": "Genel Bakış · Yedekleme Platformu",
+      "h1": [
+        "Genel Bakış"
+      ],
+      "hierarchy": [
+        "H1:Genel Bakış"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo",
+      "actual": "/tenants/demo",
+      "title": "Genel Bakış · Yedekleme Platformu",
+      "h1": [
+        "Genel Bakış"
+      ],
+      "hierarchy": [
+        "H1:Genel Bakış"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/agents",
+      "actual": "/tenants/demo/agents",
+      "title": "Yedekleme bilgisayarları · Yedekleme Platformu",
+      "h1": [
+        "Yedekleme bilgisayarları"
+      ],
+      "hierarchy": [
+        "H1:Yedekleme bilgisayarları"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/agents/item",
+      "actual": "/tenants/demo/agents/item",
+      "title": "Backup Platform",
+      "h1": [],
+      "hierarchy": [],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/enrollment",
+      "actual": "/tenants/demo/enrollment",
+      "title": "Yeni bilgisayar kaydı · Yedekleme Platformu",
+      "h1": [
+        "Yeni bilgisayar kaydı"
+      ],
+      "hierarchy": [
+        "H1:Yeni bilgisayar kaydı",
+        "H2:Bekleyen kayıt anahtarları"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs/item/edit",
+      "actual": "/tenants/demo/backup-jobs/item/edit",
+      "title": "Yedekleme işini düzenle · Yedekleme Platformu",
+      "h1": [
+        "Yedekleme işini düzenle"
+      ],
+      "hierarchy": [
+        "H1:Yedekleme işini düzenle",
+        "H2:Yedekleme sağlığı"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-runs",
+      "actual": "/tenants/demo/backup-runs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-runs/item",
+      "actual": "/tenants/demo/backup-runs/item",
+      "title": "Yedekleme denemesi · Yedekleme Platformu",
+      "h1": [
+        "Yedekleme denemesi"
+      ],
+      "hierarchy": [
+        "H1:Yedekleme denemesi"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/storage",
+      "actual": "/tenants/demo/storage",
+      "title": "Depolama · Yedekleme Platformu",
+      "h1": [
+        "Depolama"
+      ],
+      "hierarchy": [
+        "H1:Depolama"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/storage/usage",
+      "actual": "/tenants/demo/storage/usage",
+      "title": "Depolama · Yedekleme Platformu",
+      "h1": [
+        "Depolama"
+      ],
+      "hierarchy": [
+        "H1:Depolama"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/storage/providers",
+      "actual": "/tenants/demo/storage/providers",
+      "title": "Depolama · Yedekleme Platformu",
+      "h1": [
+        "Depolama"
+      ],
+      "hierarchy": [
+        "H1:Depolama"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/storage/connections/new",
+      "actual": "/tenants/demo/storage/connections/new",
+      "title": "Bağlantı ekle · Yedekleme Platformu",
+      "h1": [
+        "Bağlantı ekle"
+      ],
+      "hierarchy": [
+        "H1:Bağlantı ekle",
+        "H2:Yedekler nerede saklansın?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/storage/connections/item",
+      "actual": "/tenants/demo/storage/connections/item",
+      "title": "Depolama bağlantısı · Yedekleme Platformu",
+      "h1": [
+        "Depolama bağlantısı"
+      ],
+      "hierarchy": [
+        "H1:Depolama bağlantısı"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/discovery",
+      "actual": "/tenants/demo/discovery",
+      "title": "Veritabanı bulma · Yedekleme Platformu",
+      "h1": [
+        "Veritabanı bulma"
+      ],
+      "hierarchy": [
+        "H1:Veritabanı bulma"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/discovery/instances/item",
+      "actual": "/tenants/demo/discovery/instances/item",
+      "title": "Veritabanı sunucusu · Yedekleme Platformu",
+      "h1": [
+        "Veritabanı sunucusu"
+      ],
+      "hierarchy": [
+        "H1:Veritabanı sunucusu"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/upload-bandwidth",
+      "actual": "/tenants/demo/upload-bandwidth",
+      "title": "Yükleme bant genişliği · Yedekleme Platformu",
+      "h1": [
+        "Yükleme bant genişliği"
+      ],
+      "hierarchy": [
+        "H1:Yükleme bant genişliği",
+        "H2:Hangi sınır geçerli?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/artifacts",
+      "actual": "/tenants/demo/artifacts",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/artifacts/item",
+      "actual": "/tenants/demo/artifacts/item",
+      "title": "Yedek dosyası · Yedekleme Platformu",
+      "h1": [
+        "Yedek dosyası"
+      ],
+      "hierarchy": [
+        "H1:Yedek dosyası"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/artifacts/item/restore",
+      "actual": "/tenants/demo/artifacts/item/restore",
+      "title": "Yedek dosyasını geri yükle · Yedekleme Platformu",
+      "h1": [
+        "Yedek dosyasını geri yükle"
+      ],
+      "hierarchy": [
+        "H1:Yedek dosyasını geri yükle"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/restores",
+      "actual": "/tenants/demo/restores",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/restores/item",
+      "actual": "/tenants/demo/restores/item",
+      "title": "Backup Platform",
+      "h1": [],
+      "hierarchy": [],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/support-access",
+      "actual": "/tenants/demo/support-access",
+      "title": "Backup Platform",
+      "h1": [],
+      "hierarchy": [],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/notifications",
+      "actual": "/tenants/demo/notifications",
+      "title": "Bildirimler · Yedekleme Platformu",
+      "h1": [
+        "Bildirimler"
+      ],
+      "hierarchy": [
+        "H1:Bildirimler",
+        "H2:Bildirim politikası"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/encryption",
+      "actual": "/tenants/demo/encryption",
+      "title": "Şifreleme · Yedekleme Platformu",
+      "h1": [
+        "Şifreleme"
+      ],
+      "hierarchy": [
+        "H1:Şifreleme",
+        "H2:Acil destek erişimi"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/not-found",
+      "actual": "/tenants/demo/not-found",
+      "title": "Backup Platform",
+      "h1": [],
+      "hierarchy": [],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/tenants",
+      "actual": "/platform/tenants",
+      "title": "Çalışma alanları · Yedekleme Platformu",
+      "h1": [
+        "Çalışma alanları"
+      ],
+      "hierarchy": [
+        "H1:Çalışma alanları"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/tenants/demo",
+      "actual": "/platform/tenants/demo",
+      "title": "Çalışma Alanı · Yedekleme Platformu",
+      "h1": [
+        "Çalışma Alanı"
+      ],
+      "hierarchy": [
+        "H1:Çalışma Alanı"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/tenants/demo/agents/item",
+      "actual": "/platform/tenants/demo/agents/item",
+      "title": "Yedekleme bilgisayarı · Yedekleme Platformu",
+      "h1": [
+        "Yedekleme bilgisayarı"
+      ],
+      "hierarchy": [
+        "H1:Yedekleme bilgisayarı"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/plans",
+      "actual": "/platform/plans",
+      "title": "Planlar · Yedekleme Platformu",
+      "h1": [
+        "Planlar"
+      ],
+      "hierarchy": [
+        "H1:Planlar"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/storage",
+      "actual": "/platform/storage",
+      "title": "Depolama · Yedekleme Platformu",
+      "h1": [
+        "Depolama"
+      ],
+      "hierarchy": [
+        "H1:Depolama"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/storage/connections",
+      "actual": "/platform/storage/connections",
+      "title": "Depolama · Yedekleme Platformu",
+      "h1": [
+        "Depolama"
+      ],
+      "hierarchy": [
+        "H1:Depolama"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/storage-connections",
+      "actual": "/platform/storage/connections",
+      "title": "Depolama · Yedekleme Platformu",
+      "h1": [
+        "Depolama"
+      ],
+      "hierarchy": [
+        "H1:Depolama"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/quota-policies",
+      "actual": "/platform/quota-policies",
+      "title": "Kota Politikaları · Yedekleme Platformu",
+      "h1": [
+        "Kota Politikaları"
+      ],
+      "hierarchy": [
+        "H1:Kota Politikaları"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/users",
+      "actual": "/platform/users",
+      "title": "Kullanıcılar · Yedekleme Platformu",
+      "h1": [
+        "Kullanıcılar"
+      ],
+      "hierarchy": [
+        "H1:Kullanıcılar"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/agents",
+      "actual": "/platform/agents",
+      "title": "Yedekleme bilgisayarları · Yedekleme Platformu",
+      "h1": [
+        "Yedekleme bilgisayarları"
+      ],
+      "hierarchy": [
+        "H1:Yedekleme bilgisayarları"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/audit",
+      "actual": "/platform/audit",
+      "title": "Denetim · Yedekleme Platformu",
+      "h1": [
+        "Denetim"
+      ],
+      "hierarchy": [
+        "H1:Denetim"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/support-sessions",
+      "actual": "/platform/support-sessions",
+      "title": "Backup Platform",
+      "h1": [],
+      "hierarchy": [],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/support-sessions/item",
+      "actual": "/platform/support-sessions/item",
+      "title": "Backup Platform",
+      "h1": [],
+      "hierarchy": [],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/break-glass",
+      "actual": "/platform/break-glass",
+      "title": "Acil destek erişimi · Yedekleme Platformu",
+      "h1": [
+        "Acil destek erişimi"
+      ],
+      "hierarchy": [
+        "H1:Acil destek erişimi"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/break-glass/item",
+      "actual": "/platform/break-glass/item",
+      "title": "Acil destek erişimi isteği · Yedekleme Platformu",
+      "h1": [
+        "Acil destek erişimi isteği"
+      ],
+      "hierarchy": [
+        "H1:Acil destek erişimi isteği"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/notification-transports",
+      "actual": "/platform/notification-transports",
+      "title": "Bildirim altyapısı · Yedekleme Platformu",
+      "h1": [
+        "Bildirim altyapısı"
+      ],
+      "hierarchy": [
+        "H1:Bildirim altyapısı"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/agent-settings",
+      "actual": "/platform/agent-settings",
+      "title": "Yedekleme bilgisayarı ayarları · Yedekleme Platformu",
+      "h1": [
+        "Yedekleme bilgisayarı ayarları"
+      ],
+      "hierarchy": [
+        "H1:Yedekleme bilgisayarı ayarları"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform/not-found",
+      "actual": "/platform/not-found",
+      "title": "Backup Platform",
+      "h1": [],
+      "hierarchy": [],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "light",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "desktop",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 1366,
+        "inner": 1366
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "light",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "tablet",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 768,
+        "inner": 768
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "light",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "high-contrast",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "high-contrast-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "forced-colors",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Yedeklemeler · Yedekleme Platformu",
+      "h1": [
+        "Yedeklemeler"
+      ],
+      "hierarchy": [
+        "H1:Yedeklemeler"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "Yeni yedekleme işi · Yedekleme Platformu",
+      "h1": [
+        "Yeni yedekleme işi"
+      ],
+      "hierarchy": [
+        "H1:Yeni yedekleme işi",
+        "H2:Adım 1 / 5: Kaynak",
+        "H2:Yedekleme işi ve bilgisayar",
+        "H2:Hangi veritabanını yedekleyeceğiz?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "tr",
+      "condition": "forced-colors-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform özeti · Yedekleme Platformu",
+      "h1": [
+        "Platform özeti"
+      ],
+      "hierarchy": [
+        "H1:Platform özeti"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "light",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "light",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "high-contrast",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "high-contrast-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "forced-colors",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs",
+      "actual": "/tenants/demo/backup-jobs",
+      "title": "Backups · Backup Platform",
+      "h1": [
+        "Backups"
+      ],
+      "hierarchy": [
+        "H1:Backups"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/tenants/demo/backup-jobs/new",
+      "actual": "/tenants/demo/backup-jobs/new",
+      "title": "New backup job · Backup Platform",
+      "h1": [
+        "New backup job"
+      ],
+      "hierarchy": [
+        "H1:New backup job",
+        "H2:Step 1 / 5: Source",
+        "H2:Backup job and computer",
+        "H2:Which database should we back up?"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    },
+    {
+      "viewport": "mobile",
+      "language": "en",
+      "condition": "forced-colors-dark",
+      "route": "/platform",
+      "actual": "/platform",
+      "title": "Platform overview · Backup Platform",
+      "h1": [
+        "Platform overview"
+      ],
+      "hierarchy": [
+        "H1:Platform overview"
+      ],
+      "scroll": {
+        "width": 390,
+        "inner": 390
+      },
+      "alerts": [],
+      "errors": []
+    }
+  ]
+}

@@ -90,7 +90,7 @@ export function OpenSessionDialog({ tenantId, tenantName, onClose }: { tenantId:
       </Field>
       <fieldset className="space-y-2" aria-describedby={`${formId}-permission-help${permissionError ? ` ${formId}-permission-error` : ''}`}>
         <legend className="mb-2 text-sm font-medium text-text-heading">{tx("Erişim izinleri")}</legend>
-        {permissions.map(permission => <CheckField key={permission} className="items-start rounded-lg bg-surface-2 p-3" checked={selected.includes(permission)}
+        {permissions.map(permission => <CheckField key={permission} className="items-start" checked={selected.includes(permission)}
             disabled={permission === 'ViewBackupMetadata' && viewRequired} onChange={event => togglePermission(permission, event.target.checked)} label={<span className="min-w-0"><span className="block font-medium">{permissionLabels[permission]}</span><span className="mt-0.5 block text-text-muted">{permissionDescriptions[permission]}</span></span>} />)}
         <p id={`${formId}-permission-help`} className="text-xs text-text-muted">{tx("İndirme ve geri yükleme izinleri ViewBackupMetadata iznini gerektirir; bu izin otomatik seçilir.")}</p>
         {permissionError && <p id={`${formId}-permission-error`} role="alert" className="text-sm text-error">{tx(permissionError)}</p>}

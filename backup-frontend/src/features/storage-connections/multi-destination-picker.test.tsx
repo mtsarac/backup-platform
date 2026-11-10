@@ -223,6 +223,14 @@ describe('MultiDestinationPicker', () => {
     )
 
     expect(screen.getByText('Toplam 2 hedef')).toBeInTheDocument()
+    const count = screen.getByRole('spinbutton', { name: 'Gerekli Doğrulanmış Kopya Sayısı' })
+    expect(count).toHaveAttribute('min', '1')
+    expect(count).toHaveAttribute('max', '2')
+    fireEvent.change(count, { target: { value: '0' } })
+    expect(onChange.mock.lastCall?.[0].requiredVerifiedReplicaCount).toBe(1)
+    fireEvent.change(count, { target: { value: '9' } })
+    expect(onChange.mock.lastCall?.[0].requiredVerifiedReplicaCount).toBe(2)
+    onChange.mockClear()
 
     // Change primary to SFTP
     const makePrimaryBtn = screen.getByRole('button', { name: "Birincil Yap" })

@@ -16,7 +16,7 @@ function ProviderCard({ provider, connections, addPath }: { provider: ProviderDe
   return <Card as="li" aria-disabled={planned || undefined} className={`space-y-4 ${planned ? 'opacity-70' : ''}`}>
     <div className="flex items-start gap-3">
       <ProviderIcon providerType={provider.providerType} />
-      <div className="min-w-0 flex-1"><h3 className="font-medium text-text-heading">{tx(provider.displayName)}</h3>{!planned && <div className="mt-1"><StatusPill domain="provider" status={provider.availability} /></div>}</div>
+      <div className="min-w-0 flex-1"><h2 className="font-medium text-text-heading">{tx(provider.displayName)}</h2>{!planned && <div className="mt-1"><StatusPill domain="provider" status={provider.availability} /></div>}</div>
     </div>
     {planned && (
       <p className="text-sm text-text-muted">{tx("Yakında / henüz kullanılamaz. Bu sağlayıcı için bağlantı oluşturulamaz ve test başarılı sayılmaz.")}</p>

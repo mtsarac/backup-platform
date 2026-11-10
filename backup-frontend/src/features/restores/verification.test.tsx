@@ -193,7 +193,7 @@ describe('restores list filter', () => {
     vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => page(filters?.purpose === 'Verification' ? [{ ...base, sourceDatabaseName: 'SalesDB', cleanup: cleanupOf({}) }] : []))
     renderAt(<RestoresPage />)
     await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ purpose: undefined }), expect.anything()))
-    fireEvent.click(screen.getByRole('tab', { name: "Geri yükleme testleri" }))
+    fireEvent.change(screen.getByRole('combobox', { name: "Liste türü" }), { target: { value: 'tests' } })
     expect(await screen.findByText("Başarılı")).toBeInTheDocument()
     expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ purpose: 'Verification' }), expect.anything())
     expect(screen.queryByText("Hedef veritabanı")).not.toBeInTheDocument()

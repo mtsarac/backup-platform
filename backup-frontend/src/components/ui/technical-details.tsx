@@ -27,15 +27,15 @@ const rowClass = 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2'
 function TechnicalAccordion({ items, defaultOpen = false, children }: TechnicalDetailsProps) {
   useLanguage()
   if (items.length === 0 && !children) return null
-  return <details open={defaultOpen || undefined} className="group rounded-lg border border-border bg-surface-2 text-sm">
-    <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx('Teknik ayrıntılar')}</summary>
-    {items.length > 0 && <dl className="space-y-2 border-t border-border px-3 py-2">
+  return <details open={defaultOpen || undefined} className="group text-sm">
+    <summary className="w-fit cursor-pointer select-none py-1 font-medium text-text-muted underline-offset-4 hover:text-text hover:underline group-open:text-text-heading">{tx('Teknik ayrıntılar')}</summary>
+    {items.length > 0 && <dl className="mt-2 space-y-2 border-l-2 border-border pl-4">
       {items.map(item => <div key={item.label} className={rowClass}>
         <dt className="col-start-1 text-text-muted">{item.label}</dt><dd className="col-start-1 break-all font-mono text-text">{item.value}</dd>
         <dd className="col-start-2 row-span-2 row-start-1"><CopyButton value={item.value} label={tx('Kopyala: {0}', { '0': item.label })} /></dd>
       </div>)}
     </dl>}
-    {children && <div className="space-y-6 border-t border-border p-3">{children}</div>}
+    {children && <div className="mt-2 space-y-6 border-l-2 border-border pl-4">{children}</div>}
   </details>
 }
 
@@ -75,10 +75,10 @@ function TechnicalDrawer({ items, defaultOpen = false, children }: TechnicalDeta
       onToggle={(e) => {
         setOpen(e.currentTarget.open)
       }}
-      className="group rounded-lg border border-border bg-surface-2 text-sm text-left"
+      className="group text-left text-sm"
     >
       <summary
-        className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading"
+        className="w-fit cursor-pointer select-none py-1 font-medium text-text-muted underline-offset-4 hover:text-text hover:underline group-open:text-text-heading"
       >
         {tx('Teknik ayrıntılar')}
       </summary>
@@ -86,7 +86,7 @@ function TechnicalDrawer({ items, defaultOpen = false, children }: TechnicalDeta
       {/* Backdrop (visible only when open) */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          className="fixed inset-0 z-40 bg-black/40 transition-opacity animate-in fade-in"
           onClick={(e) => {
             e.preventDefault()
             setOpen(false)
@@ -99,7 +99,7 @@ function TechnicalDrawer({ items, defaultOpen = false, children }: TechnicalDeta
       <div
         className={
           open
-            ? 'fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-border bg-surface shadow-2xl transition-transform animate-in slide-in-from-right duration-200'
+            ? 'fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-border bg-surface shadow-overlay transition-transform animate-in slide-in-from-right duration-200'
             : 'hidden'
         }
       >

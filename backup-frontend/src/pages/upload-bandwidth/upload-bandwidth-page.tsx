@@ -84,14 +84,6 @@ export function UploadBandwidthPage() {
   const newProfile = canAdmin ? <Button size="sm" onClick={() => setEditingProfile('new')}>{tx("Yeni Profil")}</Button> : null
   return <div className="space-y-6">
     <PageHeader title={tx("Yükleme bant genişliği")} description={tx("{0} · Yedeklerin ne kadar hızlı yükleneceğini sınırlayın.", { "0": tenant.name })} />
-    <Section title={tx("Hangi sınır geçerli?")}>
-      <ul className="list-disc space-y-2 pl-5 text-sm text-text">
-        <li>{tx("Profil atanmamışsa, yedeklemeye uygulanan sınırların en düşüğü geçerlidir: yedekleme işi, yedekleme bilgisayarı ve çalışma alanı sınırları birbirini aşamaz.")}</li>
-        <li>{tx("Bir profil (saate göre değişen sınırlar) atarsanız sabit sınırların yerine geçer. Önce yedekleme işinin, sonra yedekleme bilgisayarının, en son çalışma alanının profili kullanılır. Profildeki saatlerin dışında hız sınırsızdır.")}</li>
-        <li>{tx("Profilde duraklatılan aktarımlar kendiliğinden devam etmez; elle devam ettirmeniz gerekir.")}</li>
-        <li>{tx("Sınırlanmayanlar: geri yükleme ve indirmeler, dosya doğrulama ve yedekleme bilgisayarlarının bağlantı kontrolleri.")}</li>
-      </ul>
-    </Section>
     {!canAdmin && <Notice tone="warning">{tx("Hız sınırlarını yalnızca yöneticiler değiştirebilir. Yöneticinize danışın.")}</Notice>}
     <Tabs label={tx("Hız sınırı kapsamı")} idPrefix="bandwidth" value={tab} onChange={setTab} items={[{ value: 'tenant', label: tx('Çalışma alanı') }, { value: 'agents', label: tx('Yedekleme bilgisayarları') }, { value: 'jobs', label: tx('Yedekleme işleri') }, { value: 'profiles', label: tx('Profiller') }]} />
     <div role="tabpanel" id={`bandwidth-panel-${tab}`} aria-labelledby={`bandwidth-tab-${tab}`}>
@@ -163,6 +155,14 @@ export function UploadBandwidthPage() {
         </QueryState>}
       </QueryState>
     </div>
+    <Section title={tx("Hangi sınır geçerli?")}>
+      <ul className="list-disc space-y-2 pl-5 text-sm text-text">
+        <li>{tx("Yedekleme işi, yedekleme bilgisayarı ve çalışma alanı için ayarlanan sabit sınırların tümü geçerlidir. Çalışma alanı sınırı, eşzamanlı yüklemelerin toplamını sınırlar.")}</li>
+        <li>{tx("Bir profil (saate göre değişen sınırlar) sabit sınırları yalnızca düşürebilir; tüm sabit sınırlar geçerliliğini korur. Önce yedekleme işinin, sonra yedekleme bilgisayarının, en son çalışma alanının profili kullanılır. Profil saatleri dışında yalnızca sabit sınırlar geçerlidir.")}</li>
+        <li>{tx("Profilde duraklatılan aktarımlar kendiliğinden devam etmez; elle devam ettirmeniz gerekir.")}</li>
+        <li>{tx("Sınırlanmayanlar: geri yükleme ve indirmeler, dosya doğrulama ve yedekleme bilgisayarlarının bağlantı kontrolleri.")}</li>
+      </ul>
+    </Section>
     {editing && data && <LimitDialog {...editing} minimum={data.minimumBytesPerSecond} maximum={data.maximumBytesPerSecond} onClose={() => setEditing(null)} />}
     {assigning && <AssignProfileDialog {...assigning} onClose={() => setAssigning(null)} />}
     {editingProfile && data && <ProfileDialog profile={editingProfile === 'new' ? null : editingProfile} minimum={data.minimumBytesPerSecond} maximum={data.maximumBytesPerSecond} onClose={() => setEditingProfile(null)} />}

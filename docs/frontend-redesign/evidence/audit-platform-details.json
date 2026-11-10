@@ -1,0 +1,66 @@
+{
+  "viewport": "1366x900",
+  "language": "tr",
+  "role": "platform-admin",
+  "blocked": 0,
+  "results": [
+    {
+      "name": "tenant",
+      "h1": 1,
+      "tabs": [
+        {
+          "index": 0,
+          "selected": true
+        },
+        {
+          "index": 1,
+          "selected": true
+        },
+        {
+          "index": 2,
+          "selected": true
+        },
+        {
+          "index": 3,
+          "selected": true
+        },
+        {
+          "index": 4,
+          "selected": true
+        },
+        {
+          "index": 5,
+          "selected": true
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "name": "agent",
+      "h1": 1,
+      "tabs": [],
+      "overflow": false
+    },
+    {
+      "name": "support-session",
+      "h1": 1,
+      "tabs": [
+        {
+          "index": 0,
+          "selected": true
+        },
+        {
+          "index": 1,
+          "selected": true
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "name": "break-glass",
+      "h1": 1,
+      "tabs": [],
+      "overflow": false
+    }
+  ]
+}

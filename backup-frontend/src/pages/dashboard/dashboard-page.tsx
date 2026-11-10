@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertCircle, HardDrive, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -14,16 +14,15 @@ import { RelativeTime } from '@/components/data/relative-time'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { ErrorNotice } from '@/components/ui/notice'
 import { TechnicalDetails } from '@/components/ui/technical-details'
+import { ReplicationSummary } from '@/features/backups/replication'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import type { BackupRun } from '@/features/backups/types'
-import { ReplicationSummary } from '@/features/backups/replication'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { HealthStatusCard } from './health-status-card'
 import { useHealthSummary } from './health-summary'
 import { ObservabilityPanel } from './observability-panel'
 import { formatDateTime } from '@/lib/format'
-import { Disclosure } from '@/components/ui/disclosure'
 
 interface Dashboard {
   jobs: { total: number; enabled: number; scheduled: number }
@@ -57,7 +56,7 @@ export function DashboardPage() {
     { key: 'agent', header: tx('Yedekleme bilgisayarı'), render: run => run.agentName ?? '—' },
     { key: 'date', header: tx('Başlangıç'), render: run => <RelativeTime value={run.startedAt ?? run.createdAt} /> },
     { key: 'status', header: tx('Durum'), card: 'status', render: run => <StatusPill status={run.status} /> },
-    { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => <div className="space-y-2"><p>{runNote(run)}</p><TechnicalDetails items={[{ label: tx('Veritabanı'), value: run.configuration.database }]}>{run.replication && <ReplicationSummary replication={run.replication} />}</TechnicalDetails></div> },
+    { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => <div className="space-y-1"><p>{runNote(run)}</p><TechnicalDetails items={[{ label: tx('Veritabanı'), value: run.configuration.database }]}>{run.replication && <ReplicationSummary replication={run.replication} />}</TechnicalDetails></div> },
   ]
   const replicationShort = data?.runs.replicationInsufficientLast24Hours ?? 0
   const noJobs = useHealthSummary(tenantId).data?.totalJobs === 0
@@ -68,13 +67,13 @@ export function DashboardPage() {
     <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
       {data && <>
         {data.artifacts.deleteFailed > 0 && <ErrorNotice what={tx("{0} yedek dosyası silinemedi.", { "0": data.artifacts.deleteFailed })} dataImpact={tx("Silinemeyen dosyalar depoda duruyor; diğer yedekleriniz etkilenmedi.")} action={tx("Nedenini inceleyip silmeyi yeniden deneyin.")} control={<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link>} />}
-        {!noJobs && <div className="grid gap-4 sm:grid-cols-2">
-          <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
-          <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />}
+        {!noJobs && <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" />
+          <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined}
             hint={data.runs.failedLast24Hours > 0 || data.runs.storageFailedLast24Hours > 0 ? <>
               {data.runs.storageFailedLast24Hours > 0 && <>{tx("{0} tanesi depolamaya yazma veya kopya doğrulama hatası.", { "0": data.runs.storageFailedLast24Hours })}{' '}</>}
               {tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")}
-              <Link className="flex min-h-11 w-fit items-center font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
+              <Link className="flex min-h-9 pointer-coarse:min-h-11 w-fit items-center font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
             </> : undefined} />
         </div>}
         {!noJobs && <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
@@ -84,9 +83,8 @@ export function DashboardPage() {
           </div>
           <DataList rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage={tx("Henüz yedekleme kaydı yok.")} />
         </section>}
-        <Disclosure title={tx("Ayrıntılar")}><div className="space-y-6">
             {!noJobs && <ObservabilityPanel tenantId={tenantId} />}
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-x-8 gap-y-6 lg:grid-cols-3">
               <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")}><dl className="divide-y divide-border">
                 <Row label={tx("Toplam")} value={data.agents.total} /><Row label={tx("Çevrimiçi")} value={data.agents.online} /><Row label={tx("Çevrimdışı")} value={data.agents.offline} tone="error" /><Row label={tx("Bağlantı bilinmiyor")} value={data.agents.unknown} />
                 <Row label={tx("Devre dışı (lifecycle)")} value={data.agents.disabled} /><Row label={tx("İptal edilmiş (lifecycle)")} value={data.agents.revoked} />
@@ -99,8 +97,6 @@ export function DashboardPage() {
                 ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? formatDateTime(job.schedule.nextOccurrenceAt) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
                 : <p className="text-sm text-text-muted">{tx("Etkin zamanlama yok.")}</p>}</Section>
             </div>
-          </div>
-        </Disclosure>
       </>}
     </QueryState>
   </>

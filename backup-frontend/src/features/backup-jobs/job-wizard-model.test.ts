@@ -34,6 +34,14 @@ describe('step validation', () => {
     expect(validateJob(valid)).toEqual({ errors: {}, firstInvalid: undefined })
     expect(validateJob({ ...valid, retry: { ...valid.retry, maxAttempts: 0 } }).firstInvalid).toBe('schedule')
   })
+  it('requires a whole replica count within the available destination and 3-2-1 bounds', () => {
+    const destination = values.configuration.destinations[0]
+    const configuration = { ...values.configuration, destinations: [destination, { ...destination, isPrimary: false }, { ...destination, isPrimary: false }], enforceThreeTwoOne: true }
+    for (const count of [0, 2, 2.5, 4, NaN]) {
+      expect(validateStep('storage', { ...values, configuration: { ...configuration, requiredVerifiedReplicaCount: count } })['configuration.requiredVerifiedReplicaCount']).toBeTruthy()
+    }
+    expect(validateStep('storage', { ...values, configuration: { ...configuration, requiredVerifiedReplicaCount: 3 } })).toEqual({})
+  })
 })
 
 describe('engine switching', () => {

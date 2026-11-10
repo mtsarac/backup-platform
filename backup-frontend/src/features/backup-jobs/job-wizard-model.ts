@@ -104,6 +104,12 @@ export function validateStep(step: JobStep, values: JobValues): StepErrors {
     }
     if (values.configuration.engine === 'mssql' && host.includes('\\') && port !== null) errors['configuration.port'] = tx('Instance adı içeren host ile port birlikte verilemez; birini seçin.')
     if (port !== null && !(Number.isInteger(port) && port >= 1 && port <= 65535)) errors['configuration.port'] = tx('Port 1 ile 65535 arasında bir tam sayı olmalı.')
+  } else if (step === 'storage') {
+    const { requiredVerifiedReplicaCount: count, destinations, enforceThreeTwoOne } = values.configuration
+    const minimum = enforceThreeTwoOne ? 3 : 1
+    if (!Number.isInteger(count) || count < minimum || count > destinations.length) {
+      errors['configuration.requiredVerifiedReplicaCount'] = tx('{0} ile {1} arasında bir tam sayı girin.', { '0': minimum, '1': destinations.length })
+    }
   } else if (step === 'schedule') {
     const { scheduled, schedule, retry } = values
     if (scheduled && !schedule.cronExpression.trim()) errors.cronExpression = tx('Cron ifadesini girin veya hazır bir zamanlama seçin.')

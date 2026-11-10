@@ -1,0 +1,1268 @@
+{
+  "generatedAt": "2026-11-10T15:36:32.185Z",
+  "viewport": "1366x900",
+  "language": "tr",
+  "blocked": 0,
+  "results": [
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/enrollment",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/backup-jobs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/backup-jobs/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/backup-runs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/storage/usage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/storage/providers",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/storage/connections/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/discovery",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/upload-bandwidth",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/artifacts",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/restores",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/support-access",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/notifications",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/encryption",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "tenant",
+      "route": "/missing",
+      "platformAdmin": false,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/tenants",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/plans",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/storage/connections",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/quota-policies",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/users",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/audit",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/support-sessions",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/break-glass",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/notification-transports",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/agent-settings",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "owner-a",
+      "area": "platform",
+      "route": "/platform/missing",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/enrollment",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/backup-jobs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/backup-jobs/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/backup-runs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/storage/usage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/storage/providers",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/storage/connections/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/discovery",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/upload-bandwidth",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/artifacts",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/restores",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/support-access",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/notifications",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/encryption",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-a",
+      "area": "tenant",
+      "route": "/missing",
+      "platformAdmin": false,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/enrollment",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/backup-jobs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/backup-jobs/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/backup-runs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/storage/usage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/storage/providers",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/storage/connections/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/discovery",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/upload-bandwidth",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/artifacts",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/restores",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/support-access",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/notifications",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/encryption",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-a",
+      "area": "tenant",
+      "route": "/missing",
+      "platformAdmin": false,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/enrollment",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/backup-jobs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/backup-jobs/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/backup-runs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/storage/usage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/storage/providers",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/storage/connections/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/discovery",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/upload-bandwidth",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/artifacts",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/restores",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/support-access",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/notifications",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/encryption",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-a",
+      "area": "tenant",
+      "route": "/missing",
+      "platformAdmin": false,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/enrollment",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/backup-jobs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/backup-jobs/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/backup-runs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/storage/usage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/storage/providers",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/storage/connections/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/discovery",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/upload-bandwidth",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/artifacts",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/restores",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/support-access",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/notifications",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/encryption",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "admin-b",
+      "area": "tenant",
+      "route": "/missing",
+      "platformAdmin": false,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/enrollment",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/backup-jobs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/backup-jobs/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/backup-runs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/storage/usage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/storage/providers",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/storage/connections/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/discovery",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/upload-bandwidth",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/artifacts",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/restores",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/support-access",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/notifications",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/encryption",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "operator-b",
+      "area": "tenant",
+      "route": "/missing",
+      "platformAdmin": false,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/agents",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/enrollment",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/backup-jobs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/backup-jobs/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/backup-runs",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/storage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/storage/usage",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/storage/providers",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/storage/connections/new",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/discovery",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/upload-bandwidth",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/artifacts",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/restores",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": false,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/support-access",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/notifications",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/encryption",
+      "platformAdmin": false,
+      "h1": 1,
+      "hasAlert": true,
+      "overflow": false
+    },
+    {
+      "role": "viewer-b",
+      "area": "tenant",
+      "route": "/missing",
+      "platformAdmin": false,
+      "h1": 0,
+      "hasAlert": false,
+      "overflow": false
+    }
+  ]
+}

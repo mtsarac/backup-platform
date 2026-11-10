@@ -1,0 +1,8 @@
+{
+  "route": "tenant storage providers",
+  "fixture": "populated lab, guarded login POST only",
+  "viewport": "Chromium desktop",
+  "before": { "headings": ["H1", "H3", "H3", "H3", "H3", "H3", "H3"], "axeHeadingOrderViolations": 1 },
+  "after": { "headings": ["H1", "H2", "H2", "H2", "H2", "H2", "H2"], "axeHeadingOrderViolations": 0 },
+  "targetedTest": "storage-layout.test.tsx: 10 passed"
+}
