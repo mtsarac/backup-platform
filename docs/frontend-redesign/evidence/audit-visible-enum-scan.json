@@ -1,0 +1,76 @@
+{
+  "viewport": "1366x900",
+  "language": "tr",
+  "role": "owner-a",
+  "method": "visible text nodes matched against listed enum spellings; closed details excluded",
+  "results": [
+    {
+      "route": "/",
+      "matches": []
+    },
+    {
+      "route": "/agents",
+      "matches": []
+    },
+    {
+      "route": "/backup-jobs",
+      "matches": []
+    },
+    {
+      "route": "/backup-runs",
+      "matches": []
+    },
+    {
+      "route": "/storage",
+      "matches": []
+    },
+    {
+      "route": "/storage/usage",
+      "matches": []
+    },
+    {
+      "route": "/storage/providers",
+      "matches": []
+    },
+    {
+      "route": "/discovery",
+      "matches": []
+    },
+    {
+      "route": "/upload-bandwidth",
+      "matches": []
+    },
+    {
+      "route": "/artifacts",
+      "matches": []
+    },
+    {
+      "route": "/restores",
+      "matches": []
+    },
+    {
+      "route": "/notifications",
+      "matches": []
+    },
+    {
+      "route": "/encryption",
+      "matches": []
+    }
+  ],
+  "spellings": [
+    "RetryPending",
+    "CancellationRequested",
+    "StorageUnavailable",
+    "CapacityUnavailable",
+    "VersionMismatch",
+    "DeletePending",
+    "DeleteFailed",
+    "CentralStorage",
+    "BackendRelayed",
+    "AgentLocal",
+    "NotMeasurable",
+    "CredentialsRequired",
+    "NoSubscription",
+    "PartiallySucceeded"
+  ]
+}
