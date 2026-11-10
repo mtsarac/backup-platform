@@ -73,6 +73,8 @@ leases, execution, or completion.
 
 A typed login is stored under a reference derived from the request, after a claim row in `job_credential_claims` was written. A retry reuses the one credential. A request that creates nothing (validation error, conflict, unknown agent) deletes the credential it stored; a creation that is interrupted after storing it and never retried is removed by `JobCredentialSweepWorker` (every minute, every node) once its claim is older than one hour and no job references the credential. The sweep locks each stale claim row (`FOR UPDATE SKIP LOCKED`) from selection until the credential is deleted and the claim removed, in one transaction; a retry's claim waits on that row, then claims and rewrites the credential afresh, and a claim refreshed before the selection is not stale at all. A job therefore never ends up referencing a credential a sweep deleted. `PUT` is not idempotent. Jobs created before the migration have no key and stay valid. Other tenants' keys never match.
 
+Invalid retention settings on job creation return `400` with `field: retention` and `code: invalid_value`, as on retention updates.
+
 ### Request boundary
 
 Hostile input is refused at the edge with a controlled `400`, after authentication and authorization (an anonymous or unauthorized caller still gets `401`/`403` first, whatever the id) and before any handler or database call. The body is always `{ "error": "invalid_request", "field": …, "code": "invalid_value" }`; nothing about the database or an exception is ever returned.

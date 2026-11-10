@@ -94,8 +94,11 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         var options = scheduling ?? new BackupSchedulingOptions();
         var overlap = ResolveOverlap(request);
         var schedule = request.Schedule is null ? null : BackupScheduleService.ToDomain(request.Schedule, null, now, options);
+        BackupRetentionPolicy policy;
+        try { policy = ToDomain(request.Retention, retention ?? new BackupRetentionOptions(), null); }
+        catch (ArgumentException) { throw new InvalidBackupJobException("retention"); }
         var newJob = new BackupJob(Guid.NewGuid(), tenantId, request.Name.Trim(), new AgentId(request.AgentId), configuration, now,
-            ToDomain(request.RetryPolicy), overlap, schedule, ToDomain(request.Retention, retention ?? new BackupRetentionOptions(), null));
+            ToDomain(request.RetryPolicy), overlap, schedule, policy);
         if (request.Enabled is false) newJob.Disable();
         if (idempotency is not null) newJob.RecordCreationRequest(idempotency.Key, idempotency.Fingerprint);
         return newJob;
