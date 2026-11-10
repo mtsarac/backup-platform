@@ -49,7 +49,7 @@ describe('Storage hub', () => {
     expect(screen.getByRole('heading', { name: 'Kullanım' })).toBeInTheDocument()
     expect(screen.getByText('Kota kapsamı: managed')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Sağlayıcılar' }))
-    expect(await screen.findByRole('heading', { name: 'SFTP' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'SFTP' })).toBeInTheDocument()
   })
 
   it('does not make destinations depend on a successful quota read', async () => {

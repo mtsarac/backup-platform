@@ -11,11 +11,12 @@
   "oldCheckDiscarded": true,
   "overwriteDisabled": true,
   "focusTrapped": true,
-  "escapeCloses": true,
+  "escapeCloses": false,
   "exactNameEnables": true,
   "overwriteErrorVisible": true,
+  "mockExecutionNavigation": true,
   "prechecks": 3,
-  "executions": 2,
+  "executions": 3,
   "firstRequest": {
     "agentId": "agent-1",
     "target": {
