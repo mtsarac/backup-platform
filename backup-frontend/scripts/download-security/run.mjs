@@ -32,7 +32,7 @@ const accounts = {
 }
 // Every credential-like value of the lab state: none may appear in any denied response.
 const SECRETS = []
-;(function walk(o, k = '') { for (const [key, v] of Object.entries(o)) typeof v === 'object' && v ? walk(v, key) : typeof v === 'string' && /pass|secret/i.test(key) && v.length >= 8 && SECRETS.push(v) })(state)
+;(function walk(o) { for (const [key, v] of Object.entries(o)) { if (typeof v === 'object' && v) walk(v); else if (typeof v === 'string' && /pass|secret/i.test(key) && v.length >= 8) SECRETS.push(v) } })(state)
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex')
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const within = (p, ms) => Promise.race([p, sleep(ms).then(() => null)]) // opaque / aborted responses can leave body() pending
@@ -293,7 +293,6 @@ await test('anchor.download', '6', async () => {
   const page = await ctx.newPage()
   let sid // the session the page prepared; Playwright reports no network event for a download-manager request, so the API state is the evidence
   page.on('response', async r => { if (r.request().method() === 'POST' && r.url().endsWith('/downloads') && r.ok()) sid = (await r.json()).sessionId })
-  let sessionFromUi
   if (UI) {
     await page.goto(`${UI}/login`)
     await page.getByLabel('Kullanıcı adı').fill(accounts.owner.login)
