@@ -458,7 +458,8 @@ def pause_reason_db():
         cleanup(t,j,d); shutil.rmtree(ROOT('bwp')/'files'/'reason',ignore_errors=True)
 
 def remove_cap():
-    t=G.GT('bw'); j=job(t,'bw','remove',24*MB); d=None; change=[]
+    # 24 MB ended within ~1 s of the change taking effect (about 3 s after removal, at ~28 MB/s), so the detection window below never contained the burst; 128 MB keeps it visible for several seconds.
+    t=G.GT('bw'); j=job(t,'bw','remove',128*MB); d=None; change=[]
     try:
         policy(t,'tenant',256*1024)
         def callback(t,rid,d,s):
