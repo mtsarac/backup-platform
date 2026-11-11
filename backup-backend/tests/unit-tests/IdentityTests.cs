@@ -194,5 +194,65 @@ public sealed class IdentityTests
 
         public Task RecordLoginFailureAsync(UserId? targetUserId, DateTimeOffset now, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+
+        public TotpCredential? Totp { get; set; }
+        public List<RecoveryCode> RecoveryCodes { get; } = [];
+
+        public Task<PasswordCredential?> FindCredentialByUserIdAsync(UserId userId, CancellationToken cancellationToken) =>
+            Task.FromResult(userId == Credential.UserId ? Credential : null);
+
+        public Task<bool> HasSecondFactorAsync(UserId userId, CancellationToken cancellationToken) =>
+            Task.FromResult(userId == Credential.UserId && Totp is not null);
+
+        public Task<TotpCredential?> FindTotpCredentialAsync(UserId userId, CancellationToken cancellationToken) =>
+            Task.FromResult(userId == Credential.UserId ? Totp : null);
+
+        public Task SaveTotpCredentialAsync(TotpCredential credential, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            Totp = credential;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> RemoveTotpCredentialAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            if (Totp?.UserId == userId)
+            {
+                Totp = null;
+                return Task.FromResult(true);
+            }
+            return Task.FromResult(false);
+        }
+
+        public Task<bool> TryUseTotpStepAsync(UserId userId, long step, CancellationToken cancellationToken)
+        {
+            if (Totp?.UserId == userId && (Totp.LastUsedEpochStep == null || Totp.LastUsedEpochStep < step))
+            {
+                Totp.RecordUsedStep(step);
+                return Task.FromResult(true);
+            }
+            return Task.FromResult(false);
+        }
+
+        public Task SaveRecoveryCodesAsync(UserId userId, IEnumerable<string> codeHashes, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            RecoveryCodes.RemoveAll(c => c.UserId == userId);
+            foreach (var hash in codeHashes)
+                RecoveryCodes.Add(new RecoveryCode(Guid.NewGuid(), userId, hash, now));
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> TryRedeemRecoveryCodeAsync(UserId userId, string codeHash, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            var match = RecoveryCodes.FirstOrDefault(c => c.UserId == userId && c.CodeHash == codeHash && c.RedeemedAt == null);
+            if (match is not null)
+            {
+                match.Redeem(now);
+                return Task.FromResult(true);
+            }
+            return Task.FromResult(false);
+        }
+
+        public Task<int> GetRemainingRecoveryCodesCountAsync(UserId userId, CancellationToken cancellationToken) =>
+            Task.FromResult(RecoveryCodes.Count(c => c.UserId == userId && c.RedeemedAt == null));
     }
 }

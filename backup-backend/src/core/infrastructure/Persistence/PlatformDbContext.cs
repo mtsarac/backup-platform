@@ -70,6 +70,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<LoginThrottleEntry> LoginThrottleEntries => Set<LoginThrottleEntry>();
+    public DbSet<TotpCredential> TotpCredentials => Set<TotpCredential>();
+    public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
     public DbSet<BackupJob> BackupJobs => Set<BackupJob>();
     public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
     public DbSet<BackupRunAttempt> BackupRunAttempts => Set<BackupRunAttempt>();
@@ -204,7 +206,7 @@ public sealed class PlatformDbContext : DbContext
             {
                 throw new InvalidOperationException("A matching trusted tenant context is required for tenant writes.");
             }
-            if (!IsPlatformOperations && entry.Entity is PasswordCredential or UserSession)
+            if (!IsPlatformOperations && entry.Entity is PasswordCredential or UserSession or TotpCredential or RecoveryCode)
             {
                 throw new InvalidOperationException("Authentication state writes require explicit identity infrastructure operations.");
             }

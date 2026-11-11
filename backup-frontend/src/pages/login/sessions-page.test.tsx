@@ -14,7 +14,7 @@ const api = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/api/client', async importOriginal => ({ ...await importOriginal<typeof client>(), apiRequest: api }))
 const clearAuth = vi.fn(async () => {})
 const login = vi.fn(async () => {})
-const auth = { user: null, tenants: [], isAuthenticated: false, isLoading: false, error: null, sessionExpired: false, login, logout: vi.fn(), clearAuth, refresh: vi.fn() }
+const auth = { user: null, tenants: [], isAuthenticated: false, isLoading: false, error: null, sessionExpired: false, login, completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth, refresh: vi.fn() }
 const records = [
   { id: 'current', device: 'Firefox', ipAddress: '127.0.0.1', lastActivityAt: '2026-01-01T12:00:00Z', isCurrent: true },
   { id: 'other', device: 'Chrome', ipAddress: '192.0.2.1', lastActivityAt: '2026-01-02T12:00:00Z', isCurrent: false },

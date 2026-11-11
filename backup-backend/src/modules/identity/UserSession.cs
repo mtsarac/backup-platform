@@ -6,7 +6,7 @@ public enum SessionAuthenticationState { FullyAuthenticated, PasswordChangeRequi
 
 public sealed class UserSession
 {
-    public UserSession(Guid id, UserId userId, DateTimeOffset createdAt, bool rememberMe, string device, string ipAddress)
+    public UserSession(Guid id, UserId userId, DateTimeOffset createdAt, bool rememberMe, string device, string ipAddress, SessionAuthenticationState authenticationState = SessionAuthenticationState.FullyAuthenticated)
     {
         if (id == Guid.Empty) throw new ArgumentException("A session identity must not be empty.", nameof(id));
         ArgumentNullException.ThrowIfNull(userId);
@@ -16,6 +16,7 @@ public sealed class UserSession
         RememberMe = rememberMe;
         Device = device;
         IpAddress = ipAddress;
+        AuthenticationState = authenticationState;
     }
 
     public Guid Id { get; }

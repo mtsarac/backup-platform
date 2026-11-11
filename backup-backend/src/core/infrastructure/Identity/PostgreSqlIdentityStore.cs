@@ -99,4 +99,106 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
             "user", targetUserId?.ToString() ?? "unknown", new Dictionary<string, object?> { ["result"] = "denied", ["code"] = "invalid_credentials" }));
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<PasswordCredential?> FindCredentialByUserIdAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.PasswordCredentials.AsNoTracking().SingleOrDefaultAsync(
+            credential => credential.UserId == userId, cancellationToken);
+    }
+
+    public async Task<bool> HasSecondFactorAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.TotpCredentials.AsNoTracking().AnyAsync(row => row.UserId == userId, cancellationToken);
+    }
+
+    public async Task<TotpCredential?> FindTotpCredentialAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.TotpCredentials.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == userId, cancellationToken);
+    }
+
+    public async Task SaveTotpCredentialAsync(TotpCredential credential, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var existing = await context.TotpCredentials.SingleOrDefaultAsync(row => row.UserId == credential.UserId, cancellationToken);
+        if (existing is not null)
+        {
+            context.TotpCredentials.Remove(existing);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        context.TotpCredentials.Add(credential);
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, credential.UserId, AuditActorKind.User, AuditActions.TotpEnrolled, null,
+            "user", credential.UserId.ToString(), new Dictionary<string, object?> { ["result"] = "enrolled" }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTotpCredentialAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var deleted = await context.TotpCredentials.Where(row => row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        if (deleted > 0)
+        {
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, userId, AuditActorKind.User, AuditActions.TotpRemoved, null,
+                "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "removed" }));
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return deleted > 0;
+    }
+
+    public async Task<bool> TryUseTotpStepAsync(UserId userId, long step, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var updated = await context.TotpCredentials
+            .Where(row => row.UserId == userId && (row.LastUsedEpochStep == null || row.LastUsedEpochStep < step))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.LastUsedEpochStep, step), cancellationToken);
+        return updated > 0;
+    }
+
+    public async Task SaveRecoveryCodesAsync(UserId userId, IEnumerable<string> codeHashes, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var hashList = codeHashes.ToList();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.RecoveryCodes.Where(row => row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        foreach (var hash in hashList)
+        {
+            context.RecoveryCodes.Add(new RecoveryCode(Guid.NewGuid(), userId, hash, now));
+        }
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, userId, AuditActorKind.User, AuditActions.RecoveryCodesRegenerated, null,
+            "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "regenerated", ["count"] = hashList.Count }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryRedeemRecoveryCodeAsync(UserId userId, string codeHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var updated = await context.RecoveryCodes
+            .Where(row => row.UserId == userId && row.CodeHash == codeHash && row.RedeemedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.RedeemedAt, now), cancellationToken);
+        if (updated > 0)
+        {
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, userId, AuditActorKind.User, AuditActions.RecoveryCodeConsumed, null,
+                "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "consumed" }));
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return updated > 0;
+    }
+    public async Task<int> GetRemainingRecoveryCodesCountAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.RecoveryCodes.AsNoTracking().CountAsync(row => row.UserId == userId && row.RedeemedAt == null, cancellationToken);
+    }
 }
