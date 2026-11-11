@@ -26,12 +26,6 @@ public sealed class PlatformUserRequest
 public sealed class PlatformMembershipRequest
 {
     public Guid UserId { get; init; }
-    public string? Role { get; init; }
-}
-
-public sealed class PlatformMembershipRoleRequest
-{
-    public string? Role { get; init; }
 }
 
 /// <summary>
@@ -54,7 +48,6 @@ public static class PlatformEndpoints
         platform.MapPut("/tenants/{tenantId:guid}", RenameTenantAsync);
         platform.MapGet("/tenants/{tenantId:guid}/memberships", ListMembershipsAsync);
         platform.MapPost("/tenants/{tenantId:guid}/memberships", AddMembershipAsync);
-        platform.MapPut("/tenants/{tenantId:guid}/memberships/{userId:guid}", ChangeMembershipRoleAsync);
         platform.MapDelete("/tenants/{tenantId:guid}/memberships/{userId:guid}", RemoveMembershipAsync);
         platform.MapGet("/tenants/{tenantId:guid}/agents/{agentId:guid}", GetAgentAsync);
         platform.MapGet("/users", ListUsersAsync);
@@ -157,30 +150,15 @@ public static class PlatformEndpoints
         {
             return Invalid(new InvalidPlatformRequestException("userId", "required"));
         }
-        if (!TryParseRole(request.Role, out var role))
-        {
-            return Invalid(new InvalidPlatformRequestException("role", "invalid_value"));
-        }
-        var change = await service.AddMembershipAsync(new TenantId(tenantId), new UserId(request.UserId), role, currentUser.UserId!, cancellationToken);
+        var change = await service.AddMembershipAsync(new TenantId(tenantId), new UserId(request.UserId), currentUser.UserId!, cancellationToken);
         return change.Outcome switch
         {
             PlatformChangeOutcome.TenantNotFound => TenantNotFound(),
             PlatformChangeOutcome.UserNotFound => Results.NotFound(new { error = "user_not_found" }),
             PlatformChangeOutcome.AlreadyMember => Results.Conflict(new { error = "already_member" }),
+            PlatformChangeOutcome.PlatformAdminCannotBeMember => Results.BadRequest(new { error = "platform_admin_membership_not_allowed" }),
             _ => Results.Json(ToResponse(change.Value!), statusCode: StatusCodes.Status201Created)
         };
-    }
-
-    private static async Task<IResult> ChangeMembershipRoleAsync(
-        Guid tenantId, Guid userId, PlatformMembershipRoleRequest? request, ICurrentUser currentUser,
-        PlatformAdministrationService service, CancellationToken cancellationToken)
-    {
-        if (!TryParseRole(request?.Role, out var role))
-        {
-            return Invalid(new InvalidPlatformRequestException("role", "invalid_value"));
-        }
-        var change = await service.ChangeMembershipRoleAsync(new TenantId(tenantId), new UserId(userId), role, currentUser.UserId!, cancellationToken);
-        return change.Outcome == PlatformChangeOutcome.MembershipNotFound ? MembershipNotFound() : Results.Ok(ToResponse(change.Value!));
     }
 
     private static async Task<IResult> RemoveMembershipAsync(
@@ -317,12 +295,6 @@ public static class PlatformEndpoints
         return p is >= 1 and <= 1_000_000 && size is >= 1 and <= MaximumPageSize;
     }
 
-    private static bool TryParseRole(string? value, out TenantRole role)
-    {
-        role = default;
-        return !string.IsNullOrEmpty(value) && value.All(char.IsLetter)
-            && Enum.TryParse(value, ignoreCase: true, out role) && Enum.IsDefined(role);
-    }
 
     private static object Page<TSource, TResult>(PagedResult<TSource> result, Func<TSource, TResult> map) => new
     {
@@ -354,8 +326,7 @@ public static class PlatformEndpoints
     {
         userId = membership.UserId.Value,
         displayName = membership.DisplayName,
-        loginIdentifier = membership.LoginIdentifier,
-        role = membership.Role.ToString()
+        loginIdentifier = membership.LoginIdentifier
     };
 
     private static object ToResponse(AgentConnectivitySummary summary) => new

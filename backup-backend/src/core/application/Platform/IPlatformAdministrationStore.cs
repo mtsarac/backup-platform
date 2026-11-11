@@ -13,7 +13,7 @@ public sealed record PlatformTenantDetail(
 
 public sealed record PlatformUserItem(UserId UserId, string DisplayName, string? LoginIdentifier, bool IsPlatformAdmin, int MembershipCount);
 
-public sealed record PlatformMembershipItem(UserId UserId, string DisplayName, string? LoginIdentifier, TenantRole Role);
+public sealed record PlatformMembershipItem(UserId UserId, string DisplayName, string? LoginIdentifier);
 
 public sealed record PlatformAuditItem(
     Guid Id, DateTimeOffset At, UserId ActorUserId, string? ActorDisplayName, AuditActorKind ActorKind, string Action,
@@ -31,7 +31,8 @@ public enum PlatformChangeOutcome
     UserNotFound = 4,
     MembershipNotFound = 5,
     AlreadyMember = 6,
-    LoginTaken = 7
+    LoginTaken = 7,
+    PlatformAdminCannotBeMember = 8
 }
 
 public sealed record PlatformChange<T>(PlatformChangeOutcome Outcome, T? Value = default) where T : class;
@@ -57,9 +58,7 @@ public interface IPlatformAdministrationStore
     /// <summary>Null when the tenant does not exist.</summary>
     Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(
-        TenantId tenantId, UserId userId, TenantRole role, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
-    Task<PlatformChange<PlatformMembershipItem>> ChangeMembershipRoleAsync(
-        TenantId tenantId, UserId userId, TenantRole role, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+        TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> RemoveMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 

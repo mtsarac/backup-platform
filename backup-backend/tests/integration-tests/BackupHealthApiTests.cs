@@ -155,7 +155,7 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         Assert.Equal("Critical", health.GetProperty("state").GetString());
         Assert.Equal("schedule_unavailable", health.GetProperty("factors").GetProperty("freshness").GetProperty("reason").GetString());
         Assert.Equal("capacity_unavailable", health.GetProperty("factors").GetProperty("storageCapacity").GetProperty("reason").GetString());
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
+        var viewer = await scenario.SessionAsync();
         using var read = await viewer.GetAsync(scenario.Root + $"/backup-jobs/{job}/health");
         Assert.Equal(HttpStatusCode.OK, read.StatusCode);
         using var anonymous = await scenario.World.Anonymous.GetAsync($"/api/v1/backups/jobs/{job}/health");

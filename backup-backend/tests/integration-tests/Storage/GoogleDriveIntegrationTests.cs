@@ -50,7 +50,7 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
         await world.EntitleAsync(tenant);
 
         var user = await world.SeedUserAsync();
-        await world.GrantAsync(tenant, user, TenantRole.Admin);
+        await world.GrantAsync(tenant, user);
         var session = await world.SignInAsync(user);
 
         // 1. Create Google Drive storage connection (initially without secret)
@@ -172,11 +172,11 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
         await world.EntitleAsync(tB);
 
         var userA = await world.SeedUserAsync();
-        await world.GrantAsync(tA, userA, TenantRole.Admin);
+        await world.GrantAsync(tA, userA);
         var sessionA = await world.SignInAsync(userA);
 
         var userB = await world.SeedUserAsync();
-        await world.GrantAsync(tB, userB, TenantRole.Admin);
+        await world.GrantAsync(tB, userB);
         var sessionB = await world.SignInAsync(userB);
 
         // Tenant A creates Google Drive connection
@@ -344,10 +344,10 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
         await world.EntitleAsync(tenant);
         await world.EntitleAsync(foreign);
         var adminUser = await world.SeedUserAsync();
-        await world.GrantAsync(tenant, adminUser, TenantRole.Admin);
-        await world.GrantAsync(foreign, adminUser, TenantRole.Admin);
+        await world.GrantAsync(tenant, adminUser);
+        await world.GrantAsync(foreign, adminUser);
         var viewerUser = await world.SeedUserAsync();
-        await world.GrantAsync(tenant, viewerUser, TenantRole.Viewer);
+        await world.GrantAsync(tenant, viewerUser);
         var admin = await world.SignInAsync(adminUser);
         var viewer = await world.SignInAsync(viewerUser);
         await world.Factory.Services.GetRequiredService<ISecretStore>().SetAsync(

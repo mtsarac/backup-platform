@@ -135,18 +135,12 @@ public sealed class RestorePreparationApiTests(PostgreSqlFixture fixture) : ICla
         var body = purpose == "discovery" ? DiscoveryBody(scenario) : scenario.Body();
         var created = await scenario.StartPreparationAsync(backup.ArtifactId, purpose, body);
         var id = created.GetProperty("id").GetGuid();
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
-        var platform = await scenario.World.SignInAsync(await scenario.World.SeedUserAsync(platformAdmin: true));
-        foreach (var session in new[] { viewer, platform })
-        {
-            using var start = await scenario.StartPreparationRawAsync(backup.ArtifactId, purpose, body, session: session);
-            using var cancel = await scenario.CancelRawAsync(id, session);
-            Assert.Equal(HttpStatusCode.Forbidden, start.StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, cancel.StatusCode);
-        }
-        using var platformDetail = await scenario.GetRawAsync($"/restores/{id}", platform);
-        Assert.Equal(HttpStatusCode.Forbidden, platformDetail.StatusCode);
-        Assert.Equal("Pending", StatusOf(await scenario.RestoreAsync(id, viewer)));
+        var nonMember = await scenario.SessionAsync(member: false);
+        using var start = await scenario.StartPreparationRawAsync(backup.ArtifactId, purpose, body, session: nonMember);
+        using var cancel = await scenario.CancelRawAsync(id, nonMember);
+        Assert.Equal(HttpStatusCode.Forbidden, start.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, cancel.StatusCode);
+        Assert.Equal("Pending", StatusOf(await scenario.RestoreAsync(id, scenario.Admin)));
     }
 
     [Theory]

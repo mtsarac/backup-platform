@@ -13,7 +13,6 @@ internal sealed class TenantMembershipConfiguration : IEntityTypeConfiguration<T
         {
             table.HasCheckConstraint("ck_tenant_memberships_tenant_id_nonempty", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
             table.HasCheckConstraint("ck_tenant_memberships_user_id_nonempty", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-            table.HasCheckConstraint("ck_tenant_memberships_role", "\"Role\" BETWEEN 1 AND 4");
         });
         builder.HasKey(membership => new { membership.TenantId, membership.UserId });
         builder.Property(membership => membership.TenantId)
@@ -27,7 +26,6 @@ internal sealed class TenantMembershipConfiguration : IEntityTypeConfiguration<T
             .HasColumnType("uuid")
             .ValueGeneratedNever()
             .IsRequired();
-        builder.Property(membership => membership.Role).HasConversion<int>().IsRequired();
         builder.HasOne<Tenant>().WithMany()
             .HasForeignKey(membership => membership.TenantId)
             .OnDelete(DeleteBehavior.Restrict);

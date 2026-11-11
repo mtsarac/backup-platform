@@ -14,13 +14,11 @@ public sealed class StorageConnectionPlatformLockIntegrationTests(PostgreSqlFixt
 {
     private readonly ConnectionWorld _world = new(fixture);
 
-    [Theory]
-    [InlineData(TenantRole.Owner)]
-    [InlineData(TenantRole.Admin)]
-    public async Task OwnerPreferenceCannotClearAPlatformLockOrDeleteTheConnectionToBypassIt(TenantRole role)
+    [Fact]
+    public async Task OwnerPreferenceCannotClearAPlatformLockOrDeleteTheConnectionToBypassIt()
     {
         await using var env = await ApiWorld.CreateAsync(fixture);
-        var tenant = role == TenantRole.Admin ? env.Admin : await env.SessionAsync(role);
+        var tenant = env.Admin;
         var platform = await env.PlatformAdminAsync();
         var localId = await LocalIdAsync(env);
         var path = env.TenantRoot + $"/storage-connections/{localId}";
@@ -53,13 +51,11 @@ public sealed class StorageConnectionPlatformLockIntegrationTests(PostgreSqlFixt
         await AssertToggleAuditsAsync(env, localId);
     }
 
-    [Theory]
-    [InlineData(TenantRole.Viewer)]
-    [InlineData(TenantRole.Operator)]
-    public async Task ReadOnlyMembersCannotChangeEitherControlOrDeleteALockedConnection(TenantRole role)
+    [Fact]
+    public async Task NonMembersCannotChangeEitherControlOrDeleteALockedConnection()
     {
         await using var env = await ApiWorld.CreateAsync(fixture);
-        var reader = await env.SessionAsync(role);
+        var reader = await env.NonMemberAsync();
         var platform = await env.PlatformAdminAsync();
         var localId = await LocalIdAsync(env);
         var path = env.TenantRoot + $"/storage-connections/{localId}";

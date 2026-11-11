@@ -12,7 +12,7 @@ public static class DownloadEndpoints
     public static IEndpointRouteBuilder MapDownloadEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/tenants/{tenantId:guid}/backup-artifacts/{artifactId:guid}")
-            .WithMetadata(new TenantScopedEndpoint()).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            .WithMetadata(new TenantScopedEndpoint()).RequireAuthorization(AuthorizationPolicies.ArtifactContentAccess);
         group.MapGet("/download-availability", AvailabilityAsync);
         group.MapPost("/downloads", PrepareAsync);
         group.MapGet("/downloads/{sessionId:guid}", StatusAsync);

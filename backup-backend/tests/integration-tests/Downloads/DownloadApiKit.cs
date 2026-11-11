@@ -29,7 +29,11 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
     public string Checksum => Convert.ToHexStringLower(SHA256.HashData(Bytes));
     public string Root => Backup.Root;
     public string ArtifactPath => Root + $"/backup-artifacts/{Accepted.ArtifactId}";
-    public PostgreSqlDownloadStore Store() => new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(World.Database.ConnectionString).Options);
+    public PostgreSqlDownloadStore Store()
+    {
+        var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(World.Database.ConnectionString).Options;
+        return new(options, new BackupPlatform.Infrastructure.Tenancy.PostgreSqlCentralAuthorizationService(options));
+    }
 
     public static async Task<DownloadApiScenario> CreateAsync(PostgreSqlFixture fixture, bool agentLocal = false, bool kestrel = false, Action<IServiceCollection>? configureServices = null, IReadOnlyDictionary<string, string?>? configuration = null)
     {

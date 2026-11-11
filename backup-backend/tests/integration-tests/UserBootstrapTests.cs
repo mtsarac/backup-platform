@@ -1,4 +1,5 @@
 using System.Net;
+using BackupPlatform.Domain.Tenancy;
 using System.Net.Http.Json;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Identity;
@@ -27,7 +28,7 @@ public sealed class UserBootstrapTests(PostgreSqlFixture fixture) : IClassFixtur
             var credential = await database.PasswordCredentials.SingleAsync();
             Assert.Equal(userId, credential.UserId);
             Assert.Equal(PasswordVerificationResult.Success, new PasswordHashService().Verify(userId, credential.PasswordHash, password));
-            Assert.Equal(userId, (await database.PlatformAdmins.SingleAsync()).UserId);
+            Assert.Equal(UserRole.PlatformAdmin, user.Role);
         }
         await using var factory = new AuthApiFactory(fixture.ConnectionString);
         using var browser = factory.CreateBrowser();

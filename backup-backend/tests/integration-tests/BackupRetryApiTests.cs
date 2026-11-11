@@ -18,23 +18,19 @@ public sealed class BackupRetryApiTests(PostgreSqlFixture fixture) : IClassFixtu
 
     // ---- the retry endpoint: who may call it, and what it refuses ----
 
-    [Theory]
-    [InlineData(TenantRole.Viewer, HttpStatusCode.Forbidden)]
-    [InlineData(TenantRole.Operator, HttpStatusCode.OK)]
-    [InlineData(TenantRole.Admin, HttpStatusCode.OK)]
-    public async Task RetryIsOpenToOperatorsAndAdminsButNotViewers(TenantRole role, HttpStatusCode expected)
+    [Fact]
+    public async Task RetryIsOpenToTenantAdministrators()
     {
         await using var scenario = await CreateAsync(fixture);
         var run = await FailedRunAsync(scenario, "PreCheckFailed");
-        var session = await scenario.SessionAsync(role);
+        var session = await scenario.SessionAsync();
 
         using var response = await scenario.RetryRawAsync(run, session);
 
-        Assert.Equal(expected, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var after = await scenario.RunAsync(run);
-        var allowed = expected == HttpStatusCode.OK;
-        Assert.Equal(allowed ? 2 : 1, AttemptsOf(after).Count);
-        Assert.Equal(allowed ? "Pending" : "Failed", StatusOf(after));
+        Assert.Equal(2, AttemptsOf(after).Count);
+        Assert.Equal("Pending", StatusOf(after));
     }
 
     [Fact]

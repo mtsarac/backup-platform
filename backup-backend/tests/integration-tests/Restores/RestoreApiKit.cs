@@ -277,8 +277,8 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
         return await command.ExecuteNonQueryAsync();
     }
 
-    /// <summary>A session of <paramref name="role"/> whose cookie is valid at the scenario clock's current time (a test that moved the clock by hours outlives older sessions).</summary>
-    public Task<BrowserSession> SessionAsync(TenantRole role) => Backup.SessionAsync(role);
+    /// <summary>A session whose cookie is valid at the scenario clock's current time (a test that moved the clock by hours outlives older sessions).</summary>
+    public Task<BrowserSession> SessionAsync(bool member = true) => Backup.SessionAsync(member);
 
     public static JsonElement Property(JsonElement element, params string[] path)
     {

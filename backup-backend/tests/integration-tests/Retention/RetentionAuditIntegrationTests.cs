@@ -394,7 +394,7 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
         await using var scenario = await CreateAsync(fixture);
         var jobId = await CreateJobAsync(scenario, Policy(enabled: false));
         var backup = await AcceptBackupAsync(scenario, jobId);
-        var deniedUser = await scenario.SessionAsync(TenantRole.Operator);
+        var deniedUser = await scenario.SessionAsync(member: false);
         using var denied = await DeleteArtifactAsync(scenario, backup.ArtifactId, deniedUser);
         using var deniedCancel = await CancelDeleteAsync(scenario, backup.ArtifactId, deniedUser);
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);

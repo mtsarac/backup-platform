@@ -99,7 +99,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         var users = from user in context.Users.AsNoTracking()
                     join credential in context.PasswordCredentials.AsNoTracking() on user.Id equals credential.UserId into joined
                     from credential in joined.DefaultIfEmpty()
-                    select new { user.Id, user.DisplayName, Login = credential == null ? null : credential.LoginIdentifier };
+                    select new { user.Id, user.DisplayName, user.Role, Login = credential == null ? null : credential.LoginIdentifier };
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim().ToLowerInvariant();
@@ -111,7 +111,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             .Select(row => new
             {
                 row.Id, row.DisplayName, row.Login,
-                IsPlatformAdmin = context.PlatformAdmins.Any(admin => admin.UserId == row.Id),
+                IsPlatformAdmin = row.Role == UserRole.PlatformAdmin,
                 MembershipCount = context.TenantMemberships.Count(membership => membership.UserId == row.Id)
             }).ToListAsync(cancellationToken);
         return new PagedResult<PlatformUserItem>(
@@ -128,7 +128,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         {
             return new(PlatformChangeOutcome.LoginTaken);
         }
-        var user = new User(userId, displayName);
+        var user = new User(userId, displayName, UserRole.UserAdmin);
         context.Users.Add(user);
         context.PasswordCredentials.Add(credential);
         // The audit event never carries the password or its hash.
@@ -161,24 +161,29 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     }
 
     public async Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(
-        TenantId tenantId, UserId userId, TenantRole role, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+        TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return new(PlatformChangeOutcome.TenantNotFound);
         }
-        if (!await context.Users.AnyAsync(user => user.Id == userId, cancellationToken))
+        var targetUser = await context.Users.SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
+        if (targetUser is null)
         {
             return new(PlatformChangeOutcome.UserNotFound);
+        }
+        if (targetUser.Role == UserRole.PlatformAdmin)
+        {
+            return new(PlatformChangeOutcome.PlatformAdminCannotBeMember);
         }
         if (await context.TenantMemberships.AnyAsync(membership => membership.TenantId == tenantId && membership.UserId == userId, cancellationToken))
         {
             return new(PlatformChangeOutcome.AlreadyMember);
         }
-        context.TenantMemberships.Add(new TenantMembership(tenantId, userId, role));
+        context.TenantMemberships.Add(new TenantMembership(tenantId, userId));
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipAdded, tenantId,
-            "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId), ["role"] = role.ToString() }));
+            "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
         try
         {
             await context.SaveChangesAsync(cancellationToken);
@@ -188,28 +193,6 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             return new(PlatformChangeOutcome.AlreadyMember);
         }
         return new(PlatformChangeOutcome.Changed, await ReadMembershipAsync(context, tenantId, userId, cancellationToken));
-    }
-
-    public async Task<PlatformChange<PlatformMembershipItem>> ChangeMembershipRoleAsync(
-        TenantId tenantId, UserId userId, TenantRole role, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var membership = await context.TenantMemberships.SingleOrDefaultAsync(row => row.TenantId == tenantId && row.UserId == userId, cancellationToken);
-        if (membership is null)
-        {
-            return new(PlatformChangeOutcome.MembershipNotFound);
-        }
-        var previous = membership.Role;
-        var outcome = PlatformChangeOutcome.Unchanged;
-        if (previous != role)
-        {
-            membership.ChangeRole(role);
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipRoleChanged, tenantId,
-                "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId), ["previousRole"] = previous.ToString(), ["role"] = role.ToString() }));
-            await context.SaveChangesAsync(cancellationToken);
-            outcome = PlatformChangeOutcome.Changed;
-        }
-        return new(outcome, await ReadMembershipAsync(context, tenantId, userId, cancellationToken));
     }
 
     public async Task<PlatformChange<PlatformMembershipItem>> RemoveMembershipAsync(
@@ -224,7 +207,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         var item = await ReadMembershipAsync(context, tenantId, userId, cancellationToken);
         context.TenantMemberships.Remove(membership);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipRemoved, tenantId,
-            "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId), ["role"] = membership.Role.ToString() }));
+            "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
         await context.SaveChangesAsync(cancellationToken);
         return new(PlatformChangeOutcome.Changed, item);
     }
@@ -274,7 +257,6 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         public required UserId UserId { get; init; }
         public required string DisplayName { get; init; }
         public string? Login { get; init; }
-        public required TenantRole Role { get; init; }
     }
 
     private static IQueryable<MembershipRow> MembershipItems(PlatformDbContext context, TenantId tenantId, UserId? userId = null) =>
@@ -283,10 +265,9 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         join user in context.Users.AsNoTracking() on membership.UserId equals user.Id
         join credential in context.PasswordCredentials.AsNoTracking() on user.Id equals credential.UserId into joined
         from credential in joined.DefaultIfEmpty()
-        select new MembershipRow { UserId = user.Id, DisplayName = user.DisplayName, Login = credential == null ? null : credential.LoginIdentifier, Role = membership.Role };
+        select new MembershipRow { UserId = user.Id, DisplayName = user.DisplayName, Login = credential == null ? null : credential.LoginIdentifier };
 
-    private static PlatformMembershipItem ToItem(MembershipRow row) => new(row.UserId, row.DisplayName, row.Login, row.Role);
-
+    private static PlatformMembershipItem ToItem(MembershipRow row) => new(row.UserId, row.DisplayName, row.Login);
     private static async Task<PlatformMembershipItem> ReadMembershipAsync(
         PlatformDbContext context, TenantId tenantId, UserId userId, CancellationToken cancellationToken) =>
         ToItem(await MembershipItems(context, tenantId, userId).SingleAsync(cancellationToken));

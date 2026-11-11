@@ -186,8 +186,8 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
     {
         await using var scenario = await CreateAsync(fixture);
         var backup = await scenario.AcceptBackupAsync();
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
-        var operatorSession = await scenario.SessionAsync(TenantRole.Operator);
+        var viewer = await scenario.SessionAsync(member: false);
+        var operatorSession = await scenario.SessionAsync();
         var created = await scenario.StartAsync(backup.ArtifactId);
         var restoreId = created.GetProperty("id").GetGuid();
 
@@ -425,7 +425,7 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
 
         using var inside = await scenario.StartRawAsync(backup.ArtifactId, scenario.Body("InsideGrace"), "inside");
         scenario.Clock.Advance(TimeSpan.FromHours(25));
-        var admin = await scenario.SessionAsync(TenantRole.Admin);
+        var admin = await scenario.SessionAsync();
         using var after = await scenario.StartRawAsync(backup.ArtifactId, scenario.Body("AfterGrace"), "after", admin);
 
         Assert.Equal(HttpStatusCode.Accepted, inside.StatusCode);
@@ -616,10 +616,10 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
         scenario.Clock.Advance(TimeSpan.FromSeconds(60));
         await scenario.SweepAsync();
         // The sweep is global (other tests' leftovers expire too), so what is asserted is this restore: a lease with time left is never touched.
-        Assert.Equal("Running", StatusOf(await scenario.RestoreAsync(lost, await scenario.SessionAsync(TenantRole.Admin))));
+        Assert.Equal("Running", StatusOf(await scenario.RestoreAsync(lost, await scenario.SessionAsync())));
         scenario.Clock.Advance(TimeSpan.FromSeconds(70));
         await scenario.SweepAsync();
-        var view = await scenario.RestoreAsync(lost, await scenario.SessionAsync(TenantRole.Admin));
+        var view = await scenario.RestoreAsync(lost, await scenario.SessionAsync());
         Assert.Equal("AgentLost", StatusOf(view));
         Assert.Equal("AgentLost", view.GetProperty("failureCode").GetString());
         Assert.Equal("The agent lease expired before the restore completed.", view.GetProperty("reason").GetString());
@@ -639,13 +639,13 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
 
         scenario.Clock.Advance(TimeSpan.FromMinutes(59));
         await scenario.SweepAsync();
-        var admin = await scenario.SessionAsync(TenantRole.Admin);
+        var admin = await scenario.SessionAsync();
         Assert.Equal("Pending", StatusOf(await scenario.RestoreAsync(restoreId, admin)));
         scenario.Clock.Advance(TimeSpan.FromMinutes(2));
         var swept = await scenario.SweepAsync();
 
         Assert.True(swept.UnclaimedWithdrawn >= 1);
-        var view = await scenario.RestoreAsync(restoreId, await scenario.SessionAsync(TenantRole.Admin));
+        var view = await scenario.RestoreAsync(restoreId, await scenario.SessionAsync());
         Assert.Equal("Cancelled", StatusOf(view));
         Assert.Equal("NotClaimed", view.GetProperty("failureCode").GetString());
         Assert.Equal("NotModified", view.GetProperty("targetState").GetString());

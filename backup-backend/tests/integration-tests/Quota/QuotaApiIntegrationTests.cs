@@ -411,14 +411,12 @@ public sealed class QuotaApiIntegrationTests(PostgreSqlFixture fixture) : IClass
         }
     }
 
-    [Theory]
-    [InlineData(TenantRole.Owner)]
-    [InlineData(TenantRole.Admin)]
-    public async Task TenantOwnersAndAdminsCannotReachAnyPlatformQuotaRoute(TenantRole role)
+    [Fact]
+    public async Task TenantOwnersAndAdminsCannotReachAnyPlatformQuotaRoute()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var platform = await PlatformAdminAsync(world);
-        var setup = await world.CreateTenantAsync(role);
+        var setup = await world.CreateTenantAsync();
         var tenant = setup.Tenant.Id.Value;
         var policiesBefore = (await CallAsync(platform, HttpMethod.Get, Policies)).Json.GetProperty("items").GetArrayLength();
 
@@ -458,15 +456,11 @@ public sealed class QuotaApiIntegrationTests(PostgreSqlFixture fixture) : IClass
 
     // ---- the tenant's own standing -----------------------------------------------------------------------------------------------
 
-    [Theory]
-    [InlineData(TenantRole.Owner)]
-    [InlineData(TenantRole.Admin)]
-    [InlineData(TenantRole.Operator)]
-    [InlineData(TenantRole.Viewer)]
-    public async Task AnyMemberOfATenantReadsItsStorageQuota(TenantRole role)
+    [Fact]
+    public async Task AnyMemberOfATenantReadsItsStorageQuota()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
-        var setup = await world.CreateTenantAsync(role);
+        var setup = await world.CreateTenantAsync();
         await _quota.AssignAsync(setup.Tenant.Id, await _quota.PlanAsync(5 * Gb));
 
         using var response = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/storage-quota");
@@ -570,7 +564,7 @@ public sealed class QuotaApiIntegrationTests(PostgreSqlFixture fixture) : IClass
     public async Task TheStorageUsageListIsPlatformAdminOnly()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
-        var setup = await world.CreateTenantAsync(TenantRole.Owner);
+        var setup = await world.CreateTenantAsync();
 
         var forbidden = await CallAsync(setup.Admin, HttpMethod.Get, "/api/platform/storage-usage");
         using var anonymous = await world.Anonymous.GetAsync("/api/platform/storage-usage");

@@ -23,13 +23,13 @@ public sealed class DownloadContentSecurityTests(PostgreSqlFixture fixture) : IC
         var id = created.GetProperty("sessionId").GetGuid();
         var url = created.GetProperty("downloadUrl").GetString()!;
         var otherTenant = await scenario.World.CreateTenantAsync();
+        var platformSession = await SignInAsync(scenario, member: false, platformAdmin: true);
+        var sameTenantMember = await SignInAsync(scenario, member: true);
         var callers = new (string Name, HttpClient Client, HttpStatusCode Expected)[]
         {
             ("anonymous", scenario.World.Anonymous, HttpStatusCode.Unauthorized),
-            ("same-tenant administrator", (await SignInAsync(scenario, TenantRole.Admin)).Client, HttpStatusCode.NotFound),
-            ("same-tenant owner", (await SignInAsync(scenario, TenantRole.Owner)).Client, HttpStatusCode.NotFound),
-            ("operator", (await SignInAsync(scenario, TenantRole.Operator)).Client, HttpStatusCode.Forbidden),
-            ("viewer", (await SignInAsync(scenario, TenantRole.Viewer)).Client, HttpStatusCode.Forbidden),
+            ("same-tenant member (not session owner)", sameTenantMember.Client, HttpStatusCode.NotFound),
+            ("platform admin", platformSession.Client, HttpStatusCode.Forbidden),
             ("administrator of another tenant", otherTenant.Admin.Client, HttpStatusCode.Forbidden)
         };
         foreach (var (name, client, expected) in callers)
@@ -44,17 +44,17 @@ public sealed class DownloadContentSecurityTests(PostgreSqlFixture fixture) : IC
     }
 
     [Fact]
-    public async Task ADemotedOwnerCannotRedeemAPreparedSession()
+    public async Task ARemovedMemberCannotRedeemAPreparedSession()
     {
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
         var account = await scenario.World.SeedUserAsync();
-        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account, TenantRole.Admin);
+        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account);
         var browser = await scenario.World.SignInAsync(account);
         var created = await scenario.CreateSessionAsync(browser);
         await using (var context = scenario.World.Database.CreatePlatformContext())
         {
             var membership = await context.TenantMemberships.SingleAsync(row => row.TenantId == scenario.Backup.Backup.Setup.Tenant.Id && row.UserId == account.UserId);
-            membership.ChangeRole(TenantRole.Viewer);
+            context.TenantMemberships.Remove(membership);
             await context.SaveChangesAsync();
         }
         using var response = await browser.GetAsync(created.GetProperty("downloadUrl").GetString()!);
@@ -183,10 +183,13 @@ public sealed class DownloadContentSecurityTests(PostgreSqlFixture fixture) : IC
         Assert.Equal(1, await AuditCountAsync(id, "download.completed"));
     }
 
-    private static async Task<BrowserSession> SignInAsync(DownloadApiScenario scenario, TenantRole role)
+    private static async Task<BrowserSession> SignInAsync(DownloadApiScenario scenario, bool member = true, bool platformAdmin = false)
     {
-        var account = await scenario.World.SeedUserAsync();
-        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account, role);
+        var account = await scenario.World.SeedUserAsync(platformAdmin);
+        if (member)
+        {
+            await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account);
+        }
         return await scenario.World.SignInAsync(account);
     }
 

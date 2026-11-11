@@ -211,22 +211,21 @@ public sealed class ScheduleApiTests(PostgreSqlFixture fixture) : IClassFixture<
     // ---- authorization and isolation --------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task ViewersReadTheScheduleAndItsHistoryButCannotChangeIt()
+    public async Task NonMembersCannotReadOrChangeTheSchedule()
     {
         var (scenario, jobId, _) = await CreateAsync();
         await using var _ = scenario;
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
+        var nonMember = await scenario.SessionAsync(member: false);
         var root = scenario.Root + $"/backup-jobs/{jobId}";
 
-        using var read = await viewer.GetAsync(root);
-        using var history = await viewer.GetAsync(root + "/schedule/occurrences");
-        using var put = await viewer.SendAsync(HttpMethod.Put, root + "/schedule", Schedule("5 * * * *"));
-        using var delete = await viewer.SendAsync(HttpMethod.Delete, root + "/schedule");
-        using var enable = await viewer.SendAsync(HttpMethod.Post, root + "/enable");
-        using var disable = await viewer.SendAsync(HttpMethod.Post, root + "/disable");
+        using var read = await nonMember.GetAsync(root);
+        using var history = await nonMember.GetAsync(root + "/schedule/occurrences");
+        using var put = await nonMember.SendAsync(HttpMethod.Put, root + "/schedule", Schedule("5 * * * *"));
+        using var delete = await nonMember.SendAsync(HttpMethod.Delete, root + "/schedule");
+        using var enable = await nonMember.SendAsync(HttpMethod.Post, root + "/enable");
+        using var disable = await nonMember.SendAsync(HttpMethod.Post, root + "/disable");
 
-        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (read.StatusCode, history.StatusCode));
-        Assert.All(new[] { put, delete, enable, disable }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+        Assert.All(new[] { read, history, put, delete, enable, disable }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
         using var after = await scenario.Admin.GetAsync(root);
         Assert.Equal("0 3 * * *", AgentWorld.ReadJson(after).GetProperty("schedule").GetProperty("cronExpression").GetString());
     }

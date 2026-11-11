@@ -187,58 +187,42 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
-    public async Task TenantRolesStayIndependentAndPlatformAdminCannotBypassMembership()
+    public async Task PlatformAdminAccessesTenantsWithoutMembershipAndUserAdminRequiresMembership()
     {
         var seed = await SeedUserAsync();
-        var adminTenant = await AddTenantAsync(seed.UserId, TenantRole.Admin);
-        var viewerTenant = await AddTenantAsync(seed.UserId, TenantRole.Viewer);
-        var absentTenant = await AddTenantAsync(null, null);
-        await using (var database = fixture.CreatePlatformContext())
-        {
-            database.PlatformAdmins.Add(new PlatformAdmin(seed.UserId));
-            await database.SaveChangesAsync();
-        }
+        var adminTenant = await AddTenantAsync(seed.UserId, true);
+        var absentTenant = await AddTenantAsync(null, false);
         await using var factory = new AuthApiFactory(fixture.ConnectionString);
         using var browser = factory.CreateBrowser();
         await AuthenticateAsync(browser, seed);
         using var listed = await browser.GetAsync("/api/me/tenants");
         Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
         var memberships = (await ReadJsonAsync(listed)).EnumerateArray().ToArray();
-        Assert.Equal(2, memberships.Length);
-        Assert.Equal("Administrator", memberships.Single(row => row.GetProperty("tenantId").GetGuid() == adminTenant.Id.Value).GetProperty("role").GetString());
-        Assert.Equal("Viewer", memberships.Single(row => row.GetProperty("tenantId").GetGuid() == viewerTenant.Id.Value).GetProperty("role").GetString());
+        Assert.Single(memberships);
+        Assert.Equal("Administrator", memberships[0].GetProperty("role").GetString());
         using var adminContext = await browser.GetAsync($"/api/tenants/{adminTenant.Id.Value}/context");
         Assert.Equal(HttpStatusCode.OK, adminContext.StatusCode);
         var selected = await ReadJsonAsync(adminContext);
         Assert.Equal(adminTenant.Id.Value, selected.GetProperty("tenantId").GetGuid());
         Assert.Equal(adminTenant.Name, selected.GetProperty("name").GetString());
-        using var viewerContext = await browser.GetAsync($"/api/tenants/{viewerTenant.Id.Value}/context");
-        Assert.Equal(HttpStatusCode.OK, viewerContext.StatusCode);
-        Assert.Equal("Viewer", (await ReadJsonAsync(viewerContext)).GetProperty("role").GetString());
         using var missingContext = await browser.GetAsync($"/api/tenants/{absentTenant.Id.Value}/context");
         Assert.Equal(HttpStatusCode.Forbidden, missingContext.StatusCode);
         using var platform = await browser.GetAsync("/api/test/platform");
-        Assert.Equal(HttpStatusCode.OK, platform.StatusCode);
-        using var viewerAdmin = await browser.GetAsync($"/api/test/tenants/{viewerTenant.Id.Value}/administrator");
-        Assert.Equal(HttpStatusCode.Forbidden, viewerAdmin.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, platform.StatusCode);
     }
 
-    [Theory]
-    [InlineData(TenantRole.Owner, true, true)]
-    [InlineData(TenantRole.Admin, true, true)]
-    [InlineData(TenantRole.Operator, false, true)]
-    [InlineData(TenantRole.Viewer, false, false)]
-    public async Task TenantRolePoliciesDoNotConferPlatformAdministration(TenantRole role, bool administer, bool operate)
+    [Fact]
+    public async Task TenantRolePoliciesDoNotConferPlatformAdministration()
     {
         var seed = await SeedUserAsync();
-        var tenant = await AddTenantAsync(seed.UserId, role);
+        var tenant = await AddTenantAsync(seed.UserId, true);
         await using var factory = new AuthApiFactory(fixture.ConnectionString);
         using var browser = factory.CreateBrowser();
         await AuthenticateAsync(browser, seed);
         using var administration = await browser.GetAsync($"/api/test/tenants/{tenant.Id.Value}/administrator");
-        Assert.Equal(administer ? HttpStatusCode.OK : HttpStatusCode.Forbidden, administration.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, administration.StatusCode);
         using var operation = await browser.GetAsync($"/api/test/tenants/{tenant.Id.Value}/operator");
-        Assert.Equal(operate ? HttpStatusCode.OK : HttpStatusCode.Forbidden, operation.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, operation.StatusCode);
         using var read = await browser.GetAsync($"/api/tenants/{tenant.Id.Value}/context");
         Assert.Equal(HttpStatusCode.OK, read.StatusCode);
         using var platform = await browser.GetAsync("/api/test/platform");
@@ -250,8 +234,8 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
     {
         var seed = await SeedUserAsync();
         var other = await SeedUserAsync();
-        var firstTenant = await AddTenantAsync(seed.UserId, TenantRole.Viewer);
-        var secondTenant = await AddTenantAsync(other.UserId, TenantRole.Owner);
+        var firstTenant = await AddTenantAsync(seed.UserId, true);
+        var secondTenant = await AddTenantAsync(other.UserId, true);
         await using var factory = new AuthApiFactory(fixture.ConnectionString);
         using var browser = factory.CreateBrowser();
         await AuthenticateAsync(browser, seed);
@@ -298,14 +282,14 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         return new SeededUser(user.Id, identifier, password, user.DisplayName);
     }
 
-    private async Task<Tenant> AddTenantAsync(UserId? userId, TenantRole? role)
+    private async Task<Tenant> AddTenantAsync(UserId? userId, bool member = true)
     {
         var tenant = new Tenant(TenantId.New(), $"Tenant {Guid.NewGuid():N}");
         await using var database = fixture.CreatePlatformContext();
         database.Tenants.Add(tenant);
-        if (userId is not null && role is not null)
+        if (userId is not null && member)
         {
-            database.TenantMemberships.Add(new TenantMembership(tenant.Id, userId, role.Value));
+            database.TenantMemberships.Add(new TenantMembership(tenant.Id, userId));
         }
         await database.SaveChangesAsync();
         return tenant;

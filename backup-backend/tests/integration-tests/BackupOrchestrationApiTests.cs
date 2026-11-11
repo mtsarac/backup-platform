@@ -8,17 +8,15 @@ namespace BackupPlatform.IntegrationTests;
 
 public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
-    [Theory]
-    [InlineData(TenantRole.Admin)]
-    [InlineData(TenantRole.Operator)]
-    public async Task ManualStartIsIdempotentAndPendingCancellationPreventsClaim(TenantRole role)
+    [Fact]
+    public async Task ManualStartIsIdempotentAndPendingCancellationPreventsClaim()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
         await world.EntitleAsync(setup.Tenant);
         var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup));
         var account = await world.SeedUserAsync();
-        await world.GrantAsync(setup.Tenant, account, role);
+        await world.GrantAsync(setup.Tenant, account);
         var session = await world.SignInAsync(account);
         var root = $"/api/tenants/{setup.Tenant.Id.Value}";
         using var create = await session.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
@@ -70,7 +68,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         using var start = await StartAsync(setup.Admin, root, jobId, "viewer-test");
         var runId = AgentWorld.ReadJson(start).GetProperty("id").GetGuid();
         var viewer = await world.SeedUserAsync();
-        await world.GrantAsync(setup.Tenant, viewer, TenantRole.Viewer);
+        await world.GrantAsync(setup.Tenant, viewer);
         var session = await world.SignInAsync(viewer);
         using var detail = await session.GetAsync(root + $"/backup-runs/{runId}");
         using var list = await session.GetAsync(root + "/backup-runs");
@@ -208,7 +206,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         using var checkpoint = await world.SendAgentAsync(HttpMethod.Post, taskRoot + "/progress", agent.CredentialId, agent.Secret, body: progress);
         Assert.Equal(HttpStatusCode.NoContent, checkpoint.StatusCode);
         var viewer = await world.SeedUserAsync();
-        await world.GrantAsync(setup.Tenant, viewer, TenantRole.Viewer);
+        await world.GrantAsync(setup.Tenant, viewer);
         var viewerSession = await world.SignInAsync(viewer);
         using var denied = await viewerSession.SendAsync(HttpMethod.Post, root + $"/backup-runs/{runId}/pause");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);

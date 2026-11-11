@@ -26,7 +26,8 @@ public static class UserEndpoints
             {
                 userId = profile.UserId.Value,
                 displayName = profile.DisplayName,
-                isPlatformAdmin = await userAccessStore.IsPlatformAdminAsync(currentUser.UserId!, cancellationToken)
+                role = profile.Role.ToString(),
+                isPlatformAdmin = profile.Role == UserRole.PlatformAdmin
             });
     }
 
@@ -37,8 +38,8 @@ public static class UserEndpoints
         {
             tenantId = membership.TenantId.Value,
             name = membership.Name,
-            role = FormatRole(membership.Role),
-            membershipRole = membership.Role.ToString()
+            role = "Administrator",
+            membershipRole = "Administrator"
         }));
     }
 
@@ -49,16 +50,9 @@ public static class UserEndpoints
         {
             tenantId = membership.TenantId.Value,
             name = membership.Name,
-            role = FormatRole(membership.Role),
-            membershipRole = membership.Role.ToString()
+            role = "Administrator",
+            membershipRole = "Administrator"
         });
     }
 
-    private static string FormatRole(TenantRole role) => role switch
-    {
-        TenantRole.Owner or TenantRole.Admin => "Administrator",
-        TenantRole.Operator => "Operator",
-        TenantRole.Viewer => "Viewer",
-        _ => throw new InvalidOperationException("The tenant membership has an unsupported role.")
-    };
 }

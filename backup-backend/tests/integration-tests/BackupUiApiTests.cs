@@ -12,7 +12,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var job = await scenario.CreateJobAsync(overlapPolicy: "Queue");
         var first = await scenario.StartRunAsync(job);
-        var session = await scenario.SessionAsync(TenantRole.Operator);
+        var session = await scenario.SessionAsync();
         var body = new { name = "Updated job", agentId = scenario.Agent.AgentId,
             configuration = new BackupExecutionConfiguration { Database = "updated-database", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalAgent },
             retryPolicy = new { maxAttempts = 5 }, overlapPolicy = "Queue" };
@@ -57,7 +57,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var job = await scenario.CreateJobAsync();
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
+        var viewer = await scenario.SessionAsync(member: false);
         var body = BackupApiScenario.JobBody(scenario.Agent.AgentId);
         using var forbidden = await viewer.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
         using var csrf = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body, includeAntiforgery: false);
@@ -245,11 +245,10 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var job = await scenario.CreateJobAsync();
-        var operatorSession = await scenario.SessionAsync(TenantRole.Operator);
+        var operatorSession = await scenario.SessionAsync(member: false);
         var body = FullEdit(scenario.Agent.AgentId, "Operator edit", retention: new { enabled = true, keepForSeconds = 7200, deleteGracePeriodSeconds = 3600 });
         using var forbidden = await operatorSession.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
-        Assert.Equal("administrator_required", AgentWorld.ReadJson(forbidden).GetProperty("code").GetString());
         using var read = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
         Assert.Equal("Nightly full backup", AgentWorld.ReadJson(read).GetProperty("name").GetString());
 

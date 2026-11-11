@@ -60,7 +60,6 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<User> Users => Set<User>();
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
-    public DbSet<PlatformAdmin> PlatformAdmins => Set<PlatformAdmin>();
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<TenantAgentEnrollmentPolicy> TenantAgentEnrollmentPolicies => Set<TenantAgentEnrollmentPolicy>();
     public DbSet<PlatformAgentSettings> PlatformAgentSettings => Set<PlatformAgentSettings>();
@@ -204,10 +203,6 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is Tenant tenant && (CurrentTenantId is null || tenant.Id != CurrentTenantId))
             {
                 throw new InvalidOperationException("A matching trusted tenant context is required for tenant writes.");
-            }
-            if (!IsPlatformOperations && entry.Entity is PlatformAdmin)
-            {
-                throw new InvalidOperationException("Platform grants require explicit platform operations.");
             }
             if (!IsPlatformOperations && entry.Entity is PasswordCredential or UserSession)
             {

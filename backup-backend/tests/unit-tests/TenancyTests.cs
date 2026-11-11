@@ -23,22 +23,20 @@ public sealed class TenancyTests
     {
         Assert.Throws<ArgumentNullException>(() => new Tenant(default!, "Tenant"));
         Assert.Throws<ArgumentNullException>(() => new User(default!, "User"));
-        Assert.Throws<ArgumentNullException>(() => new TenantMembership(default!, UserId.New(), TenantRole.Admin));
-        Assert.Throws<ArgumentNullException>(() => new TenantMembership(TenantId.New(), default!, TenantRole.Admin));
-        Assert.Throws<ArgumentNullException>(() => new PlatformAdmin(default!));
+        Assert.Throws<ArgumentNullException>(() => new TenantMembership(default!, UserId.New()));
+        Assert.Throws<ArgumentNullException>(() => new TenantMembership(TenantId.New(), default!));
     }
 
     [Fact]
-    public void MembershipRolesAreIndependentAcrossTenantsAndFromPlatformGrant()
+    public void UserHasRoleAndMembershipsAreRoleless()
     {
-        var user = new User(UserId.New(), "Alice");
-        var first = new TenantMembership(TenantId.New(), user.Id, TenantRole.Admin);
-        var second = new TenantMembership(TenantId.New(), user.Id, TenantRole.Viewer);
-        var platformAdmin = new PlatformAdmin(user.Id);
-        first.ChangeRole(TenantRole.Operator);
-        Assert.Equal(TenantRole.Operator, first.Role);
-        Assert.Equal(TenantRole.Viewer, second.Role);
-        Assert.Equal(user.Id, platformAdmin.UserId);
+        var userAdmin = new User(UserId.New(), "Alice", UserRole.UserAdmin);
+        var platformAdmin = new User(UserId.New(), "Bob", UserRole.PlatformAdmin);
+        var first = new TenantMembership(TenantId.New(), userAdmin.Id);
+        var second = new TenantMembership(TenantId.New(), userAdmin.Id);
+        Assert.Equal(UserRole.UserAdmin, userAdmin.Role);
+        Assert.Equal(UserRole.PlatformAdmin, platformAdmin.Role);
+        Assert.Equal(userAdmin.Id, first.UserId);
         Assert.NotEqual(first.TenantId, second.TenantId);
     }
 
@@ -50,10 +48,7 @@ public sealed class TenancyTests
     {
         var tenantId = TenantId.New();
         var userId = UserId.New();
-        Assert.Throws<ArgumentOutOfRangeException>(() => new TenantMembership(tenantId, userId, (TenantRole)value));
-        var membership = new TenantMembership(tenantId, userId, TenantRole.Viewer);
-        Assert.Throws<ArgumentOutOfRangeException>(() => membership.ChangeRole((TenantRole)value));
-        Assert.Equal(TenantRole.Viewer, membership.Role);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new User(userId, "Alice", (UserRole)value));
     }
 
     [Theory]

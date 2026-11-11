@@ -396,6 +396,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<Guid?>("LegacyAccessId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("SupportSessionId");
+
                     b.Property<string>("SealKeyId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -403,10 +407,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<string>("SealSignature")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
-
-                    b.Property<Guid?>("LegacyAccessId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("SupportSessionId");
 
                     b.Property<string>("TargetId")
                         .IsRequired()
@@ -2352,7 +2352,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
-
                     b.Property<Guid>("TenantId")
                         .IsConcurrencyToken()
                         .HasColumnType("uuid");
@@ -2381,20 +2380,17 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_download_sessions_active")
                         .HasFilter("\"ReleasedAt\" IS NULL");
 
-
                     b.HasIndex("TenantId");
 
                     b.HasIndex("ArtifactId", "TenantId");
 
                     b.HasIndex("ReplicaId", "TenantId");
 
-
                     b.HasIndex("TenantId", "AgentId", "State");
 
                     b.ToTable("download_sessions", null, t =>
                         {
                             t.HasCheckConstraint("ck_download_sessions_bytes", "\"SizeBytes\" >= 0 AND \"TransferredBytes\" BETWEEN 0 AND \"SizeBytes\"");
-
 
                             t.HasCheckConstraint("ck_download_sessions_expiry", "\"ExpiresAt\" > \"CreatedAt\"");
 
@@ -3137,7 +3133,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-
                     b.Property<string>("TargetState")
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)");
@@ -3264,7 +3259,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-
                     b.HasIndex("TenantId");
 
                     b.HasIndex("AgentId", "TenantId");
@@ -3276,7 +3270,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasFilter("\"Status\" = 'Pending'");
 
                     b.HasIndex("ReplicaId", "TenantId");
-
 
                     b.HasIndex("TenantId", "AgentId")
                         .HasDatabaseName("ix_restore_operations_cleanup_pending")
@@ -3312,7 +3305,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_restore_operations_source", "\"SourceAccess\" IN ('AgentLocal','CentralStorage','BackendRelayed','AgentDirect')");
 
                             t.HasCheckConstraint("ck_restore_operations_status", "\"Status\" IN ('Pending','Leased','Running','Succeeded','Failed','Cancelled','AgentLost')");
-
 
                             t.HasCheckConstraint("ck_restore_operations_target", "(\"TargetPort\" IS NULL OR \"TargetPort\" BETWEEN 1 AND 65535) AND ((\"TargetIntegratedSecurity\" AND \"TargetCredentialReference\" IS NULL) OR (NOT \"TargetIntegratedSecurity\" AND \"TargetCredentialReference\" IS NOT NULL))");
 
@@ -3799,20 +3791,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
-
-            modelBuilder.Entity("BackupPlatform.Domain.Tenancy.PlatformAdmin", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("UserId");
-
-                    b.ToTable("platform_admins", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_platform_admins_user_id_nonempty", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-                        });
-                });
-
             modelBuilder.Entity("BackupPlatform.Domain.Tenancy.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3847,9 +3825,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("Role")
-                        .HasColumnType("integer");
-
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -3862,8 +3837,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.ToTable("tenant_memberships", null, t =>
                         {
-                            t.HasCheckConstraint("ck_tenant_memberships_role", "\"Role\" BETWEEN 1 AND 4");
-
                             t.HasCheckConstraint("ck_tenant_memberships_tenant_id_nonempty", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_tenant_memberships_user_id_nonempty", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
@@ -3879,6 +3852,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("Role")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2);
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -3892,6 +3870,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_users_display_name_nonblank", "\"DisplayName\" ~ '[^[:space:]]'");
 
                             t.HasCheckConstraint("ck_users_id_nonempty", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_users_role", "\"Role\" IN (1, 2)");
                         });
                 });
 
@@ -4780,7 +4760,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationChannel", b =>
@@ -4886,7 +4865,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Restores.RestoreReplicaPin", b =>
@@ -4948,16 +4926,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-
-            modelBuilder.Entity("BackupPlatform.Domain.Tenancy.PlatformAdmin", b =>
-                {
-                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

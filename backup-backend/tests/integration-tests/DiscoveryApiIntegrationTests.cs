@@ -130,19 +130,13 @@ public sealed class DiscoveryApiIntegrationTests(PostgreSqlFixture fixture) : IC
             new { credentialReference = "x", integratedSecurity = false, encrypt = true, trustServerCertificate = false }))
             Assert.Equal(HttpStatusCode.NotFound, foreignBind.StatusCode);
 
-        var viewerAccount = await world.SeedUserAsync();
-        await world.GrantAsync(setup.Tenant, viewerAccount, TenantRole.Viewer);
-        var viewer = await world.SignInAsync(viewerAccount);
-        Assert.Single((await InstancesAsync(setup, viewer)).EnumerateArray());
-        using (var rescan = await viewer.SendAsync(HttpMethod.Post, $"{Root(setup)}/agents/{agent.AgentId}/rescan"))
+        var nonMemberAccount = await world.SeedUserAsync();
+        var nonMember = await world.SignInAsync(nonMemberAccount);
+        using (var rescan = await nonMember.SendAsync(HttpMethod.Post, $"{Root(setup)}/agents/{agent.AgentId}/rescan"))
             Assert.Equal(HttpStatusCode.Forbidden, rescan.StatusCode);
-        using (var bind = await viewer.SendAsync(HttpMethod.Put, $"{Root(setup)}/instances/{instanceId}/credential", new { credentialReference = "x", integratedSecurity = false }))
+        using (var bind = await nonMember.SendAsync(HttpMethod.Put, $"{Root(setup)}/instances/{instanceId}/credential", new { credentialReference = "x", integratedSecurity = false }))
             Assert.Equal(HttpStatusCode.Forbidden, bind.StatusCode);
-
-        var operatorAccount = await world.SeedUserAsync();
-        await world.GrantAsync(setup.Tenant, operatorAccount, TenantRole.Operator);
-        var operatorSession = await world.SignInAsync(operatorAccount);
-        using (var settings = await operatorSession.SendAsync(HttpMethod.Put, $"{Root(setup)}/agents/{agent.AgentId}/settings", new { enabled = true, scanIntervalMinutes = 60, includeDocker = true }))
+        using (var settings = await nonMember.SendAsync(HttpMethod.Put, $"{Root(setup)}/agents/{agent.AgentId}/settings", new { enabled = true, scanIntervalMinutes = 60, includeDocker = true }))
             Assert.Equal(HttpStatusCode.Forbidden, settings.StatusCode);
         using (var adminSettings = await setup.Admin.SendAsync(HttpMethod.Put, $"{Root(setup)}/agents/{agent.AgentId}/settings", new { enabled = true, scanIntervalMinutes = 60, includeDocker = false }))
         {
