@@ -199,7 +199,7 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
         var memberships = (await ReadJsonAsync(listed)).EnumerateArray().ToArray();
         Assert.Single(memberships);
-        Assert.Equal("Administrator", memberships[0].GetProperty("role").GetString());
+        Assert.Equal(adminTenant.Id.Value, memberships[0].GetProperty("tenantId").GetGuid());
         using var adminContext = await browser.GetAsync($"/api/tenants/{adminTenant.Id.Value}/context");
         Assert.Equal(HttpStatusCode.OK, adminContext.StatusCode);
         var selected = await ReadJsonAsync(adminContext);
@@ -212,17 +212,15 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
-    public async Task TenantRolePoliciesDoNotConferPlatformAdministration()
+    public async Task TenantAccessDoesNotConferPlatformAdministration()
     {
         var seed = await SeedUserAsync();
         var tenant = await AddTenantAsync(seed.UserId, true);
         await using var factory = new AuthApiFactory(fixture.ConnectionString);
         using var browser = factory.CreateBrowser();
         await AuthenticateAsync(browser, seed);
-        using var administration = await browser.GetAsync($"/api/test/tenants/{tenant.Id.Value}/administrator");
-        Assert.Equal(HttpStatusCode.OK, administration.StatusCode);
-        using var operation = await browser.GetAsync($"/api/test/tenants/{tenant.Id.Value}/operator");
-        Assert.Equal(HttpStatusCode.OK, operation.StatusCode);
+        using var access = await browser.GetAsync($"/api/test/tenants/{tenant.Id.Value}/access");
+        Assert.Equal(HttpStatusCode.OK, access.StatusCode);
         using var read = await browser.GetAsync($"/api/tenants/{tenant.Id.Value}/context");
         Assert.Equal(HttpStatusCode.OK, read.StatusCode);
         using var platform = await browser.GetAsync("/api/test/platform");

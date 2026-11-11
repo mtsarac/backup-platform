@@ -2,15 +2,14 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/features/artifact-encryption/api'
 import { keyId, makeTenantEncryption } from '@/features/artifact-encryption/test-fixtures'
-import type { MembershipRole } from '@/features/platform/types'
 import { renderPlatform } from '@/features/platform/test-utils'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { EncryptionPage } from './encryption-page'
 
 vi.mock('@/features/artifact-encryption/api')
-function mount(role: MembershipRole = 'Owner') {
+function mount(canAdmin = true) {
   const tenantId = 'tenant-a'
-  return renderPlatform(<TenantContext.Provider value={{ tenantId, tenant: { tenantId, name: 'Acme', role }, canAdmin: role === 'Owner' || role === 'Admin', canOperate: role !== 'Viewer', switchTenant: vi.fn() }}><EncryptionPage /></TenantContext.Provider>, { path: '/tenants/tenant-a/encryption' })
+  return renderPlatform(<TenantContext.Provider value={{ tenantId, tenant: { tenantId, name: 'Acme' }, canAdmin, canOperate: canAdmin, switchTenant: vi.fn() }}><EncryptionPage /></TenantContext.Provider>, { path: '/tenants/tenant-a/encryption' })
 }
 beforeEach(() => {
   vi.resetAllMocks()
@@ -18,15 +17,15 @@ beforeEach(() => {
 })
 
 describe('tenant encryption page', () => {
-  it.each(['Operator', 'Viewer'] as const)('makes no request for %s', (role) => {
-    mount(role)
+  it('makes no request when access is denied', () => {
+    mount(false)
     expect(screen.getByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(api.getTenantEncryption).not.toHaveBeenCalled()
   })
 
-  it.each(['Owner', 'Admin'] as const)('shows protection with copyable collapsed key details for %s', async (role) => {
-    mount(role)
+  it('shows protection with copyable collapsed key details', async () => {
+    mount()
     expect(await screen.findByText('Kurtarma anahtarınız eklenmemiş')).toBeInTheDocument()
     expect(screen.getByText('Şifreli yedekleriniz korunuyor')).toBeInTheDocument()
     const details = screen.getByText(keyId).closest('details')!

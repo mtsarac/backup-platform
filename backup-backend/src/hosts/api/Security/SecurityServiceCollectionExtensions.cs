@@ -487,11 +487,7 @@ public static class SecurityServiceCollectionExtensions
             var browserPolicy = new AuthorizationPolicyBuilder(BrowserAuthentication.Scheme).RequireAuthenticatedUser().Build();
             options.DefaultPolicy = browserPolicy;
             options.FallbackPolicy = browserPolicy;
-            options.AddPolicy(AuthorizationPolicies.TenantAdministrator, policy =>
-                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantAccessRequirement()));
-            options.AddPolicy(AuthorizationPolicies.TenantOperator, policy =>
-                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantAccessRequirement()));
-            options.AddPolicy(AuthorizationPolicies.TenantViewer, policy =>
+            options.AddPolicy(AuthorizationPolicies.TenantAccess, policy =>
                 policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantAccessRequirement()));
             options.AddPolicy(AuthorizationPolicies.PlatformAdmin, policy =>
                 policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new PlatformAdminRequirement()));

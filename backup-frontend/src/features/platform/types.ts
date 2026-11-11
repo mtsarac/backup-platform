@@ -1,7 +1,5 @@
 import type { AgentCapability } from '@/features/agents/types'
 
-export type MembershipRole = 'Owner' | 'Admin' | 'Operator' | 'Viewer'
-export const membershipRoles: readonly MembershipRole[] = ['Owner', 'Admin', 'Operator', 'Viewer']
 
 export interface PageParams {
   page?: number
@@ -59,7 +57,6 @@ export interface PlatformMembership {
   userId: string
   displayName: string
   loginIdentifier: string | null
-  role: MembershipRole
 }
 
 export interface PlatformUser {

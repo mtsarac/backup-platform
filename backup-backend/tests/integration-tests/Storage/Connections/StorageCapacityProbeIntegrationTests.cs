@@ -317,6 +317,28 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         // Tenant B attempts to get Tenant A's capacity -> 404 NotFound
         using var getResponse = await tenantB.Admin.GetAsync($"/api/v1/storage/connections/{connectionAId}/capacity");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+
+        var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
+        using var platformProbe = await platform.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionAId}/probe");
+        Assert.Contains(platformProbe.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Accepted });
+        using var platformCapacity = await platform.GetAsync($"/api/v1/storage/connections/{connectionAId}/capacity");
+        Assert.Equal(HttpStatusCode.OK, platformCapacity.StatusCode);
+
+        var memberAccount = await world.SeedUserAsync();
+        await world.GrantAsync(tenantA.Tenant, memberAccount);
+        var member = await world.SignInAsync(memberAccount);
+        using var memberCapacity = await member.GetAsync($"/api/v1/storage/connections/{connectionAId}/capacity");
+        Assert.Equal(HttpStatusCode.OK, memberCapacity.StatusCode);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            var membership = await context.TenantMemberships.SingleAsync(row => row.TenantId == tenantA.Tenant.Id && row.UserId == memberAccount.UserId);
+            context.TenantMemberships.Remove(membership);
+            await context.SaveChangesAsync();
+        }
+        using var revokedProbe = await member.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionAId}/probe");
+        using var revokedCapacity = await member.GetAsync($"/api/v1/storage/connections/{connectionAId}/capacity");
+        Assert.Equal(HttpStatusCode.NotFound, revokedProbe.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, revokedCapacity.StatusCode);
     }
 
     [Fact]

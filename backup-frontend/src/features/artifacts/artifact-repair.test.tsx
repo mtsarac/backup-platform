@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@/features/tenancy/use-tenant', () => ({
   useTenant: () => ({ tenantId: 'tenant-1', canAdmin: true, canOperate: state.canOperate }),
 }))
+vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: 'UserAdmin' } }) }))
 
 vi.mock('@/features/artifacts/hooks', () => ({
   useArtifact: () => ({ data: state.artifact, isPending: false, error: null, refetch: vi.fn() }),

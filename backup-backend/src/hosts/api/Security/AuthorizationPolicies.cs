@@ -7,9 +7,7 @@ namespace BackupPlatform.Api.Security;
 
 public static class AuthorizationPolicies
 {
-    public const string TenantAdministrator = "TenantAdministrator";
-    public const string TenantOperator = "TenantOperator";
-    public const string TenantViewer = "TenantViewer";
+    public const string TenantAccess = "TenantAccess";
     public const string PlatformAdmin = "PlatformAdmin";
     public const string ArtifactContentAccess = "ArtifactContentAccess";
     /// <summary>Agent-scheme only; never satisfied by a browser session.</summary>

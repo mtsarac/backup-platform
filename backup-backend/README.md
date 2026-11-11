@@ -37,7 +37,7 @@ The architecture tests enforce the dependency direction between these layers, so
 
 ### Advisory backup health
 
-Tenant viewers can read `GET /api/tenants/{tenantId}/backup-jobs/{jobId}/health`
+Tenant members and platform administrators can read `GET /api/tenants/{tenantId}/backup-jobs/{jobId}/health`
 and `GET /api/tenants/{tenantId}/observability/health-summary`. The versioned
 equivalents are `GET /api/v1/backups/jobs/{id}/health` and
 `GET /api/v1/observability/health-summary?tenantId={tenantId}`; membership (or
@@ -136,7 +136,7 @@ connection's newest snapshot and its newest measured snapshot are always kept.
 
 ### Scheduled upload bandwidth
 
-Tenant administrators manage weekly profiles through
+Tenant members and platform administrators manage weekly profiles through
 `/api/tenants/{tenantId}/bandwidth-profiles` and assign them using the upload-bandwidth
 `tenant/profile`, `agents/{agentId}/profile`, or `jobs/{jobId}/profile` routes.
 The most specific assignment wins: job, then agent, then tenant. A static ceiling
@@ -442,7 +442,7 @@ UnknownKey and Unsealed records. Per-record signatures detect changed payloads,
 not deletion of whole records; export records and public keys to independently
 controlled storage for deletion-resistant audit retention.
 
-Tenant viewers can query `/api/tenants/{tenantId}/reports/backups` with optional
+Tenant members and platform administrators can query `/api/tenants/{tenantId}/reports/backups` with optional
 `from`/`to` timestamps. The default interval is the last 30 days; the maximum is
 366 days. Results include succeeded, failed and cancelled totals plus daily and
 per-job outcomes, restricted to that tenant.

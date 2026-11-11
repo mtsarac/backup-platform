@@ -17,16 +17,16 @@ public static class BackupArtifactEndpoints
     public static IEndpointRouteBuilder MapBackupArtifactEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
-        tenant.MapGet("/backup-artifacts", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/backup-artifacts/{artifactId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapDelete("/backup-artifacts/{artifactId:guid}", DeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/backup-artifacts/{artifactId:guid}/cancel-delete", CancelDeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/backup-artifacts", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-artifacts/{artifactId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapDelete("/backup-artifacts/{artifactId:guid}", DeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/cancel-delete", CancelDeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         if (endpoints.IsFeatureEnabled(Features.ReplicaRepair))
         {
-            tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs", StartRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-            tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}", GetRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-            tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}/cancel", CancelRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-            tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs", ListRepairsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+            tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs", StartRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+            tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}", GetRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+            tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}/cancel", CancelRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+            tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs", ListRepairsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         }
         return endpoints;
     }

@@ -6,27 +6,23 @@ import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { errorMessage, platformOnlyMessage } from '@/lib/api/failure-messages'
-import { useAddMembership, useChangeMembershipRole, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
+import { useAddMembership, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
 import { bareListClass } from './list-empty'
 import { SearchForm } from './search-form'
-import { membershipRoles, type MembershipRole, type PlatformMembership } from './types'
+import type { PlatformMembership } from './types'
 import { LIST_PAGE_SIZE, useListParams } from './use-list-params'
 import { QueryState } from '@/components/data/query-state'
 import { Select } from '@/components/ui/text-input'
 
-function isRole(value: string): value is MembershipRole {
-  return membershipRoles.some((role) => role === value)
-}
 
 function AddMemberForm({ tenantId }: { tenantId: string }) {
   useLanguage()
   const [userSearch, setUserSearch] = useState('')
   const [userId, setUserId] = useState('')
-  const [role, setRole] = useState<MembershipRole>('Viewer')
   const [added, setAdded] = useState('')
   const users = usePlatformUsers({ search: userSearch, page: 1, pageSize: 20 })
   const add = useAddMembership(tenantId)
@@ -34,9 +30,9 @@ function AddMemberForm({ tenantId }: { tenantId: string }) {
     event.preventDefault()
     setAdded('')
     const chosen = users.data?.items.find((user) => user.userId === userId)
-    add.mutate({ userId, role }, { onSuccess: () => { setUserId(''); setAdded(chosen?.displayName ?? '') } })
+    add.mutate({ userId }, { onSuccess: () => { setUserId(''); setAdded(chosen?.displayName ?? '') } })
   }
-  return <Section title={tx("Üye ekle")} description={tx("Var olan bir kullanıcıyı bu tenant'a bir rolle ekleyin. Kullanıcı hesabı burada oluşturulmaz.")}>
+  return <Section title={tx("Üye ekle")} description={tx("Var olan bir kullanıcıyı bu tenant'a ekleyin. Kullanıcı hesabı burada oluşturulmaz.")}>
     <div className="space-y-4">
       <div className="flex max-w-xl"><SearchForm label={tx("Kullanıcı ara")} value={userSearch} onSearch={(value) => { setUserSearch(value); setUserId('') }} placeholder={tx("Ad veya kullanıcı adı")} /></div>
       <form onSubmit={submit} className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_10rem_auto]">
@@ -44,7 +40,6 @@ function AddMemberForm({ tenantId }: { tenantId: string }) {
           <option value="">{users.isPending ? tx('Kullanıcılar yükleniyor…') : users.error ? tx('Kullanıcılar alınamadı') : tx('Kullanıcı seçin')}</option>
           {users.data?.items.map((user) => <option key={user.userId} value={user.userId}>{user.displayName}{user.loginIdentifier ? ` (${user.loginIdentifier})` : ''}{user.isPlatformAdmin ? tx(' · PlatformAdmin') : ''}</option>)}
         </Select>}</Field>
-        <Field label={tx("Rol")}>{(control) => <Select {...control} value={role} onChange={(event) => { if (isRole(event.target.value)) setRole(event.target.value) }}>{membershipRoles.map((item) => <option key={item} value={item}>{tx(item)}</option>)}</Select>}</Field>
         <Button type="submit" disabled={!userId || add.isPending}>{add.isPending ? tx('Ekleniyor…') : tx('Üye ekle')}</Button>
       </form>
       {users.error && <p role="alert" className="text-sm text-error">{errorMessage(users.error)}</p>}
@@ -59,20 +54,17 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
   useLanguage()
   const { page, update } = useListParams('memberPage')
   const query = usePlatformMemberships(tenantId, { page, pageSize: LIST_PAGE_SIZE })
-  const changeRole = useChangeMembershipRole(tenantId)
   const remove = useRemoveMembership(tenantId)
   const [selected, setSelected] = useState<PlatformMembership | null>(null)
   const data = query.data
   const columns: Column<PlatformMembership>[] = [
     { key: 'name', header: tx('Ad'), wrap: true, render: (member) => <span className="font-medium">{member.displayName}</span> },
     { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (member) => member.loginIdentifier ?? '—' },
-    { key: 'role', header: tx('Rol'), render: (member) => <Select aria-label={tx("{0} rolü", { "0": member.displayName })} value={member.role} disabled={changeRole.isPending} onChange={(event) => { if (isRole(event.target.value)) changeRole.mutate({ userId: member.userId, role: event.target.value }) }}>{membershipRoles.map((role) => <option key={role} value={role}>{tx(role)}</option>)}</Select> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={tx("{0} üyeliğini kaldır", { "0": member.displayName })} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
   ]
   return <div className="space-y-6">
     <AddMemberForm tenantId={tenantId} />
-    <Section title={tx("Üyelikler")} description={tx("Rol değişikliği hemen uygulanır; üyeliği kaldırmak kullanıcı hesabını silmez.")} flush className="overflow-hidden">
-      {changeRole.error && <div className="p-4"><ErrorNotice error={changeRole.error} /></div>}
+    <Section title={tx("Üyelikler")} description={tx("Üyeliği kaldırmak kullanıcı hesabını silmez.")} flush className="overflow-hidden">
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (data.totalCount === 0
           ? <EmptyState icon={Users} message={tx("Bu tenant'ın henüz üyesi yok; yukarıdan bir kullanıcı ekleyin.")} />

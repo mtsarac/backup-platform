@@ -18,8 +18,8 @@ vi.mock('@/features/artifact-encryption/api')
 vi.mock('@/features/platform/storage/api')
 
 const tenant: PlatformTenantDetail = { tenantId: 'tenant-a', name: 'Acme A.Ş.', memberCount: 2, enabledBackupJobs: 5, agents: { total: 4, online: 2, offline: 1, unknown: 0, disabled: 1, revoked: 0 }, enrollment: { enabled: true, changedAt: '2026-10-05T09:00:00Z' } }
-const ayse: PlatformMembership = { userId: 'user-1', displayName: 'Ayşe Yılmaz', loginIdentifier: 'ayse', role: 'Owner' }
-const can: PlatformMembership = { userId: 'user-2', displayName: 'Can Demir', loginIdentifier: null, role: 'Viewer' }
+const ayse: PlatformMembership = { userId: 'user-1', displayName: 'Ayşe Yılmaz', loginIdentifier: 'ayse' }
+const can: PlatformMembership = { userId: 'user-2', displayName: 'Can Demir', loginIdentifier: null }
 const users: PlatformUser[] = [
   { userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz', isPlatformAdmin: false, membershipCount: 0 },
   { userId: 'user-4', displayName: 'Root', loginIdentifier: 'root', isPlatformAdmin: true, membershipCount: 0 },
@@ -159,7 +159,6 @@ describe('platform tenant detail', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
     expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
     expect(screen.getByText('Can Demir')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Ayşe Yılmaz rolü' })).toHaveValue('Owner')
   })
 
   it('renames the tenant', async () => {
@@ -188,7 +187,7 @@ describe('platform tenant detail', () => {
   })
 
   it('adds a member chosen from the searchable user list', async () => {
-    vi.mocked(api.addMembership).mockResolvedValue({ userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz', role: 'Operator' })
+    vi.mocked(api.addMembership).mockResolvedValue({ userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz' })
     mount('people')
     await screen.findByText('Ayşe Yılmaz')
     await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'den')
@@ -196,11 +195,10 @@ describe('platform tenant detail', () => {
     await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ search: 'den', page: 1, pageSize: 20 }, expect.any(AbortSignal)))
     expect(screen.getByRole('option', { name: /Root \(root\) · (?:PlatformAdmin|Platform Yöneticisi)/ })).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kullanıcı' }), 'user-3')
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Rol' }), 'Operator')
-    vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, can, { userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz', role: 'Operator' }]))
+    vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, can, { userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz' }]))
     await userEvent.click(screen.getByRole('button', { name: 'Üye ekle' }))
-    expect(api.addMembership).toHaveBeenCalledWith('tenant-a', 'user-3', 'Operator')
-    expect(await screen.findByRole('combobox', { name: 'Deniz Kaya rolü' })).toHaveValue('Operator')
+    expect(api.addMembership).toHaveBeenCalledWith('tenant-a', 'user-3')
+    expect(await screen.findByText('Deniz Kaya')).toBeInTheDocument()
   })
 
   it('reports an existing member (409) and a missing user (404) with safe messages', async () => {
@@ -214,16 +212,6 @@ describe('platform tenant detail', () => {
     expect(await screen.findByText('Kullanıcı bulunamadı.')).toBeInTheDocument()
   })
 
-  it('changes a member role', async () => {
-    vi.mocked(api.changeMembershipRole).mockResolvedValue({ ...can, role: 'Admin' })
-    mount('people')
-    await screen.findByText('Can Demir')
-    vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, { ...can, role: 'Admin' }]))
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Can Demir rolü' }), 'Admin')
-    expect(api.changeMembershipRole).toHaveBeenCalledWith('tenant-a', 'user-2', 'Admin')
-    await waitFor(() => expect(api.getMemberships).toHaveBeenCalledTimes(2))
-    expect(screen.getByRole('combobox', { name: 'Can Demir rolü' })).toHaveValue('Admin')
-  })
 
   it('removes a member only after confirmation', async () => {
     vi.mocked(api.removeMembership).mockResolvedValue(undefined)

@@ -1,11 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  addMembership, changeMembershipRole, createTenant, createUser, getAudit, getMemberships, getPlatformAgent,
+  addMembership, createTenant, createUser, getAudit, getMemberships, getPlatformAgent,
   getPlatformAgents, getSummary, getTenant, getTenants, getUsers, removeMembership, renameTenant, setTenantEnrollment,
 } from './api'
 import type { PlanFilters } from './plans/types'
 import type { StorageUsageFilters } from '@/features/storage/types'
-import type { AuditFilters, CreateUserInput, MembershipRole, PageParams, PlatformAgentFilters, SearchParams } from './types'
+import type { AuditFilters, CreateUserInput, PageParams, PlatformAgentFilters, SearchParams } from './types'
 
 export const platformKeys = {
   all: ['platform'] as const,
@@ -112,18 +112,11 @@ function invalidateMembershipViews(client: ReturnType<typeof useQueryClient>) {
 export function useAddMembership(tenantId: string) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (input: { userId: string; role: MembershipRole }) => addMembership(tenantId, input.userId, input.role),
+    mutationFn: (input: { userId: string }) => addMembership(tenantId, input.userId),
     onSuccess: () => invalidateMembershipViews(client),
   })
 }
 
-export function useChangeMembershipRole(tenantId: string) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { userId: string; role: MembershipRole }) => changeMembershipRole(tenantId, input.userId, input.role),
-    onSuccess: () => invalidateMembershipViews(client),
-  })
-}
 
 export function useRemoveMembership(tenantId: string) {
   const client = useQueryClient()

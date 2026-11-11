@@ -119,6 +119,67 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
         }
     }
 
+    [Fact]
+    public async Task EveryApiEndpointHasItsRequiredAuthorizationPolicy()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var routes = Routes(world.Factory.Services)
+            .Where(route => !route.Pattern.StartsWith("/api/test/", StringComparison.Ordinal)).ToArray();
+        Assert.NotEmpty(routes);
+
+        var anonymous = new HashSet<(string Method, string Pattern)>
+        {
+            ("GET", "/api/auth/antiforgery"), ("POST", "/api/auth/login"),
+            ("POST", "/api/agent/enroll"), ("GET", "/api/features"),
+            ("GET", "/api/agent-dist/install.ps1"), ("HEAD", "/api/agent-dist/install.ps1"),
+            ("GET", "/api/agent-dist/install.sh"), ("HEAD", "/api/agent-dist/install.sh"),
+            ("GET", "/api/agent-dist/packages/{platform}"), ("HEAD", "/api/agent-dist/packages/{platform}"),
+            ("GET", "/api/agent-dist/status"),
+            ("GET", "/api/notifications/recipient/{route}"), ("POST", "/api/notifications/recipient/{route}"),
+            ("GET", "/api/tenants/{tenantId:guid}/storage-connections/google-drive/callback"),
+            ("GET", "/api/platform/google-drive/oauth/callback")
+        };
+        // These browser routes resolve the tenant inside their handlers, or operate on the current session.
+        var authenticated = new HashSet<(string Method, string Pattern)>
+        {
+            ("POST", "/api/auth/logout"), ("GET", "/api/auth/sessions"),
+            ("DELETE", "/api/auth/sessions/{id:guid}"), ("DELETE", "/api/auth/sessions"),
+            ("POST", "/api/auth/second-factor/totp"), ("POST", "/api/auth/second-factor/recovery-code"),
+            ("GET", "/api/auth/security"), ("POST", "/api/auth/security/totp/setup"),
+            ("POST", "/api/auth/security/totp/enroll"), ("POST", "/api/auth/security/totp/remove"),
+            ("POST", "/api/auth/security/recovery-codes/regenerate"),
+            ("GET", "/api/me"), ("GET", "/api/me/tenants"),
+            ("POST", "/api/backups/runs/{runId:guid}/pause"), ("POST", "/api/backups/runs/{runId:guid}/resume"),
+            ("GET", "/api/v1/backups/jobs/{id:guid}/health"), ("GET", "/api/v1/observability/health-summary"),
+            ("GET", "/api/v1/storage/connections/{id:guid}/capacity"), ("POST", "/api/v1/storage/connections/{id:guid}/probe")
+        };
+        var artifactContent = new HashSet<(string Method, string Pattern)>
+        {
+            ("GET", "/api/tenants/{tenantId:guid}/backup-artifacts/{artifactId:guid}/download-availability"),
+            ("POST", "/api/tenants/{tenantId:guid}/backup-artifacts/{artifactId:guid}/downloads"),
+            ("GET", "/api/tenants/{tenantId:guid}/backup-artifacts/{artifactId:guid}/downloads/{sessionId:guid}"),
+            ("GET", "/api/tenants/{tenantId:guid}/backup-artifacts/{artifactId:guid}/downloads/{sessionId:guid}/content"),
+            ("POST", "/api/tenants/{tenantId:guid}/backup-artifacts/{artifactId:guid}/downloads/{sessionId:guid}/content")
+        };
+
+        foreach (var route in routes)
+        {
+            var key = (route.Method, route.Pattern);
+            var isAnonymous = AnonymousAllowed(route);
+            Assert.True(isAnonymous == anonymous.Contains(key), $"Unexpected anonymous metadata: {key}");
+            if (isAnonymous) continue;
+
+            var authorization = route.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>();
+            var expected = authenticated.Contains(key) ? null
+                : artifactContent.Contains(key) ? AuthorizationPolicies.ArtifactContentAccess
+                : route.Pattern.StartsWith("/api/platform/", StringComparison.Ordinal) ? AuthorizationPolicies.PlatformAdmin
+                : route.Pattern.StartsWith("/api/tenants/", StringComparison.Ordinal) ? AuthorizationPolicies.TenantAccess
+                : route.Pattern.StartsWith("/api/agent/", StringComparison.Ordinal) ? AuthorizationPolicies.Agent
+                : throw new InvalidOperationException($"Unclassified API endpoint: {key}");
+            Assert.True(authorization.Any(item => item.Policy == expected), $"Missing {expected ?? "authenticated"} policy: {key}");
+        }
+    }
+
     [Theory]
     [InlineData("a\u0000b")]
     [InlineData("\u0000")]

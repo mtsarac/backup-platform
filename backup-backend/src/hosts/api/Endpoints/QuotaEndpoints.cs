@@ -49,7 +49,7 @@ public static class QuotaEndpoints
         platform.MapGet("/storage-usage", ListStorageUsageAsync);
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
-        tenant.MapGet("/storage-quota", GetTenantQuotaAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapGet("/storage-quota", GetTenantQuotaAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         return endpoints;
     }
 

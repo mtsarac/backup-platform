@@ -46,16 +46,16 @@ public static class AgentAdministrationEndpoints
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}")
             .WithMetadata(new TenantScopedEndpoint());
-        tenant.MapGet("/agent-enrollment", GetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPut("/agent-enrollment", SetTenantPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapGet("/agent-enrollment-tokens", ListTokensAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapGet("/agent-enrollment-tokens/{tokenId:guid}", GetTokenStatusAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapDelete("/agent-enrollment-tokens/{tokenId:guid}", RevokeTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/agents/connectivity-summary", GetConnectivitySummaryAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/agents/{agentId:guid}", GetAgentAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPost("/agents/{agentId:guid}/revoke", RevokeAgentAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/agent-enrollment", GetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/agent-enrollment", SetTenantPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/agent-enrollment-tokens", ListTokensAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/agent-enrollment-tokens/{tokenId:guid}", GetTokenStatusAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapDelete("/agent-enrollment-tokens/{tokenId:guid}", RevokeTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/agents/connectivity-summary", GetConnectivitySummaryAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/agents/{agentId:guid}", GetAgentAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/agents/{agentId:guid}/revoke", RevokeAgentAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         return endpoints;
     }
 

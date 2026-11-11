@@ -9,8 +9,8 @@ import { formatDateTime } from '@/lib/format'
 
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({
   login: vi.fn(), logout: vi.fn(), isAuthenticated: false, sessionExpired: false,
-  user: { displayName: 'Customer Agent Tenant', isPlatformAdmin: false },
-  tenants: [{ tenantId: 'one', name: 'Customer Agent Tenant', role: 'Owner' }, { tenantId: 'two', name: 'English Customer Name', role: 'Viewer' }],
+  user: { displayName: 'Customer Agent Tenant', role: 'UserAdmin', isPlatformAdmin: false },
+  tenants: [{ tenantId: 'one', name: 'Customer Agent Tenant' }, { tenantId: 'two', name: 'English Customer Name' }],
 }) }))
 
 describe('Language consumers', () => {
@@ -30,14 +30,11 @@ describe('Language consumers', () => {
     expect(formatDateTime(date)).toBe(new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date)))
   })
 
-  it('localizes workspace roles while preserving customer names and restores the saved preference', () => {
+  it('preserves customer names and restores the saved preference', () => {
     localStorage.setItem('bp_language', 'en')
     render(<MemoryRouter><TenantSelectPage /></MemoryRouter>)
     expect(screen.getByText('Customer Agent Tenant')).toBeInTheDocument()
-    expect(screen.getByText('Owner')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Change language: TR / EN' }))
-    expect(screen.getByText('Sahip')).toBeInTheDocument()
-    expect(screen.getByText('Görüntüleyici')).toBeInTheDocument()
     expect(screen.getByText('Customer Agent Tenant')).toBeInTheDocument()
     expect(screen.getByText('English Customer Name')).toBeInTheDocument()
     expect(document.documentElement.lang).toBe('tr')

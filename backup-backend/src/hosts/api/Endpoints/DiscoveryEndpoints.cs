@@ -26,13 +26,13 @@ public static class DiscoveryEndpoints
         agent.MapPut("{scanId:guid}", ReportAsync).WithMetadata(new RequestSizeLimitAttribute(DiscoveryProtocol.MaximumReportBytes));
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}/discovery").WithMetadata(new TenantScopedEndpoint());
-        tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/instances", ListInstancesAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/instances/{instanceId:guid}", GetInstanceAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPost("/agents/{agentId:guid}/rescan", RescanAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/instances/{instanceId:guid}/verify", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPut("/instances/{instanceId:guid}/credential", BindCredentialAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPut("/agents/{agentId:guid}/settings", ChangeSettingsAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/instances", ListInstancesAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/instances/{instanceId:guid}", GetInstanceAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/agents/{agentId:guid}/rescan", RescanAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/instances/{instanceId:guid}/verify", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/instances/{instanceId:guid}/credential", BindCredentialAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/agents/{agentId:guid}/settings", ChangeSettingsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         return endpoints;
     }
 

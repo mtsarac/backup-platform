@@ -45,4 +45,61 @@ public sealed class CentralAuthorizationBoundaryTests(DependencyGraphFixture fix
                 $"File {fileName} queries TenantMemberships directly instead of using ICentralAuthorizationService.");
         }
     }
+
+    [Fact]
+    public void RemovedTenantRolePoliciesDoNotReturn()
+    {
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../src"));
+        Assert.True(Directory.Exists(root), $"Source directory not found: {root}");
+        var removed = new[] { "AuthorizationPolicies.TenantAdministrator", "AuthorizationPolicies.TenantOperator",
+            "AuthorizationPolicies.TenantViewer", "TenantRoleRequirement", "enum TenantRole" };
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}", StringComparison.Ordinal)) continue;
+            var content = File.ReadAllText(file);
+            foreach (var identifier in removed)
+                Assert.DoesNotContain(identifier, content, StringComparison.Ordinal);
+        }
+    }
+    [Fact]
+    public void RemovedRoleNamesDoNotAppearInProductionSource()
+    {
+        var backendRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../src"));
+        var frontendRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../../backup-frontend/src"));
+
+        var legacyRolePatterns = new[]
+        {
+            "TenantRole", "MembershipRole", "membershipRole",
+            "AuthorizationPolicies.TenantAdministrator", "AuthorizationPolicies.TenantOperator", "AuthorizationPolicies.TenantViewer"
+        };
+
+        if (Directory.Exists(backendRoot))
+        {
+            foreach (var file in Directory.EnumerateFiles(backendRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                if (file.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}", StringComparison.Ordinal)) continue;
+                var text = File.ReadAllText(file);
+                foreach (var pattern in legacyRolePatterns)
+                {
+                    Assert.DoesNotContain(pattern, text, StringComparison.Ordinal);
+                }
+            }
+        }
+
+        if (Directory.Exists(frontendRoot))
+        {
+            foreach (var file in Directory.EnumerateFiles(frontendRoot, "*.*", SearchOption.AllDirectories))
+            {
+                var ext = Path.GetExtension(file);
+                if (ext is not (".ts" or ".tsx")) continue;
+                if (file.Contains(".test.") || file.Contains(".spec.")) continue;
+
+                var text = File.ReadAllText(file);
+                foreach (var pattern in legacyRolePatterns)
+                {
+                    Assert.DoesNotContain(pattern, text, StringComparison.Ordinal);
+                }
+            }
+        }
+    }
 }

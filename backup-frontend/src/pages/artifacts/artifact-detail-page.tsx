@@ -21,6 +21,7 @@ import type { ReplicationDestination } from '@/features/artifacts/types'
 import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus, useArtifactRepairs } from '@/features/artifacts/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { useAuth } from '@/features/auth/use-auth'
 import { type ErrorDescription, describeError, describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 import { storageProviderLabel } from '@/features/storage-connections/labels'
@@ -48,6 +49,7 @@ export function ArtifactDetailPage() {
 function ArtifactDetail({ id }: { id: string }) {
   useLanguage()
   const { tenantId, canAdmin, canOperate } = useTenant()
+  const { user } = useAuth()
   const query = useArtifact(tenantId, id)
   const artifact = query.data
   const { requestDelete, cancelDelete } = useArtifactActions(tenantId, id)
@@ -139,7 +141,7 @@ function ArtifactDetail({ id }: { id: string }) {
   }
   const canRequestDelete = Boolean(canAdmin && artifact && artifact.state !== 'Deleted' && artifact.replicas.some((replica) => replica.status === 'Available'))
   const canRestore = Boolean(canOperate && artifact && !restoreIneligibility(artifact))
-  const canDownload = Boolean(canAdmin && artifact?.state === 'Available')
+  const canDownload = Boolean(user?.role === 'UserAdmin' && canAdmin && artifact?.state === 'Available')
   return (
     <div className="space-y-6">
       <PageHeader

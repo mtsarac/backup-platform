@@ -14,7 +14,7 @@ import { paged, platformAdmin, renderPlatform, tenantOwner } from './test-utils'
 
 vi.mock('./api')
 vi.mock('./storage/api')
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Acme', role: 'Owner' } }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Acme' } }) }))
 
 const tree = <Route path="/platform" element={<PlatformAdminRoute />}>
   <Route element={<ThemeProvider><PlatformShell /></ThemeProvider>}><Route index element={<PlatformDashboardPage />} /></Route>
@@ -40,7 +40,7 @@ describe('Platform Administration entry points', () => {
   })
 
   it('tenant picker links PlatformAdmin users and hides it for others', () => {
-    const tenants = [{ tenantId: 't1', name: 'Bir', role: 'Owner' as const }, { tenantId: 't2', name: 'İki', role: 'Viewer' as const }]
+    const tenants = [{ tenantId: 't1', name: 'Bir' }, { tenantId: 't2', name: 'İki' }]
     const { unmount } = renderPlatform(<TenantSelectPage />, { user: platformAdmin, tenants })
     expect(screen.getByRole('link', { name: /Platform Administration|Platform Yönetimi/ })).toHaveAttribute('href', '/platform')
     unmount()

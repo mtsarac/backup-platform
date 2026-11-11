@@ -15,25 +15,25 @@ public static class BackupEndpoints
     public static IEndpointRouteBuilder MapBackupEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
-        tenant.MapPost("/backup-jobs", CreateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapGet("/backup-jobs", ListJobsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPut("/backup-jobs/{jobId:guid}", UpdateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapGet("/dashboard", GetDashboardAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/backup-jobs/{jobId:guid}", GetJobAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPut("/backup-jobs/{jobId:guid}/schedule", ChangeScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapDelete("/backup-jobs/{jobId:guid}/schedule", RemoveScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapGet("/backup-jobs/{jobId:guid}/schedule/occurrences", ListOccurrencesAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPut("/backup-jobs/{jobId:guid}/retention", ChangeRetentionAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/backup-jobs/{jobId:guid}/enable", EnableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/backup-runs/{runId:guid}", GetRunAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPost("/backup-runs/{runId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-runs/{runId:guid}/retry", RetryAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-runs/{runId:guid}/pause", PauseAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-runs/{runId:guid}/resume", ResumeAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-jobs", CreateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-jobs", ListJobsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/backup-jobs/{jobId:guid}", UpdateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/dashboard", GetDashboardAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-jobs/{jobId:guid}", GetJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/backup-jobs/{jobId:guid}/schedule", ChangeScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapDelete("/backup-jobs/{jobId:guid}/schedule", RemoveScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-jobs/{jobId:guid}/schedule/occurrences", ListOccurrencesAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/backup-jobs/{jobId:guid}/retention", ChangeRetentionAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-jobs/{jobId:guid}/enable", EnableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-runs/{runId:guid}", GetRunAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-runs/{runId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-runs/{runId:guid}/retry", RetryAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-runs/{runId:guid}/pause", PauseAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-runs/{runId:guid}/resume", ResumeAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         endpoints.MapPost("/api/backups/runs/{runId:guid}/pause", PauseBrowserAsync).RequireAuthorization();
         endpoints.MapPost("/api/backups/runs/{runId:guid}/resume", ResumeBrowserAsync).RequireAuthorization();
         return endpoints;
@@ -133,7 +133,7 @@ public static class BackupEndpoints
     }
 
     private static async Task<bool> IsAdministratorAsync(IAuthorizationService authorization, HttpContext context) =>
-        (await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAdministrator)).Succeeded;
+        (await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAccess)).Succeeded;
 
     private static IResult RetentionForbidden() => Results.Json(new { error = "forbidden", field = "retention", code = "administrator_required" }, statusCode: StatusCodes.Status403Forbidden);
 
@@ -270,14 +270,16 @@ public static class BackupEndpoints
         };
 
     private static Task<IResult> PauseBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
-        TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, user, false, cancellationToken);
+        HttpContext context, IAuthorizationService authorization, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
+        SetBrowserPauseAsync(runId, store, resolution, context, authorization, time, user, false, cancellationToken);
     private static Task<IResult> ResumeBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
-        TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, user, true, cancellationToken);
+        HttpContext context, IAuthorizationService authorization, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
+        SetBrowserPauseAsync(runId, store, resolution, context, authorization, time, user, true, cancellationToken);
     private static async Task<IResult> SetBrowserPauseAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
-        TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken)
+        HttpContext context, IAuthorizationService authorization, TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken)
     {
         var tenantId = await store.FindRunTenantAsync(runId, cancellationToken);
-        if (tenantId is null || await resolution.ResolveAsync(tenantId, cancellationToken) is null)
+        if (tenantId is null || !await BackupHealthEndpoints.AuthorizeResolvedTenantAsync(tenantId, resolution, context, authorization, cancellationToken))
             return Results.NotFound();
         return await store.SetPauseAsync(tenantId, runId, resume, time.GetUtcNow(), cancellationToken, user.UserId) switch
         {

@@ -13,7 +13,7 @@ public static class UserEndpoints
         endpoints.MapGet("/api/me/tenants", GetTenantsAsync).RequireAuthorization();
         endpoints.MapGet("/api/tenants/{tenantId}/context", GetTenantContext)
             .WithMetadata(new TenantScopedEndpoint())
-            .RequireAuthorization(AuthorizationPolicies.TenantViewer);
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
         return endpoints;
     }
 
@@ -37,9 +37,7 @@ public static class UserEndpoints
         return Results.Ok(memberships.Select(membership => new
         {
             tenantId = membership.TenantId.Value,
-            name = membership.Name,
-            role = "Administrator",
-            membershipRole = "Administrator"
+            name = membership.Name
         }));
     }
 
@@ -49,9 +47,7 @@ public static class UserEndpoints
         return Results.Ok(new
         {
             tenantId = membership.TenantId.Value,
-            name = membership.Name,
-            role = "Administrator",
-            membershipRole = "Administrator"
+            name = membership.Name
         });
     }
 

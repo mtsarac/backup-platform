@@ -26,8 +26,8 @@ beforeEach(() => {
     if (path === '/api/auth/login') { authenticated = true; return new Response(null, { status: 204 }) }
     if (path === '/api/auth/logout') { authenticated = false; return new Response(null, { status: 204 }) }
     if (!authenticated) return json({}, 401)
-    if (path === '/api/me/tenants') return json([{ tenantId: 'tenant-a', name: 'Tenant A', role: 'Administrator', membershipRole: 'Owner' }])
-    return json({ userId: 'owner', displayName: 'Real Owner', isPlatformAdmin: false })
+    if (path === '/api/me/tenants') return json([{ tenantId: 'tenant-a', name: 'Tenant A' }])
+    return json({ userId: 'owner', displayName: 'Real Owner', role: 'UserAdmin', isPlatformAdmin: false })
   }))
 })
 afterEach(() => vi.unstubAllGlobals())

@@ -21,7 +21,6 @@ public static class AuditActions
     public const string TenantCreated = "tenant.created";
     public const string TenantRenamed = "tenant.renamed";
     public const string MembershipAdded = "membership.added";
-    public const string MembershipRoleChanged = "membership.role_changed";
     public const string MembershipRemoved = "membership.removed";
     public const string EnrollmentPolicyChanged = "agent_enrollment.policy_changed";
     public const string AgentSettingsChanged = "agent_settings.changed";
