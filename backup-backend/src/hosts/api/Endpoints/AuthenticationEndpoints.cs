@@ -78,23 +78,35 @@ public static class AuthenticationEndpoints
         return Results.Ok(new { requestToken = tokens.RequestToken, headerName = "X-CSRF-TOKEN" });
     }
 
-    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, LoginThrottle throttle)
+    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, IIdentityStore identityStore, LoginThrottle throttle)
     {
         var ip = context.Connection.RemoteIpAddress?.ToString();
-        if (await throttle.RetryAfterAsync("login", request.LoginIdentifier, ip, context.RequestAborted) is { } wait)
+        if (await throttle.RetryAfterAsync("login", null, ip, context.RequestAborted) is { } wait)
         {
             context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
             return Results.Json(new { error = "Too many failed login attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
         }
+        string? normalized = null;
+        try
+        {
+            normalized = request.LoginIdentifier?.Contains('@') == true
+                ? LoginIdentifierNormalizer.NormalizeEmail(request.LoginIdentifier)
+                : LoginIdentifierNormalizer.TryNormalize(request.LoginIdentifier, out var login) ? login : null;
+        }
+        catch (ArgumentException) { }
+        var credential = normalized is null ? null : await identityStore.FindCredentialAsync(normalized, context.RequestAborted);
+        var account = credential?.NormalizedLoginIdentifier ?? normalized;
+        if (await throttle.RetryAfterAsync("login", account, null, context.RequestAborted) is not null)
+            return Results.Json(new { error = "Invalid login identifier or password." }, statusCode: StatusCodes.Status401Unauthorized);
         var device = context.Request.Headers.UserAgent.ToString();
         if (device.Length > 512) device = device[..512];
-        var session = await authenticationService.LoginAsync(request.LoginIdentifier, request.Password, request.RememberMe, device, ip ?? "", context.RequestAborted);
+        var session = await authenticationService.LoginAsync(request.LoginIdentifier ?? "", request.Password, request.RememberMe, device, ip ?? "", context.RequestAborted);
         if (session is null)
         {
-            await throttle.FailedAsync("login", request.LoginIdentifier, ip, context.RequestAborted);
+            await throttle.FailedAsync("login", account, ip, context.RequestAborted);
             return Results.Json(new { error = "Invalid login identifier or password." }, statusCode: StatusCodes.Status401Unauthorized);
         }
-        await throttle.SucceededAsync("login", request.LoginIdentifier, ip, context.RequestAborted);
+        await throttle.SucceededAsync("login", account, ip, context.RequestAborted);
         var identity = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, session.UserId.Value.ToString("D")),

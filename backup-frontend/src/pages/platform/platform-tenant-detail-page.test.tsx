@@ -8,7 +8,7 @@ import { makeTenantEncryption } from '@/features/artifact-encryption/test-fixtur
 import * as connectionApi from '@/features/storage-connections/api'
 import { catalog, makeConnection, makeManaged, noPermissions } from '@/features/storage-connections/test-fixtures'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
-import type { PlatformAuditEntry, PlatformMembership, PlatformTenantDetail, PlatformUser } from '@/features/platform/types'
+import type { PagedResult, PlatformAuditEntry, PlatformMembership, PlatformTenantDetail, PlatformUser } from '@/features/platform/types'
 import { ApiError } from '@/lib/api/client'
 import { PlatformTenantDetailPage } from './platform-tenant-detail-page'
 
@@ -21,8 +21,8 @@ const tenant: PlatformTenantDetail = { tenantId: 'tenant-a', name: 'Acme A.Ş.',
 const ayse: PlatformMembership = { userId: 'user-1', displayName: 'Ayşe Yılmaz', loginIdentifier: 'ayse' }
 const can: PlatformMembership = { userId: 'user-2', displayName: 'Can Demir', loginIdentifier: null }
 const users: PlatformUser[] = [
-  { userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz', isPlatformAdmin: false, membershipCount: 0 },
-  { userId: 'user-4', displayName: 'Root', loginIdentifier: 'root', isPlatformAdmin: true, membershipCount: 0 },
+  { userId: 'user-3', displayName: 'Deniz Kaya', username: 'deniz', email: 'deniz@example.com', role: 'UserAdmin', membershipCount: 0 },
+  { userId: 'user-4', displayName: 'Root', username: 'root', email: 'root@example.com', role: 'PlatformAdmin', membershipCount: 0 },
 ]
 const audit: PlatformAuditEntry = { id: 'audit-1', at: '2026-10-06T08:00:00Z', actorUserId: 'admin-id', actorDisplayName: 'Platform Operatörü', actorKind: 'PlatformAdmin', action: 'membership.role_changed', tenantId: 'tenant-a', tenantName: 'Acme A.Ş.', targetType: 'Membership', targetId: 'user-1', details: { role: 'Admin', changed: true, note: null } }
 
@@ -159,6 +159,7 @@ describe('platform tenant detail', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
     expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
     expect(screen.getByText('Can Demir')).toBeInTheDocument()
+    expect(screen.getByText('ayse')).toBeInTheDocument()
   })
 
   it('renames the tenant', async () => {
@@ -193,12 +194,32 @@ describe('platform tenant detail', () => {
     await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'den')
     await userEvent.click(screen.getByRole('button', { name: 'Ara' }))
     await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ search: 'den', page: 1, pageSize: 20 }, expect.any(AbortSignal)))
-    expect(screen.getByRole('option', { name: /Root \(root\) · (?:PlatformAdmin|Platform Yöneticisi)/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Root/ })).not.toBeInTheDocument()
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kullanıcı' }), 'user-3')
     vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, can, { userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz' }]))
     await userEvent.click(screen.getByRole('button', { name: 'Üye ekle' }))
     expect(api.addMembership).toHaveBeenCalledWith('tenant-a', 'user-3')
     expect(await screen.findByText('Deniz Kaya')).toBeInTheDocument()
+  })
+
+  it('does not offer stale users while a membership search is loading', async () => {
+    const { promise, resolve } = Promise.withResolvers<PagedResult<PlatformUser>>()
+    vi.mocked(api.getUsers).mockResolvedValueOnce(paged(users)).mockReturnValueOnce(promise)
+    mount('people')
+    await screen.findByRole('option', { name: 'Deniz Kaya (deniz)' })
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'other')
+    await userEvent.click(screen.getByRole('button', { name: 'Ara' }))
+    expect(screen.getByRole('combobox', { name: 'Kullanıcı' })).toBeDisabled()
+    resolve(paged([]))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Kullanıcı' })).toBeEnabled())
+    expect(screen.queryByRole('option', { name: 'Deniz Kaya (deniz)' })).not.toBeInTheDocument()
+  })
+
+  it('reports failure to load users for membership selection', async () => {
+    vi.mocked(api.getUsers).mockRejectedValue(new ApiError(503))
+    mount('people')
+    expect(await screen.findByText('Sunucu isteği tamamlayamadı. Daha sonra tekrar deneyin.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Üye ekle' })).toBeDisabled()
   })
 
   it('reports an existing member (409) and a missing user (404) with safe messages', async () => {

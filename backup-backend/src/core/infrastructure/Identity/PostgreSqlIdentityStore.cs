@@ -13,7 +13,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         return await context.PasswordCredentials.AsNoTracking().SingleOrDefaultAsync(
-            credential => credential.NormalizedLoginIdentifier == normalizedLoginIdentifier, cancellationToken);
+            credential => credential.NormalizedLoginIdentifier == normalizedLoginIdentifier || credential.NormalizedEmail == normalizedLoginIdentifier, cancellationToken);
     }
 
     public async Task UpdatePasswordHashAsync(UserId userId, string passwordHash, CancellationToken cancellationToken)

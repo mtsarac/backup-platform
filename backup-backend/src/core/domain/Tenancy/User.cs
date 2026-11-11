@@ -25,6 +25,12 @@ public sealed class User
         DisplayName = displayName.Trim();
     }
 
+    public void ChangeRole(UserRole role)
+    {
+        ValidateRole(role);
+        Role = role;
+    }
+
     private static void ValidateRole(UserRole role)
     {
         if (!Enum.IsDefined(role))

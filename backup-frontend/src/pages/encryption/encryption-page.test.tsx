@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/features/artifact-encryption/api'
 import { keyId, makeTenantEncryption } from '@/features/artifact-encryption/test-fixtures'
+
 import { renderPlatform } from '@/features/platform/test-utils'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { EncryptionPage } from './encryption-page'

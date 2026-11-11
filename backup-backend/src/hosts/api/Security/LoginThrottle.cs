@@ -59,7 +59,16 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
         await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "Kind" = {kind} AND "Scope" = 'account' AND "Identifier" = {key}""", cancellationToken);
     }
 
-    private static string? AccountKey(string? account) => LoginIdentifierNormalizer.TryNormalize(account, out var key) ? key : null;
+    private static string? AccountKey(string? account)
+    {
+        try
+        {
+            return account?.Contains('@') == true
+                ? LoginIdentifierNormalizer.NormalizeEmail(account)
+                : LoginIdentifierNormalizer.TryNormalize(account, out var key) ? key : null;
+        }
+        catch (ArgumentException) { return null; }
+    }
 
     private static string? IpKey(string? ipAddress) => IPAddress.TryParse(ipAddress, out var ip) ? ip.MapToIPv6().ToString() : null;
 

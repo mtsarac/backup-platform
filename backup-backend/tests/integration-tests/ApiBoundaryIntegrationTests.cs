@@ -209,8 +209,9 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
         foreach (var (path, body) in new (string, object)[]
         {
             ("/api/platform/tenants", new { name = marker + Nul }),
-            ("/api/platform/users", new { loginIdentifier = marker + Nul, displayName = "Name", password = "Local-only-password-1!" }),
-            ("/api/platform/users", new { loginIdentifier = marker, displayName = marker + Nul, password = "Local-only-password-1!" }),
+            ("/api/platform/users", new { username = marker + Nul, email = $"{marker}@example.com", displayName = "Name", password = "Local-only-password-1!", role = "PlatformAdmin", tenantIds = Array.Empty<Guid>() }),
+            ("/api/platform/users", new { username = marker, email = $"{marker}@example.com", displayName = marker + Nul, password = "Local-only-password-1!", role = "PlatformAdmin", tenantIds = Array.Empty<Guid>() }),
+            ("/api/platform/users", new { username = marker, email = $"{marker}{Nul}@example.com", displayName = "Name", password = "Local-only-password-1!", role = "PlatformAdmin", tenantIds = Array.Empty<Guid>() }),
         })
         {
             using var response = await platform.SendAsync(HttpMethod.Post, path, body);

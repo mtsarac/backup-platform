@@ -72,12 +72,55 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         }
 
         using var locked = await LoginAsync(second, secondToken, seed.Identifier.ToUpperInvariant(), seed.Password);
-        Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
-        Assert.Equal(((int)LoginThrottle.Window.TotalSeconds).ToString(), Assert.Single(locked.Headers.GetValues("Retry-After")));
+        Assert.Equal(HttpStatusCode.Unauthorized, locked.StatusCode);
+        using var lockedByEmail = await LoginAsync(second, secondToken, seed.Email.ToUpperInvariant(), seed.Password);
+        Assert.Equal(HttpStatusCode.Unauthorized, lockedByEmail.StatusCode);
 
+        // The IP throttle still answers 429 once the shared host threshold is reached.
+        second.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.24");
+        for (var attempt = 0; attempt < LoginThrottle.MaxFailures; attempt++)
+        {
+            using var failed = await LoginAsync(second, secondToken, $"random-{attempt}-{Guid.NewGuid():N}", "Wrong-password!");
+            Assert.Equal(HttpStatusCode.Unauthorized, failed.StatusCode);
+        }
+        using var ipLocked = await LoginAsync(second, secondToken, $"random-{Guid.NewGuid():N}", "Wrong-password!");
+        Assert.Equal(HttpStatusCode.TooManyRequests, ipLocked.StatusCode);
+        Assert.Equal(((int)LoginThrottle.Window.TotalSeconds).ToString(), Assert.Single(ipLocked.Headers.GetValues("Retry-After")));
         clock.Advance(LoginThrottle.Window);
         using var allowed = await LoginAsync(second, secondToken, seed.Identifier, seed.Password);
         Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+    }
+
+    [Fact]
+    public async Task AlternatingUsernameAndEmailSharesThrottleAndResetsTogether()
+    {
+        var seed = await SeedUserAsync();
+        var clock = new MutableClock();
+        await using var factory = new AuthApiFactory(fixture.ConnectionString, clock);
+        using var browser = factory.CreateBrowser();
+        var token = await FetchTokenAsync(browser);
+
+        for (var attempt = 0; attempt < LoginThrottle.MaxFailures; attempt++)
+        {
+            var id = attempt % 2 == 0 ? seed.Identifier : seed.Email;
+            using var wrong = await LoginAsync(browser, token, id, "Wrong-local-password!");
+            Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+        }
+
+        using var lockedUsername = await LoginAsync(browser, token, seed.Identifier, seed.Password);
+        Assert.Equal(HttpStatusCode.Unauthorized, lockedUsername.StatusCode);
+        using var lockedEmail = await LoginAsync(browser, token, seed.Email, seed.Password);
+        Assert.Equal(HttpStatusCode.Unauthorized, lockedEmail.StatusCode);
+
+        clock.Advance(LoginThrottle.Window);
+        using var allowed = await LoginAsync(browser, token, seed.Email, seed.Password);
+        Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+
+        // Successful login resets throttle for both aliases
+        using var secondBrowser = factory.CreateBrowser();
+        var secondToken = await FetchTokenAsync(secondBrowser);
+        using var allowedAgain = await LoginAsync(secondBrowser, secondToken, seed.Identifier, seed.Password);
+        Assert.Equal(HttpStatusCode.NoContent, allowedAgain.StatusCode);
     }
 
     [Fact]
@@ -322,13 +365,14 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
     {
         var user = new User(UserId.New(), "Local test user", role);
         var identifier = $"user-{Guid.NewGuid():N}";
+        var email = $"{Guid.NewGuid():N}@example.com";
         var password = $"Local-only-{Guid.NewGuid():N}!";
         var hash = new PasswordHashService().Hash(user.Id, password);
         await using var database = fixture.CreatePlatformContext();
         database.Users.Add(user);
-        database.PasswordCredentials.Add(new PasswordCredential(user.Id, identifier, hash));
+        database.PasswordCredentials.Add(new PasswordCredential(user.Id, identifier, hash, email));
         await database.SaveChangesAsync();
-        return new SeededUser(user.Id, identifier, password, user.DisplayName);
+        return new SeededUser(user.Id, identifier, email, password, user.DisplayName);
     }
 
     private async Task<Tenant> AddTenantAsync(UserId? userId, bool member = true)
@@ -386,10 +430,11 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         return document.RootElement.Clone();
     }
 
-    private sealed class SeededUser(UserId userId, string identifier, string password, string displayName)
+    private sealed class SeededUser(UserId userId, string identifier, string email, string password, string displayName)
     {
         public UserId UserId { get; } = userId;
         public string Identifier { get; } = identifier;
+        public string Email { get; } = email;
         public string Password { get; } = password;
         public string DisplayName { get; } = displayName;
     }

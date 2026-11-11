@@ -25,6 +25,7 @@ public static class AuditActions
     public const string EnrollmentPolicyChanged = "agent_enrollment.policy_changed";
     public const string AgentSettingsChanged = "agent_settings.changed";
     public const string UserCreated = "user.created";
+    public const string UserUpdated = "user.updated";
 
     // Authentication events
     public const string UserLoginSucceeded = "auth.login_succeeded";

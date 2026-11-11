@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetAntiforgery } from '@/lib/api/client'
-import { addMembership, getAudit, getPlatformAgent, getPlatformAgents, getTenants, setTenantEnrollment } from './api'
+import { addMembership, createUser, getAudit, getPlatformAgent, getPlatformAgents, getTenants, setTenantEnrollment, updateUser } from './api'
 
 let requests: Request[] = []
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -40,5 +40,17 @@ describe('platform API paths', () => {
     await addMembership('tenant-a', 'user-1')
     expect(last().method).toBe('POST')
     expect(await last().json()).toEqual({ userId: 'user-1' })
+  })
+
+  it('sends account creation and update payloads', async () => {
+    const input = { displayName: 'Ada', username: 'ada', email: 'ada@example.com', role: 'UserAdmin' as const }
+    await createUser({ ...input, password: 'secret', tenantIds: ['t1', 't2'] })
+    expect(new URL(last().url).pathname).toBe('/api/platform/users')
+    expect(last().method).toBe('POST')
+    expect(await last().json()).toEqual({ ...input, password: 'secret', tenantIds: ['t1', 't2'] })
+    await updateUser('user/1', input)
+    expect(new URL(last().url).pathname).toBe('/api/platform/users/user%2F1')
+    expect(last().method).toBe('PUT')
+    expect(await last().json()).toEqual(input)
   })
 })

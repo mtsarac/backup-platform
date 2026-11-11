@@ -31,11 +31,16 @@ describe('Sign-in page', () => {
     vi.clearAllMocks()
   })
 
-  it('asks for a username, which is what the backend accepts, not an email address', () => {
+  it('accepts an email address as the login identifier', async () => {
+    loginMock.mockResolvedValueOnce(undefined)
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     const field = screen.getByRole('textbox', { name: 'Kullanıcı adı' })
     expect(field).toHaveAttribute('autocomplete', 'username')
-    expect(screen.queryByLabelText(/e-posta/i)).not.toBeInTheDocument()
+    expect(screen.getByText('E-posta adresinizle de giriş yapabilirsiniz.')).toBeInTheDocument()
+    await userEvent.type(field, 'alice@example.com')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    expect(loginMock).toHaveBeenCalledWith('alice@example.com', 'correct-password', false)
   })
 
   it('prompts for TOTP code when login indicates second factor is required', async () => {
