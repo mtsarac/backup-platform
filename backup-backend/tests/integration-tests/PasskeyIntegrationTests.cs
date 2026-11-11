@@ -24,7 +24,8 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
     private static async Task<(VirtualAuthenticator Authenticator, Guid CredentialId)> EnrolPasskeyAsync(
         BrowserSession browser,
         string password,
-        string name = "Primary Key")
+        string name = "Primary Key",
+        Action<string[]>? onRecoveryCodes = null)
     {
         using var optionsResponse = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register/options");
         Assert.Equal(HttpStatusCode.OK, optionsResponse.StatusCode);
@@ -44,6 +45,7 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         });
         Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
         var regJson = AgentWorld.ReadJson(registerResponse);
+        onRecoveryCodes?.Invoke(regJson.GetProperty("recoveryCodes").EnumerateArray().Select(e => e.GetString()!).ToArray());
         var credId = regJson.GetProperty("id").GetGuid();
         return (authenticator, credId);
     }
@@ -101,7 +103,7 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         });
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
         var loginBody = AgentWorld.ReadJson(loginResponse);
-        Assert.True(loginBody.GetProperty("requiresSecondFactor").GetBoolean());
+        Assert.True(loginBody.GetProperty("secondFactorRequired").GetBoolean());
 
         // Restricted session cannot reach /api/me (403 Forbidden)
         using var deniedMe = await browser.GetAsync("/api/me");
@@ -196,8 +198,11 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    [Fact]
-    public async Task ForeignOriginAssertion_IsRefused()
+    [Theory]
+    [InlineData("https://evil.com")]
+    [InlineData("http://localhost:9999")]
+    [InlineData("https://localhost")]
+    public async Task ForeignOriginAssertion_IsRefused(string origin)
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var account = await world.SeedUserAsync();
@@ -214,8 +219,8 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         var challengeId = optionsJson.GetProperty("challengeId").GetGuid();
         var challengeBase64 = optionsJson.GetProperty("options").GetProperty("challenge").GetString()!;
 
-        // Foreign origin: evil.com
-        var assertion = authenticator.CreateAssertion(challengeBase64, origin: "https://evil.com");
+        anonBrowser.Client.DefaultRequestHeaders.Add("Origin", origin);
+        var assertion = authenticator.CreateAssertion(challengeBase64, origin: origin);
         using var response = await anonBrowser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login", new
         {
             challengeId,
@@ -431,6 +436,36 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task FailedAssertions_AreThrottledPerAccountAcrossDifferentIPs()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+        var browser = await SignInWithPasswordAsync(world, account);
+        var (authenticator, _) = await EnrolPasskeyAsync(browser, account.Password);
+
+        for (var i = 1; i <= 5; i++)
+        {
+            var ipBrowser = new BrowserSession(world.Factory.CreateBrowser());
+            ipBrowser.Client.DefaultRequestHeaders.Add("X-Forwarded-For", $"198.51.100.{i}");
+            using var opt = await ipBrowser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login/options", new { loginIdentifier = account.Identifier });
+            var cid = AgentWorld.ReadJson(opt).GetProperty("challengeId").GetGuid();
+            var ch = AgentWorld.ReadJson(opt).GetProperty("options").GetProperty("challenge").GetString()!;
+            var badAssertion = authenticator.CreateAssertion(ch, origin: "https://evil.com");
+            using var fail = await ipBrowser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login", new { challengeId = cid, response = badAssertion });
+            Assert.Equal(HttpStatusCode.Unauthorized, fail.StatusCode);
+        }
+
+        var nextIpBrowser = new BrowserSession(world.Factory.CreateBrowser());
+        nextIpBrowser.Client.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.99");
+        using var optThrottled = await nextIpBrowser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login/options", new { loginIdentifier = account.Identifier });
+        var cidThrottled = AgentWorld.ReadJson(optThrottled).GetProperty("challengeId").GetGuid();
+        var chThrottled = AgentWorld.ReadJson(optThrottled).GetProperty("options").GetProperty("challenge").GetString()!;
+        var assertionThrottled = authenticator.CreateAssertion(chThrottled);
+        using var throttledResponse = await nextIpBrowser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login", new { challengeId = cidThrottled, response = assertionThrottled });
+        Assert.Equal(HttpStatusCode.TooManyRequests, throttledResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task AddingAndRemovingPasskey_AreAudited()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
@@ -469,23 +504,196 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task RegistrationChallenge_CannotBeUsedFromAnotherSession()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+        var first = await SignInWithPasswordAsync(world, account);
+        var second = await SignInWithPasswordAsync(world, account);
+        using var optionsResponse = await first.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register/options");
+        Assert.Equal(HttpStatusCode.OK, optionsResponse.StatusCode);
+        var options = AgentWorld.ReadJson(optionsResponse);
+        var attestation = new VirtualAuthenticator().CreateAttestation(options.GetProperty("options").GetProperty("challenge").GetString()!);
+        using var result = await second.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
+        {
+            challengeId = options.GetProperty("challengeId").GetGuid(),
+            name = "Key",
+            response = attestation,
+            currentPassword = account.Password
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+        using var list = await second.GetAsync("/api/auth/passkeys");
+        Assert.Empty(AgentWorld.ReadJson(list).EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ExistingPasskey_VerifiesRegistrationAndRemovalInSameFlow()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+        var browser = await SignInWithPasswordAsync(world, account);
+        var (existing, _) = await EnrolPasskeyAsync(browser, account.Password);
+        using var registrationOptions = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register/options");
+        var registration = AgentWorld.ReadJson(registrationOptions);
+        var added = new VirtualAuthenticator();
+        var attestation = added.CreateAttestation(registration.GetProperty("options").GetProperty("challenge").GetString()!);
+
+        using var verificationOptions = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/second-factor/options");
+        var verification = AgentWorld.ReadJson(verificationOptions);
+        var assertion = existing.CreateAssertion(verification.GetProperty("options").GetProperty("challenge").GetString()!);
+        using var registered = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
+        {
+            challengeId = registration.GetProperty("challengeId").GetGuid(),
+            name = "Second",
+            response = attestation,
+            verificationChallengeId = verification.GetProperty("challengeId").GetGuid(),
+            verificationResponse = assertion
+        });
+        Assert.Equal(HttpStatusCode.Created, registered.StatusCode);
+        var id = AgentWorld.ReadJson(registered).GetProperty("id").GetGuid();
+
+        using var replay = await browser.SendAsync(HttpMethod.Delete, $"/api/auth/passkeys/{id}", new
+        {
+            verificationChallengeId = verification.GetProperty("challengeId").GetGuid(),
+            verificationResponse = assertion
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+
+        using var nextOptions = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/second-factor/options");
+        var next = AgentWorld.ReadJson(nextOptions);
+        var nextAssertion = existing.CreateAssertion(next.GetProperty("options").GetProperty("challenge").GetString()!);
+        using var removed = await browser.SendAsync(HttpMethod.Delete, $"/api/auth/passkeys/{id}", new
+        {
+            verificationChallengeId = next.GetProperty("challengeId").GetGuid(),
+            verificationResponse = nextAssertion
+        });
+        Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+        using var list = await browser.GetAsync("/api/auth/passkeys");
+        Assert.Single(AgentWorld.ReadJson(list).EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ManagementPasswordFailures_BlockCorrectPasswordUntilThrottleExpires()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+        var browser = await SignInWithPasswordAsync(world, account);
+        using var optionsResponse = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register/options");
+        Assert.Equal(HttpStatusCode.OK, optionsResponse.StatusCode);
+        var options = AgentWorld.ReadJson(optionsResponse);
+        var challengeId = options.GetProperty("challengeId").GetGuid();
+        var attestation = new VirtualAuthenticator().CreateAttestation(options.GetProperty("options").GetProperty("challenge").GetString()!);
+        for (var i = 0; i < 5; i++)
+        {
+            using var denied = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
+            {
+                challengeId, name = "Key", response = attestation, currentPassword = "wrong"
+            });
+            Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        }
+        using var blocked = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
+        {
+            challengeId, name = "Key", response = attestation, currentPassword = account.Password
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, blocked.StatusCode);
+        world.Clock.Advance(TimeSpan.FromMinutes(1));
+        using var allowed = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
+        {
+            challengeId, name = "Key", response = attestation, currentPassword = account.Password
+        });
+        Assert.Equal(HttpStatusCode.Created, allowed.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConcurrentAssertions_WithSameNonzeroCounter_OnlyOneSucceeds()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+        var setup = await SignInWithPasswordAsync(world, account);
+        var (authenticator, _) = await EnrolPasskeyAsync(setup, account.Password);
+        var first = new BrowserSession(world.Factory.CreateBrowser());
+        var second = new BrowserSession(world.Factory.CreateBrowser());
+        using var firstOptions = await first.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login/options", new { loginIdentifier = account.Identifier });
+        using var secondOptions = await second.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login/options", new { loginIdentifier = account.Identifier });
+        Assert.Equal(HttpStatusCode.OK, firstOptions.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, secondOptions.StatusCode);
+        var firstJson = AgentWorld.ReadJson(firstOptions);
+        var secondJson = AgentWorld.ReadJson(secondOptions);
+        var firstAssertion = authenticator.CreateAssertion(firstJson.GetProperty("options").GetProperty("challenge").GetString()!, counterOverride: 1);
+        var secondAssertion = authenticator.CreateAssertion(secondJson.GetProperty("options").GetProperty("challenge").GetString()!, counterOverride: 1);
+        var requests = await Task.WhenAll(
+            first.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login", new { challengeId = firstJson.GetProperty("challengeId").GetGuid(), response = firstAssertion }),
+            second.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login", new { challengeId = secondJson.GetProperty("challengeId").GetGuid(), response = secondAssertion }));
+        using var firstResult = requests[0];
+        using var secondResult = requests[1];
+        Assert.Single(requests, response => response.StatusCode == HttpStatusCode.NoContent);
+        Assert.Single(requests, response => response.StatusCode == HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ConcurrentFactorEnrollment_IssuesOneRecoverySet_AndBothFactorsWork()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+        var passkeyBrowser = await SignInWithPasswordAsync(world, account);
+        var totpBrowser = await SignInWithPasswordAsync(world, account);
+        using var setupResponse = await totpBrowser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/setup");
+        Assert.Equal(HttpStatusCode.OK, setupResponse.StatusCode);
+        var setup = AgentWorld.ReadJson(setupResponse);
+        var secret = Totp.DecodeBase32(setup.GetProperty("manualEntryKey").GetString()!);
+        var setupCode = Totp.ComputeCode(secret, Totp.CurrentStep(world.Clock.GetUtcNow()));
+        string[] passkeyCodes = [];
+        var passkeyTask = EnrolPasskeyAsync(passkeyBrowser, account.Password, onRecoveryCodes: codes => passkeyCodes = codes);
+        var totpTask = totpBrowser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/enroll", new
+        {
+            setupToken = setup.GetProperty("setupToken").GetString(),
+            code = setupCode,
+            currentPassword = account.Password
+        });
+        await Task.WhenAll(passkeyTask, totpTask);
+        using var totpResponse = await totpTask;
+        Assert.Equal(HttpStatusCode.OK, totpResponse.StatusCode);
+        var totpCodes = AgentWorld.ReadJson(totpResponse).GetProperty("recoveryCodes").EnumerateArray().Select(e => e.GetString()!).ToArray();
+        Assert.Equal(10, passkeyCodes.Length + totpCodes.Length);
+        var recoveryCode = (passkeyCodes.Length > 0 ? passkeyCodes : totpCodes)[0];
+
+        var recoveryBrowser = await SignInWithPasswordAsync(world, account);
+        using var recovery = await recoveryBrowser.SendAsync(HttpMethod.Post, "/api/auth/second-factor/recovery-code", new { recoveryCode });
+        Assert.Equal(HttpStatusCode.NoContent, recovery.StatusCode);
+        using var recoveryMe = await recoveryBrowser.GetAsync("/api/me");
+        Assert.Equal(HttpStatusCode.OK, recoveryMe.StatusCode);
+
+        var passkeyLogin = await SignInWithPasswordAsync(world, account);
+        using var optionsResponse = await passkeyLogin.SendAsync(HttpMethod.Post, "/api/auth/passkeys/second-factor/options");
+        Assert.Equal(HttpStatusCode.OK, optionsResponse.StatusCode);
+        var options = AgentWorld.ReadJson(optionsResponse);
+        var assertion = (await passkeyTask).Authenticator.CreateAssertion(options.GetProperty("options").GetProperty("challenge").GetString()!);
+        using var passkeyResult = await passkeyLogin.SendAsync(HttpMethod.Post, "/api/auth/passkeys/second-factor", new
+        {
+            challengeId = options.GetProperty("challengeId").GetGuid(),
+            response = assertion
+        });
+        Assert.Equal(HttpStatusCode.NoContent, passkeyResult.StatusCode);
+
+        world.Clock.Advance(TimeSpan.FromSeconds(30));
+        var totpLogin = await SignInWithPasswordAsync(world, account);
+        var code = Totp.ComputeCode(secret, Totp.CurrentStep(world.Clock.GetUtcNow()));
+        using var totpResult = await totpLogin.SendAsync(HttpMethod.Post, "/api/auth/second-factor/totp", new { code });
+        Assert.Equal(HttpStatusCode.NoContent, totpResult.StatusCode);
+        using var totpMe = await totpLogin.GetAsync("/api/me");
+        Assert.Equal(HttpStatusCode.OK, totpMe.StatusCode);
+    }
+
+    [Fact]
     public async Task PasskeyOnlyUser_CanRedeemRecoveryCode_DuringSecondFactorChallenge()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var account = await world.SeedUserAsync();
 
         var setupBrowser = await SignInWithPasswordAsync(world, account);
-        var (_, _) = await EnrolPasskeyAsync(setupBrowser, account.Password);
-
-        // Generate recovery codes for passkey user
-        using var regenResp = await setupBrowser.SendAsync(HttpMethod.Post, "/api/auth/security/recovery-codes/regenerate", new
-        {
-            currentPassword = account.Password
-        });
-        Assert.Equal(HttpStatusCode.OK, regenResp.StatusCode);
-        var regenJson = AgentWorld.ReadJson(regenResp);
-        var recoveryCodes = regenJson.GetProperty("recoveryCodes").EnumerateArray().Select(e => e.GetString()!).ToList();
-        Assert.Equal(10, recoveryCodes.Count);
+        string[] recoveryCodes = [];
+        await EnrolPasskeyAsync(setupBrowser, account.Password, onRecoveryCodes: codes => recoveryCodes = codes);
+        Assert.Equal(10, recoveryCodes.Length);
 
         // Sign in with password -> restricted session requires second factor
         var browser = new BrowserSession(world.Factory.CreateBrowser());
@@ -496,7 +704,7 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         });
         Assert.Equal(HttpStatusCode.OK, loginResp.StatusCode);
         var loginBody = AgentWorld.ReadJson(loginResp);
-        Assert.True(loginBody.GetProperty("requiresSecondFactor").GetBoolean());
+        Assert.True(loginBody.GetProperty("secondFactorRequired").GetBoolean());
 
         // Restricted session cannot reach /api/me
         using var deniedMe = await browser.GetAsync("/api/me");
@@ -512,5 +720,18 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         // Session is now fully authenticated
         using var allowedMe = await browser.GetAsync("/api/me");
         Assert.Equal(HttpStatusCode.OK, allowedMe.StatusCode);
+
+        var secondBrowser = new BrowserSession(world.Factory.CreateBrowser());
+        using var secondLogin = await secondBrowser.SendAsync(HttpMethod.Post, "/api/auth/login", new
+        {
+            loginIdentifier = account.Identifier,
+            password = account.Password
+        });
+        Assert.Equal(HttpStatusCode.OK, secondLogin.StatusCode);
+        using var reuse = await secondBrowser.SendAsync(HttpMethod.Post, "/api/auth/second-factor/recovery-code", new
+        {
+            recoveryCode = recoveryCodes[0]
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, reuse.StatusCode);
     }
 }

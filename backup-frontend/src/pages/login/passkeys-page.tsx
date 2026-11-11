@@ -14,7 +14,7 @@ import { usePageTitle } from '@/hooks/use-page-title'
 import { apiRequest } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
-import { createCredential } from '@/features/auth/webauthn'
+import { createCredential, getAssertion } from '@/features/auth/webauthn'
 import { Key, Plus, Trash2 } from 'lucide-react'
 
 export type PasskeyItem = {
@@ -38,15 +38,24 @@ export function PasskeysPage() {
   const [addPassword, setAddPassword] = useState('')
   const [addPending, setAddPending] = useState(false)
   const [addError, setAddError] = useState<ErrorDescription | null>(null)
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
+  const [usePasskeyVerification, setUsePasskeyVerification] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<PasskeyItem | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<ErrorDescription | null>(null)
 
+  async function managementVerification() {
+    const { options, challengeId } = await apiRequest<{ options: Parameters<typeof getAssertion>[0]; challengeId: string }>(
+      'auth/passkeys/second-factor/options', { method: 'POST' },
+    )
+    return { verificationChallengeId: challengeId, verificationResponse: await getAssertion(options) }
+  }
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!addName.trim() || !addPassword) return
+    if (!addName.trim() || (!usePasskeyVerification && !addPassword)) return
     setAddPending(true)
     setAddError(null)
     try {
@@ -56,17 +65,19 @@ export function PasskeysPage() {
       }>('auth/passkeys/register/options', { method: 'POST' })
 
       const credentialResponse = await createCredential(options)
+      const verification = usePasskeyVerification ? await managementVerification() : { currentPassword: addPassword }
 
-      await apiRequest('auth/passkeys/register', {
+      const result = await apiRequest<{ recoveryCodes: string[] }>('auth/passkeys/register', {
         method: 'POST',
         json: {
           challengeId,
           name: addName.trim(),
           response: credentialResponse,
-          currentPassword: addPassword
+          ...verification
         }
       })
 
+      setRecoveryCodes(result.recoveryCodes ?? [])
       await cache.invalidateQueries({ queryKey: ['auth', 'passkeys'] })
       setAddOpen(false)
       setAddName('')
@@ -80,13 +91,13 @@ export function PasskeysPage() {
 
   async function handleDelete(e: React.FormEvent) {
     e.preventDefault()
-    if (!deleteTarget || !deletePassword) return
+    if (!deleteTarget || (!usePasskeyVerification && !deletePassword)) return
     setDeletePending(true)
     setDeleteError(null)
     try {
       await apiRequest<void>(`auth/passkeys/${encodeURIComponent(deleteTarget.id)}`, {
         method: 'DELETE',
-        json: { currentPassword: deletePassword }
+        json: usePasskeyVerification ? await managementVerification() : { currentPassword: deletePassword }
       })
 
       await cache.invalidateQueries({ queryKey: ['auth', 'passkeys'] })
@@ -133,6 +144,15 @@ export function PasskeysPage() {
         }
       />
 
+      {recoveryCodes.length > 0 && (
+        <Card padding="lg" className="space-y-4">
+          <h2 className="text-lg font-semibold text-text-heading">{tx('Kurtarma kodları')}</h2>
+          <p>{tx('Bu kodları güvenli bir yerde saklayın. Her kod yalnızca bir kez kullanılabilir.')}</p>
+          <ul>{recoveryCodes.map(code => <li key={code}><code>{code}</code></li>)}</ul>
+          <Button type="button" onClick={() => setRecoveryCodes([])}>{tx('Kapat')}</Button>
+        </Card>
+      )}
+
       {addOpen && (
         <Card as="form" padding="lg" onSubmit={handleAdd} className="space-y-4">
           <h2 className="text-lg font-semibold text-text-heading">{tx('Geçiş anahtarı ekle')}</h2>
@@ -147,7 +167,7 @@ export function PasskeysPage() {
               />
             )}
           </Field>
-          <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')}>
+          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')}>
             {(control) => (
               <TextInput
                 {...control}
@@ -158,7 +178,10 @@ export function PasskeysPage() {
                 required
               />
             )}
-          </Field>
+          </Field>}
+          <Button type="button" variant="outline" onClick={() => setUsePasskeyVerification(!usePasskeyVerification)}>
+            {usePasskeyVerification ? tx('Şifreyle doğrula') : tx('Geçiş anahtarıyla doğrula')}
+          </Button>
           {addError && <ErrorNotice {...addError} />}
           <div className="flex justify-end gap-2">
             <Button
@@ -172,7 +195,7 @@ export function PasskeysPage() {
             >
               {tx('Vazgeç')}
             </Button>
-            <Button type="submit" disabled={addPending || !addName.trim() || !addPassword}>
+            <Button type="submit" disabled={addPending || !addName.trim() || (!usePasskeyVerification && !addPassword)}>
               {addPending ? tx('İşleniyor…') : tx('Kaydet')}
             </Button>
           </div>
@@ -185,7 +208,7 @@ export function PasskeysPage() {
           <p className="text-sm text-text-muted">
             {tx('Bu geçiş anahtarını kaldırmak istediğinizden emin misiniz?')} (<strong>{deleteTarget.name}</strong>)
           </p>
-          <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')}>
+          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')}>
             {(control) => (
               <TextInput
                 {...control}
@@ -196,7 +219,10 @@ export function PasskeysPage() {
                 required
               />
             )}
-          </Field>
+          </Field>}
+          <Button type="button" variant="outline" onClick={() => setUsePasskeyVerification(!usePasskeyVerification)}>
+            {usePasskeyVerification ? tx('Şifreyle doğrula') : tx('Geçiş anahtarıyla doğrula')}
+          </Button>
           {deleteError && <ErrorNotice {...deleteError} />}
           <div className="flex justify-end gap-2">
             <Button
@@ -211,7 +237,7 @@ export function PasskeysPage() {
             >
               {tx('Vazgeç')}
             </Button>
-            <Button type="submit" variant="destructive" disabled={deletePending || !deletePassword}>
+            <Button type="submit" variant="destructive" disabled={deletePending || (!usePasskeyVerification && !deletePassword)}>
               {deletePending ? tx('İşleniyor…') : tx('Kaldır')}
             </Button>
           </div>

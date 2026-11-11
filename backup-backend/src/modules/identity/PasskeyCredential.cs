@@ -44,12 +44,4 @@ public sealed class PasskeyCredential
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset? LastUsedAt { get; private set; }
 
-    public void RecordUsage(uint newCounter, DateTimeOffset usedAt)
-    {
-        if (newCounter > SignatureCounter)
-        {
-            SignatureCounter = newCounter;
-        }
-        LastUsedAt = usedAt.ToUniversalTime();
-    }
 }

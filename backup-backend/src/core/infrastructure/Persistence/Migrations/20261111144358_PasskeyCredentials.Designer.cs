@@ -1450,6 +1450,80 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupShare", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CreatedByRole")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RevokedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("RevokedByUserId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("ArtifactId", "TenantId");
+
+                    b.HasIndex("TenantId", "ArtifactId");
+
+                    b.HasIndex("TenantId", "CreatedAtUtc");
+
+                    b.ToTable("backup_shares", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_shares_artifact_id_nonempty", "\"ArtifactId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_shares_created_by_role", "\"CreatedByRole\" IN (1, 2)");
+
+                            t.HasCheckConstraint("ck_backup_shares_created_by_user_id_nonempty", "\"CreatedByUserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_shares_expiry", "\"ExpiresAtUtc\" > \"CreatedAtUtc\"");
+
+                            t.HasCheckConstraint("ck_backup_shares_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_shares_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupStorageCleanup", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3794,18 +3868,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("BackupPlatform.Domain.Tenancy.PlatformAdmin", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("UserId");
-
-                    b.ToTable("platform_admins", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_platform_admins_user_id_nonempty", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-                        });
-                });
 
             modelBuilder.Entity("BackupPlatform.Domain.Tenancy.Tenant", b =>
                 {
@@ -3841,9 +3903,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("Role")
-                        .HasColumnType("integer");
-
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -3856,8 +3915,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.ToTable("tenant_memberships", null, t =>
                         {
-                            t.HasCheckConstraint("ck_tenant_memberships_role", "\"Role\" BETWEEN 1 AND 4");
-
                             t.HasCheckConstraint("ck_tenant_memberships_tenant_id_nonempty", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_tenant_memberships_user_id_nonempty", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
@@ -3878,6 +3935,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<int>("Role")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2);
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -3891,6 +3953,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_users_display_name_nonblank", "\"DisplayName\" ~ '[^[:space:]]'");
 
                             t.HasCheckConstraint("ck_users_id_nonempty", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_users_role", "\"Role\" IN (1, 2)");
                         });
                 });
 
@@ -4051,6 +4115,63 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_password_credentials_normalized_login", "\"NormalizedLoginIdentifier\" = upper(\"LoginIdentifier\" COLLATE \"C\")");
 
                             t.HasCheckConstraint("ck_password_credentials_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Identity.RecoveryCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RedeemedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "CodeHash");
+
+                    b.ToTable("recovery_codes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_recovery_codes_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_recovery_codes_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Identity.TotpCredential", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EncryptedSecret")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset>("EnrolledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("LastUsedEpochStep")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("totp_credentials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_totp_credentials_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
                 });
 
@@ -4730,6 +4851,33 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupShare", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("RevokedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupArtifact", null)
+                        .WithMany()
+                        .HasForeignKey("ArtifactId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupStorageCleanup", b =>
                 {
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
@@ -5037,14 +5185,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("BackupPlatform.Domain.Tenancy.PlatformAdmin", b =>
-                {
-                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
 
             modelBuilder.Entity("BackupPlatform.Domain.Tenancy.TenantMembership", b =>
                 {
@@ -5076,6 +5216,24 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Identity.RecoveryCode", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Identity.TotpCredential", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

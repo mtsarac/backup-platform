@@ -150,6 +150,47 @@ public sealed class IdentityTests
         Assert.Equal(hash, store.Credential.PasswordHash);
     }
 
+    [Fact]
+    public async Task SaveTotpCredentialRejectsConcurrentOverwriting()
+    {
+        var hashes = new PasswordHashService();
+        var userId = UserId.New();
+        var hash = hashes.Hash(userId, "local-password");
+        var store = new MemoryIdentityStore(new PasswordCredential(userId, "Alice", hash));
+        var now = DateTimeOffset.UtcNow;
+        var totp1 = new TotpCredential(userId, "secret1", now, null);
+        var totp2 = new TotpCredential(userId, "secret2", now, null);
+
+        var first = await store.SaveTotpCredentialAsync(totp1, ["hash1"], now, default);
+        Assert.Equal(TotpEnrollmentOutcome.EnrolledWithRecoveryCodes, first);
+        Assert.Equal("secret1", store.Totp?.EncryptedSecret);
+
+        var second = await store.SaveTotpCredentialAsync(totp2, ["hash2"], now, default);
+        Assert.Equal(TotpEnrollmentOutcome.Conflict, second);
+        Assert.Equal("secret1", store.Totp?.EncryptedSecret);
+    }
+
+    [Fact]
+    public async Task SaveChallengeCleansUpExpiredChallenges()
+    {
+        var hashes = new PasswordHashService();
+        var userId = UserId.New();
+        var hash = hashes.Hash(userId, "local-password");
+        var store = new MemoryIdentityStore(new PasswordCredential(userId, "Alice", hash));
+        var now = DateTimeOffset.UtcNow;
+
+        var expired = new PasskeyChallenge(Guid.NewGuid(), userId, null, "login", "{}", now.AddMinutes(-10), now.AddMinutes(-5));
+        var active = new PasskeyChallenge(Guid.NewGuid(), userId, null, "login", "{}", now.AddMinutes(-1), now.AddMinutes(4));
+        await store.SaveChallengeAsync(expired, default);
+        await store.SaveChallengeAsync(active, default);
+
+        var next = new PasskeyChallenge(Guid.NewGuid(), userId, null, "login", "{}", now, now.AddMinutes(5));
+        await store.SaveChallengeAsync(next, default);
+
+        Assert.DoesNotContain(store.Challenges, c => c.Id == expired.Id);
+        Assert.Contains(store.Challenges, c => c.Id == active.Id);
+        Assert.Contains(store.Challenges, c => c.Id == next.Id);
+    }
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
@@ -206,10 +247,21 @@ public sealed class IdentityTests
         public Task<TotpCredential?> FindTotpCredentialAsync(UserId userId, CancellationToken cancellationToken) =>
             Task.FromResult(userId == Credential.UserId ? Totp : null);
 
-        public Task SaveTotpCredentialAsync(TotpCredential credential, DateTimeOffset now, CancellationToken cancellationToken)
+        public Task<TotpEnrollmentOutcome> SaveTotpCredentialAsync(TotpCredential credential, IReadOnlyList<string> recoveryCodeHashes, DateTimeOffset now, CancellationToken cancellationToken)
         {
+            if (Totp is not null)
+            {
+                return Task.FromResult(TotpEnrollmentOutcome.Conflict);
+            }
             Totp = credential;
-            return Task.CompletedTask;
+            if (recoveryCodeHashes.Count > 0)
+            {
+                RecoveryCodes.Clear();
+                foreach (var hash in recoveryCodeHashes)
+                    RecoveryCodes.Add(new RecoveryCode(Guid.NewGuid(), credential.UserId, hash, now));
+                return Task.FromResult(TotpEnrollmentOutcome.EnrolledWithRecoveryCodes);
+            }
+            return Task.FromResult(TotpEnrollmentOutcome.EnrolledWithoutRecoveryCodes);
         }
 
         public Task<bool> RemoveTotpCredentialAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -258,11 +310,28 @@ public sealed class IdentityTests
         public Task<IReadOnlyList<PasskeyCredential>> ListPasskeysAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PasskeyCredential>>([]);
         public Task<PasskeyCredential?> FindPasskeyByCredentialIdAsync(byte[] credentialId, CancellationToken cancellationToken) => Task.FromResult<PasskeyCredential?>(null);
         public Task<PasskeyCredential?> FindPasskeyByIdAsync(Guid id, UserId userId, CancellationToken cancellationToken) => Task.FromResult<PasskeyCredential?>(null);
-        public Task AddPasskeyAsync(PasskeyCredential passkey, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<bool> AddPasskeyAsync(PasskeyCredential passkey, IReadOnlyList<string> recoveryCodeHashes, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<bool> RemovePasskeyAsync(Guid id, UserId userId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(false);
-        public Task UpdatePasskeyUsageAsync(Guid id, uint newCounter, DateTimeOffset usedAt, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SaveChallengeAsync(PasskeyChallenge challenge, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task<PasskeyChallenge?> ConsumeChallengeAsync(Guid challengeId, string purpose, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult<PasskeyChallenge?>(null);
+        public Task<bool> UpdatePasskeyUsageAsync(Guid id, uint newCounter, DateTimeOffset usedAt, CancellationToken cancellationToken) => Task.FromResult(true);
+        public List<PasskeyChallenge> Challenges { get; } = [];
+
+        public Task SaveChallengeAsync(PasskeyChallenge challenge, CancellationToken cancellationToken)
+        {
+            Challenges.RemoveAll(c => c.ExpiresAt <= challenge.CreatedAt);
+            Challenges.Add(challenge);
+            return Task.CompletedTask;
+        }
+
+        public Task<PasskeyChallenge?> ConsumeChallengeAsync(Guid challengeId, string purpose, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            var match = Challenges.FirstOrDefault(c => c.Id == challengeId && c.Purpose == purpose && c.ExpiresAt > now);
+            if (match is not null)
+            {
+                Challenges.Remove(match);
+                return Task.FromResult<PasskeyChallenge?>(match);
+            }
+            return Task.FromResult<PasskeyChallenge?>(null);
+        }
         public Task<bool> IsUserDisabledAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<string?> GetUserDisplayNameAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult<string?>("Test User");
     }

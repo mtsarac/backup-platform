@@ -20,7 +20,7 @@ const webauthnMock = vi.hoisted(() => ({
 vi.mock('@/features/auth/webauthn', () => webauthnMock)
 
 const auth = {
-  user: { userId: '11111111-1111-1111-1111-111111111111', displayName: 'Test User', isPlatformAdmin: false },
+  user: { userId: '11111111-1111-1111-1111-111111111111', displayName: 'Test User', role: 'UserAdmin' as const, isPlatformAdmin: false },
   tenants: [],
   isAuthenticated: true,
   isLoading: false,
@@ -60,8 +60,11 @@ beforeEach(() => {
     if (path === 'auth/passkeys/register/options') {
       return { options: { challenge: 'test-challenge' }, challengeId: 'test-cid' }
     }
+    if (path === 'auth/passkeys/second-factor/options') {
+      return { options: { challenge: 'verification' }, challengeId: 'verify-id' }
+    }
     if (path === 'auth/passkeys/register') {
-      return { id: 'cred-new', name: 'New Key', createdAt: '2026-01-04T10:00:00Z' }
+      return { id: 'cred-new', name: 'New Key', createdAt: '2026-01-04T10:00:00Z', recoveryCodes: ['ABCD-EFGH'] }
     }
     if (path.startsWith('auth/passkeys/') && options?.method === 'DELETE') {
       return undefined
@@ -75,6 +78,7 @@ beforeEach(() => {
     type: 'public-key',
     response: { attestationObject: 'mock-att', clientDataJSON: 'mock-client-data' }
   })
+  webauthnMock.getAssertion.mockResolvedValue({ id: 'existing-key' })
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -95,8 +99,10 @@ describe('Passkeys management page', () => {
     const nameInput = screen.getByLabelText('Geçiş anahtarı adı')
     const pwdInput = screen.getByLabelText('Mevcut şifreniz')
 
-    await userEvent.type(nameInput, 'Home Key')
-    await userEvent.type(pwdInput, 'Correct-password-123!')
+    await userEvent.click(nameInput)
+    await userEvent.paste('Home Key')
+    await userEvent.click(pwdInput)
+    await userEvent.paste('Correct-password-123!')
 
     await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
 
@@ -111,6 +117,21 @@ describe('Passkeys management page', () => {
         })
       }))
     })
+    expect(await screen.findByText('ABCD-EFGH')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Kapat' }))
+    expect(screen.queryByText('ABCD-EFGH')).not.toBeInTheDocument()
+  })
+
+  it('verifies removal with an existing passkey instead of a password', async () => {
+    mount(<PasskeysPage />)
+    await screen.findByText('Work YubiKey')
+    await userEvent.click(screen.getByRole('button', { name: 'Work YubiKey geçiş anahtarını kaldır' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarıyla doğrula' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Kaldır' }))
+    await waitFor(() => expect(api).toHaveBeenCalledWith('auth/passkeys/cred-1', {
+      method: 'DELETE',
+      json: { verificationChallengeId: 'verify-id', verificationResponse: { id: 'existing-key' } },
+    }))
   })
 
   it('removes a passkey with password verification', async () => {

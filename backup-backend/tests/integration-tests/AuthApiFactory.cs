@@ -43,7 +43,9 @@ internal sealed class AuthApiFactory(
             ["Backups:Retention:Enabled"] = "false",
             ["ManagedService:Quota:MaintenanceEnabled"] = "false",
             ["Notifications:Enabled"] = "false",
-            ["Notifications:PublicBaseUrl"] = "https://backup.example.com"
+            ["Notifications:PublicBaseUrl"] = "https://backup.example.com",
+            ["Authentication:Passkeys:RelyingPartyId"] = "localhost",
+            ["Authentication:Passkeys:Origins:0"] = "http://localhost"
         };
         // Suites exercise the features themselves, so every flag starts on; a test passes Features:{key}=false to cover the off state.
         foreach (var feature in BackupPlatform.Contracts.Flags.Features.All) settings[$"Features:{feature.Key}"] = "true";

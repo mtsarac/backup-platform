@@ -3,6 +3,7 @@ using System.Text.Json;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Identity;
+using BackupPlatform.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -371,6 +372,270 @@ public sealed class TotpAndRecoveryIntegrationTests(PostgreSqlFixture fixture) :
             {
                 Assert.DoesNotContain(code, rawJson, StringComparison.OrdinalIgnoreCase);
             }
+        }
+    }
+
+    [Fact]
+    public async Task RateLimitingOnTotpEnrollmentRemovalAndRegeneration()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+
+        var (browser, _) = await SignInAsync(world, account);
+
+        // 1. Password guessing on enroll
+        using (var setup = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/setup"))
+        {
+            Assert.Equal(HttpStatusCode.OK, setup.StatusCode);
+            var setupJson = AgentWorld.ReadJson(setup);
+            var setupToken = setupJson.GetProperty("setupToken").GetString()!;
+            var manualKey = setupJson.GetProperty("manualEntryKey").GetString()!;
+            var code = Totp.ComputeCode(Totp.DecodeBase32(manualKey), Totp.CurrentStep(world.Clock.GetUtcNow()));
+
+            for (var i = 0; i < LoginThrottle.MaxFailures; i++)
+            {
+                using var fail = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/enroll", new
+                {
+                    setupToken,
+                    code,
+                    currentPassword = "WrongPassword!"
+                });
+                Assert.Equal(HttpStatusCode.BadRequest, fail.StatusCode);
+            }
+
+            using var locked = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/enroll", new
+            {
+                setupToken,
+                code,
+                currentPassword = "WrongPassword!"
+            });
+            Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+            Assert.NotNull(locked.Headers.RetryAfter);
+        }
+
+        // Advance past window and enroll properly
+        world.Clock.Advance(LoginThrottle.MaxWait);
+        browser.Client.DefaultRequestHeaders.Remove("X-Forwarded-For");
+        browser.Client.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.201");
+        var (manualKeyEnrolled, _) = await EnrolTotpAsync(world, browser, account);
+
+        // 2. Password guessing on remove
+        for (var i = 0; i < LoginThrottle.MaxFailures; i++)
+        {
+            using var fail = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/remove", new
+            {
+                currentPassword = "WrongPassword!"
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, fail.StatusCode);
+        }
+        using (var locked = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/remove", new
+        {
+            currentPassword = "WrongPassword!"
+        }))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+        }
+
+        // Advance past window
+        world.Clock.Advance(LoginThrottle.MaxWait);
+        browser.Client.DefaultRequestHeaders.Remove("X-Forwarded-For");
+        browser.Client.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.202");
+
+        // 3. TOTP code guessing on remove
+        for (var i = 0; i < LoginThrottle.MaxFailures; i++)
+        {
+            using var fail = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/remove", new
+            {
+                code = "999999"
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, fail.StatusCode);
+        }
+        using (var locked = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/remove", new
+        {
+            code = "999999"
+        }))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+        }
+
+        // Advance past window
+        world.Clock.Advance(LoginThrottle.MaxWait);
+        browser.Client.DefaultRequestHeaders.Remove("X-Forwarded-For");
+        browser.Client.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.203");
+        var validCode = Totp.ComputeCode(Totp.DecodeBase32(manualKeyEnrolled), Totp.CurrentStep(world.Clock.GetUtcNow()));
+        using (var clearTotpThrottle = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/recovery-codes/regenerate", new { code = validCode }))
+        {
+            Assert.Equal(HttpStatusCode.OK, clearTotpThrottle.StatusCode);
+        }
+        world.Clock.Advance(TimeSpan.FromSeconds(Totp.StepSeconds));
+        browser.Client.DefaultRequestHeaders.Remove("X-Forwarded-For");
+        browser.Client.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.204");
+
+        // 4. TOTP code guessing on recovery code regenerate
+        for (var i = 0; i < LoginThrottle.MaxFailures; i++)
+        {
+            using var fail = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/recovery-codes/regenerate", new
+            {
+                code = "999999"
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, fail.StatusCode);
+        }
+        using (var locked = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/recovery-codes/regenerate", new
+            {
+                code = "999999"
+            }))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task TotpCodeConsumedAtomicallyInRemovalAndRegeneration_ReplayRefused()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+
+        var (browser, _) = await SignInAsync(world, account);
+        var (manualKey, _) = await EnrolTotpAsync(world, browser, account);
+        world.Clock.Advance(TimeSpan.FromSeconds(Totp.StepSeconds));
+
+        var secretBytes = Totp.DecodeBase32(manualKey);
+        var currentCode = Totp.ComputeCode(secretBytes, Totp.CurrentStep(world.Clock.GetUtcNow()));
+
+        // Regenerating with currentCode succeeds first time
+        using (var firstRegen = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/recovery-codes/regenerate", new { code = currentCode }))
+        {
+            Assert.Equal(HttpStatusCode.OK, firstRegen.StatusCode);
+        }
+
+        // Immediate replay of same code in same step window fails
+        using (var replayedRegen = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/recovery-codes/regenerate", new { code = currentCode }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, replayedRegen.StatusCode);
+        }
+
+        // Advance to next step and get fresh code
+        world.Clock.Advance(TimeSpan.FromSeconds(Totp.StepSeconds));
+        var removeCode = Totp.ComputeCode(secretBytes, Totp.CurrentStep(world.Clock.GetUtcNow()));
+
+        // Remove with code succeeds
+        using (var removeResp = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/remove", new { code = removeCode }))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, removeResp.StatusCode);
+        }
+
+        // Replay of removeCode fails
+        using (var removeReplay = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/remove", new { code = removeCode }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, removeReplay.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentTotpEnrollmentDoesNotOverwriteCredential()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+
+        var (browser1, _) = await SignInAsync(world, account);
+        var (browser2, _) = await SignInAsync(world, account);
+
+        // Setup 1
+        using var setupResp1 = await browser1.SendAsync(HttpMethod.Post, "/api/auth/security/totp/setup");
+        Assert.Equal(HttpStatusCode.OK, setupResp1.StatusCode);
+        var json1 = AgentWorld.ReadJson(setupResp1);
+        var token1 = json1.GetProperty("setupToken").GetString()!;
+        var key1 = json1.GetProperty("manualEntryKey").GetString()!;
+        var code1 = Totp.ComputeCode(Totp.DecodeBase32(key1), Totp.CurrentStep(world.Clock.GetUtcNow()));
+
+        // Setup 2
+        using var setupResp2 = await browser2.SendAsync(HttpMethod.Post, "/api/auth/security/totp/setup");
+        Assert.Equal(HttpStatusCode.OK, setupResp2.StatusCode);
+        var json2 = AgentWorld.ReadJson(setupResp2);
+        var token2 = json2.GetProperty("setupToken").GetString()!;
+        var key2 = json2.GetProperty("manualEntryKey").GetString()!;
+        var code2 = Totp.ComputeCode(Totp.DecodeBase32(key2), Totp.CurrentStep(world.Clock.GetUtcNow()));
+
+        // Concurrently attempt to enroll both
+        var task1 = browser1.SendAsync(HttpMethod.Post, "/api/auth/security/totp/enroll", new
+        {
+            setupToken = token1,
+            code = code1,
+            currentPassword = account.Password
+        });
+        var task2 = browser2.SendAsync(HttpMethod.Post, "/api/auth/security/totp/enroll", new
+        {
+            setupToken = token2,
+            code = code2,
+            currentPassword = account.Password
+        });
+
+        var responses = await Task.WhenAll(task1, task2);
+        var statuses = responses.Select(r => r.StatusCode).ToList();
+
+        // Exactly one should succeed (200 OK) and one should be rejected (409 Conflict)
+        Assert.Contains(HttpStatusCode.OK, statuses);
+        Assert.Contains(HttpStatusCode.Conflict, statuses);
+
+        var successResp = responses.Single(r => r.StatusCode == HttpStatusCode.OK);
+        var successJson = AgentWorld.ReadJson(successResp);
+        var issuedCodes = successJson.GetProperty("recoveryCodes").EnumerateArray().Select(e => e.GetString()!).ToList();
+        Assert.Equal(10, issuedCodes.Count);
+
+        // Advance step
+        world.Clock.Advance(TimeSpan.FromSeconds(Totp.StepSeconds));
+
+        // Sign in: winning key works, recovery codes work
+        var winningKey = responses[0].StatusCode == HttpStatusCode.OK ? key1 : key2;
+
+        var (loginBrowser, secondFactorReq) = await SignInAsync(world, account);
+        Assert.True(secondFactorReq);
+
+        var winningCode = Totp.ComputeCode(Totp.DecodeBase32(winningKey), Totp.CurrentStep(world.Clock.GetUtcNow()));
+        using (var verify = await loginBrowser.SendAsync(HttpMethod.Post, "/api/auth/second-factor/totp", new { code = winningCode }))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, verify.StatusCode);
+        }
+
+        // Verify recovery code works
+        var (recoveryBrowser, req2) = await SignInAsync(world, account);
+        Assert.True(req2);
+        using (var recVerify = await recoveryBrowser.SendAsync(HttpMethod.Post, "/api/auth/second-factor/recovery-code", new { recoveryCode = issuedCodes[0] }))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, recVerify.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task SaveChallengeAsyncCleansUpExpiredChallengesInDatabase()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync();
+
+        var store = new PostgreSqlIdentityStore(fixture.Options);
+        var now = world.Clock.GetUtcNow();
+
+        // Expired challenge (expired 5 minutes ago)
+        var expiredChallenge = new PasskeyChallenge(
+            Guid.NewGuid(), account.UserId, null, "login", "{}", now.AddMinutes(-10), now.AddMinutes(-5));
+
+        // Save expired challenge first directly into DB
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            db.PasskeyChallenges.Add(expiredChallenge);
+            await db.SaveChangesAsync();
+        }
+
+        // Now save a new active challenge via SaveChallengeAsync
+        var activeChallenge = new PasskeyChallenge(
+            Guid.NewGuid(), account.UserId, null, "login", "{}", now, now.AddMinutes(5));
+        await store.SaveChallengeAsync(activeChallenge, default);
+
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            var inDb = await db.PasskeyChallenges.Where(c => c.UserId == account.UserId).ToListAsync();
+            Assert.DoesNotContain(inDb, c => c.Id == expiredChallenge.Id);
+            Assert.Contains(inDb, c => c.Id == activeChallenge.Id);
         }
     }
 }

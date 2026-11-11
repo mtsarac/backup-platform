@@ -18,51 +18,11 @@ public sealed class PasskeyService(
 {
     public IFido2 CreateFido2(HttpContext context)
     {
-        var configRp = configuration["Authentication:Passkeys:RelyingPartyId"] ?? configuration["Authentication:WebAuthn:RelyingPartyId"];
-        var requestHost = context.Request.Host.Host;
-        var rpId = !string.IsNullOrWhiteSpace(configRp) ? configRp : (string.IsNullOrWhiteSpace(requestHost) ? "localhost" : requestHost);
-
-        var origins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "https://localhost",
-            "http://localhost",
-            "https://localhost:5001",
-            "http://localhost:5000",
-            "http://localhost:5173",
-            "https://127.0.0.1",
-            "http://127.0.0.1"
-        };
-
-        if (!string.IsNullOrWhiteSpace(context.Request.Scheme) && context.Request.Host.HasValue)
-        {
-            origins.Add($"{context.Request.Scheme}://{context.Request.Host.Value}");
-        }
-
-        if (context.Request.Headers.TryGetValue("Origin", out var originHeader) && !string.IsNullOrWhiteSpace(originHeader))
-        {
-            if (Uri.TryCreate(originHeader.ToString(), UriKind.Absolute, out var originUri))
-            {
-                if (originUri.Host.Equals(requestHost, StringComparison.OrdinalIgnoreCase)
-                    || originUri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                    || originUri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase))
-                {
-                    origins.Add(originHeader.ToString().TrimEnd('/'));
-                }
-            }
-        }
-
-        var configOrigins = configuration.GetSection("Authentication:Passkeys:Origins").Get<string[]>()
-            ?? configuration.GetSection("Authentication:WebAuthn:Origins").Get<string[]>();
-        if (configOrigins != null)
-        {
-            foreach (var origin in configOrigins)
-            {
-                if (!string.IsNullOrWhiteSpace(origin))
-                {
-                    origins.Add(origin.TrimEnd('/'));
-                }
-            }
-        }
+        var rpId = configuration["Authentication:Passkeys:RelyingPartyId"];
+        var configuredOrigins = configuration.GetSection("Authentication:Passkeys:Origins").Get<string[]>();
+        if (string.IsNullOrWhiteSpace(rpId) || configuredOrigins is null || configuredOrigins.Length == 0)
+            throw new InvalidOperationException("Passkey relying party ID and origins must be configured.");
+        var origins = new HashSet<string>(configuredOrigins, StringComparer.OrdinalIgnoreCase);
 
         var fidoConfig = new Fido2Configuration
         {
@@ -80,6 +40,8 @@ public sealed class PasskeyService(
         HttpContext context,
         CancellationToken cancellationToken)
     {
+        if (!BrowserAuthentication.TryGetSession(context.User, out _, out var sessionId))
+            throw new InvalidOperationException("A session is required to register a passkey.");
         var now = timeProvider.GetUtcNow();
         var existing = await identityStore.ListPasskeysAsync(userId, cancellationToken);
         var excludeCredentials = existing.Select(p => new PublicKeyCredentialDescriptor(p.CredentialId)).ToList();
@@ -110,7 +72,7 @@ public sealed class PasskeyService(
         var challenge = new PasskeyChallenge(
             challengeId,
             userId,
-            null,
+            sessionId,
             "registration",
             options.ToJson(),
             now,
@@ -120,12 +82,14 @@ public sealed class PasskeyService(
         return (options, challengeId);
     }
 
-    public async Task<PasskeyCredential?> RegisterPasskeyAsync(
+    public async Task<(PasskeyCredential Credential, string[] RecoveryCodes)?> RegisterPasskeyAsync(
         UserId userId,
         Guid challengeId,
         string name,
         AuthenticatorAttestationRawResponse response,
         string? currentPassword,
+        Guid? verificationChallengeId,
+        AuthenticatorAssertionRawResponse? verificationResponse,
         HttpContext context,
         CancellationToken cancellationToken)
     {
@@ -135,20 +99,12 @@ public sealed class PasskeyService(
 
         var now = timeProvider.GetUtcNow();
 
-        // Security verification: current password required
-        if (string.IsNullOrEmpty(currentPassword))
-            return null;
-
-        var cred = await identityStore.FindCredentialByUserIdAsync(userId, cancellationToken);
-        if (cred is null)
-            return null;
-
-        var verifyResult = passwordHashService.Verify(userId, cred.PasswordHash, currentPassword);
-        if (verifyResult == PasswordVerificationResult.Failed)
+        if (!await VerifyManagementAsync(userId, currentPassword, verificationChallengeId, verificationResponse, context, cancellationToken))
             return null;
 
         var challenge = await identityStore.ConsumeChallengeAsync(challengeId, "registration", now, cancellationToken);
-        if (challenge is null || challenge.UserId != userId)
+        if (!BrowserAuthentication.TryGetSession(context.User, out _, out var sessionId)
+            || challenge is null || challenge.UserId != userId || challenge.SessionId != sessionId)
             return null;
 
         var originalOptions = CredentialCreateOptions.FromJson(challenge.OptionsJson);
@@ -171,8 +127,10 @@ public sealed class PasskeyService(
             result.SignCount,
             result.AaGuid == Guid.Empty ? null : result.AaGuid,
             now);
-        await identityStore.AddPasskeyAsync(passkey, now, cancellationToken);
-        return passkey;
+        var recoveryCodes = Totp.GenerateRecoveryCodes(10);
+        var hashes = recoveryCodes.Select(code => Totp.HashRecoveryCode(userId, code)).ToArray();
+        var issued = await identityStore.AddPasskeyAsync(passkey, hashes, now, cancellationToken);
+        return (passkey, issued ? recoveryCodes : []);
     }
 
     public async Task<(AssertionOptions Options, Guid ChallengeId)> CreateLoginOptionsAsync(
@@ -183,17 +141,6 @@ public sealed class PasskeyService(
         var now = timeProvider.GetUtcNow();
         var allowedCredentials = new List<PublicKeyCredentialDescriptor>();
         UserId? targetUserId = null;
-
-        if (!string.IsNullOrWhiteSpace(loginIdentifier) && LoginIdentifierNormalizer.TryNormalize(loginIdentifier, out var normalized))
-        {
-            var cred = await identityStore.FindCredentialAsync(normalized, cancellationToken);
-            if (cred != null)
-            {
-                targetUserId = cred.UserId;
-                var passkeys = await identityStore.ListPasskeysAsync(cred.UserId, cancellationToken);
-                allowedCredentials.AddRange(passkeys.Select(p => new PublicKeyCredentialDescriptor(p.CredentialId)));
-            }
-        }
 
         var fido2 = CreateFido2(context);
         var options = fido2.GetAssertionOptions(new GetAssertionOptionsParams
@@ -206,7 +153,7 @@ public sealed class PasskeyService(
         var challenge = new PasskeyChallenge(
             challengeId,
             targetUserId,
-            null,
+            GetClientFlowId(context),
             "login",
             options.ToJson(),
             now,
@@ -232,24 +179,28 @@ public sealed class PasskeyService(
         }
 
         var challenge = await identityStore.ConsumeChallengeAsync(challengeId, "login", now, cancellationToken);
-        if (challenge is null)
+        if (challenge is null || (challenge.SessionId != null && challenge.SessionId != GetClientFlowId(context)))
         {
             await throttle.FailedAsync("passkey_assertion", null, ip, cancellationToken);
             return null;
         }
 
         var passkey = await identityStore.FindPasskeyByCredentialIdAsync(response.RawId, cancellationToken);
-        if (passkey is null)
+        if (passkey is null || (challenge.UserId is not null && challenge.UserId != passkey.UserId))
         {
-            await throttle.FailedAsync("passkey_assertion", null, ip, cancellationToken);
+            var failedAccount = challenge.UserId is { } boundUser
+                ? (await identityStore.FindCredentialByUserIdAsync(boundUser, cancellationToken))?.LoginIdentifier
+                : null;
+            await throttle.FailedAsync("passkey_assertion", failedAccount, ip, cancellationToken);
             return null;
         }
 
         var userCred = await identityStore.FindCredentialByUserIdAsync(passkey.UserId, cancellationToken);
         var accountIdentifier = userCred?.LoginIdentifier;
 
-        if (accountIdentifier != null && await throttle.RetryAfterAsync("passkey_assertion", accountIdentifier, ip, cancellationToken) is not null)
+        if (accountIdentifier != null && await throttle.RetryAfterAsync("passkey_assertion", accountIdentifier, ip, cancellationToken) is { } waitAccount)
         {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(waitAccount.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
             return null;
         }
 
@@ -294,7 +245,11 @@ public sealed class PasskeyService(
             return null;
         }
 
-        await identityStore.UpdatePasskeyUsageAsync(passkey.Id, result.SignCount, now, cancellationToken);
+        if (!await identityStore.UpdatePasskeyUsageAsync(passkey.Id, result.SignCount, now, cancellationToken))
+        {
+            await throttle.FailedAsync("passkey_assertion", accountIdentifier, ip, cancellationToken);
+            return null;
+        }
         await throttle.SucceededAsync("passkey_assertion", accountIdentifier, ip, cancellationToken);
 
         var device = context.Request.Headers.UserAgent.ToString();
@@ -373,8 +328,9 @@ public sealed class PasskeyService(
         var userCred = await identityStore.FindCredentialByUserIdAsync(userId, cancellationToken);
         var accountIdentifier = userCred?.LoginIdentifier;
 
-        if (await throttle.RetryAfterAsync("passkey_assertion", accountIdentifier, ip, cancellationToken) is not null)
+        if (await throttle.RetryAfterAsync("passkey_assertion", accountIdentifier, ip, cancellationToken) is { } wait)
         {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
             return false;
         }
 
@@ -419,7 +375,11 @@ public sealed class PasskeyService(
             return false;
         }
 
-        await identityStore.UpdatePasskeyUsageAsync(passkey.Id, result.SignCount, now, cancellationToken);
+        if (!await identityStore.UpdatePasskeyUsageAsync(passkey.Id, result.SignCount, now, cancellationToken))
+        {
+            await throttle.FailedAsync("passkey_assertion", accountIdentifier, ip, cancellationToken);
+            return false;
+        }
         await identityStore.SetSessionStateAsync(sessionId, userId, SessionAuthenticationState.FullyAuthenticated, cancellationToken);
         await throttle.SucceededAsync("passkey_assertion", accountIdentifier, ip, cancellationToken);
 
@@ -430,22 +390,43 @@ public sealed class PasskeyService(
         UserId userId,
         Guid credentialId,
         string? currentPassword,
+        Guid? verificationChallengeId,
+        AuthenticatorAssertionRawResponse? verificationResponse,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
 
-        // Security verification: current password required
-        if (string.IsNullOrEmpty(currentPassword))
-            return false;
-
-        var cred = await identityStore.FindCredentialByUserIdAsync(userId, cancellationToken);
-        if (cred is null)
-            return false;
-
-        var verifyResult = passwordHashService.Verify(userId, cred.PasswordHash, currentPassword);
-        if (verifyResult == PasswordVerificationResult.Failed)
+        if (!await VerifyManagementAsync(userId, currentPassword, verificationChallengeId, verificationResponse, context, cancellationToken))
             return false;
 
         return await identityStore.RemovePasskeyAsync(credentialId, userId, now, cancellationToken);
+    }
+
+    private async Task<bool> VerifyManagementAsync(UserId userId, string? password, Guid? verificationChallengeId, AuthenticatorAssertionRawResponse? verificationResponse, HttpContext context, CancellationToken cancellationToken)
+    {
+        if (verificationChallengeId is { } challengeId && verificationResponse is not null
+            && BrowserAuthentication.TryGetSession(context.User, out _, out var sessionId))
+            return await VerifySecondFactorAsync(userId, sessionId, challengeId, verificationResponse, context, cancellationToken);
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId, cancellationToken);
+        if (credential is null) return false;
+        var ip = context.Connection.RemoteIpAddress?.ToString();
+        var account = credential.LoginIdentifier;
+        if (await throttle.RetryAfterAsync("login", account, ip, cancellationToken) is not null) return false;
+        if (string.IsNullOrEmpty(password) || passwordHashService.Verify(userId, credential.PasswordHash, password) == PasswordVerificationResult.Failed)
+        {
+            await throttle.FailedAsync("login", account, ip, cancellationToken);
+            return false;
+        }
+        await throttle.SucceededAsync("login", account, ip, cancellationToken);
+        return true;
+    }
+    private static Guid? GetClientFlowId(HttpContext context)
+    {
+        var cookie = context.Request.Cookies[BrowserAuthentication.CookieName]
+            ?? context.Request.Cookies["__Host-BackupPlatform.Antiforgery"];
+        if (string.IsNullOrWhiteSpace(cookie)) return null;
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(cookie));
+        return new Guid(bytes.AsSpan(0, 16));
     }
 }
