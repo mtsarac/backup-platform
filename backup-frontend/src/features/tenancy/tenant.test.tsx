@@ -18,7 +18,7 @@ function TenantProbe() {
   return <><p>{tenantId}</p><p>{query.data?.join(',') ?? 'Loading tenant data'}</p>{canOperate && <button>Run now</button>}<button onClick={() => { void switchTenant('tenant-b') }}>Switch tenant</button><button onClick={() => navigate('/tenants/tenant-b')}>Direct navigation</button></>
 }
 function setup(cache: QueryClient) {
-  return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', isPlatformAdmin: true }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}><MemoryRouter initialEntries={['/tenants/tenant-a']}><Routes><Route path="/tenants/:tenantId" element={<TenantProvider><TenantProbe /></TenantProvider>} /></Routes></MemoryRouter></AuthContext.Provider></QueryClientProvider>)
+  return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', isPlatformAdmin: true }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}><MemoryRouter initialEntries={['/tenants/tenant-a']}><Routes><Route path="/tenants/:tenantId" element={<TenantProvider><TenantProbe /></TenantProvider>} /></Routes></MemoryRouter></AuthContext.Provider></QueryClientProvider>)
 }
 describe('tenant switching and permissions', () => {
   it.each(['Switch tenant', 'Direct navigation'])('clears previous tenant cache with %s and does not keep its state on screen', async action => {

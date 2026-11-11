@@ -1,8 +1,12 @@
+using System.Globalization;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Identity;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
+using QRCoder;
 using AuthenticationService = BackupPlatform.Identity.AuthenticationService;
 
 namespace BackupPlatform.Api.Endpoints;
@@ -12,6 +16,35 @@ public sealed class LoginRequest
     public string LoginIdentifier { get; init; } = string.Empty;
     public string Password { get; init; } = string.Empty;
     public bool RememberMe { get; init; }
+}
+
+public sealed class TotpVerificationRequest
+{
+    public string Code { get; init; } = string.Empty;
+}
+
+public sealed class RecoveryCodeVerificationRequest
+{
+    public string RecoveryCode { get; init; } = string.Empty;
+}
+
+public sealed class EnrollTotpRequest
+{
+    public string SetupToken { get; init; } = string.Empty;
+    public string Code { get; init; } = string.Empty;
+    public string CurrentPassword { get; init; } = string.Empty;
+}
+
+public sealed class RemoveTotpRequest
+{
+    public string? CurrentPassword { get; init; }
+    public string? Code { get; init; }
+}
+
+public sealed class RegenerateRecoveryCodesRequest
+{
+    public string? CurrentPassword { get; init; }
+    public string? Code { get; init; }
 }
 
 public static class AuthenticationEndpoints
@@ -25,6 +58,17 @@ public static class AuthenticationEndpoints
         auth.MapGet("/sessions", ListSessionsAsync).RequireAuthorization();
         auth.MapDelete("/sessions/{id:guid}", EndSessionAsync).RequireAuthorization();
         auth.MapDelete("/sessions", EndAllSessionsAsync).RequireAuthorization();
+
+        // Second factor verification at sign-in (RestrictedSessionAllowed)
+        auth.MapPost("/second-factor/totp", VerifyTotpSecondFactorAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
+        auth.MapPost("/second-factor/recovery-code", VerifyRecoveryCodeSecondFactorAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
+
+        // Security settings & factor management (FullyAuthenticated)
+        auth.MapGet("/security", GetSecurityStatusAsync).RequireAuthorization();
+        auth.MapPost("/security/totp/setup", SetupTotpAsync).RequireAuthorization();
+        auth.MapPost("/security/totp/enroll", EnrollTotpAsync).RequireAuthorization();
+        auth.MapPost("/security/totp/remove", RemoveTotpAsync).RequireAuthorization();
+        auth.MapPost("/security/recovery-codes/regenerate", RegenerateRecoveryCodesAsync).RequireAuthorization();
         return endpoints;
     }
 
@@ -61,6 +105,10 @@ public static class AuthenticationEndpoints
             IsPersistent = request.RememberMe,
             AllowRefresh = false
         });
+        if (session.SecondFactorRequired)
+        {
+            return Results.Ok(new { secondFactorRequired = true });
+        }
         return Results.NoContent();
     }
 
@@ -96,5 +144,313 @@ public static class AuthenticationEndpoints
         await store.EndAllSessionsAsync(userId!, clock.GetUtcNow(), context.RequestAborted);
         await context.SignOutAsync(BrowserAuthentication.Scheme);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> VerifyTotpSecondFactorAsync(
+        TotpVerificationRequest request,
+        HttpContext context,
+        IIdentityStore identityStore,
+        LoginThrottle throttle,
+        IDataProtectionProvider dataProtection,
+        TimeProvider clock)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out var sessionId))
+            return Results.Unauthorized();
+
+        if (context.Features.Get<BrowserSessionState>() is not { Value: SessionAuthenticationState.SecondFactorPending })
+            return Results.BadRequest(new { error = "Second factor verification is not pending." });
+
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        var account = credential?.NormalizedLoginIdentifier;
+        var ip = context.Connection.RemoteIpAddress?.ToString();
+
+        if (await throttle.RetryAfterAsync("totp", account, ip, context.RequestAborted) is { } wait)
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            return Results.Json(new { error = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        var totpCred = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted);
+        if (totpCred is null)
+        {
+            await throttle.FailedAsync("totp", account, ip, context.RequestAborted);
+            return Results.Json(new { error = "TOTP is not enrolled." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var protector = dataProtection.CreateProtector("BackupPlatform.Identity.Totp.v1");
+        string secretBase32;
+        try
+        {
+            secretBase32 = protector.Unprotect(totpCred.EncryptedSecret);
+        }
+        catch
+        {
+            return Results.Json(new { error = "Failed to decrypt TOTP secret." }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        var secretBytes = Totp.DecodeBase32(secretBase32);
+        if (!Totp.VerifyCode(secretBytes, request.Code, clock.GetUtcNow(), totpCred.LastUsedEpochStep, out var matchedStep))
+        {
+            await throttle.FailedAsync("totp", account, ip, context.RequestAborted);
+            return Results.Json(new { error = "Invalid verification code." }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!await identityStore.TryUseTotpStepAsync(userId!, matchedStep, context.RequestAborted))
+        {
+            await throttle.FailedAsync("totp", account, ip, context.RequestAborted);
+            return Results.Json(new { error = "Verification code has already been used." }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        await throttle.SucceededAsync("totp", account, ip, context.RequestAborted);
+        await identityStore.SetSessionStateAsync(sessionId, userId!, SessionAuthenticationState.FullyAuthenticated, context.RequestAborted);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> VerifyRecoveryCodeSecondFactorAsync(
+        RecoveryCodeVerificationRequest request,
+        HttpContext context,
+        IIdentityStore identityStore,
+        LoginThrottle throttle,
+        TimeProvider clock)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out var sessionId))
+            return Results.Unauthorized();
+
+        if (context.Features.Get<BrowserSessionState>() is not { Value: SessionAuthenticationState.SecondFactorPending })
+            return Results.BadRequest(new { error = "Second factor verification is not pending." });
+
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        var account = credential?.NormalizedLoginIdentifier;
+        var ip = context.Connection.RemoteIpAddress?.ToString();
+
+        if (await throttle.RetryAfterAsync("recovery", account, ip, context.RequestAborted) is { } wait)
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            return Results.Json(new { error = "Too many failed recovery code attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.RecoveryCode))
+        {
+            await throttle.FailedAsync("recovery", account, ip, context.RequestAborted);
+            return Results.Json(new { error = "Invalid recovery code." }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var hash = Totp.HashRecoveryCode(userId!, request.RecoveryCode);
+        var redeemed = await identityStore.TryRedeemRecoveryCodeAsync(userId!, hash, clock.GetUtcNow(), context.RequestAborted);
+        if (!redeemed)
+        {
+            await throttle.FailedAsync("recovery", account, ip, context.RequestAborted);
+            return Results.Json(new { error = "Invalid or already used recovery code." }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        await throttle.SucceededAsync("recovery", account, ip, context.RequestAborted);
+        await identityStore.SetSessionStateAsync(sessionId, userId!, SessionAuthenticationState.FullyAuthenticated, context.RequestAborted);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> GetSecurityStatusAsync(
+        HttpContext context,
+        IIdentityStore identityStore)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _))
+            return Results.Unauthorized();
+
+        var hasTotp = await identityStore.HasSecondFactorAsync(userId!, context.RequestAborted);
+        var recoveryCodesCount = await identityStore.GetRemainingRecoveryCodesCountAsync(userId!, context.RequestAborted);
+        return Results.Ok(new { hasTotp, remainingRecoveryCodes = recoveryCodesCount });
+    }
+
+    private static async Task<IResult> SetupTotpAsync(
+        HttpContext context,
+        IIdentityStore identityStore,
+        IDataProtectionProvider dataProtection,
+        TimeProvider clock)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _))
+            return Results.Unauthorized();
+
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        if (credential is null) return Results.Unauthorized();
+
+        var secretBytes = RandomNumberGenerator.GetBytes(20);
+        var secretBase32 = Totp.EncodeBase32(secretBytes);
+        var label = Uri.EscapeDataString(credential.LoginIdentifier);
+        var qrUri = $"otpauth://totp/BackupPlatform:{label}?secret={secretBase32}&issuer=BackupPlatform&algorithm=SHA1&digits=6&period=30";
+
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrData = qrGenerator.CreateQrCode(qrUri, QRCodeGenerator.ECCLevel.M);
+        var qrSvg = new SvgQRCode(qrData).GetGraphic(20);
+
+        var setupProtector = dataProtection.CreateProtector("BackupPlatform.Identity.TotpSetup.v1");
+        var expiresAt = clock.GetUtcNow().AddMinutes(15).ToUnixTimeSeconds();
+        var payload = $"{userId!.Value:D}|{secretBase32}|{expiresAt}";
+        var setupToken = setupProtector.Protect(payload);
+
+        return Results.Ok(new
+        {
+            setupToken,
+            manualEntryKey = secretBase32,
+            qrUri,
+            qrSvg
+        });
+    }
+
+    private static async Task<IResult> EnrollTotpAsync(
+        EnrollTotpRequest request,
+        HttpContext context,
+        IIdentityStore identityStore,
+        PasswordHashService passwordHasher,
+        IDataProtectionProvider dataProtection,
+        TimeProvider clock)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _))
+            return Results.Unauthorized();
+
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        if (credential is null) return Results.Unauthorized();
+
+        // Security verification: current password required
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+        {
+            return Results.Json(new { error = "Current password is required." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+        var passwordCheck = passwordHasher.Verify(userId!, credential.PasswordHash, request.CurrentPassword);
+        if (passwordCheck == Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
+        {
+            return Results.Json(new { error = "Current password is incorrect." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        // Unpack setup token
+        var setupProtector = dataProtection.CreateProtector("BackupPlatform.Identity.TotpSetup.v1");
+        string secretBase32;
+        try
+        {
+            var unpacked = setupProtector.Unprotect(request.SetupToken);
+            var parts = unpacked.Split('|');
+            if (parts.Length != 3 || parts[0] != userId!.Value.ToString("D"))
+                return Results.Json(new { error = "Invalid setup token." }, statusCode: StatusCodes.Status400BadRequest);
+
+            var expiresAtUnix = long.Parse(parts[2], CultureInfo.InvariantCulture);
+            if (clock.GetUtcNow().ToUnixTimeSeconds() > expiresAtUnix)
+                return Results.Json(new { error = "Setup token has expired. Please restart enrollment." }, statusCode: StatusCodes.Status400BadRequest);
+
+            secretBase32 = parts[1];
+        }
+        catch
+        {
+            return Results.Json(new { error = "Invalid setup token." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var secretBytes = Totp.DecodeBase32(secretBase32);
+        if (!Totp.VerifyCode(secretBytes, request.Code, clock.GetUtcNow(), null, out var matchedStep))
+        {
+            return Results.Json(new { error = "Invalid verification code." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var protector = dataProtection.CreateProtector("BackupPlatform.Identity.Totp.v1");
+        var encryptedSecret = protector.Protect(secretBase32);
+        var now = clock.GetUtcNow();
+        var totpCredential = new TotpCredential(userId!, encryptedSecret, now, matchedStep);
+        await identityStore.SaveTotpCredentialAsync(totpCredential, now, context.RequestAborted);
+
+        // Generate single-use recovery codes
+        var recoveryCodes = Totp.GenerateRecoveryCodes(10);
+        var hashes = recoveryCodes.Select(code => Totp.HashRecoveryCode(userId!, code));
+        await identityStore.SaveRecoveryCodesAsync(userId!, hashes, now, context.RequestAborted);
+
+        return Results.Ok(new { recoveryCodes });
+    }
+
+    private static async Task<IResult> RemoveTotpAsync(
+        RemoveTotpRequest request,
+        HttpContext context,
+        IIdentityStore identityStore,
+        PasswordHashService passwordHasher,
+        IDataProtectionProvider dataProtection,
+        TimeProvider clock)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _))
+            return Results.Unauthorized();
+
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        if (credential is null) return Results.Unauthorized();
+
+        // Security verification: current password OR existing factor code
+        var verified = false;
+        if (!string.IsNullOrWhiteSpace(request.CurrentPassword))
+        {
+            var passwordCheck = passwordHasher.Verify(userId!, credential.PasswordHash, request.CurrentPassword);
+            if (passwordCheck != Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
+                verified = true;
+        }
+        if (!verified && !string.IsNullOrWhiteSpace(request.Code))
+        {
+            var totpCred = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted);
+            if (totpCred is not null)
+            {
+                var protector = dataProtection.CreateProtector("BackupPlatform.Identity.Totp.v1");
+                var secretBase32 = protector.Unprotect(totpCred.EncryptedSecret);
+                var secretBytes = Totp.DecodeBase32(secretBase32);
+                if (Totp.VerifyCode(secretBytes, request.Code, clock.GetUtcNow(), totpCred.LastUsedEpochStep, out _))
+                    verified = true;
+            }
+        }
+
+        if (!verified)
+        {
+            return Results.Json(new { error = "Security verification failed. Please provide your current password or TOTP code." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var now = clock.GetUtcNow();
+        await identityStore.RemoveTotpCredentialAsync(userId!, now, context.RequestAborted);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> RegenerateRecoveryCodesAsync(
+        RegenerateRecoveryCodesRequest request,
+        HttpContext context,
+        IIdentityStore identityStore,
+        PasswordHashService passwordHasher,
+        IDataProtectionProvider dataProtection,
+        TimeProvider clock)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _))
+            return Results.Unauthorized();
+
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        if (credential is null) return Results.Unauthorized();
+
+        // Security verification: current password OR existing factor code
+        var verified = false;
+        if (!string.IsNullOrWhiteSpace(request.CurrentPassword))
+        {
+            var passwordCheck = passwordHasher.Verify(userId!, credential.PasswordHash, request.CurrentPassword);
+            if (passwordCheck != Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
+                verified = true;
+        }
+        if (!verified && !string.IsNullOrWhiteSpace(request.Code))
+        {
+            var totpCred = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted);
+            if (totpCred is not null)
+            {
+                var protector = dataProtection.CreateProtector("BackupPlatform.Identity.Totp.v1");
+                var secretBase32 = protector.Unprotect(totpCred.EncryptedSecret);
+                var secretBytes = Totp.DecodeBase32(secretBase32);
+                if (Totp.VerifyCode(secretBytes, request.Code, clock.GetUtcNow(), totpCred.LastUsedEpochStep, out _))
+                    verified = true;
+            }
+        }
+
+        if (!verified)
+        {
+            return Results.Json(new { error = "Security verification failed. Please provide your current password or TOTP code." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var now = clock.GetUtcNow();
+        var recoveryCodes = Totp.GenerateRecoveryCodes(10);
+        var hashes = recoveryCodes.Select(code => Totp.HashRecoveryCode(userId!, code));
+        await identityStore.SaveRecoveryCodesAsync(userId!, hashes, now, context.RequestAborted);
+
+        return Results.Ok(new { recoveryCodes });
     }
 }

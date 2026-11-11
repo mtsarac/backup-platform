@@ -30,6 +30,7 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
         <A11yToolbar />
         <LanguageSwitcher />
         <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/sessions">{tx('Oturumlarım')}</Link>
+        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/security">{tx('Güvenlik')}</Link>
         <span className="hidden max-w-40 truncate text-sm text-text-muted xl:inline" title={user?.displayName}>{user?.displayName}</span>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => { void signOut() }}><LogOut aria-hidden="true" className="size-4" />{tx("Çıkış")}</Button>
       </div>

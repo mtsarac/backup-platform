@@ -87,7 +87,7 @@ describe('i18n source catalog', () => {
   })
 
   it('keeps no entry that nothing references', () => {
-    const source = Object.values(references).join('\n')
+    const source = Object.entries(references).map(([, code]) => code).join('\n')
     expect(Object.keys(sourceCatalog).filter(key => !hasReference(key, source) && !backendSupplied.includes(key))).toEqual([])
   }, 20_000)
 

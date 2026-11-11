@@ -44,10 +44,12 @@ public sealed class AuthenticationService(IIdentityStore identityStore, Password
             var replacement = passwordHashService.Hash(credential.UserId, password);
             await identityStore.UpdatePasswordHashAsync(credential.UserId, replacement, cancellationToken).ConfigureAwait(false);
         }
-        var session = new UserSession(Guid.NewGuid(), credential.UserId, now, rememberMe, device, ipAddress);
+        var hasSecondFactor = await identityStore.HasSecondFactorAsync(credential.UserId, cancellationToken).ConfigureAwait(false);
+        var initialState = hasSecondFactor ? SessionAuthenticationState.SecondFactorPending : SessionAuthenticationState.FullyAuthenticated;
+        var session = new UserSession(Guid.NewGuid(), credential.UserId, now, rememberMe, device, ipAddress, initialState);
         await identityStore.CreateSessionAsync(session, now, cancellationToken).ConfigureAwait(false);
-        return new LoginSession(session.UserId, session.Id);
+        return new LoginSession(session.UserId, session.Id, hasSecondFactor);
     }
 }
 
-public sealed record LoginSession(UserId UserId, Guid SessionId);
+public sealed record LoginSession(UserId UserId, Guid SessionId, bool SecondFactorRequired = false);
