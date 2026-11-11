@@ -1,5 +1,5 @@
 """Feature flags: every flagged feature answers 404 / is absent while its flag is off and works once the operator turns it on.
-sms, supportSessions, smb, sizeAnomaly, replicaRepair (default ON) and externalSecrets are API flags: bp-api is recreated with Features__<key> flipped
+sms, smb, sizeAnomaly, replicaRepair (default ON) and externalSecrets are API flags: bp-api is recreated with Features__<key> flipped
 (docker-compose.e2e.override.yml reads E2E_FEATURE_<KEY>) and always put back to the product defaults. windowsVss and linuxSnapshots are agent flags: the
 agent host refuses to start with a file source configured for that snapshot kind. Run: python3 flags.py [filter]"""
 import os, subprocess, sys, time, uuid, requests, api, lib
@@ -8,7 +8,7 @@ from lib import scenario
 COMPOSE = ["docker", "compose", "-p", "bpe2e", "--env-file", ".env.e2e", "-f", "docker-compose.yml", "-f", "docker-compose.e2e.override.yml"]
 GATEWAY = {"enabled": True, "endpoint": "https://sms.e2e.test/send", "authentication": "none"}
 PHONE = "+905551230000"
-DEFAULTS = {"sms": False, "supportSessions": False, "smb": False, "sizeAnomaly": False, "externalSecrets": False, "replicaRepair": True}
+DEFAULTS = {"sms": False, "smb": False, "sizeAnomaly": False, "externalSecrets": False, "replicaRepair": True}
 
 def features():
     return requests.get(f"{api.BASE}/api/features", verify=False, timeout=5).json()
@@ -31,8 +31,6 @@ def set_flags(**flags):
         time.sleep(3)
     raise TimeoutError(f"api did not come back with {want}")
 
-def code(r):
-    return r.status_code
 
 def sms_requests(admin, t):
     """Every SMS-specific call and the status it must answer while the feature is off."""
@@ -65,20 +63,6 @@ def sms_flag(t):
         if features()["sms"]: admin.put(f"{transports}/sms", json={"enabled": False})
         set_flags()
 
-@scenario("flags/support-sessions-off-rejects-on-works")
-def support_flag(t):
-    admin = api.login()
-    set_flags(supportSessions=False)
-    try:
-        off = {"platform list": code(admin.get(f"{api.BASE}/api/platform/support-sessions")), "tenant list": code(t.raw("GET", "/support-access/sessions")),
-               "open": code(admin.post(f"{api.BASE}/api/platform/support-sessions", json={"tenantId": t.id}, headers={"Idempotency-Key": uuid.uuid4().hex}))}
-        assert all(c == 404 for c in off.values()), f"support API answered while off: {off}"
-        set_flags(supportSessions=True)
-        on = {"platform list": code(admin.get(f"{api.BASE}/api/platform/support-sessions")), "tenant list": code(t.raw("GET", "/support-access/sessions"))}
-        assert on == {"platform list": 200, "tenant list": 200}, f"support API unreachable while on: {on}"
-        return {"offStatus": off}
-    finally:
-        set_flags()
 
 @scenario("flags/smb-off-rejects-on-works")
 def smb_flag(t):

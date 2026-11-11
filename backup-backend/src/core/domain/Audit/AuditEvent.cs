@@ -111,7 +111,7 @@ public sealed class AuditEvent
 
     private AuditEvent(
         Guid id, DateTimeOffset at, UserId actorUserId, AuditActorKind actorKind, string action,
-        TenantId? tenantId, string targetType, string targetId, string detailsJson, Guid? supportSessionId)
+        TenantId? tenantId, string targetType, string targetId, string detailsJson, Guid? legacyAccessId)
     {
         Id = id;
         At = at.ToUniversalTime();
@@ -122,7 +122,7 @@ public sealed class AuditEvent
         TargetType = targetType;
         TargetId = targetId;
         DetailsJson = detailsJson;
-        SupportSessionId = supportSessionId;
+        LegacyAccessId = legacyAccessId;
     }
 
     public Guid Id { get; private set; }
@@ -136,12 +136,12 @@ public sealed class AuditEvent
     public string TargetId { get; private set; }
     /// <summary>A JSON object of scalar values.</summary>
     public string DetailsJson { get; private set; }
-    /// <summary>The support access session the event belongs to; null for everything that is not support access. Indexed, so a session's history is one query.</summary>
-    public Guid? SupportSessionId { get; private set; }
+    /// <summary>Historical access correlation retained for audit integrity.</summary>
+    public Guid? LegacyAccessId { get; private set; }
 
     public static AuditEvent Record(
         DateTimeOffset at, UserId actor, AuditActorKind actorKind, string action, TenantId? tenantId,
-        string targetType, string targetId, IReadOnlyDictionary<string, object?>? details = null, Guid? supportSessionId = null)
+        string targetType, string targetId, IReadOnlyDictionary<string, object?>? details = null, Guid? legacyAccessId = null)
     {
         ArgumentNullException.ThrowIfNull(actor);
         ArgumentException.ThrowIfNullOrWhiteSpace(action);
@@ -156,7 +156,7 @@ public sealed class AuditEvent
         {
             throw new ArgumentException("Audit details are too large.", nameof(details));
         }
-        if (supportSessionId == Guid.Empty) throw new ArgumentException("A support session id must not be empty.", nameof(supportSessionId));
-        return new AuditEvent(Guid.NewGuid(), at, actor, actorKind, action, tenantId, targetType, targetId, json, supportSessionId);
+        if (legacyAccessId == Guid.Empty) throw new ArgumentException("A legacy access id must not be empty.", nameof(legacyAccessId));
+        return new AuditEvent(Guid.NewGuid(), at, actor, actorKind, action, tenantId, targetType, targetId, json, legacyAccessId);
     }
 }

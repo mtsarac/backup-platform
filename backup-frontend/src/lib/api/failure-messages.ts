@@ -128,19 +128,7 @@ const messages: Record<string, string> = {
   get quota_policy_disabled() { return tx("Bu kota politikası devre dışı; plana atanamaz.") },
   get default_policy_required() { return tx("Varsayılan kota politikası devre dışı bırakılamaz.") },
   get unsupported_scope_kind() { return tx("Bu kapsam türü henüz desteklenmiyor.") },
-  get support_access_denied() { return tx("Bu destek oturumu üzerinden erişim reddedildi.") },
-  get session_expired() { return tx("Destek oturumunun süresi doldu.") },
-  get session_closed() { return tx("Destek oturumu kapatıldı.") },
-  get session_revoked() { return tx("Destek erişimi geri alındı.") },
-  get permission_missing() { return tx("Destek oturumunda bu işlem için gereken izin yok.") },
-  get not_session_owner() { return tx("Yalnızca destek oturumunu açan PlatformAdmin müşteri verilerine erişebilir ve oturumu kapatabilir.") },
-  get replace_forbidden() { return tx("Destek erişimi yalnızca yeni Database geri yüklemeye izin verir; mevcut Database üzerine yazılamaz.") },
-  get active_session_exists() { return tx("Bu tenant için zaten etkin bir destek oturumunuz var.") },
-  get support_unavailable() { return tx("Destek erişimi güvenli audit kaydı oluşturulamadığı için kullanılamıyor. Hiçbir erişim açılmadı.") },
-  get support_session_not_found() { return tx("Destek oturumu bulunamadı.") },
-  get session_not_active() { return tx("Destek oturumu artık etkin değil.") },
   get idempotency_conflict() { return tx("Bu istek anahtarı farklı bir işlem için kullanıldı. Formu kapatıp yeniden açın.") },
-  get view_required() { return tx("Download ve Restore izinleri Backup metadata görüntüleme iznini gerektirir.") },
   get notification_channel_not_found() { return tx("Bildirim kanalı bulunamadı. Liste güncel olmayabilir.") },
   get notification_channel_name_taken() { return tx("Bu ada sahip bir bildirim kanalı zaten var.") },
   get notification_channel_target_taken() { return tx("Bu hedef (adres, URL veya numara) için zaten bir bildirim kanalı var.") },
@@ -211,8 +199,6 @@ export function errorMessage(error: unknown, scope?: ErrorScope): string {
     if (error.status === 401) return tx('Oturumunuz sona erdi. Yeniden giriş yapın.')
     const code = error.reason ?? error.code
     if (scope && isRequestFailure(error)) return failureMessage(code, scope)
-    if (error.code === 'support_access_denied') return failureMessage(code)
-    if (error.code === 'support_session_not_found' || error.code === 'not_session_owner' || error.code === 'replace_forbidden' || error.code === 'support_unavailable') return failureMessage(code)
     if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
     if (error.status === 403) return tx('Bu işlem için yetkiniz yok.')
     if (error.status === 404) return tx('Kayıt bulunamadı veya bu tenant altında erişilemiyor.')

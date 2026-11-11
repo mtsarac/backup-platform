@@ -9,30 +9,6 @@ namespace BackupPlatform.IntegrationTests;
 public sealed class RemoveArtifactAccessMigrationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
     [Fact]
-    public async Task UpgradePreservesSupportDownloads()
-    {
-        await using var scenario = await SupportScenario.CreateAsync(fixture);
-        var supportId = SupportScenario.IdOf(await scenario.OpenAsync([SupportScenario.View, SupportScenario.Download]));
-        var path = SupportScenario.Path(supportId, $"/artifacts/{scenario.ArtifactId}/downloads");
-        var (status, created) = await scenario.PostAsync(path, new { replicaId = scenario.Source.ReplicaId });
-        Assert.Equal(HttpStatusCode.OK, status);
-        var downloadId = created.GetProperty("sessionId").GetGuid();
-        var url = created.GetProperty("downloadUrl").GetString()!;
-        await using (var context = fixture.CreatePlatformContext())
-        {
-            var migrator = context.GetService<IMigrator>();
-            await migrator.MigrateAsync("20261106140706_JobCredentialClaims");
-            await migrator.MigrateAsync();
-        }
-        var session = await scenario.Source.Store().GetAsync(scenario.Tenant.Id, downloadId, default);
-        Assert.Equal(DownloadState.Ready, session!.State);
-        Assert.Equal(supportId, session.SupportSessionId);
-        using var content = await scenario.Admin.Client.GetAsync(url);
-        Assert.Equal(HttpStatusCode.OK, content.StatusCode);
-        Assert.Equal(scenario.Source.Bytes, await content.Content.ReadAsByteArrayAsync());
-    }
-
-    [Fact]
     public async Task UpgradeRevokesLegacyBreakGlassSessionsWithoutDisturbingTenantDownloads()
     {
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture, agentLocal: true);

@@ -18,7 +18,6 @@ export function PlatformSidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
       { label: tx("Kota ilkeleri"), to: platformPaths.quotaPolicies, icon: Sliders },
     ] },
     { heading: tx("Güvenlik ve destek"), items: [
-      { label: tx("Destek oturumları"), to: platformPaths.supportSessions, icon: ShieldCheck, feature: 'supportSessions' },
       { label: tx("Denetim kaydı"), to: platformPaths.audit(), icon: ScrollText },
     ] },
     { heading: tx("Ayarlar"), items: [

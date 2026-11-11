@@ -53,7 +53,7 @@ public sealed class AuditSigningInterceptor(string keyId, string privateKeyPem) 
         {
             record.Id, AtMicroseconds = (record.At.UtcTicks - DateTimeOffset.UnixEpoch.UtcTicks) / 10,
             ActorUserId = record.ActorUserId.Value, record.ActorKind, record.Action,
-            TenantId = record.TenantId?.Value, record.TargetType, record.TargetId, record.SupportSessionId,
+            TenantId = record.TenantId?.Value, record.TargetType, record.TargetId, SupportSessionId = record.LegacyAccessId,
             Details = details.RootElement.EnumerateObject().OrderBy(property => property.Name, StringComparer.Ordinal).Select(property => new
             {
                 property.Name, property.Value.ValueKind,

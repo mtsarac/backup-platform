@@ -2,7 +2,6 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { changeLanguage } from '@/lib/i18n/runtime'
 import { tenantRoutes } from '@/route-tables'
 import { AppShell } from './app-shell'
@@ -14,7 +13,7 @@ vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { isPlatfor
 
 vi.mock('@/hooks/use-theme', () => ({ useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }))
 
-beforeEach(() => { access.canAdmin = true; access.isPlatformAdmin = false; setFeatureFlags({ supportSessions: true }) })
+beforeEach(() => { access.canAdmin = true; access.isPlatformAdmin = false })
 
 const base = '/tenants/tenant-a'
 const nav = () => screen.getAllByRole('navigation')[0]
@@ -40,7 +39,6 @@ describe('Tenant sidebar', () => {
       ['Bildirimler', `${base}/notifications`],
       ['Şifreleme', `${base}/encryption`],
       ['Yükleme bant genişliği', `${base}/upload-bandwidth`],
-      ['Destek erişimi', `${base}/support-access`],
     ])
     expect(within(nav()).queryByRole('link', { name: 'Platform Yönetimi' })).not.toBeInTheDocument()
   })
@@ -64,7 +62,7 @@ describe('Tenant sidebar', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(tenantRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith(base))
-    expect(targets).toHaveLength(12)
+    expect(targets).toHaveLength(11)
     for (const href of targets) expect(matchRoutes(routes, href.slice(base.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 
@@ -73,7 +71,7 @@ describe('Tenant sidebar', () => {
     act(() => changeLanguage('en'))
     expect(links('Backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup attempts', 'Backup files', 'Restores'])
     expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Database discovery', 'Storage'])
-    expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Upload bandwidth', 'Support access'])
+    expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Upload bandwidth'])
     expect(within(nav()).getByRole('link', { name: 'Overview' })).toBeInTheDocument()
   })
 

@@ -153,12 +153,6 @@ const dictionary = {
     OverQuota: { level: 'urgent', get label() { return tx("OverQuota") } },
     Unlimited: { level: 'info', get label() { return tx("Unlimited") } },
   },
-  supportSession: {
-    Active: { level: 'safe', get label() { return tx("Etkin") } },
-    Expired: { level: 'attention', get label() { return tx("Süresi doldu") } },
-    Closed: { level: 'neutral', get label() { return tx("Kapatıldı") } },
-    Revoked: { level: 'urgent', get label() { return tx("Erişim geri alındı") } },
-  },
   verification: {
     Restored: { level: 'safe', get label() { return tx("Başarılı · Restored") } },
     Failed: { level: 'urgent', get label() { return tx("Başarısız · Failed") } },

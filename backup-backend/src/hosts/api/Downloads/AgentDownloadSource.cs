@@ -76,7 +76,7 @@ public sealed class AgentDownloadSource(IDownloadStore store, AgentConnectivityQ
         if (session is null) return null;
         if (request.Sdp is null) return new DownloadSignal(signals.Offer(sessionId));
         if (session.State != DownloadState.Preparing || !DirectDownloadSignals.ValidSdp(request.Sdp)) return null;
-        // Re-enter the existing streaming gate: tenant role and support-session revocation are checked before peer bytes can flow.
+        // Re-enter the existing streaming gate: tenant administrator role is checked before peer bytes can flow.
         var ready = await store.TransitionAsync(sessionId, new DownloadTransition(DownloadState.Preparing, DownloadState.Ready,
             session.LeaseOwner, null, time.GetUtcNow()), cancellationToken);
         if (ready is null) return null;
