@@ -1,14 +1,16 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Downloads;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
+using BackupPlatform.Infrastructure.Downloads;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Backups;
 
-public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContext> options) : IBackupShareStore
+public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContext> options, ActiveDownloadRegistry? activeDownloads = null) : IBackupShareStore
 {
     public async Task<BackupShareCreateResult> CreateAsync(
         TenantId tenantId,
@@ -322,11 +324,12 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         }
 
         var oldExpiry = share.ExpiresAtUtc;
-        share.Revoke(actor, now);
+        var revokedAtUtc = now.ToUniversalTime();
+        share.Revoke(actor, revokedAtUtc);
 
         var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
         context.AuditEvents.Add(AuditEvent.Record(
-            now.ToUniversalTime(),
+            revokedAtUtc,
             actor,
             actorKind,
             AuditActions.BackupShareRevoked,
@@ -345,9 +348,35 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
                 ["result"] = "revoked"
             }));
 
+        var agentSessionIds = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM download_sessions
+            WHERE "TenantId" = {tenantId.Value} AND "ShareId" = {share.Id} AND "AgentId" IS NOT NULL AND "ReleasedAt" IS NULL
+            ORDER BY "Id"
+            FOR UPDATE
+            """).ToListAsync(cancellationToken);
+
+        if (agentSessionIds.Count > 0)
+        {
+            var agentSessions = await context.DownloadSessions
+                .Where(s => agentSessionIds.Contains(s.Id))
+                .ToListAsync(cancellationToken);
+            foreach (var agentSession in agentSessions)
+            {
+                if (agentSession.CancelByRevocation(revokedAtUtc))
+                {
+                    PostgreSqlDownloadStore.RecordSessionAudit(context, agentSession, revokedAtUtc, "download.cancelled");
+                }
+            }
+        }
+
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_notify('backup_share_revoked', {share.Id.ToString("D")})",
+            cancellationToken);
+
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        activeDownloads?.CancelShare(share.Id);
         var userNames = await ResolveUserNamesAsync(context, [share.CreatedByUserId], cancellationToken);
         var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
         var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);

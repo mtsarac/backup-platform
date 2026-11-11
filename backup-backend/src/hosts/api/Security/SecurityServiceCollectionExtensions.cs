@@ -134,10 +134,19 @@ public static class SecurityServiceCollectionExtensions
         AddNotifications(services);
         services.AddSingleton<InAppNotificationFanout>();
         services.AddHostedService(provider => provider.GetRequiredService<InAppNotificationFanout>());
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection(ShareRevocationOptions.SectionName).Get<ShareRevocationOptions>() ?? new ShareRevocationOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.TryAddSingleton<ActiveDownloadRegistry>();
         services.AddScoped<IDownloadStore, PostgreSqlDownloadStore>();
         services.AddScoped<DownloadService>();
         services.AddScoped<DownloadStreamer>();
         services.AddHostedService<DownloadExpiryWorker>();
+        services.AddSingleton<ShareRevocationCancellationWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<ShareRevocationCancellationWorker>());
         services.AddAgentDownloads();
         services.AddSingleton<IBackupWorkSignal, AgentPushWorkSignal>();
         services.AddBackupScheduling();

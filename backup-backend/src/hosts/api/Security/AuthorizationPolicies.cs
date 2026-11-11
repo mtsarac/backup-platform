@@ -90,7 +90,7 @@ internal sealed class ArtifactContentAuthorizationHandler(ICurrentUser currentUs
                 shareId = hSid;
             }
             bool allowExpiredShare = false;
-            if (shareId is null && httpContext.Request.RouteValues.TryGetValue("sessionId", out var sVal) && Guid.TryParse(sVal?.ToString(), out var sessionId))
+            if (httpContext.Request.RouteValues.TryGetValue("sessionId", out var sVal) && Guid.TryParse(sVal?.ToString(), out var sessionId))
             {
                 var downloadStore = httpContext.RequestServices.GetService<IDownloadStore>();
                 if (downloadStore is not null)
@@ -98,7 +98,12 @@ internal sealed class ArtifactContentAuthorizationHandler(ICurrentUser currentUs
                     var session = await downloadStore.GetAsync(tenantId, sessionId, httpContext.RequestAborted);
                     if (session is not null && session.UserId == userId.Value && session.ArtifactId == artifactId)
                     {
-                        shareId = session.ShareId;
+                        if (session.ShareId is not null && HttpMethods.IsGet(httpContext.Request.Method) && !path.EndsWith("/content", StringComparison.OrdinalIgnoreCase))
+                        {
+                            context.Succeed(requirement);
+                            return;
+                        }
+                        shareId ??= session.ShareId;
                         allowExpiredShare = session.State == BackupPlatform.Domain.Downloads.DownloadState.Streaming || session.IsTerminal;
                     }
                 }

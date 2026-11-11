@@ -22,6 +22,7 @@ public interface IDownloadStore
     Task<DownloadSession?> ExpireSessionAsync(TenantId tenantId, Guid sessionId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<DownloadSession?> SwitchReplicaAsync(Guid sessionId, Guid currentReplicaId, string? expectedOwner, BackupReplica newReplica, CancellationToken cancellationToken);
     Task RecordRefusalAsync(DownloadRefusalCommand command, CancellationToken cancellationToken);
+    Task<bool> IsShareRevokedAsync(TenantId tenantId, Guid shareId, CancellationToken cancellationToken) => Task.FromResult(false);
 }
 
 /// <summary>Agent availability and control-plane selection. Direct browser sessions never expose a backend payload stream.</summary>
