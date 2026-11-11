@@ -19,14 +19,14 @@ public sealed class UserBootstrapTests(PostgreSqlFixture fixture) : IClassFixtur
         var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(fixture.ConnectionString).Options;
         var identifier = $"initial-{Guid.NewGuid():N}";
         var password = $"Local-only-{Guid.NewGuid():N}!";
-        foreach (var (login, email, candidate) in new[]
+        foreach (var (candidateLogin, email, candidate) in new[]
         {
             ("bad login!", "admin@example.com", password),
             (identifier, "invalid", password),
             (identifier, "admin@example.com", "short")
         })
             await Assert.ThrowsAnyAsync<ArgumentException>(() => UserBootstrapper.CreateInitialUserAsync(
-                options, login, "Initial local user", email, candidate, CancellationToken.None));
+                options, candidateLogin, "Initial local user", email, candidate, CancellationToken.None));
         await using (var empty = fixture.CreatePlatformContext())
             Assert.Empty(await empty.Users.ToListAsync());
 
@@ -44,7 +44,7 @@ public sealed class UserBootstrapTests(PostgreSqlFixture fixture) : IClassFixtur
         var attempts = new[] { Attempt(identifier), Attempt(identifier + "-other") };
         start.SetResult();
         var results = await Task.WhenAll(attempts);
-        var userId = Assert.Single(results.Where(id => id is not null))!;
+        var userId = Assert.Single(results, id => id is not null)!;
         if (results[1] is not null) identifier += "-other";
         await Assert.ThrowsAsync<InvalidOperationException>(() => UserBootstrapper.CreateInitialUserAsync(
             options, "replacement", "Replacement user", "replacement@example.com", password, CancellationToken.None));

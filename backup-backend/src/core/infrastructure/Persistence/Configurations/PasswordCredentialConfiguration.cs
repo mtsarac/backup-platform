@@ -15,7 +15,7 @@ internal sealed class PasswordCredentialConfiguration : IEntityTypeConfiguration
             table.HasCheckConstraint("ck_password_credentials_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
             table.HasCheckConstraint("ck_password_credentials_login", "\"LoginIdentifier\" ~ '^[A-Za-z0-9._-]{3,128}$'");
             table.HasCheckConstraint("ck_password_credentials_normalized_login", "\"NormalizedLoginIdentifier\" = upper(\"LoginIdentifier\" COLLATE \"C\")");
-            table.HasCheckConstraint("ck_password_credentials_normalized_email", "\"NormalizedEmail\" = upper(\"Email\" COLLATE \"C\")");
+            table.HasCheckConstraint("ck_password_credentials_normalized_email", "(\"Email\" IS NULL AND \"NormalizedEmail\" IS NULL) OR (\"Email\" IS NOT NULL AND \"NormalizedEmail\" IS NOT NULL AND \"NormalizedEmail\" = upper(\"Email\" COLLATE \"C\"))");
             table.HasCheckConstraint("ck_password_credentials_hash", "\"PasswordHash\" ~ '[^[:space:]]'");
         });
         builder.HasKey(credential => credential.UserId);
