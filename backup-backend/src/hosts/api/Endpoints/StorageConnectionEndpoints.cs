@@ -480,16 +480,15 @@ public static class StorageConnectionEndpoints
     }
 
     private static async Task<IResult> ProbeV1Async(
-        Guid id, ICurrentUser user, TenantResolutionService resolution, IUserAccessStore userAccess,
+        Guid id, ICurrentUser user, TenantResolutionService resolution,
         IStorageConnectionStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         if (!user.IsAuthenticated || user.UserId is not { } userId) return Results.Unauthorized();
         var record = await store.FindAsync(id, null, cancellationToken);
         if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
 
-        var isPlatformAdmin = await userAccess.IsPlatformAdminAsync(userId, cancellationToken);
-        var membership = isPlatformAdmin ? null : await resolution.ResolveAsync(record.Connection.TenantId, cancellationToken);
-        if (!isPlatformAdmin && (membership is null || (membership.Role != BackupPlatform.Domain.Tenancy.TenantRole.Owner && membership.Role != BackupPlatform.Domain.Tenancy.TenantRole.Admin)))
+        var access = await resolution.ResolveAsync(record.Connection.TenantId, cancellationToken);
+        if (access is null)
         {
             return Results.NotFound(new { error = "storage_connection_not_found" });
         }

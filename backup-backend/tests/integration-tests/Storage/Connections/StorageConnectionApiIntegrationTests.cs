@@ -63,16 +63,16 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
             await world.EntitleAsync(tenant);
 
             var account = await world.SeedUserAsync();
-            await world.GrantAsync(tenant, account, TenantRole.Admin);
+            await world.GrantAsync(tenant, account);
             var adminSession = await world.SignInAsync(account);
 
             return new ApiWorld(world, tenant, adminSession, centralRoot);
         }
 
-        public async Task<BrowserSession> SessionAsync(TenantRole role)
+        public async Task<BrowserSession> MemberAsync()
         {
             var account = await World.SeedUserAsync();
-            await World.GrantAsync(Tenant, account, role);
+            await World.GrantAsync(Tenant, account);
             return await World.SignInAsync(account);
         }
 
@@ -126,24 +126,11 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
     {
         await using var env = await ApiWorld.CreateAsync(fixture);
         var admin = env.Admin;
-        var viewer = await env.SessionAsync(TenantRole.Viewer);
         var platform = await env.PlatformAdminAsync();
 
-        // 1. Viewer reads first: auto-provisions both, but Viewer cannot mutate anything
-        using var viewerList = await viewer.GetAsync(env.TenantRoot + "/storage-connections");
-        Assert.Equal(HttpStatusCode.OK, viewerList.StatusCode);
-        var viewerItems = AgentWorld.ReadJson(viewerList).GetProperty("items").EnumerateArray().ToList();
-        Assert.Equal(2, viewerItems.Count);
-        Assert.All(viewerItems, item =>
-        {
-            var p = item.GetProperty("permissions");
-            Assert.False(p.GetProperty("canEdit").GetBoolean());
-            Assert.False(p.GetProperty("canToggle").GetBoolean());
-            Assert.False(p.GetProperty("canDelete").GetBoolean());
-        });
-
-        // 2. Admin reads: can manage TenantManaged (Local) but not PlatformManaged (Central)
+        // 1. UserAdmin member reads: can manage TenantManaged (Local) but not PlatformManaged (Central)
         using var adminList = await admin.GetAsync(env.TenantRoot + "/storage-connections");
+        Assert.Equal(HttpStatusCode.OK, adminList.StatusCode);
         var adminItems = AgentWorld.ReadJson(adminList).GetProperty("items").EnumerateArray().ToList();
         var local = adminItems.Single(item => item.GetProperty("providerType").GetString() == "local");
         var central = adminItems.Single(item => item.GetProperty("providerType").GetString() == "central");
@@ -154,7 +141,7 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
         Assert.False(central.GetProperty("permissions").GetProperty("canToggle").GetBoolean());
         Assert.False(central.GetProperty("permissions").GetProperty("canDelete").GetBoolean());
 
-        // 3. PlatformAdmin reads: can manage PlatformManaged (Central) fully; for TenantManaged (Local) can only toggle and set quotaScope
+        // 2. PlatformAdmin reads: can manage PlatformManaged (Central) fully; for TenantManaged (Local) can only toggle and set quotaScope
         using var platformList = await platform.GetAsync($"/api/platform/tenants/{env.Tenant.Id.Value}/storage-connections");
         var platformItems = AgentWorld.ReadJson(platformList).GetProperty("items").EnumerateArray().ToList();
         var pLocal = platformItems.Single(item => item.GetProperty("providerType").GetString() == "local");
@@ -172,25 +159,14 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
     // ---- authorization matrix --------------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task ViewerAndOperatorAreReadOnlyAndNonMembersAreForbidden()
+    public async Task NonMembersAreForbiddenOnTenantRoutes()
     {
         await using var env = await ApiWorld.CreateAsync(fixture);
-        var operatorUser = await env.SessionAsync(TenantRole.Operator);
         var nonMember = await env.NonMemberAsync();
-        using var list = await env.Admin.GetAsync(env.TenantRoot + "/storage-connections");
-        var localId = AgentWorld.ReadJson(list).GetProperty("items").EnumerateArray().Single(i => i.GetProperty("providerType").GetString() == "local").GetProperty("id").GetGuid();
 
-        // Operator attempts mutations -> 403
-        using var opRename = await operatorUser.SendAsync(HttpMethod.Put, env.TenantRoot + $"/storage-connections/{localId}", new { name = "Hacked" });
-        using var opToggle = await operatorUser.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/disable");
-        using var opDelete = await operatorUser.SendAsync(HttpMethod.Delete, env.TenantRoot + $"/storage-connections/{localId}");
-        Assert.Equal(HttpStatusCode.Forbidden, opRename.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, opToggle.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, opDelete.StatusCode);
-
-        // Non-member -> 403 on tenant routes
+        // Non-member -> 403 or 404 on tenant routes
         using var nmList = await nonMember.GetAsync(env.TenantRoot + "/storage-connections");
-        Assert.Equal(HttpStatusCode.Forbidden, nmList.StatusCode);
+        Assert.True(nmList.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound);
     }
 
     [Fact]

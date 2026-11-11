@@ -162,23 +162,13 @@ public sealed class RetentionApiTests(PostgreSqlFixture fixture) : IClassFixture
         await using var scenario = await CreateAsync(fixture);
         var jobId = await CreateJobAsync(scenario);
         var backup = await AcceptBackupAsync(scenario, jobId);
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
-        var @operator = await scenario.SessionAsync(TenantRole.Operator);
-
-        using var list = await viewer.GetAsync(scenario.Root + "/backup-artifacts");
-        using var get = await viewer.GetAsync(scenario.Root + $"/backup-artifacts/{backup.ArtifactId}");
-        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
-
-        foreach (var session in new[] { viewer, @operator })
-        {
-            using var delete = await DeleteArtifactAsync(scenario, backup.ArtifactId, session);
-            using var cancel = await CancelDeleteAsync(scenario, backup.ArtifactId, session);
-            using var retention = await PutRetentionAsync(scenario, jobId, Policy(keepForSeconds: 7200), session);
-            Assert.Equal(HttpStatusCode.Forbidden, delete.StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, cancel.StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, retention.StatusCode);
-        }
+        var nonMember = await scenario.SessionAsync(member: false);
+        using var delete = await DeleteArtifactAsync(scenario, backup.ArtifactId, nonMember);
+        using var cancel = await CancelDeleteAsync(scenario, backup.ArtifactId, nonMember);
+        using var retention = await PutRetentionAsync(scenario, jobId, Policy(keepForSeconds: 7200), nonMember);
+        Assert.Equal(HttpStatusCode.Forbidden, delete.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, cancel.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, retention.StatusCode);
 
         using var anonymous = await scenario.World.Anonymous.DeleteAsync(scenario.Root + $"/backup-artifacts/{backup.ArtifactId}");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
@@ -186,17 +176,13 @@ public sealed class RetentionApiTests(PostgreSqlFixture fixture) : IClassFixture
         Assert.Equal((true, DefaultKeep.TotalSeconds, DefaultGrace.TotalSeconds), Read(await JobAsync(scenario, jobId)));
     }
 
-    [Theory]
-    [InlineData(TenantRole.Owner)]
-    [InlineData(TenantRole.Admin)]
-    public async Task OwnersAndAdminsMayRequestDeletion(TenantRole role)
+    [Fact]
+    public async Task OwnersAndAdminsMayRequestDeletion()
     {
         await using var scenario = await CreateAsync(fixture);
         var backup = await AcceptBackupAsync(scenario, await CreateJobAsync(scenario));
-        var session = await scenario.SessionAsync(role);
-
+        var session = await scenario.SessionAsync();
         using var response = await DeleteArtifactAsync(scenario, backup.ArtifactId, session);
-
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
 

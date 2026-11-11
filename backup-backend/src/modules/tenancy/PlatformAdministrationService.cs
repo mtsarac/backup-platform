@@ -60,18 +60,8 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
     }
 
     public Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(
-        TenantId tenantId, UserId userId, TenantRole role, UserId actor, CancellationToken cancellationToken)
-    {
-        ValidRole(role);
-        return store.AddMembershipAsync(tenantId, userId, role, actor, timeProvider.GetUtcNow(), cancellationToken);
-    }
-
-    public Task<PlatformChange<PlatformMembershipItem>> ChangeMembershipRoleAsync(
-        TenantId tenantId, UserId userId, TenantRole role, UserId actor, CancellationToken cancellationToken)
-    {
-        ValidRole(role);
-        return store.ChangeMembershipRoleAsync(tenantId, userId, role, actor, timeProvider.GetUtcNow(), cancellationToken);
-    }
+        TenantId tenantId, UserId userId, UserId actor, CancellationToken cancellationToken) =>
+        store.AddMembershipAsync(tenantId, userId, actor, timeProvider.GetUtcNow(), cancellationToken);
 
     public Task<PlatformChange<PlatformMembershipItem>> RemoveMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, CancellationToken cancellationToken) =>
@@ -91,11 +81,4 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
         return trimmed;
     }
 
-    private static void ValidRole(TenantRole role)
-    {
-        if (!Enum.IsDefined(role))
-        {
-            throw new InvalidPlatformRequestException("role", "invalid_value");
-        }
-    }
 }

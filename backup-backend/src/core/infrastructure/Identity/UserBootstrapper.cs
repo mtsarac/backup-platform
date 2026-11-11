@@ -34,9 +34,8 @@ public static class UserBootstrapper
         {
             throw new InvalidOperationException("Bootstrap is only available before the first password credential exists.");
         }
-        context.Users.Add(new User(userId, displayName));
+        context.Users.Add(new User(userId, displayName, UserRole.PlatformAdmin));
         context.PasswordCredentials.Add(credential);
-        context.PlatformAdmins.Add(new PlatformAdmin(userId));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return userId;

@@ -129,7 +129,7 @@ internal sealed class AuthProbeStartupFilter : IStartupFilter
             [new Claim(ClaimTypes.NameIdentifier, replacementUser.Value.ToString())], BrowserAuthentication.Scheme));
         context.Request.Headers["X-Tenant-Id"] = replacementTenant.Value.ToString();
         context.Request.RouteValues["tenantId"] = replacementTenant.Value.ToString();
-        context.Features.Set(new ResolvedTenantContext(new TenantAccess(replacementTenant, "Untrusted replacement", TenantRole.Owner)));
+        context.Features.Set(new ResolvedTenantContext(new TenantAccess(replacementTenant, "Untrusted replacement")));
         var visibleTenants = await database.Tenants.Select(row => row.Id).ToArrayAsync();
         await context.Response.WriteAsJsonAsync(new
         {

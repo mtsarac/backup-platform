@@ -16,7 +16,11 @@ public sealed class DownloadStoreTests(PostgreSqlFixture fixture) : IClassFixtur
     private readonly DateTimeOffset _now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
     private DateTimeOffset Now => _now;
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(3);
-    private PostgreSqlDownloadStore Store() => new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(fixture.ConnectionString).Options);
+    private PostgreSqlDownloadStore Store()
+    {
+        var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(fixture.ConnectionString).Options;
+        return new(options, new BackupPlatform.Infrastructure.Tenancy.PostgreSqlCentralAuthorizationService(options));
+    }
 
     private async Task<DownloadCreateCommand> SeedAsync()
     {
@@ -24,7 +28,7 @@ public sealed class DownloadStoreTests(PostgreSqlFixture fixture) : IClassFixtur
         var user = new User(UserId.New(), "Download administrator");
         await using var context = fixture.CreatePlatformContext();
         context.Users.Add(user);
-        context.TenantMemberships.Add(new TenantMembership(seed.TenantId, user.Id, TenantRole.Admin));
+        context.TenantMemberships.Add(new TenantMembership(seed.TenantId, user.Id));
         await context.SaveChangesAsync();
         return new(seed.TenantId, seed.ArtifactId, seed.ReplicaId, user.Id.Value, "master.bak", Now, Lifetime);
     }
@@ -186,7 +190,7 @@ public sealed class DownloadStoreTests(PostgreSqlFixture fixture) : IClassFixtur
         await using (var context = fixture.CreatePlatformContext())
         {
             context.Users.Add(user);
-            context.TenantMemberships.Add(new TenantMembership(seed.TenantId, user.Id, TenantRole.Admin));
+            context.TenantMemberships.Add(new TenantMembership(seed.TenantId, user.Id));
             await context.SaveChangesAsync();
         }
         var command = new DownloadCreateCommand(seed.TenantId, seed.ArtifactId, seed.ReplicaId, user.Id.Value, "master.bak", Now, Lifetime);

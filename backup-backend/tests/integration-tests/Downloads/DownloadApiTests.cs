@@ -10,14 +10,12 @@ namespace BackupPlatform.IntegrationTests;
 
 public sealed class DownloadApiTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
-    [Theory]
-    [InlineData(TenantRole.Owner)]
-    [InlineData(TenantRole.Admin)]
-    public async Task AdministratorDownloadsRealCentralBytesThroughANativeAttachment(TenantRole role)
+    [Fact]
+    public async Task AdministratorDownloadsRealCentralBytesThroughANativeAttachment()
     {
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
         var account = await scenario.World.SeedUserAsync();
-        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account, role);
+        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account);
         var browser = await scenario.World.SignInAsync(account);
         using var availability = await browser.GetAsync(scenario.ArtifactPath + "/download-availability");
         Assert.Equal(HttpStatusCode.OK, availability.StatusCode);
@@ -60,21 +58,23 @@ public sealed class DownloadApiTests(PostgreSqlFixture fixture) : IClassFixture<
         Assert.Equal(persisted.ReleasedAt, details.RootElement.GetProperty("completedAt").GetDateTimeOffset());
     }
 
-    [Theory]
-    [InlineData(TenantRole.Operator)]
-    [InlineData(TenantRole.Viewer)]
-    public async Task LowerRolesCannotReadAvailabilityCreateStatusOrContent(TenantRole role)
+    [Fact]
+    public async Task PlatformAdminAndNonMembersCannotReadAvailabilityCreateStatusOrContent()
     {
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
-        var account = await scenario.World.SeedUserAsync();
-        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account, role);
-        var browser = await scenario.World.SignInAsync(account);
+        var platformAccount = await scenario.World.SeedUserAsync(platformAdmin: true);
+        var nonMemberAccount = await scenario.World.SeedUserAsync(platformAdmin: false);
         var created = await scenario.CreateSessionAsync();
-        using var availability = await browser.GetAsync(scenario.ArtifactPath + "/download-availability");
-        using var create = await scenario.CreateRawAsync(browser);
-        using var status = await browser.GetAsync(scenario.ArtifactPath + $"/downloads/{created.GetProperty("sessionId").GetGuid()}");
-        using var content = await browser.GetAsync(created.GetProperty("downloadUrl").GetString()!);
-        Assert.All(new[] { availability, create, status, content }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+
+        foreach (var account in new[] { platformAccount, nonMemberAccount })
+        {
+            var browser = await scenario.World.SignInAsync(account);
+            using var availability = await browser.GetAsync(scenario.ArtifactPath + "/download-availability");
+            using var create = await scenario.CreateRawAsync(browser);
+            using var status = await browser.GetAsync(scenario.ArtifactPath + $"/downloads/{created.GetProperty("sessionId").GetGuid()}");
+            using var content = await browser.GetAsync(created.GetProperty("downloadUrl").GetString()!);
+            Assert.All(new[] { availability, create, status, content }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+        }
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public sealed class DownloadApiTests(PostgreSqlFixture fixture) : IClassFixture<
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
         var created = await scenario.CreateSessionAsync();
         var account = await scenario.World.SeedUserAsync();
-        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account, TenantRole.Owner);
+        await scenario.World.GrantAsync(scenario.Backup.Backup.Setup.Tenant, account);
         var owner = await scenario.World.SignInAsync(account);
         var other = await scenario.World.CreateTenantAsync();
         var sessionId = created.GetProperty("sessionId").GetGuid();

@@ -52,7 +52,7 @@ public sealed class RestoreVerificationApiTests(PostgreSqlFixture fixture) : ICl
     {
         var (scenario, backup) = await StartScenarioAsync(fixture);
         await using var _ = scenario;
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
+        var viewer = await scenario.SessionAsync(member: false);
         using var denied = await scenario.StartPreparationRawAsync(backup.ArtifactId, "verifications", VerifyBody(scenario.Agent.AgentId), "viewer-key", viewer);
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
 
@@ -177,8 +177,8 @@ public sealed class RestoreVerificationApiTests(PostgreSqlFixture fixture) : ICl
     {
         var (scenario, backup) = await StartScenarioAsync(fixture);
         await using var _ = scenario;
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
-        var operatorSession = await scenario.SessionAsync(TenantRole.Operator);
+        var viewer = await scenario.SessionAsync(member: false);
+        var operatorSession = await scenario.SessionAsync();
         var restoreId = (await StartVerificationAsync(scenario, backup.ArtifactId)).GetProperty("id").GetGuid();
         var task = await scenario.MustPollRestoreAsync(taskType: Verification);
         using (var started = await scenario.StartAttemptRawAsync(task)) Assert.Equal(HttpStatusCode.OK, started.StatusCode);
@@ -205,7 +205,7 @@ public sealed class RestoreVerificationApiTests(PostgreSqlFixture fixture) : ICl
         // A one-minute guard instead of the seven-day default, so the test can pass it without expiring the sessions.
         await using var scenario = await CreateAsync(fixture, configuration: new Dictionary<string, string?> { ["Restores:RollbackRetention"] = "00:01:00" });
         var backup = await scenario.AcceptBackupAsync();
-        var operatorSession = await scenario.SessionAsync(TenantRole.Operator);
+        var operatorSession = await scenario.SessionAsync(member: false);
         var created = await scenario.StartAsync(backup.ArtifactId, scenario.Body("Sales", "ReplaceExistingDatabase", "Sales"));
         var restoreId = created.GetProperty("id").GetGuid();
         await scenario.RunToCompletionAsync(result: new { databaseState = "ONLINE", retainedDatabaseName = RollbackName });

@@ -20,7 +20,7 @@ public sealed class BackupAuditSafetyIntegrationTests(PostgreSqlFixture fixture)
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var jobId = await scenario.CreateJobAsync();
-        var viewer = await scenario.SessionAsync(TenantRole.Viewer);
+        var viewer = await scenario.SessionAsync(member: false);
         using (var denied = await scenario.CreateJobRawAsync(BackupApiScenario.JobBody(scenario.Agent.AgentId), viewer))
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         using (var denied = await scenario.StartRawAsync(jobId, "viewer-denied", viewer))
@@ -52,7 +52,7 @@ public sealed class BackupAuditSafetyIntegrationTests(PostgreSqlFixture fixture)
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var account = await scenario.World.SeedUserAsync();
-        await scenario.World.GrantAsync(scenario.Setup.Tenant, account, TenantRole.Operator);
+        await scenario.World.GrantAsync(scenario.Setup.Tenant, account);
         var session = await scenario.World.SignInAsync(account);
         using var created = await scenario.CreateJobRawAsync(BackupApiScenario.JobBody(scenario.Agent.AgentId), session);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);

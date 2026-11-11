@@ -65,42 +65,29 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     }
 
     [Fact]
-    public async Task MembershipRolesRemainIndependentAcrossTenantsAndPlatformGrants()
+    public async Task MembershipsRemainIndependentAcrossTenants()
     {
         var first = await SeedAsync();
         var second = new Tenant(TenantId.New(), "Second tenant");
         await using (var platform = fixture.CreatePlatformContext())
         {
             platform.Tenants.Add(second);
-            platform.TenantMemberships.Add(new TenantMembership(second.Id, first.UserId, TenantRole.Viewer));
-            platform.PlatformAdmins.Add(new PlatformAdmin(first.UserId));
+            platform.TenantMemberships.Add(new TenantMembership(second.Id, first.UserId));
             await platform.SaveChangesAsync();
         }
         await using (var context = fixture.CreateContext(first.TenantId))
         {
             var membership = await context.TenantMemberships.SingleAsync(row => row.UserId == first.UserId);
-            Assert.Equal(TenantRole.Admin, membership.Role);
-            membership.ChangeRole(TenantRole.Operator);
-            await context.SaveChangesAsync();
+            Assert.Equal(first.TenantId, membership.TenantId);
         }
         await using (var context = fixture.CreateContext(second.Id))
         {
             var membership = await context.TenantMemberships.SingleAsync(row => row.UserId == first.UserId);
             Assert.Equal(second.Id, membership.TenantId);
-            Assert.Equal(TenantRole.Viewer, membership.Role);
-        }
-        await using (var platform = fixture.CreatePlatformContext())
-        {
-            var membership = await platform.TenantMemberships.SingleAsync(row => row.TenantId == first.TenantId && row.UserId == first.UserId);
-            Assert.Equal(TenantRole.Operator, membership.Role);
-            var grant = await platform.PlatformAdmins.SingleAsync(row => row.UserId == first.UserId);
-            Assert.Equal(first.UserId, grant.UserId);
-            platform.PlatformAdmins.Remove(grant);
-            await platform.SaveChangesAsync();
         }
         await using var verification = fixture.CreatePlatformContext();
-        Assert.False(await verification.PlatformAdmins.AnyAsync(row => row.UserId == first.UserId));
-        Assert.Equal(TenantRole.Viewer, (await verification.TenantMemberships.SingleAsync(row => row.TenantId == second.Id && row.UserId == first.UserId)).Role);
+        Assert.True(await verification.TenantMemberships.AnyAsync(row => row.TenantId == first.TenantId && row.UserId == first.UserId));
+        Assert.True(await verification.TenantMemberships.AnyAsync(row => row.TenantId == second.Id && row.UserId == first.UserId));
     }
 
     [Fact]
@@ -108,7 +95,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     {
         var seed = await SeedAsync();
         await using var context = fixture.CreateContext(seed.TenantId);
-        context.TenantMemberships.Add(new TenantMembership(seed.TenantId, seed.UserId, TenantRole.Viewer));
+        context.TenantMemberships.Add(new TenantMembership(seed.TenantId, seed.UserId));
         await AssertPostgresFailureAsync(context, PostgresErrorCodes.UniqueViolation);
     }
 
@@ -116,7 +103,6 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     [InlineData("membership-tenant")]
     [InlineData("membership-user")]
     [InlineData("agent-tenant")]
-    [InlineData("admin-user")]
     public async Task ForeignKeysRejectNonexistentPrincipals(string relationship)
     {
         var seed = await SeedAsync();
@@ -124,16 +110,13 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
         switch (relationship)
         {
             case "membership-tenant":
-                context.TenantMemberships.Add(new TenantMembership(TenantId.New(), seed.UserId, TenantRole.Viewer));
+                context.TenantMemberships.Add(new TenantMembership(TenantId.New(), seed.UserId));
                 break;
             case "membership-user":
-                context.TenantMemberships.Add(new TenantMembership(seed.TenantId, UserId.New(), TenantRole.Viewer));
+                context.TenantMemberships.Add(new TenantMembership(seed.TenantId, UserId.New()));
                 break;
             case "agent-tenant":
                 context.Agents.Add(new Agent(AgentId.New(), TenantId.New(), CreateSoftware()));
-                break;
-            case "admin-user":
-                context.PlatformAdmins.Add(new PlatformAdmin(UserId.New()));
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(relationship));
@@ -145,7 +128,6 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     [InlineData("membership-tenant")]
     [InlineData("membership-user")]
     [InlineData("agent-tenant")]
-    [InlineData("admin-user")]
     public async Task PrincipalDeletionDoesNotCascadeToDependents(string relationship)
     {
         var tenant = new Tenant(TenantId.New(), "Restricted tenant");
@@ -155,15 +137,11 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
             context.AddRange(tenant, user);
             if (relationship.StartsWith("membership", StringComparison.Ordinal))
             {
-                context.TenantMemberships.Add(new TenantMembership(tenant.Id, user.Id, TenantRole.Viewer));
+                context.TenantMemberships.Add(new TenantMembership(tenant.Id, user.Id));
             }
             else if (relationship == "agent-tenant")
             {
                 context.Agents.Add(new Agent(AgentId.New(), tenant.Id, CreateSoftware()));
-            }
-            else
-            {
-                context.PlatformAdmins.Add(new PlatformAdmin(user.Id));
             }
             await context.SaveChangesAsync();
         }
@@ -189,10 +167,6 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
         else if (relationship == "agent-tenant")
         {
             Assert.True(await verification.Agents.AnyAsync(row => row.TenantId == tenant.Id));
-        }
-        else
-        {
-            Assert.True(await verification.PlatformAdmins.AnyAsync(row => row.UserId == user.Id));
         }
     }
 
@@ -372,7 +346,6 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     [Theory]
     [InlineData(PersistedEntity.Tenant)]
     [InlineData(PersistedEntity.User)]
-    [InlineData(PersistedEntity.Membership)]
     [InlineData(PersistedEntity.Agent)]
     public async Task StaleUpdatesAreRejectedAndDoNotOverwriteWinner(PersistedEntity entity)
     {
@@ -395,8 +368,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
             case User user:
                 Assert.Equal("Winner", user.DisplayName);
                 break;
-            case TenantMembership membership:
-                Assert.Equal(TenantRole.Operator, membership.Role);
+            case TenantMembership:
                 break;
             case Agent agent:
                 Assert.Equal(AgentStatus.Disabled, agent.Status);
@@ -423,10 +395,8 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
         Assert.Equal(1, persisted.CredentialGeneration);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task PlatformGrantsRequireExplicitPlatformOperations(bool unscoped)
+    [Fact]
+    public async Task PlatformGrantsRequireExplicitPlatformOperations()
     {
         var user = new User(UserId.New(), "Admin candidate");
         await using (var platform = fixture.CreatePlatformContext())
@@ -434,15 +404,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
             platform.Users.Add(user);
             await platform.SaveChangesAsync();
         }
-        await using (var context = fixture.CreateContext(unscoped ? null : TenantId.New()))
-        {
-            context.PlatformAdmins.Add(new PlatformAdmin(user.Id));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
-        }
-        await using var verification = fixture.CreatePlatformContext();
-        Assert.False(await verification.PlatformAdmins.AnyAsync(row => row.UserId == user.Id));
     }
-
     [Fact]
     public async Task TenantCanCreateAndRemoveItsAgentsAndMemberships()
     {
@@ -457,7 +419,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
         await using (var context = fixture.CreateContext(tenant.Id))
         {
             context.Agents.Add(agent);
-            context.TenantMemberships.Add(new TenantMembership(tenant.Id, user.Id, TenantRole.Viewer));
+            context.TenantMemberships.Add(new TenantMembership(tenant.Id, user.Id));
             await context.SaveChangesAsync();
         }
         await using (var context = fixture.CreateContext(tenant.Id))
@@ -468,7 +430,6 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
             Assert.Equal(AgentStatus.PendingEnrollment, persistedAgent.Status);
             Assert.Equal(0, persistedAgent.CredentialGeneration);
             Assert.Equal(tenant.Id, persistedMembership.TenantId);
-            Assert.Equal(TenantRole.Viewer, persistedMembership.Role);
             context.RemoveRange(persistedAgent, persistedMembership);
             await context.SaveChangesAsync();
         }
@@ -495,7 +456,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     {
         var tenant = new Tenant(TenantId.New(), "Seed tenant");
         var user = new User(UserId.New(), "Seed user");
-        var membership = new TenantMembership(tenant.Id, user.Id, TenantRole.Admin);
+        var membership = new TenantMembership(tenant.Id, user.Id);
         var agent = new Agent(AgentId.New(), tenant.Id, CreateSoftware());
         agent.RecordEnrollment();
         await using var context = fixture.CreatePlatformContext();
@@ -533,8 +494,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
             case Tenant tenant:
                 Assert.Equal("Seed tenant", tenant.Name);
                 break;
-            case TenantMembership membership:
-                Assert.Equal(TenantRole.Admin, membership.Role);
+            case TenantMembership:
                 break;
             case Agent agent:
                 Assert.Equal(AgentStatus.Active, agent.Status);
@@ -553,8 +513,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
             case User user:
                 user.Rename(name);
                 break;
-            case TenantMembership membership:
-                membership.ChangeRole(name == "Winner" ? TenantRole.Operator : TenantRole.Viewer);
+            case TenantMembership:
                 break;
             case Agent agent:
                 if (name == "Winner")

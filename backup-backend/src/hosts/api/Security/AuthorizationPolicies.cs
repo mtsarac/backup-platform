@@ -1,6 +1,6 @@
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
-using BackupPlatform.Domain.Tenancy;
+using BackupPlatform.Domain.Identity;
 using Microsoft.AspNetCore.Authorization;
 
 namespace BackupPlatform.Api.Security;
@@ -11,54 +11,60 @@ public static class AuthorizationPolicies
     public const string TenantOperator = "TenantOperator";
     public const string TenantViewer = "TenantViewer";
     public const string PlatformAdmin = "PlatformAdmin";
+    public const string ArtifactContentAccess = "ArtifactContentAccess";
     /// <summary>Agent-scheme only; never satisfied by a browser session.</summary>
     public const string Agent = "Agent";
 }
 
-internal sealed record TenantRoleRequirement(TenantRole MinimumRole) : IAuthorizationRequirement;
+internal sealed class TenantAccessRequirement : IAuthorizationRequirement { }
 internal sealed class PlatformAdminRequirement : IAuthorizationRequirement { }
+internal sealed class ArtifactContentRequirement : IAuthorizationRequirement { }
 
-internal sealed class TenantRoleAuthorizationHandler : AuthorizationHandler<TenantRoleRequirement>
+internal sealed class TenantAccessAuthorizationHandler : AuthorizationHandler<TenantAccessRequirement>
 {
-    public TenantRoleAuthorizationHandler() { }
-
-    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, TenantRoleRequirement requirement)
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, TenantAccessRequirement requirement)
     {
-        var membership = (context.Resource as HttpContext)?.Features.Get<ResolvedTenantContext>()?.Membership;
-        if (context.User.Identity?.IsAuthenticated == true && membership is not null && GrantsAccess(membership.Role, requirement.MinimumRole))
+        var resolvedTenant = (context.Resource as HttpContext)?.Features.Get<ResolvedTenantContext>();
+        if (context.User.Identity?.IsAuthenticated == true && resolvedTenant is not null)
         {
             context.Succeed(requirement);
         }
         return Task.CompletedTask;
     }
-
-    private static bool GrantsAccess(TenantRole role, TenantRole minimumRole) => minimumRole switch
-    {
-        TenantRole.Admin => role is TenantRole.Owner or TenantRole.Admin,
-        TenantRole.Operator => role is TenantRole.Owner or TenantRole.Admin or TenantRole.Operator,
-        TenantRole.Viewer => role is TenantRole.Owner or TenantRole.Admin or TenantRole.Operator or TenantRole.Viewer,
-        _ => false
-    };
 }
 
-internal sealed class PlatformAdminAuthorizationHandler : AuthorizationHandler<PlatformAdminRequirement>
+internal sealed class PlatformAdminAuthorizationHandler(ICurrentUser currentUser, ICentralAuthorizationService centralAuth)
+    : AuthorizationHandler<PlatformAdminRequirement>
 {
-    private readonly ICurrentUser _currentUser;
-    private readonly IUserAccessStore _userAccessStore;
-
-    public PlatformAdminAuthorizationHandler(ICurrentUser currentUser, IUserAccessStore userAccessStore)
-    {
-        _currentUser = currentUser;
-        _userAccessStore = userAccessStore;
-    }
-
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, PlatformAdminRequirement requirement)
     {
-        if (!_currentUser.IsAuthenticated || _currentUser.UserId is not { } userId || context.Resource is not HttpContext httpContext)
+        if (!currentUser.IsAuthenticated || currentUser.UserId is not { } userId || context.Resource is not HttpContext httpContext)
         {
             return;
         }
-        if (await _userAccessStore.IsPlatformAdminAsync(userId, httpContext.RequestAborted))
+        if (await centralAuth.IsPlatformAdminAsync(userId, httpContext.RequestAborted))
+        {
+            context.Succeed(requirement);
+        }
+    }
+}
+
+internal sealed class ArtifactContentAuthorizationHandler(ICurrentUser currentUser, ICentralAuthorizationService centralAuth)
+    : AuthorizationHandler<ArtifactContentRequirement>
+{
+    protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, ArtifactContentRequirement requirement)
+    {
+        if (!currentUser.IsAuthenticated || currentUser.UserId is not { } userId || context.Resource is not HttpContext httpContext)
+        {
+            return;
+        }
+        var tenantId = httpContext.Features.Get<ResolvedTenantContext>()?.TenantId
+            ?? (Guid.TryParse(httpContext.Request.RouteValues["tenantId"]?.ToString(), out var tid) ? new TenantId(tid) : null);
+        if (tenantId is null)
+        {
+            return;
+        }
+        if (await centralAuth.EvaluateContentAccessAsync(userId, tenantId, httpContext.RequestAborted))
         {
             context.Succeed(requirement);
         }

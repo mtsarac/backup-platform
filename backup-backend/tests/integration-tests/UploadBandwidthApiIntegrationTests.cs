@@ -46,15 +46,12 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
     private static Task<HttpResponseMessage> PolicyAsync(BackupApiScenario scenario, TaskClaim claim, Guid? lease = null, bool release = false, EnrolledAgent? agent = null) =>
         scenario.AgentCallAsync(claim, "upload-policy", new UploadPolicyRequest { LeaseToken = lease ?? claim.LeaseToken, Release = release }, agent);
 
-    [Theory]
-    [InlineData(TenantRole.Viewer, HttpStatusCode.Forbidden)]
-    [InlineData(TenantRole.Operator, HttpStatusCode.Forbidden)]
-    [InlineData(TenantRole.Admin, HttpStatusCode.OK)]
-    public async Task Every_member_reads_the_limits_and_only_administrators_change_them(TenantRole role, HttpStatusCode expected)
+    [Fact]
+    public async Task Every_member_reads_the_limits_and_only_administrators_change_them()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var jobId = await scenario.CreateJobAsync();
-        var session = await scenario.SessionAsync(role);
+        var session = await scenario.SessionAsync();
 
         var initial = await GetAsync(scenario, session);
         Assert.Equal(UploadBandwidth_Min, initial.GetProperty("minimumBytesPerSecond").GetInt64());
@@ -64,22 +61,14 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
         using var tenant = await PutAsync(scenario, "tenant", 5_000_000, session);
         using var agent = await PutAsync(scenario, $"agents/{scenario.Agent.AgentId}", 2_000_000, session);
         using var job = await PutAsync(scenario, $"jobs/{jobId}", 1_000_000, session);
-        Assert.Equal(expected, tenant.StatusCode);
-        Assert.Equal(expected, agent.StatusCode);
-        Assert.Equal(expected, job.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, tenant.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, agent.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, job.StatusCode);
 
         var after = await GetAsync(scenario, session);
-        if (expected == HttpStatusCode.OK)
-        {
-            Assert.Equal(5_000_000, after.GetProperty("tenant").GetProperty("bytesPerSecond").GetInt64());
-            Assert.Equal(2_000_000, Assert.Single(after.GetProperty("agents").EnumerateArray()).GetProperty("bytesPerSecond").GetInt64());
-            Assert.Equal(jobId, Assert.Single(after.GetProperty("jobs").EnumerateArray()).GetProperty("jobId").GetGuid());
-        }
-        else
-        {
-            Assert.Equal(JsonValueKind.Null, after.GetProperty("tenant").GetProperty("bytesPerSecond").ValueKind);
-            Assert.Empty(after.GetProperty("jobs").EnumerateArray());
-        }
+        Assert.Equal(5_000_000, after.GetProperty("tenant").GetProperty("bytesPerSecond").GetInt64());
+        Assert.Equal(2_000_000, Assert.Single(after.GetProperty("agents").EnumerateArray()).GetProperty("bytesPerSecond").GetInt64());
+        Assert.Equal(jobId, Assert.Single(after.GetProperty("jobs").EnumerateArray()).GetProperty("jobId").GetGuid());
     }
     [Fact]
     public async Task Bandwidth_profiles_exist_only_under_the_tenant_route()

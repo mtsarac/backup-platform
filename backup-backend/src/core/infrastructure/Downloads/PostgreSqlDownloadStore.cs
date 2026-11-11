@@ -1,5 +1,6 @@
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Downloads;
+using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Downloads;
@@ -12,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BackupPlatform.Infrastructure.Downloads;
 
 /// <summary>Replica locks serialize durable holds with deletion; session locks fence lifecycle writes and their audits.</summary>
-public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> options, TimeProvider? time = null) : IDownloadStore
+public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> options, ICentralAuthorizationService centralAuth, TimeProvider? time = null) : IDownloadStore
 {
     private const int MaxBatch = 500;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
@@ -29,7 +30,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var downloadId = Guid.NewGuid();
-        if (!await IsAdministratorAsync(context, command.TenantId, command.UserId, cancellationToken)) return null;
+        if (!await centralAuth.EvaluateContentAccessAsync(new UserId(command.UserId), command.TenantId, cancellationToken)) return null;
         var artifactLocked = await context.Database.SqlQuery<Guid>($"""
             SELECT "Id" AS "Value" FROM backup_artifacts
             WHERE "TenantId" = {command.TenantId.Value} AND "Id" = {command.ArtifactId} FOR NO KEY UPDATE
@@ -89,7 +90,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         }
         var session = await LockSessionAsync(context, sessionId, cancellationToken);
         if (session is null) return null;
-        if (startsStreaming && !await IsAdministratorAsync(context, session.TenantId, session.UserId, cancellationToken)) return null;
+        if (startsStreaming && !await centralAuth.EvaluateContentAccessAsync(new UserId(session.UserId), session.TenantId, cancellationToken)) return null;
         var previous = session.State;
         if (!session.Transition(transition.ExpectedState, transition.ExpectedOwner, transition.State, transition.Owner,
             transition.Now, transition.LeaseDuration, transition.Bytes, transition.FailureCode)) return null;
@@ -187,9 +188,6 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         return ids.Count == 0 ? null : await context.DownloadSessions.SingleAsync(session => session.Id == sessionId, cancellationToken);
     }
 
-    private static Task<bool> IsAdministratorAsync(PlatformDbContext context, TenantId tenantId, Guid userId, CancellationToken cancellationToken) =>
-        context.TenantMemberships.AnyAsync(membership => membership.TenantId == tenantId && membership.UserId == new UserId(userId) &&
-            (membership.Role == TenantRole.Owner || membership.Role == TenantRole.Admin), cancellationToken);
 
     private static void AddAudit(PlatformDbContext context, DownloadSession session, DateTimeOffset now, string action)
     {

@@ -28,6 +28,7 @@ using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Agents;
 using BackupPlatform.Infrastructure.Identity;
+using BackupPlatform.Infrastructure.Tenancy;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.Infrastructure.Scheduling;
@@ -85,6 +86,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
         services.AddScoped<IIdentityStore, PostgreSqlIdentityStore>();
         services.AddScoped<IUserAccessStore, PostgreSqlUserAccessStore>();
+        services.AddScoped<ICentralAuthorizationService, PostgreSqlCentralAuthorizationService>();
         services.AddSingleton<PasswordHashService>();
         services.AddScoped<AuthenticationService>();
         services.AddScoped<TenantResolutionService>();
@@ -477,21 +479,24 @@ public static class SecurityServiceCollectionExtensions
 
     private static void AddPolicies(IServiceCollection services)
     {
-        services.AddScoped<IAuthorizationHandler, TenantRoleAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, TenantAccessAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, PlatformAdminAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, ArtifactContentAuthorizationHandler>();
         services.AddAuthorization(options =>
         {
             var browserPolicy = new AuthorizationPolicyBuilder(BrowserAuthentication.Scheme).RequireAuthenticatedUser().Build();
             options.DefaultPolicy = browserPolicy;
             options.FallbackPolicy = browserPolicy;
             options.AddPolicy(AuthorizationPolicies.TenantAdministrator, policy =>
-                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantRoleRequirement(TenantRole.Admin)));
+                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantAccessRequirement()));
             options.AddPolicy(AuthorizationPolicies.TenantOperator, policy =>
-                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantRoleRequirement(TenantRole.Operator)));
+                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantAccessRequirement()));
             options.AddPolicy(AuthorizationPolicies.TenantViewer, policy =>
-                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantRoleRequirement(TenantRole.Viewer)));
+                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantAccessRequirement()));
             options.AddPolicy(AuthorizationPolicies.PlatformAdmin, policy =>
                 policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new PlatformAdminRequirement()));
+            options.AddPolicy(AuthorizationPolicies.ArtifactContentAccess, policy =>
+                policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new ArtifactContentRequirement()));
             options.AddPolicy(AuthorizationPolicies.Agent, policy =>
                 policy.AddAuthenticationSchemes(AgentAuthentication.Scheme).RequireAuthenticatedUser());
         });

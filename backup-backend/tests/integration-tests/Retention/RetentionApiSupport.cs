@@ -111,7 +111,7 @@ internal static class RetentionApiSupport
         if (response.StatusCode == HttpStatusCode.Unauthorized && session is null)
         {
             response.Dispose();
-            response = await (await scenario.SessionAsync(BackupPlatform.Domain.Tenancy.TenantRole.Admin)).GetAsync(path);
+            response = await (await scenario.SessionAsync()).GetAsync(path);
         }
         using (response)
         {

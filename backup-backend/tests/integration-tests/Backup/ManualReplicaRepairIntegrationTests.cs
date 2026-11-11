@@ -41,6 +41,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     private readonly ConnectionWorld _connections = new(fixture);
     private QuotaWorld World => _connections.Quota;
 
+    private PostgreSqlDownloadStore DownloadStore(MutableClock? clock = null) =>
+        new(World.Options(), new BackupPlatform.Infrastructure.Tenancy.PostgreSqlCentralAuthorizationService(World.Options()), clock);
     public Task InitializeAsync() => Task.CompletedTask;
 
     // The database is private to this class and its tests run one after another, so every operation still open when a test ends is a leftover of that test (or of its
@@ -704,12 +706,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
         // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
-        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var store = DownloadStore(clock);
         var user = new User(UserId.New(), "Fallback downloader");
         await using (var context = fixture.CreatePlatformContext())
         {
             context.Users.Add(user);
-            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id));
             await context.SaveChangesAsync();
         }
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
@@ -748,12 +750,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var other = await SetupAsync(verified: new HashSet<string> { "central" });
         // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
-        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var store = DownloadStore(clock);
         var user = new User(UserId.New(), "Source switch owner");
         await using (var context = fixture.CreatePlatformContext())
         {
             context.Users.Add(user);
-            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id));
             await context.SaveChangesAsync();
         }
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
@@ -766,7 +768,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         Assert.Null(await store.SwitchReplicaAsync(session.Id, primary.Id, "owner", other.Artifact.Replicas.Single(), default));
         var results = await Task.WhenAll(
             store.SwitchReplicaAsync(session.Id, primary.Id, "owner", fallback, default),
-            new PostgreSqlDownloadStore(World.Options(), clock).SwitchReplicaAsync(session.Id, primary.Id, "owner", alternate, default));
+            DownloadStore(clock).SwitchReplicaAsync(session.Id, primary.Id, "owner", alternate, default));
         var winner = Assert.Single(results, result => result is not null)!;
         Assert.Equal(winner.ReplicaId, (await store.GetAsync(session.TenantId, session.Id, default))!.ReplicaId);
         await using (var context = fixture.CreatePlatformContext())
@@ -1274,12 +1276,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
         // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
-        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var store = DownloadStore(clock);
         var user = new User(UserId.New(), "Retention race owner");
         await using (var context = fixture.CreatePlatformContext())
         {
             context.Users.Add(user);
-            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id));
             await context.SaveChangesAsync();
         }
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
@@ -1336,12 +1338,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
         // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
-        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var store = DownloadStore(clock);
         var user = new User(UserId.New(), "HTTP fallback owner");
         await using (var context = fixture.CreatePlatformContext())
         {
             context.Users.Add(user);
-            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id));
             await context.SaveChangesAsync();
         }
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
@@ -1418,12 +1420,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" }, content: content);
         // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
-        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var store = DownloadStore(clock);
         var user = new User(UserId.New(), "Integrity stream downloader");
         await using (var context = fixture.CreatePlatformContext())
         {
             context.Users.Add(user);
-            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id));
             await context.SaveChangesAsync();
         }
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");

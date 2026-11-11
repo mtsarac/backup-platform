@@ -162,7 +162,7 @@ public sealed class AgentConnectivityIntegrationTests(PostgreSqlFixture fixture)
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
         var viewer = await world.SeedUserAsync();
-        await world.GrantAsync(setup.Tenant, viewer, BackupPlatform.Domain.Tenancy.TenantRole.Viewer);
+        await world.GrantAsync(setup.Tenant, viewer);
         var session = await world.SignInAsync(viewer);
         using var list = await session.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents");
         using var summary = await session.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents/connectivity-summary");

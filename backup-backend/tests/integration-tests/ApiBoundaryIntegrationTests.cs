@@ -83,7 +83,7 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
     private async Task<(Actors Actors, AgentWorld World)> StartAsync()
     {
         var world = await AgentWorld.CreateAsync(fixture);
-        var tenant = await world.CreateTenantAsync(TenantRole.Owner);
+        var tenant = await world.CreateTenantAsync();
         var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
         return (new Actors(world, tenant, platform, await world.EnrollAsync(tenant)), world);
     }
@@ -296,7 +296,7 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
     {
         var (actors, world) = await StartAsync();
         await using var _ = world;
-        var viewer = await world.CreateTenantAsync(TenantRole.Viewer);
+        var viewer = await world.CreateTenantAsync();
         var failures = new List<string>();
 
         foreach (var route in Routes(world.Factory.Services))

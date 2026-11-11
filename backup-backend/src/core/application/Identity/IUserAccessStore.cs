@@ -1,6 +1,6 @@
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Identity;
-
+using BackupPlatform.Domain.Tenancy;
 namespace BackupPlatform.Application.Identity;
 
 /// <summary>Narrow global reads used by authenticated identity/tenant boundaries, never an unfiltered DbContext.</summary>
@@ -12,4 +12,4 @@ public interface IUserAccessStore
     Task<bool> IsPlatformAdminAsync(UserId userId, CancellationToken cancellationToken);
 }
 
-public sealed record UserProfile(UserId UserId, string DisplayName);
+public sealed record UserProfile(UserId UserId, string DisplayName, UserRole Role);

@@ -4,7 +4,7 @@ using BackupPlatform.Domain.Identity;
 
 namespace BackupPlatform.Tenancy;
 
-public sealed class TenantResolutionService(ICurrentUser currentUser, IUserAccessStore userAccessStore)
+public sealed class TenantResolutionService(ICurrentUser currentUser, ICentralAuthorizationService authorizationService)
 {
     public Task<TenantAccess?> ResolveAsync(TenantId requestedTenantId, CancellationToken cancellationToken)
     {
@@ -12,7 +12,7 @@ public sealed class TenantResolutionService(ICurrentUser currentUser, IUserAcces
         cancellationToken.ThrowIfCancellationRequested();
         var userId = currentUser.UserId;
         return currentUser.IsAuthenticated && userId is not null
-            ? userAccessStore.GetMembershipAsync(userId, requestedTenantId, cancellationToken)
+            ? authorizationService.EvaluateTenantAccessAsync(userId, requestedTenantId, cancellationToken)
             : Task.FromResult<TenantAccess?>(null);
     }
 }

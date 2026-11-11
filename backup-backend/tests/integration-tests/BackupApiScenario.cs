@@ -45,10 +45,13 @@ internal sealed class BackupApiScenario : IAsyncDisposable
 
     public ValueTask DisposeAsync() => World.DisposeAsync();
 
-    public async Task<BrowserSession> SessionAsync(TenantRole role)
+    public async Task<BrowserSession> SessionAsync(bool member = true)
     {
         var account = await World.SeedUserAsync();
-        await World.GrantAsync(Setup.Tenant, account, role);
+        if (member)
+        {
+            await World.GrantAsync(Setup.Tenant, account);
+        }
         return await World.SignInAsync(account);
     }
 

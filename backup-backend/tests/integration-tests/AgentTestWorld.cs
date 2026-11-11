@@ -219,15 +219,12 @@ internal sealed class AgentWorld : IAsyncDisposable
 
     public async Task<Account> SeedUserAsync(bool platformAdmin = false)
     {
-        var user = new User(UserId.New(), "Agent test user");
+        var role = platformAdmin ? UserRole.PlatformAdmin : UserRole.UserAdmin;
+        var user = new User(UserId.New(), "Agent test user", role);
         var identifier = $"user-{Guid.NewGuid():N}";
         await using var context = Database.CreatePlatformContext();
         context.Users.Add(user);
         context.PasswordCredentials.Add(new PasswordCredential(user.Id, identifier, SharedCredential.Hash));
-        if (platformAdmin)
-        {
-            context.PlatformAdmins.Add(new PlatformAdmin(user.Id));
-        }
         await context.SaveChangesAsync();
         return new Account(user.Id, identifier, SharedCredential.Password);
     }
@@ -241,10 +238,10 @@ internal sealed class AgentWorld : IAsyncDisposable
         return tenant;
     }
 
-    public async Task GrantAsync(Tenant tenant, Account account, TenantRole role)
+    public async Task GrantAsync(Tenant tenant, Account account)
     {
         await using var context = Database.CreatePlatformContext();
-        context.TenantMemberships.Add(new TenantMembership(tenant.Id, account.UserId, role));
+        context.TenantMemberships.Add(new TenantMembership(tenant.Id, account.UserId));
         await context.SaveChangesAsync();
     }
 
@@ -265,11 +262,11 @@ internal sealed class AgentWorld : IAsyncDisposable
     }
 
     /// <summary>A tenant with enrollment enabled and a signed-in administrator, the common starting point.</summary>
-    public async Task<TenantSetup> CreateTenantAsync(TenantRole role = TenantRole.Admin, bool enrollmentEnabled = true)
+    public async Task<TenantSetup> CreateTenantAsync(bool enrollmentEnabled = true)
     {
         var tenant = await AddTenantAsync();
         var account = await SeedUserAsync();
-        await GrantAsync(tenant, account, role);
+        await GrantAsync(tenant, account);
         if (enrollmentEnabled)
         {
             await SetEnrollmentAsync(tenant, true);

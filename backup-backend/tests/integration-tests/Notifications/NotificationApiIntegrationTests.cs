@@ -21,10 +21,10 @@ public sealed class NotificationApiIntegrationTests : IAsyncLifetime
 
     private static string Notifications(TenantSetup setup) => $"/api/tenants/{setup.Tenant.Id.Value}/notifications";
 
-    private async Task<(AgentWorld World, TenantSetup Setup)> CreateAsync(TenantRole role = TenantRole.Admin)
+    private async Task<(AgentWorld World, TenantSetup Setup)> CreateAsync()
     {
         var world = await AgentWorld.CreateAsync(fixture);
-        return (world, await world.CreateTenantAsync(role));
+        return (world, await world.CreateTenantAsync());
     }
 
     private static async Task<JsonElement> ReadAsync(HttpResponseMessage response, HttpStatusCode expected)
@@ -34,14 +34,10 @@ public sealed class NotificationApiIntegrationTests : IAsyncLifetime
         return text.Length == 0 ? default : JsonDocument.Parse(text).RootElement.Clone();
     }
 
-    [Theory]
-    [InlineData(TenantRole.Viewer, HttpStatusCode.Forbidden)]
-    [InlineData(TenantRole.Operator, HttpStatusCode.Forbidden)]
-    [InlineData(TenantRole.Admin, HttpStatusCode.OK)]
-    [InlineData(TenantRole.Owner, HttpStatusCode.OK)]
-    public async Task Only_tenant_administrators_can_read_or_change_notification_settings(TenantRole role, HttpStatusCode expected)
+    [Fact]
+    public async Task Only_tenant_administrators_can_read_or_change_notification_settings()
     {
-        var (world, setup) = await CreateAsync(role);
+        var (world, setup) = await CreateAsync();
         await using var _ = world;
         var admin = setup.Admin;
 
@@ -51,11 +47,11 @@ public sealed class NotificationApiIntegrationTests : IAsyncLifetime
         using var create = await admin.SendAsync(HttpMethod.Post, Notifications(setup) + "/channels", new { kind = "email", name = "Ops", target = "ops@example.com" });
         using var put = await admin.SendAsync(HttpMethod.Put, Notifications(setup) + "/policy", new { enabled = false, eventTypes = new[] { "backup_failed" }, minimumSeverity = "warning", channelKinds = new[] { "email" }, recoveryNotifications = true, staleAfterHours = 48, agentOfflineAfterMinutes = 15, reminderIntervalHours = 24, maxNotificationsPerHour = 30 });
 
-        Assert.Equal(expected, policy.StatusCode);
-        Assert.Equal(expected, channels.StatusCode);
-        Assert.Equal(expected, deliveries.StatusCode);
-        Assert.Equal(expected == HttpStatusCode.OK ? HttpStatusCode.Created : expected, create.StatusCode);
-        Assert.Equal(expected, put.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, policy.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, channels.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, deliveries.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
     }
 
     [Fact]

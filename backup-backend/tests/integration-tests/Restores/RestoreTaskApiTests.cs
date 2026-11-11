@@ -294,7 +294,7 @@ public sealed class RestoreTaskApiTests(PostgreSqlFixture fixture) : IClassFixtu
 
         Assert.All(new[] { renew, progress, complete }, response => Assert.Equal(HttpStatusCode.Conflict, response.StatusCode));
         await scenario.SweepAsync();
-        var view = await scenario.RestoreAsync(restoreId, await scenario.SessionAsync(BackupPlatform.Domain.Tenancy.TenantRole.Admin));
+        var view = await scenario.RestoreAsync(restoreId, await scenario.SessionAsync());
         Assert.Equal("AgentLost", StatusOf(view));
     }
 

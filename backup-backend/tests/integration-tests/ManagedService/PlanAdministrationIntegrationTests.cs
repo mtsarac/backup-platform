@@ -12,15 +12,13 @@ namespace BackupPlatform.IntegrationTests.ManagedService;
 
 public sealed class PlanAdministrationIntegrationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
-    [Theory]
-    [InlineData(TenantRole.Owner)]
-    [InlineData(TenantRole.Admin)]
-    public async Task TenantOwnersAndAdminsCannotReachAnyManagedServiceRoute(TenantRole role)
+    [Fact]
+    public async Task TenantOwnersAndAdminsCannotReachAnyManagedServiceRoute()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
         var planId = await CreatePlanAsync(platform);
-        var setup = await world.CreateTenantAsync(role);
+        var setup = await world.CreateTenantAsync();
         var tenant = setup.Tenant.Id.Value;
         var plansBefore = (await CallAsync(platform, HttpMethod.Get, "/api/platform/plans?pageSize=100")).Json.GetProperty("totalCount").GetInt32();
         foreach (var (method, path, body) in new (HttpMethod, string, object?)[]

@@ -277,8 +277,7 @@ public static class BackupEndpoints
         TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken)
     {
         var tenantId = await store.FindRunTenantAsync(runId, cancellationToken);
-        if (tenantId is null || await resolution.ResolveAsync(tenantId, cancellationToken) is not { } membership ||
-            membership.Role is not (BackupPlatform.Domain.Tenancy.TenantRole.Owner or BackupPlatform.Domain.Tenancy.TenantRole.Admin or BackupPlatform.Domain.Tenancy.TenantRole.Operator))
+        if (tenantId is null || await resolution.ResolveAsync(tenantId, cancellationToken) is null)
             return Results.NotFound();
         return await store.SetPauseAsync(tenantId, runId, resume, time.GetUtcNow(), cancellationToken, user.UserId) switch
         {
