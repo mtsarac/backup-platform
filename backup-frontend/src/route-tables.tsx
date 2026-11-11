@@ -24,6 +24,7 @@ import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
 import { RestoresPage } from './pages/restores/restores-page'
 import { RestoreDetailPage } from './pages/restores/restore-detail-page'
 import { RestoreWizardPage } from './pages/restores/restore-wizard-page'
+import { SharesPage } from './pages/shares/shares-page'
 import { PlatformDashboardPage } from './pages/platform/platform-dashboard-page'
 import { PlatformPlansPage } from './pages/platform/platform-plans-page'
 import { PlatformStoragePage } from './pages/platform/platform-storage-page'
@@ -71,6 +72,7 @@ export const tenantRoutes = <>
   <Route path="restores/:id" element={<RestoreDetailPage />} />
   <Route path="notifications" element={<NotificationsPage />} />
   <Route path="encryption" element={<EncryptionPage />} />
+  <Route path="shares" element={<SharesPage />} />
   <Route path="*" element={<NotFound />} />
 </>
 

@@ -29,6 +29,7 @@ describe('Tenant sidebar', () => {
       ['Yedekleme denemeleri', `${base}/backup-runs`],
       ['Yedek dosyaları', `${base}/artifacts`],
       ['Geri yüklemeler', `${base}/restores`],
+      ['Paylaşımlarım', `${base}/shares`],
     ])
     expect(links('Altyapı')).toEqual([
       ['Yedekleme bilgisayarları', `${base}/agents`],
@@ -47,7 +48,7 @@ describe('Tenant sidebar', () => {
     access.canAdmin = false
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     expect(links('Ayarlar')).toEqual([['Yükleme bant genişliği', `${base}/upload-bandwidth`]])
-    expect(links('Yedeklemeler')).toHaveLength(4)
+    expect(links('Yedeklemeler')).toHaveLength(5)
     expect(links('Altyapı')).toHaveLength(3)
   })
 
@@ -62,14 +63,14 @@ describe('Tenant sidebar', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(tenantRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith(base))
-    expect(targets).toHaveLength(11)
+    expect(targets).toHaveLength(12)
     for (const href of targets) expect(matchRoutes(routes, href.slice(base.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 
   it('shows the same menu in English without leftover Turkish labels', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     act(() => changeLanguage('en'))
-    expect(links('Backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup attempts', 'Backup files', 'Restores'])
+    expect(links('Backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup attempts', 'Backup files', 'Restores', 'My shares'])
     expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Database discovery', 'Storage'])
     expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Upload bandwidth'])
     expect(within(nav()).getByRole('link', { name: 'Overview' })).toBeInTheDocument()

@@ -13,6 +13,7 @@ import { ArtifactDeletedNotice } from '@/features/artifacts/artifact-details'
 import { ArtifactAnswers } from '@/features/artifacts/artifact-answers'
 import { ArtifactTechnical } from '@/features/artifacts/artifact-technical'
 import { ArtifactDownload } from '@/features/artifacts/artifact-download'
+import { ArtifactSharesSection } from '@/features/artifacts/artifact-shares'
 import { ArtifactVerificationSection } from '@/features/restores/verification'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import { artifactName, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
@@ -180,6 +181,7 @@ function ArtifactDetail({ id }: { id: string }) {
           {artifact.replication && <ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} />}
           {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />}
           {artifact.backupMetadata?.engine !== 'file-system' && <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />}
+          <ArtifactSharesSection tenantId={tenantId} artifact={artifact} canAdmin={canAdmin} />
           <ArtifactTechnical artifact={artifact} />
         </>}
       </QueryState>

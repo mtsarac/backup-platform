@@ -201,6 +201,11 @@ const dictionary = {
     job_disabled: { level: 'neutral', get label() { return tx("İş kapalıydı.") } },
     schedule_disabled: { level: 'neutral', get label() { return tx("Zamanlama kapalıydı.") } },
   },
+  share: {
+    Active: { level: 'safe', get label() { return tx("Aktif") } },
+    Expired: { level: 'neutral', get label() { return tx("Süresi doldu") } },
+    Revoked: { level: 'urgent', get label() { return tx("İptal edildi") } },
+  },
 } as const satisfies Record<string, Record<string, StatusMeta>>
 
 export type StatusDomain = keyof typeof dictionary

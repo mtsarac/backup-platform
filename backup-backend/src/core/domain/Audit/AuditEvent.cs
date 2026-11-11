@@ -93,6 +93,9 @@ public static class AuditActions
     public const string TenantRecoveryKeySet = "tenant_recovery_key.set";
     public const string TenantRecoveryKeyRemoved = "tenant_recovery_key.removed";
 
+    // Backup share events
+    public const string BackupShareCreated = "backup_share.created";
+
 }
 
 /// <summary>

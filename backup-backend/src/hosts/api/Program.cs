@@ -64,6 +64,7 @@ app.MapNotificationRecipientEndpoints();
 app.MapBackupEndpoints();
 app.MapBackupHealthEndpoints();
 app.MapBackupArtifactEndpoints();
+app.MapBackupShareEndpoints();
 app.MapBackupTaskEndpoints();
 app.MapReplicaRepairTaskEndpoints();
 app.MapUploadBandwidthEndpoints();
