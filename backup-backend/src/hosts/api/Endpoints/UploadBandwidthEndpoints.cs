@@ -20,31 +20,31 @@ public static class UploadBandwidthEndpoints
     public static IEndpointRouteBuilder MapUploadBandwidthEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var limits = endpoints.MapGroup("/api/tenants/{tenantId:guid}/upload-bandwidth").WithMetadata(new TenantScopedEndpoint());
-        limits.MapGet("", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        limits.MapGet("", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         limits.MapPut("/tenant", (UploadBandwidthLimitRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            SetAsync(UploadBandwidthScope.Tenant, tenant.TenantId!.Value, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            SetAsync(UploadBandwidthScope.Tenant, tenant.TenantId!.Value, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         limits.MapPut("/agents/{agentId:guid}", (Guid agentId, UploadBandwidthLimitRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            SetAsync(UploadBandwidthScope.Agent, agentId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            SetAsync(UploadBandwidthScope.Agent, agentId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         limits.MapPut("/jobs/{jobId:guid}", (Guid jobId, UploadBandwidthLimitRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            SetAsync(UploadBandwidthScope.Job, jobId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            SetAsync(UploadBandwidthScope.Job, jobId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
 
         // Profile assignments
         limits.MapPut("/tenant/profile", (BandwidthProfileAssignmentRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            AssignProfileAsync(UploadBandwidthScope.Tenant, tenant.TenantId!.Value, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            AssignProfileAsync(UploadBandwidthScope.Tenant, tenant.TenantId!.Value, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         limits.MapPut("/agents/{agentId:guid}/profile", (Guid agentId, BandwidthProfileAssignmentRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            AssignProfileAsync(UploadBandwidthScope.Agent, agentId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            AssignProfileAsync(UploadBandwidthScope.Agent, agentId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         limits.MapPut("/jobs/{jobId:guid}/profile", (Guid jobId, BandwidthProfileAssignmentRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            AssignProfileAsync(UploadBandwidthScope.Job, jobId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            AssignProfileAsync(UploadBandwidthScope.Job, jobId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
 
         // Bandwidth profiles CRUD
         var profiles = endpoints.MapGroup("/api/tenants/{tenantId:guid}/bandwidth-profiles").WithMetadata(new TenantScopedEndpoint());
-        profiles.MapGet("", ListProfilesAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        profiles.MapGet("/{profileId:guid}", GetProfileAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        profiles.MapGet("", ListProfilesAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        profiles.MapGet("/{profileId:guid}", GetProfileAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         profiles.MapPost("", (SaveBandwidthProfileRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            SaveProfileAsync(null, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            SaveProfileAsync(null, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         profiles.MapPut("/{profileId:guid}", (Guid profileId, SaveBandwidthProfileRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
-            SaveProfileAsync(profileId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        profiles.MapDelete("/{profileId:guid}", DeleteProfileAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            SaveProfileAsync(profileId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        profiles.MapDelete("/{profileId:guid}", DeleteProfileAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
 
         endpoints.MapGroup("/api/agent/tasks/{attemptId:guid}")
             .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4 * 1024))

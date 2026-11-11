@@ -12,7 +12,7 @@ public static class AuditReportingEndpoints
     {
         endpoints.MapGet("/api/platform/audit/integrity", VerifyAsync).RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         endpoints.MapGet("/api/tenants/{tenantId:guid}/reports/backups", ReportAsync)
-            .WithMetadata(new TenantScopedEndpoint()).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+            .WithMetadata(new TenantScopedEndpoint()).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         return endpoints;
     }
 

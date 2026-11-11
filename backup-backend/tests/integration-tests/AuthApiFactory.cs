@@ -101,20 +101,17 @@ internal sealed class AuthProbeStartupFilter : IStartupFilter
         next(app);
         app.UseEndpoints(endpoints =>
         {
-            MapTenantPolicy(endpoints, "administrator", AuthorizationPolicies.TenantAdministrator);
-            MapTenantPolicy(endpoints, "operator", AuthorizationPolicies.TenantOperator);
+            endpoints.MapGet("/api/test/tenants/{tenantId}/access", context => context.Response.WriteAsJsonAsync(new { allowed = true }))
+                .WithMetadata(new TenantScopedEndpoint())
+                .RequireAuthorization(AuthorizationPolicies.TenantAccess);
             endpoints.MapGet("/api/test/platform", context => context.Response.WriteAsJsonAsync(new { allowed = true }))
                 .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
             endpoints.MapGet("/api/test/tenants/{tenantId}/immutable", ProbeImmutabilityAsync)
                 .WithMetadata(new TenantScopedEndpoint())
-                .RequireAuthorization(AuthorizationPolicies.TenantViewer);
+                .RequireAuthorization(AuthorizationPolicies.TenantAccess);
         });
     };
 
-    private static void MapTenantPolicy(IEndpointRouteBuilder endpoints, string path, string policy) =>
-        endpoints.MapGet($"/api/test/tenants/{{tenantId}}/{path}", context => context.Response.WriteAsJsonAsync(new { allowed = true }))
-            .WithMetadata(new TenantScopedEndpoint())
-            .RequireAuthorization(policy);
 
     private static async Task ProbeImmutabilityAsync(HttpContext context)
     {

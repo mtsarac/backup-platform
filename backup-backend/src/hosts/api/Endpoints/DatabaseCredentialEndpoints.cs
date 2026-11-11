@@ -22,7 +22,7 @@ public static class DatabaseCredentialEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .MapPost("", ResolveAsync).WithMetadata(new RequestSizeLimitAttribute(1024));
         endpoints.MapGroup("/api/tenants/{tenantId:guid}/agents/{agentId:guid}/database-logins").WithMetadata(new TenantScopedEndpoint())
-            .MapPost("", StoreAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator).WithMetadata(new RequestSizeLimitAttribute(4096));
+            .MapPost("", StoreAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithMetadata(new RequestSizeLimitAttribute(4096));
         return endpoints;
     }
 

@@ -1,6 +1,6 @@
 import { apiRequest } from '@/lib/api/client'
 import type {
-  AuditFilters, CreateUserInput, MembershipRole, PageParams, PagedResult, PlatformAgent, PlatformAgentDetail,
+  AuditFilters, CreateUserInput, PageParams, PagedResult, PlatformAgent, PlatformAgentDetail,
   PlatformAgentFilters, PlatformAuditEntry, PlatformMembership, PlatformSummary, PlatformTenant, PlatformTenantDetail,
   PlatformUser, SearchParams, TenantEnrollmentResult,
 } from './types'
@@ -48,12 +48,8 @@ export function getMemberships(tenantId: string, params: PageParams, signal?: Ab
   return apiRequest<PagedResult<PlatformMembership>>(`${tenantUrl(tenantId)}/memberships${query(params)}`, { signal })
 }
 
-export function addMembership(tenantId: string, userId: string, role: MembershipRole) {
-  return apiRequest<PlatformMembership>(`${tenantUrl(tenantId)}/memberships`, { method: 'POST', json: { userId, role } })
-}
-
-export function changeMembershipRole(tenantId: string, userId: string, role: MembershipRole) {
-  return apiRequest<PlatformMembership>(`${tenantUrl(tenantId)}/memberships/${encodeURIComponent(userId)}`, { method: 'PUT', json: { role } })
+export function addMembership(tenantId: string, userId: string) {
+  return apiRequest<PlatformMembership>(`${tenantUrl(tenantId)}/memberships`, { method: 'POST', json: { userId } })
 }
 
 export function removeMembership(tenantId: string, userId: string) {

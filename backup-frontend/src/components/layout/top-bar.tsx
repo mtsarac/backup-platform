@@ -41,12 +41,12 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
 
 export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   const { user, tenants } = useAuth()
-  const { tenantId, tenant, switchTenant } = useTenant()
+  const { tenantId, switchTenant } = useTenant()
   useLanguage()
   return <ShellBar onMenuToggle={onMenuToggle}
     context={<div className="flex min-w-0 items-center gap-2">
       <label htmlFor="tenant-select" className="text-sm text-text-muted">{tx("Çalışma Alanı")}</label>
       <Select id="tenant-select" value={tenantId} onChange={(event) => { void switchTenant(event.target.value) }} className="min-w-0 max-w-52 flex-1 text-sm font-medium sm:max-w-72">{tenants.map((item) => <option key={item.tenantId} value={item.tenantId}>{item.name}</option>)}</Select>
     </div>}
-    badges={<><Badge tone="info">{tx(tenant.membershipRole ?? tenant.role)}</Badge>{user?.isPlatformAdmin && <Badge tone="warning">{tx("Platform Yöneticisi")}</Badge>}</>} />
+    badges={user && <Badge tone={user.role === 'PlatformAdmin' ? "warning" : "info"}>{user.role === 'PlatformAdmin' ? tx("Platform Yöneticisi") : tx("UserAdmin")}</Badge>} />
 }

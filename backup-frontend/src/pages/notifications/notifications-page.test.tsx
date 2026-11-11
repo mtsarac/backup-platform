@@ -13,7 +13,7 @@ import { ApiError } from '@/lib/api/client'
 import { tx } from '@/lib/i18n'
 import { NotificationsPage } from './notifications-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme', role: 'Owner' }, canAdmin: true, canOperate: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Acme' }, canAdmin: true, canOperate: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { userId: 'owner-a' } }) }))
 vi.mock('@/features/notifications/api')
@@ -51,7 +51,6 @@ const openChannelDetails = async (user: UserEvent, name: string) => {
 beforeEach(() => {
   vi.resetAllMocks()
   access.canAdmin = true
-  access.tenant.role = 'Owner'
   vi.mocked(api.getPolicy).mockResolvedValue(policy())
   vi.mocked(api.getChannels).mockResolvedValue({ items: [channel(), channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', recipientVerified: null, targetDisplay: 'https://hooks.example.com/…', authentication: 'bearer', hasSecret: true })] })
   vi.mocked(api.getDeliveries).mockResolvedValue({ items: [delivery()], totalCount: 1, page: 1, pageSize: 25 })

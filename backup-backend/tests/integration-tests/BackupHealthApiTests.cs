@@ -147,6 +147,40 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task VersionedHealthUsesCurrentTenantAccessForBothRoles()
+    {
+        await using var scenario = await CreateScenarioAsync();
+        var job = await scenario.CreateJobAsync();
+        var account = await scenario.World.SeedUserAsync();
+        await scenario.World.GrantAsync(scenario.Setup.Tenant, account);
+        var member = await scenario.World.SignInAsync(account);
+        var platform = await scenario.World.SignInAsync(await scenario.World.SeedUserAsync(platformAdmin: true));
+        var jobPath = $"/api/v1/backups/jobs/{job}/health";
+        var summaryPath = $"/api/v1/observability/health-summary?tenantId={scenario.Setup.Tenant.Id.Value}";
+
+        foreach (var session in new[] { member, platform })
+        {
+            using var jobResponse = await session.GetAsync(jobPath);
+            using var summaryResponse = await session.GetAsync(summaryPath);
+            Assert.Equal(HttpStatusCode.OK, jobResponse.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, summaryResponse.StatusCode);
+        }
+
+        using var missingTenant = await platform.GetAsync($"/api/v1/observability/health-summary?tenantId={Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.NotFound, missingTenant.StatusCode);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            var membership = await context.TenantMemberships.SingleAsync(row => row.TenantId == scenario.Setup.Tenant.Id && row.UserId == account.UserId);
+            context.TenantMemberships.Remove(membership);
+            await context.SaveChangesAsync();
+        }
+        using var revokedJob = await member.GetAsync(jobPath);
+        using var revokedSummary = await member.GetAsync(summaryPath);
+        Assert.Equal(HttpStatusCode.NotFound, revokedJob.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, revokedSummary.StatusCode);
+    }
+
+    [Fact]
     public async Task MissingEvidenceIsTruthfulTenantIsolatedAndNeverBlocksManualOrScheduledRuns()
     {
         await using var scenario = await CreateScenarioAsync();

@@ -270,7 +270,7 @@ describe('Adding a backup computer', () => {
     await act(async () => { resolve({ tokenId: 'late', token: 'late-secret', expiresAt }) })
     expect(screen.queryByDisplayValue(/late-secret/)).not.toBeInTheDocument()
   })
-  it.each(['Viewer', 'Operator', 'PlatformAdmin'])('%s without tenant Admin cannot add a backup computer', async () => {
+  it('cannot add a backup computer without admin', async () => {
     tenancy.canAdmin = false
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><ClientsPage /></MemoryRouter></QueryClientProvider>)
     await act(async () => {})

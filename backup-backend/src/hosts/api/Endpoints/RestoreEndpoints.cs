@@ -23,17 +23,17 @@ public static class RestoreEndpoints
     public static IEndpointRouteBuilder MapRestoreEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
-        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore", StartAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-precheck", PrecheckAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-verifications", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-discovery", DiscoverAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapGet("/backup-artifacts/{artifactId:guid}/restore-targets", TargetsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/restores", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/restores/{restoreId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPost("/restores/{restoreId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore", StartAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-precheck", PrecheckAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-verifications", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-discovery", DiscoverAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-artifacts/{artifactId:guid}/restore-targets", TargetsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/restores", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/restores/{restoreId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/restores/{restoreId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         // Retrying the removal of a verification's own disposable database is routine; removing the only copy of a replaced database is an administrator's decision.
-        tenant.MapPost("/restores/{restoreId:guid}/cleanup/retry", RetryCleanupAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapPost("/restores/{restoreId:guid}/rollback-removal", RemoveRollbackAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPost("/restores/{restoreId:guid}/cleanup/retry", RetryCleanupAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/restores/{restoreId:guid}/rollback-removal", RemoveRollbackAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         return endpoints;
     }
 

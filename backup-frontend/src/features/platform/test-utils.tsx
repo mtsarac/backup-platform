@@ -9,8 +9,8 @@ import type { TenantMembership, UserProfile } from '@/features/auth/types'
 import { LocationProbe } from './location-probe'
 import type { PagedResult, PlatformAgent } from './types'
 
-export const platformAdmin: UserProfile = { userId: 'admin-id', get displayName() { return tx("Platform Operatörü") }, isPlatformAdmin: true }
-export const tenantOwner: UserProfile = { userId: 'owner-id', get displayName() { return tx("Tenant Sahibi") }, isPlatformAdmin: false }
+export const platformAdmin: UserProfile = { userId: 'admin-id', get displayName() { return tx("Platform Operatörü") }, role: 'PlatformAdmin', isPlatformAdmin: true }
+export const tenantOwner: UserProfile = { userId: 'owner-id', get displayName() { return tx("Tenant Sahibi") }, role: 'UserAdmin', isPlatformAdmin: false }
 
 export function paged<T>(items: T[], overrides: Partial<PagedResult<T>> = {}): PagedResult<T> {
   return { items, totalCount: items.length, page: 1, pageSize: 25, ...overrides }

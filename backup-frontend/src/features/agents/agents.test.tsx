@@ -14,7 +14,7 @@ import * as api from './api'
 import * as jobsApi from '@/features/backup-jobs/api'
 import { setViewport } from '@/test/viewport'
 
-const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test', role: 'Owner' } }))
+const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test' } }))
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn() }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 vi.mock('./api', () => ({ getAgentDistribution: vi.fn(), getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), getEnrollmentTokenStatus: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
@@ -37,7 +37,6 @@ beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true } })
   Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
-  tenancy.tenant.role = 'Owner'
   vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([])
   vi.mocked(api.getAgents).mockResolvedValue([agent])
   vi.mocked(api.getAgent).mockResolvedValue(agent)
@@ -137,9 +136,8 @@ describe('Backup computers list', () => {
 })
 
 describe('Backup computer page', () => {
-  it.each(['Viewer', 'Operator'])('%s can read the computer but cannot remove it', async (role) => {
+  it('can read the computer but cannot remove it without admin', async () => {
     tenancy.canAdmin = false
-    tenancy.tenant.role = role
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     expect(await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).toBeInTheDocument()
     expect(screen.getByText('Çevrimiçi')).toBeInTheDocument()
@@ -233,11 +231,9 @@ describe('Backup computer page', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
   })
 })
-
 describe('Adding a computer from the new-computer page', () => {
-  it.each(['Viewer', 'Operator'])('%s cannot query or mutate enrollment administration', (role) => {
+  it('cannot query or mutate enrollment administration without admin', () => {
     tenancy.canAdmin = false
-    tenancy.tenant.role = role
     mount(<AgentRegisterPage />)
     expect(screen.getByRole('heading', { level: 1, name: 'Yeni bilgisayar kaydı' })).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('yöneticisi')

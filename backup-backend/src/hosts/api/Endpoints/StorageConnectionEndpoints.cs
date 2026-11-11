@@ -57,24 +57,24 @@ public static class StorageConnectionEndpoints
             }
             return await next(context);
         });
-        tenant.MapGet("/storage-providers", ListProviders).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/storage-connections", ListForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/storage-connections/{id:guid}", GetForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPost("/storage-connections", CreateForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPut("/storage-connections/{id:guid}", UpdateForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPut("/storage-connections/{id:guid}/secret", SetSecretForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapDelete("/storage-connections/{id:guid}/secret", ClearSecretForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/storage-connections/{id:guid}/test", TestForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapGet("/storage-connections/{id:guid}/capacity", GetCapacityForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPost("/storage-connections/{id:guid}/probe", ProbeForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/storage-providers", ListProviders).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/storage-connections", ListForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/storage-connections/{id:guid}", GetForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/storage-connections", CreateForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/storage-connections/{id:guid}", UpdateForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/storage-connections/{id:guid}/secret", SetSecretForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapDelete("/storage-connections/{id:guid}/secret", ClearSecretForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/storage-connections/{id:guid}/test", TestForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/storage-connections/{id:guid}/capacity", GetCapacityForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/storage-connections/{id:guid}/probe", ProbeForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/storage-connections/{id:guid}/enable", (Guid id, ITenantContext t, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
-            ToggleAsync(Scope(t), id, true, u, s, c)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            ToggleAsync(Scope(t), id, true, u, s, c)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/storage-connections/{id:guid}/disable", (Guid id, ITenantContext t, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
-            ToggleAsync(Scope(t), id, false, u, s, c)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapDelete("/storage-connections/{id:guid}", DeleteForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/storage-connections/{id:guid}/google-drive/authorize-url", GoogleDriveAuthorizeAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/storage-connections/{id:guid}/google-drive/disconnect", GoogleDriveDisconnectAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/storage-connections/{id:guid}/google-drive/reconcile", GoogleDriveReconcileAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+            ToggleAsync(Scope(t), id, false, u, s, c)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapDelete("/storage-connections/{id:guid}", DeleteForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/storage-connections/{id:guid}/google-drive/authorize-url", GoogleDriveAuthorizeAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/storage-connections/{id:guid}/google-drive/disconnect", GoogleDriveDisconnectAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/storage-connections/{id:guid}/google-drive/reconcile", GoogleDriveReconcileAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/storage-connections/google-drive/callback", GoogleDriveOAuthCallbackAsync).AllowAnonymous();
 
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -127,7 +127,7 @@ public static class StorageConnectionEndpoints
     private static StorageScope Scope(ITenantContext tenant) => StorageScope.Tenant(tenant.TenantId!, canManage: true);
 
     private static async Task<StorageScope> ReadScopeAsync(HttpContext context, ITenantContext tenant, IAuthorizationService authorization) =>
-        StorageScope.Tenant(tenant.TenantId!, (await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAdministrator)).Succeeded);
+        StorageScope.Tenant(tenant.TenantId!, (await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAccess)).Succeeded);
 
     private static async Task<IResult> ToggleAsync(StorageScope scope, Guid id, bool enabled, ICurrentUser user, StorageConnectionService service, CancellationToken cancellationToken) =>
         await GuardAsync(async () => Respond(await service.SetEnabledAsync(scope, id, enabled, user.UserId!, cancellationToken)));
@@ -460,16 +460,14 @@ public static class StorageConnectionEndpoints
     }
 
     private static async Task<IResult> GetCapacityV1Async(
-        Guid id, ICurrentUser user, TenantResolutionService resolution, IUserAccessStore userAccess,
+        Guid id, ICurrentUser user, TenantResolutionService resolution, HttpContext context, IAuthorizationService authorization,
         IStorageConnectionStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
-        if (!user.IsAuthenticated || user.UserId is not { } userId) return Results.Unauthorized();
+        if (!user.IsAuthenticated || user.UserId is null) return Results.Unauthorized();
         var record = await store.FindAsync(id, null, cancellationToken);
         if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
 
-        var isPlatformAdmin = await userAccess.IsPlatformAdminAsync(userId, cancellationToken);
-        var membership = isPlatformAdmin ? null : await resolution.ResolveAsync(record.Connection.TenantId, cancellationToken);
-        if (!isPlatformAdmin && membership is null)
+        if (!await BackupHealthEndpoints.AuthorizeResolvedTenantAsync(record.Connection.TenantId, resolution, context, authorization, cancellationToken))
         {
             return Results.NotFound(new { error = "storage_connection_not_found" });
         }
@@ -480,15 +478,14 @@ public static class StorageConnectionEndpoints
     }
 
     private static async Task<IResult> ProbeV1Async(
-        Guid id, ICurrentUser user, TenantResolutionService resolution,
+        Guid id, ICurrentUser user, TenantResolutionService resolution, HttpContext context, IAuthorizationService authorization,
         IStorageConnectionStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
-        if (!user.IsAuthenticated || user.UserId is not { } userId) return Results.Unauthorized();
+        if (!user.IsAuthenticated || user.UserId is null) return Results.Unauthorized();
         var record = await store.FindAsync(id, null, cancellationToken);
         if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
 
-        var access = await resolution.ResolveAsync(record.Connection.TenantId, cancellationToken);
-        if (access is null)
+        if (!await BackupHealthEndpoints.AuthorizeResolvedTenantAsync(record.Connection.TenantId, resolution, context, authorization, cancellationToken))
         {
             return Results.NotFound(new { error = "storage_connection_not_found" });
         }

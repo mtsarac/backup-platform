@@ -30,7 +30,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
       { label: tx("Şifreleme"), to: `${base}/encryption`, icon: KeyRound, admin: true },
       { label: tx("Yükleme bant genişliği"), to: `${base}/upload-bandwidth`, icon: Upload },
     ] },
-    ...(user?.isPlatformAdmin ? [{ heading: tx("Platform"), items: [{ label: tx("Platform Yönetimi"), to: '/platform', icon: ShieldCheck }] }] : []),
+    ...(user?.role === 'PlatformAdmin' ? [{ heading: tx("Platform"), items: [{ label: tx("Platform Yönetimi"), to: '/platform', icon: ShieldCheck }] }] : []),
   ]
   const groups: NavGroup[] = config.map(({ heading, items }) => ({ heading, items: items.filter((item) => canAdmin || !item.admin) }))
   return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Ana menü")} label={tx("Ana gezinme")} brand={{ icon: DatabaseBackup, title: tx("Yedekleme Platformu"), caption: tx("Yönetim Konsolu") }} groups={groups} />

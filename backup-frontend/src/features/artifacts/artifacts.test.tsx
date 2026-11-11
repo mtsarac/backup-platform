@@ -17,8 +17,9 @@ vi.mock('@/lib/api/client', () => ({
   tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
   ApiError: class ApiError extends Error {},
 }))
-const permissions = vi.hoisted(() => ({ canAdmin: true, canOperate: true }))
+const permissions = vi.hoisted(() => ({ canAdmin: true, canOperate: true, role: 'UserAdmin' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: permissions.canAdmin, canOperate: permissions.canOperate }) }))
+vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: permissions.role } }) }))
 
 vi.mock('./api', async (importOriginal) => ({
   ...await importOriginal<typeof ArtifactApi>(),
@@ -53,10 +54,17 @@ function mount(page: 'list' | 'detail' = 'detail', search = '') {
 }
 const request = vi.mocked(apiRequest)
 afterEach(() => { cleanup(); vi.clearAllMocks() })
-beforeEach(() => { permissions.canAdmin = true; permissions.canOperate = true })
+beforeEach(() => { permissions.canAdmin = true; permissions.canOperate = true; permissions.role = 'UserAdmin' })
 const openDetails = () => fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
 
 describe('Backup dosyaları', () => {
+  it('does not offer artifact content to a platform administrator', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockResolvedValue(artifact())
+    mount()
+    await screen.findByText('Dosya sağlam mı?')
+    expect(screen.queryByRole('button', { name: 'İndir' })).not.toBeInTheDocument()
+  })
   it('shows PostgreSQL archive facts without SQL Server physical backup metadata', async () => {
     request.mockResolvedValue(artifact({ backupMetadata: {
       engine: 'postgres', databaseName: 'sales', backupType: 'Full', backupStartedAt: null, backupFinishedAt: null,

@@ -25,12 +25,12 @@ The agent only connects outward. It polls the backend for work and renews a leas
 - **Encryption** of artifacts on the agent before they reach storage, with recovery recipients.
 - **Discovery** of databases on an agent host, including Docker containers.
 - **Restore verification** into a disposable database, with an integrity check before cleanup.
-- **Downloads** of verified artifacts for tenant owners and admins, checked against SHA-256.
+- **Downloads** of verified artifacts for tenant-member UserAdmin accounts, checked against SHA-256. PlatformAdmin accounts cannot download artifact content.
 - **Notifications** by email, webhook, and SMS. SMS is off by default (feature flag `Features__sms=true` turns it on) and has not been tested against a real provider.
 - **Upload bandwidth limits** per agent, tenant, or job.
 - **Resilience**: a transfer that moves no bytes for two minutes (`Agent:Backup:UploadStallTimeout`) pauses as a network error, and network pauses resume by themselves with backoff (at most 10 times). Operator and time-rule pauses never resume on their own.
 - **Agent install** with one command on Windows (service) or Linux (systemd).
-- **Multi-tenant access** with Owner, Admin, Operator, and Viewer roles, a separate platform admin, and an audit log. The UI is available in Turkish and English. Five failed logins for one identifier lock it for five minutes (the counter is in PostgreSQL, so every API instance shares it).
+- **Multi-tenant access** with PlatformAdmin and UserAdmin account roles and an audit log. PlatformAdmin manages any tenant; UserAdmin accesses tenants through membership. Restore is a management operation and can expose plaintext on a target controlled by the restorer. The UI is available in Turkish and English. Five failed logins for one identifier lock it for five minutes (the counter is in PostgreSQL, so every API instance shares it).
 
 Storage connections are added through a guided provider, name, settings, credentials and review flow; steps that do not apply are skipped. Credentials are write-only and cleared when submitted, even if saving fails. Paste multiline private keys into their masked field; their line breaks are preserved, and the clear action removes the whole entry. Saving and testing are separate operations; Google Drive asks for account authorization in its popup before testing. The review keeps connection internals in collapsed, copyable technical details.
 

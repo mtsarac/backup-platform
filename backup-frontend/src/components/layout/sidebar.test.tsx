@@ -8,8 +8,8 @@ import { AppShell } from './app-shell'
 import { Sidebar } from './sidebar'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, isPlatformAdmin: false }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ ...access, tenant: { role: 'Owner' }, switchTenant: vi.fn() }) }))
-vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { isPlatformAdmin: access.isPlatformAdmin, displayName: 'Ada' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' }], logout: vi.fn() }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ ...access, tenant: { tenantId: 'tenant-a', name: 'Acme' }, switchTenant: vi.fn() }) }))
+vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: access.isPlatformAdmin ? 'PlatformAdmin' : 'UserAdmin', displayName: 'Ada' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' }], logout: vi.fn() }) }))
 
 vi.mock('@/hooks/use-theme', () => ({ useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }))
 
