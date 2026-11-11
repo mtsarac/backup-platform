@@ -27,6 +27,8 @@ if (builder.Configuration.GetValue<bool>("AgentSecurity:Mtls:Enabled"))
 }
 
 var app = builder.Build();
+// The hosting startup filter would otherwise process forwarded headers a second time.
+app.Configuration["ForwardedHeaders_Enabled"] = "false";
 _ = app.Services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
 _ = app.Services.GetRequiredService<BackupPlatform.Notifications.NotificationOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Agents.Connectivity.AgentConnectivityOptions>();

@@ -46,12 +46,12 @@ public sealed class AuditTrailCompletionIntegrationTests(PostgreSqlFixture fixtu
         using var logout = await setup.Admin.SendAsync(HttpMethod.Post, "/api/auth/logout");
         Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
         var store = new PostgreSqlIdentityStore(fixture.Options);
-        await store.RevokeSessionAsync(Guid.Parse(login.TargetId), setup.Account.UserId, default);
+        await store.EndSessionAsync(Guid.Parse(login.TargetId), setup.Account.UserId, world.Clock.GetUtcNow(), default);
         var loggedOut = await context.AuditEvents.AsNoTracking().SingleAsync(row =>
             row.Action == AuditActions.UserLogout && row.ActorUserId == setup.Account.UserId);
         Assert.Equal(login.TargetId, loggedOut.TargetId);
         Assert.Equal(AuditActorKind.User, loggedOut.ActorKind);
-        Assert.False(await store.IsSessionActiveAsync(Guid.Parse(login.TargetId), setup.Account.UserId, world.Clock.GetUtcNow(), default));
+        Assert.Null(await store.ValidateSessionAsync(Guid.Parse(login.TargetId), setup.Account.UserId, world.Clock.GetUtcNow(), default));
     }
 
     [Fact]

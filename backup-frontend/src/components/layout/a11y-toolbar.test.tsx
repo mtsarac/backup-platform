@@ -1,6 +1,7 @@
 import { act, screen } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShellBar } from './top-bar'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -10,7 +11,7 @@ import { changeLanguage } from '@/lib/i18n/runtime'
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { displayName: 'Ada' }, logout: vi.fn() }) }))
 
 function renderDisplayMenu() {
-  return render(<ThemeProvider><ShellBar onMenuToggle={() => {}} context="Workspace" /></ThemeProvider>)
+  return render(<MemoryRouter><ThemeProvider><ShellBar onMenuToggle={() => {}} context="Workspace" /></ThemeProvider></MemoryRouter>)
 }
 
 async function openDisplayMenu() {

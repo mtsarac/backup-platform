@@ -8,8 +8,9 @@ export interface AuthContextValue {
   isLoading: boolean
   error: unknown
   sessionExpired: boolean
-  login: (identifier: string, password: string) => Promise<void>
+  login: (identifier: string, password: string, rememberMe: boolean) => Promise<void>
   logout: () => Promise<void>
+  clearAuth: () => Promise<void>
   refresh: () => void
 }
 export const AuthContext = createContext<AuthContextValue | null>(null)

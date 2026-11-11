@@ -18,7 +18,11 @@ internal sealed class UserSessionConfiguration : IEntityTypeConfiguration<UserSe
         builder.HasKey(session => session.Id);
         builder.Property(session => session.Id).ValueGeneratedNever();
         builder.Property(session => session.UserId).HasConversion<UserIdConverter>().HasColumnType("uuid").ValueGeneratedNever();
-        builder.Property(session => session.ExpiresAt).HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(session => session.CreatedAt).HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(session => session.LastActivityAt).HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(session => session.Device).HasMaxLength(512).IsRequired();
+        builder.Property(session => session.IpAddress).HasMaxLength(64).IsRequired();
+        builder.Property(session => session.RememberMe).IsRequired();
         builder.HasOne<User>().WithMany().HasForeignKey(session => session.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(session => session.UserId);
     }

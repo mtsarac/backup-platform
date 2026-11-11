@@ -51,13 +51,17 @@ public static class BrowserAuthentication
     }
 }
 
+public sealed record BrowserSessionState(SessionAuthenticationState Value);
+public sealed class RestrictedSessionAllowed;
+
 public sealed class BrowserCookieEvents(IIdentityStore identityStore, TimeProvider timeProvider) : CookieAuthenticationEvents
 {
     public override async Task ValidatePrincipal(CookieValidatePrincipalContext context)
     {
         if (BrowserAuthentication.TryGetSession(context.Principal, out var userId, out var sessionId)
-            && await identityStore.IsSessionActiveAsync(sessionId, userId!, timeProvider.GetUtcNow(), context.HttpContext.RequestAborted))
+            && await identityStore.ValidateSessionAsync(sessionId, userId!, timeProvider.GetUtcNow(), context.HttpContext.RequestAborted) is { } state)
         {
+            context.HttpContext.Features.Set(new BrowserSessionState(state));
             return;
         }
         context.RejectPrincipal();

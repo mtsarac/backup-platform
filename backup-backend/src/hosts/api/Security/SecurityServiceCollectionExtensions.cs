@@ -59,6 +59,20 @@ public static class SecurityServiceCollectionExtensions
     public static IServiceCollection AddPlatformSecurity(this IServiceCollection services)
     {
         services.AddHttpContextAccessor();
+        services.AddOptions<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>().PostConfigure<IConfiguration>((options, configuration) =>
+        {
+            options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+            options.KnownIPNetworks.Clear();
+            options.KnownProxies.Clear();
+            // An empty known-proxy list trusts every source; the broadcast address cannot be a TCP peer.
+            options.KnownProxies.Add(System.Net.IPAddress.None);
+            foreach (var value in configuration.GetSection("Authentication:TrustedProxies").Get<string[]>() ?? [])
+            {
+                if (!System.Net.IPAddress.TryParse(value, out var address))
+                    throw new InvalidOperationException("Authentication:TrustedProxies must contain IP addresses.");
+                options.KnownProxies.Add(address);
+            }
+        });
         services.AddOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>()
             .Configure<IHttpContextAccessor>((options, accessor) => options.SerializerOptions.Converters.Add(new NulFreeStringConverter(accessor)));
         services.TryAddSingleton(TimeProvider.System);
@@ -405,7 +419,7 @@ public static class SecurityServiceCollectionExtensions
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.Path = "/";
             options.Cookie.Domain = null;
-            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.ExpireTimeSpan = TimeSpan.FromDays(31);
             options.SlidingExpiration = false;
             options.EventsType = typeof(BrowserCookieEvents);
         }).AddScheme<AgentAuthenticationOptions, AgentAuthenticationHandler>(AgentAuthentication.Scheme, _ => { });

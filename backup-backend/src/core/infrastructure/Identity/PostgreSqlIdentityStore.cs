@@ -34,24 +34,58 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> IsSessionActiveAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<SessionAuthenticationState?> ValidateSessionAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return await context.UserSessions.AnyAsync(session =>
-            session.Id == sessionId && session.UserId == userId && session.ExpiresAt > now, cancellationToken);
+        var session = await context.UserSessions.AsNoTracking().SingleOrDefaultAsync(row => row.Id == sessionId && row.UserId == userId, cancellationToken);
+        if (session is null || !session.IsActive(now)) return null;
+        if (session.LastActivityAt <= now.AddMinutes(-1))
+        {
+            var updated = await context.UserSessions.Where(row => row.Id == sessionId && row.UserId == userId && row.LastActivityAt < now)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.LastActivityAt, now), cancellationToken);
+            if (updated == 0 && !await context.UserSessions.AnyAsync(row => row.Id == sessionId && row.UserId == userId, cancellationToken)) return null;
+        }
+        return session.AuthenticationState;
     }
 
-    public async Task RevokeSessionAsync(Guid sessionId, UserId userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<UserSession>> ListSessionsAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var sessions = await context.UserSessions.AsNoTracking().Where(row => row.UserId == userId).OrderByDescending(row => row.LastActivityAt).ToListAsync(cancellationToken);
+        return sessions.Where(session => session.IsActive(now)).ToArray();
+    }
+
+    public async Task SetSessionStateAsync(Guid sessionId, UserId userId, SessionAuthenticationState state, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await context.UserSessions.Where(row => row.Id == sessionId && row.UserId == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.AuthenticationState, state), cancellationToken);
+    }
+
+    public async Task<bool> EndSessionAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        var deleted = await context.UserSessions.Where(session => session.Id == sessionId && session.UserId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
+        var deleted = await context.UserSessions.Where(row => row.Id == sessionId && row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         if (deleted > 0)
         {
-            context.AuditEvents.Add(AuditEvent.Record(
-                DateTimeOffset.UtcNow, userId, AuditActorKind.User, AuditActions.UserLogout, null,
+            context.AuditEvents.Add(AuditEvent.Record(now, userId, AuditActorKind.User, AuditActions.UserLogout, null,
                 "session", sessionId.ToString("D"), new Dictionary<string, object?> { ["result"] = "revoked" }));
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return deleted > 0;
+    }
+
+    public async Task EndAllSessionsAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var deleted = await context.UserSessions.Where(row => row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        if (deleted > 0)
+        {
+            context.AuditEvents.Add(AuditEvent.Record(now, userId, AuditActorKind.User, AuditActions.UserLogout, null,
+                "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "all_sessions_revoked" }));
             await context.SaveChangesAsync(cancellationToken);
         }
         await transaction.CommitAsync(cancellationToken);

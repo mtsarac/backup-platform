@@ -19,30 +19,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cache.removeQueries({ queryKey: ['tenant'] })
     cache.removeQueries({ queryKey: ['platform'] })
     cache.removeQueries({ queryKey: ['auth', 'tenants'] })
+    cache.removeQueries({ queryKey: ['auth', 'sessions'] })
   }), [cache])
-  async function login(loginIdentifier: string, password: string) {
-    await apiRequest<void>('auth/login', { method: 'POST', json: { loginIdentifier, password } })
+  async function login(loginIdentifier: string, password: string, rememberMe: boolean) {
+    await apiRequest<void>('auth/login', { method: 'POST', json: { loginIdentifier, password, rememberMe } })
     resetAntiforgery()
     await cache.cancelQueries()
     cache.removeQueries({ queryKey: ['tenant'] })
     cache.removeQueries({ queryKey: ['platform'] })
+    cache.removeQueries({ queryKey: ['auth', 'sessions'] })
     const profile = await apiRequest<UserProfile>('me')
     const tenants = await apiRequest<TenantMembership[]>('me/tenants')
     setSessionExpired(false)
     cache.setQueryData(['auth', 'me'], profile)
     cache.setQueryData(['auth', 'tenants'], tenants)
   }
-  async function logout() {
-    await apiRequest<void>('auth/logout', { method: 'POST' })
+  async function clearAuth() {
     resetAntiforgery()
     await cache.cancelQueries()
     cache.removeQueries({ queryKey: ['tenant'] })
     cache.removeQueries({ queryKey: ['platform'] })
     cache.removeQueries({ queryKey: ['auth', 'tenants'] })
+    cache.removeQueries({ queryKey: ['auth', 'sessions'] })
     cache.setQueryData(['auth', 'me'], null)
     setSessionExpired(false)
   }
+  async function logout() {
+    await apiRequest<void>('auth/logout', { method: 'POST' })
+    await clearAuth()
+  }
   return <AuthContext.Provider value={{ user: me.data ?? null, tenants: memberships.data ?? [], isAuthenticated: !!me.data,
     isLoading: me.isPending || (!!me.data && memberships.isPending), error: me.error ?? memberships.error, sessionExpired,
-    login, logout, refresh: () => { void me.refetch(); if (me.data) void memberships.refetch() } }}>{children}</AuthContext.Provider>
+    login, logout, clearAuth, refresh: () => { void me.refetch(); if (me.data) void memberships.refetch() } }}>{children}</AuthContext.Provider>
 }

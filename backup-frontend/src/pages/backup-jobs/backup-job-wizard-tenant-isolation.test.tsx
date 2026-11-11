@@ -39,7 +39,7 @@ function mount(cache: QueryClient) {
     { tenantId: 'tenant-b', name: 'Tenant B', role: 'Administrator' as const, membershipRole: 'Owner' as const },
   ]
   const router = createMemoryRouter(createRoutesFromElements(<><Route path="/tenants/:tenantId/*" element={<TenantProvider><PickerShell /></TenantProvider>} /><Route path="/tenants/:tenantId" element={<TenantProvider><PickerShell /></TenantProvider>} /><Route path="/" element={<p>Root</p>} /></>), { initialEntries: ['/tenants/tenant-a'] })
-  return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', isPlatformAdmin: false }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}><RouterProvider router={router} /></AuthContext.Provider></QueryClientProvider>)
+  return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', isPlatformAdmin: false }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}><RouterProvider router={router} /></AuthContext.Provider></QueryClientProvider>)
 }
 
 beforeEach(() => vi.clearAllMocks())

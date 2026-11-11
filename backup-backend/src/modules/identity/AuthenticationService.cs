@@ -5,7 +5,7 @@ namespace BackupPlatform.Identity;
 
 public sealed class AuthenticationService(IIdentityStore identityStore, PasswordHashService passwordHashService, TimeProvider timeProvider)
 {
-    public async Task<LoginSession?> LoginAsync(string loginIdentifier, string password, CancellationToken cancellationToken)
+    public async Task<LoginSession?> LoginAsync(string loginIdentifier, string password, bool rememberMe, string device, string ipAddress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var now = timeProvider.GetUtcNow();
@@ -44,10 +44,10 @@ public sealed class AuthenticationService(IIdentityStore identityStore, Password
             var replacement = passwordHashService.Hash(credential.UserId, password);
             await identityStore.UpdatePasswordHashAsync(credential.UserId, replacement, cancellationToken).ConfigureAwait(false);
         }
-        var session = new UserSession(Guid.NewGuid(), credential.UserId, now.AddHours(8));
+        var session = new UserSession(Guid.NewGuid(), credential.UserId, now, rememberMe, device, ipAddress);
         await identityStore.CreateSessionAsync(session, now, cancellationToken).ConfigureAwait(false);
-        return new LoginSession(session.UserId, session.Id, session.ExpiresAt);
+        return new LoginSession(session.UserId, session.Id);
     }
 }
 
-public sealed record LoginSession(UserId UserId, Guid SessionId, DateTimeOffset ExpiresAt);
+public sealed record LoginSession(UserId UserId, Guid SessionId);

@@ -28,7 +28,7 @@ export function makePlatformAgent(overrides: Partial<PlatformAgent> = {}): Platf
 /** `ui` is the element at `route`; pass `routes` instead to mount a full route tree (layout/guard routes). */
 export function renderPlatform(ui: ReactNode, { path = '/platform', route = '*', user = platformAdmin, routes, tenants = [] }: { path?: string; route?: string; user?: UserProfile | null; routes?: ReactNode; tenants?: TenantMembership[] } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const auth = { user, tenants, isAuthenticated: Boolean(user), isLoading: false, error: null, sessionExpired: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }
+  const auth = { user, tenants, isAuthenticated: Boolean(user), isLoading: false, error: null, sessionExpired: false, login: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }
   const view = render(<QueryClientProvider client={client}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={[path]}><Routes>{routes ?? <Route path={route} element={ui} />}</Routes><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider>)
   return { client, auth, ...view }
 }
