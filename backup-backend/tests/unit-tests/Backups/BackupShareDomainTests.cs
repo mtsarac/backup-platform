@@ -193,4 +193,46 @@ public sealed class BackupShareDomainTests
         Assert.True(share1.IsActive(Now));
         Assert.True(share2.IsActive(Now));
     }
+
+    [Fact]
+    public void PlatformAdminShare_RecordsPlatformAdminRole()
+    {
+        var (artifact, _) = CreateArtifact();
+        var platformUser = UserId.New();
+
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, platformUser, UserRole.PlatformAdmin, Now, TimeSpan.FromHours(24), "Platform debug");
+
+        Assert.Equal(UserRole.PlatformAdmin, share.CreatedByRole);
+        Assert.Equal(platformUser, share.CreatedByUserId);
+        Assert.True(share.CanBeManagedBy(UserRole.PlatformAdmin));
+        Assert.False(share.CanBeManagedBy(UserRole.UserAdmin));
+    }
+
+    [Fact]
+    public void PlatformAdminShare_TenantUserAdminCannotRevoke_ThrowsInvalidOperationException()
+    {
+        var (artifact, _) = CreateArtifact();
+        var platformUser = UserId.New();
+        var tenantUser = UserId.New();
+
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, platformUser, UserRole.PlatformAdmin, Now);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Revoke(tenantUser, UserRole.UserAdmin, Now.AddHours(1)));
+        Assert.True(share.IsActive(Now.AddHours(1)));
+    }
+
+    [Fact]
+    public void PlatformAdminShare_PlatformAdminCanRevoke()
+    {
+        var (artifact, _) = CreateArtifact();
+        var platformUser = UserId.New();
+        var anotherPlatformUser = UserId.New();
+
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, platformUser, UserRole.PlatformAdmin, Now);
+        share.Revoke(anotherPlatformUser, UserRole.PlatformAdmin, Now.AddHours(1));
+
+        Assert.Equal(BackupShareStatus.Revoked, share.GetStatus(Now.AddHours(2)));
+        Assert.Equal(anotherPlatformUser, share.RevokedByUserId);
+    }
 }

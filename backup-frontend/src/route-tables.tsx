@@ -41,6 +41,7 @@ import { NotificationsPage } from './pages/notifications/notifications-page'
 import { PlatformNotificationTransportsPage } from './pages/platform/platform-notification-transports-page'
 import { PlatformAgentSettingsPage } from './pages/platform/platform-agent-settings-page'
 import { EncryptionPage } from './pages/encryption/encryption-page'
+import { PlatformSharesPage } from './pages/platform/platform-shares-page'
 
 /** Routes under /tenants/:tenantId/*, relative to it. Kept as data so tests can check every menu link resolves to a real page. */
 export const tenantRoutes = <>
@@ -92,6 +93,7 @@ export const platformRoutes = <>
   <Route path="users" element={<PlatformUsersPage />} />
   <Route path="agents" element={<PlatformAgentsPage />} />
   <Route path="audit" element={<PlatformAuditPage />} />
+  <Route path="shares" element={<PlatformSharesPage />} />
   <Route path="notification-transports" element={<PlatformNotificationTransportsPage />} />
   <Route path="agent-settings" element={<PlatformAgentSettingsPage />} />
   <Route path="*" element={<NotFound />} />

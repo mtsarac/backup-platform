@@ -216,4 +216,118 @@ public sealed class BackupShareApiIntegrationTests(PostgreSqlFixture fixture) : 
             Assert.Equal("Active", detailDoc.GetProperty("status").GetString());
         }
     }
+
+    [Fact]
+    public async Task PlatformAdmin_CanCreateShareAcrossTenants_WithAuditMarking_AndVisibleToTenantUserAdmin()
+    {
+        var (scenario, artifactId) = await SetupScenarioWithArtifactAsync(fixture);
+        await using (scenario)
+        {
+            var platformAccount = await scenario.World.SeedUserAsync(platformAdmin: true);
+            var platformSession = await scenario.World.SignInAsync(platformAccount);
+
+            // 1. Cross-tenant list API denied to UserAdmin (403)
+            using var userAdminListAttempt = await scenario.Admin.GetAsync("/api/platform/backup-shares");
+            Assert.Equal(HttpStatusCode.Forbidden, userAdminListAttempt.StatusCode);
+
+            // 2. UserAdmin cannot call platform share creation (403)
+            using var userAdminCreateAttempt = await scenario.Admin.SendAsync(
+                HttpMethod.Post,
+                "/api/platform/backup-shares",
+                new
+                {
+                    tenantId = scenario.Setup.Tenant.Id.Value,
+                    artifactId,
+                    durationHours = 24,
+                    reason = "Unauthorized creation attempt"
+                });
+            Assert.Equal(HttpStatusCode.Forbidden, userAdminCreateAttempt.StatusCode);
+
+            // 3. PlatformAdmin creates share for arbitrary tenant without membership
+            var createRequest = new
+            {
+                tenantId = scenario.Setup.Tenant.Id.Value,
+                artifactId,
+                durationHours = 24,
+                reason = "Platform investigation"
+            };
+            using var createResponse = await platformSession.SendAsync(
+                HttpMethod.Post,
+                "/api/platform/backup-shares",
+                createRequest);
+
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+            var createdShare = AgentWorld.ReadJson(createResponse);
+            var shareId = createdShare.GetProperty("id").GetGuid();
+            Assert.NotEqual(Guid.Empty, shareId);
+            Assert.Equal(scenario.Setup.Tenant.Id.Value, createdShare.GetProperty("tenantId").GetGuid());
+            Assert.Equal(artifactId, createdShare.GetProperty("artifactId").GetGuid());
+            Assert.Equal(platformAccount.UserId.Value, createdShare.GetProperty("createdByUserId").GetGuid());
+            Assert.Equal("PlatformAdmin", createdShare.GetProperty("createdByRole").GetString());
+            Assert.Equal("Active", createdShare.GetProperty("status").GetString());
+            Assert.Equal("Platform investigation", createdShare.GetProperty("reason").GetString());
+
+            // 4. Distinct audit marking recorded
+            await using var context = fixture.CreatePlatformContext();
+            var audit = await context.AuditEvents
+                .AsNoTracking()
+                .SingleOrDefaultAsync(e => e.Action == AuditActions.BackupShareCreated && e.TargetId == shareId.ToString("D"));
+
+            Assert.NotNull(audit);
+            Assert.Equal(AuditActorKind.PlatformAdmin, audit.ActorKind);
+            Assert.Equal(platformAccount.UserId, audit.ActorUserId);
+            Assert.Equal(scenario.Setup.Tenant.Id, audit.TenantId);
+
+            using var details = JsonDocument.Parse(audit.DetailsJson);
+            Assert.Equal("PlatformAdmin", details.RootElement.GetProperty("role").GetString());
+            Assert.Equal("PlatformAdmin", details.RootElement.GetProperty("actorRole").GetString());
+            Assert.Equal(platformAccount.UserId.ToString(), details.RootElement.GetProperty("actor").GetString());
+            Assert.Equal(scenario.Setup.Tenant.Id.Value.ToString("D"), details.RootElement.GetProperty("tenant").GetString());
+
+            // 5. Cross-tenant list API for PlatformAdmin with tenant and status filters
+            using var listAllResponse = await platformSession.GetAsync("/api/platform/backup-shares");
+            Assert.Equal(HttpStatusCode.OK, listAllResponse.StatusCode);
+            var allShares = AgentWorld.ReadJson(listAllResponse).EnumerateArray().ToList();
+            Assert.Contains(allShares, s => s.GetProperty("id").GetGuid() == shareId);
+
+            // Filter by tenantId
+            using var listTenantResponse = await platformSession.GetAsync($"/api/platform/backup-shares?tenantId={scenario.Setup.Tenant.Id.Value}");
+            Assert.Equal(HttpStatusCode.OK, listTenantResponse.StatusCode);
+            var tenantShares = AgentWorld.ReadJson(listTenantResponse).EnumerateArray().ToList();
+            Assert.All(tenantShares, s => Assert.Equal(scenario.Setup.Tenant.Id.Value, s.GetProperty("tenantId").GetGuid()));
+            Assert.Contains(tenantShares, s => s.GetProperty("id").GetGuid() == shareId);
+
+            // Filter by non-existent tenant returns empty
+            using var emptyTenantResponse = await platformSession.GetAsync($"/api/platform/backup-shares?tenantId={Guid.NewGuid()}");
+            Assert.Equal(HttpStatusCode.OK, emptyTenantResponse.StatusCode);
+            Assert.Empty(AgentWorld.ReadJson(emptyTenantResponse).EnumerateArray());
+
+            // Filter by status=Active
+            using var listActiveResponse = await platformSession.GetAsync("/api/platform/backup-shares?status=Active");
+            Assert.Equal(HttpStatusCode.OK, listActiveResponse.StatusCode);
+            var activeShares = AgentWorld.ReadJson(listActiveResponse).EnumerateArray().ToList();
+            Assert.Contains(activeShares, s => s.GetProperty("id").GetGuid() == shareId);
+
+            // Filter by status=Expired does not contain our active share
+            using var listExpiredResponse = await platformSession.GetAsync("/api/platform/backup-shares?status=Expired");
+            Assert.Equal(HttpStatusCode.OK, listExpiredResponse.StatusCode);
+            var expiredShares = AgentWorld.ReadJson(listExpiredResponse).EnumerateArray().ToList();
+            Assert.DoesNotContain(expiredShares, s => s.GetProperty("id").GetGuid() == shareId);
+
+            // Detail endpoint for PlatformAdmin
+            using var platformDetailResponse = await platformSession.GetAsync($"/api/platform/backup-shares/{shareId}");
+            Assert.Equal(HttpStatusCode.OK, platformDetailResponse.StatusCode);
+            var platformDetail = AgentWorld.ReadJson(platformDetailResponse);
+            Assert.Equal(shareId, platformDetail.GetProperty("id").GetGuid());
+            Assert.Equal("PlatformAdmin", platformDetail.GetProperty("createdByRole").GetString());
+
+            // 6. Tenant UserAdmin sees PlatformAdmin-created share in Paylaşımlarım
+            using var tenantUserAdminListResponse = await scenario.Admin.GetAsync($"{scenario.Root}/backup-shares");
+            Assert.Equal(HttpStatusCode.OK, tenantUserAdminListResponse.StatusCode);
+            var visibleShares = AgentWorld.ReadJson(tenantUserAdminListResponse).EnumerateArray().ToList();
+            var platformCreatedInTenantView = Assert.Single(visibleShares, s => s.GetProperty("id").GetGuid() == shareId);
+            Assert.Equal("PlatformAdmin", platformCreatedInTenantView.GetProperty("createdByRole").GetString());
+            Assert.Equal(platformAccount.UserId.Value, platformCreatedInTenantView.GetProperty("createdByUserId").GetGuid());
+        }
+    }
 }

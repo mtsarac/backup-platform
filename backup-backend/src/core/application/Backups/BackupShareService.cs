@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Identity;
+using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 
@@ -54,5 +55,51 @@ public sealed class BackupShareService(
     {
         var now = timeProvider.GetUtcNow();
         return await store.ListAsync(tenantId, artifactId, now, cancellationToken);
+    }
+
+    public async Task<BackupShareCreateResult> CreatePlatformShareAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        UserId actor,
+        TimeSpan duration,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        var profile = await userStore.GetUserAsync(actor, cancellationToken);
+        if (profile is null || profile.Role != UserRole.PlatformAdmin)
+        {
+            return new BackupShareCreateResult(
+                BackupShareCreateOutcome.Forbidden,
+                ErrorCode: "forbidden",
+                ErrorMessage: "Only a PlatformAdmin can create a platform share.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        return await store.CreateAsync(
+            tenantId,
+            artifactId,
+            actor,
+            UserRole.PlatformAdmin,
+            duration,
+            reason,
+            now,
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BackupShareView>> ListPlatformSharesAsync(
+        TenantId? tenantId,
+        BackupShareStatus? status,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        return await store.ListPlatformAsync(tenantId, status, now, cancellationToken);
+    }
+
+    public async Task<BackupShareView?> GetPlatformShareAsync(
+        Guid shareId,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        return await store.GetPlatformAsync(shareId, now, cancellationToken);
     }
 }

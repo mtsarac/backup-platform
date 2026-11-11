@@ -14,6 +14,14 @@ export interface BackupShareView {
   status: ShareStatus
   artifactName?: string | null
   createdByDisplayName?: string | null
+  tenantName?: string | null
+}
+
+export interface CreatePlatformShareRequest {
+  tenantId: string
+  artifactId: string
+  durationHours?: number
+  reason?: string
 }
 
 export interface CreateShareRequest {

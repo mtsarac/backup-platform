@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { ArrowLeft, Bell, Building2, CreditCard, HardDrive, LayoutDashboard, Monitor, MonitorCog, ScrollText, ShieldCheck, Sliders, Users } from 'lucide-react'
+import { ArrowLeft, Bell, Building2, CreditCard, HardDrive, LayoutDashboard, Monitor, MonitorCog, ScrollText, Share2, ShieldCheck, Sliders, Users } from 'lucide-react'
 import { platformPaths } from '@/features/platform/paths'
 import { SidebarFrame, type NavGroup } from './nav'
 
@@ -19,6 +19,7 @@ export function PlatformSidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
     ] },
     { heading: tx("Güvenlik ve destek"), items: [
       { label: tx("Denetim kaydı"), to: platformPaths.audit(), icon: ScrollText },
+      { label: tx("Paylaşılan Yedekler"), to: platformPaths.shares, icon: Share2 },
     ] },
     { heading: tx("Ayarlar"), items: [
       { label: tx("Bildirim altyapısı"), to: platformPaths.notificationTransports, icon: Bell },
