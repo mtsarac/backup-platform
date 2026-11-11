@@ -119,13 +119,20 @@ def pol03_boundary(t, ag):
     else:
         assert d["status"] == "Failed" and d["attempts"][-1].get("reasonCode") == "QuotaExceeded" and q2["usedBytes"] == U, out["equal"]
     out["afterEqualRefusal"] = admit_expect(t, job, "quota_exceeded", L) if q2["usedBytes"] > U else None
-    # Actual compressed size can vary by a few bytes; admission and successful completion are separate checks.
+    # Admission reserves the estimate (the previous artifact's size). The archive size varies by a few bytes between identical runs
+    # (manifest.json carries a UTC timestamp whose text length varies), so the hold may grow to the real size, but only while it fits the limit.
     E = est(t, job); U = q2["usedBytes"]; L = U + E + 1; ov(t, "limited", L)
     st, txt, rid = post_run(t, job); assert rid, f"above boundary refused: {st} {txt}"
     d, s = watch(t, rid); q3 = settle(t)
     A3 = art_of(d)["sizeBytes"] if art_of(d) else None
     out["above"] = {"limit": L, "http": st, "run": d["status"], "reason": reason(d), "peakReserved": peak(s), "reservedAfter": q3["reservedBytes"], "usedDelta": q3["usedBytes"] - U, "artifactSize": A3, "estimate": E}
-    assert peak(s) == E and q3["reservedBytes"] == 0, out["above"]
+    assert q3["reservedBytes"] == 0, out["above"]
+    assert max(x[2] + x[3] for x in s) <= L, f"used+reserved exceeded the hard limit {L}: {max(x[2] + x[3] for x in s)}"
+    if d["status"] == "Succeeded":
+        assert A3 <= E + 1, out["above"]  # the hold could only grow while U + actual <= L = U + E + 1
+        assert E <= peak(s) <= max(E, A3), out["above"]
+    else:
+        assert peak(s) == E, out["above"]  # a refused growth leaves the admission hold untouched
     if d["status"] == "Succeeded": assert q3["usedBytes"] - U == A3, out["above"]
     else: assert d["attempts"][-1].get("reasonCode") == "QuotaExceeded" and q3["usedBytes"] == U, out["above"]
     # tenant view == platform view
