@@ -112,6 +112,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<NotificationCondition> NotificationConditions => Set<NotificationCondition>();
     public DbSet<NotificationEvent> NotificationEvents => Set<NotificationEvent>();
     public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<NotificationTransportSettings> NotificationTransports => Set<NotificationTransportSettings>();
     public DbSet<DiscoveryAgentState> DiscoveryAgentStates => Set<DiscoveryAgentState>();
     public DbSet<DiscoveredInstance> DiscoveredInstances => Set<DiscoveredInstance>();
@@ -128,6 +129,9 @@ public sealed class PlatformDbContext : DbContext
             IsPlatformOperations || (CurrentTenantId != null && tenant.Id == CurrentTenantId));
         modelBuilder.Entity<AuditEvent>().HasQueryFilter(audit =>
             IsPlatformOperations || (CurrentTenantId != null && audit.TenantId == CurrentTenantId));
+        modelBuilder.Entity<NotificationEvent>().HasQueryFilter(notification =>
+            IsPlatformOperations || (CurrentTenantId != null && notification.TenantId == CurrentTenantId));
+        modelBuilder.Entity<UserNotification>().HasQueryFilter(_ => IsPlatformOperations);
         var configureFilter = typeof(PlatformDbContext).GetMethod(nameof(ConfigureTenantFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
@@ -227,7 +231,7 @@ public sealed class PlatformDbContext : DbContext
             {
                 throw new InvalidOperationException("Storage connection writes require explicit platform operations.");
             }
-            if (!IsPlatformOperations && entry.Entity is NotificationChannel or NotificationPolicy or NotificationCondition or NotificationEvent or NotificationDelivery or NotificationTransportSettings)
+            if (!IsPlatformOperations && entry.Entity is NotificationChannel or NotificationPolicy or NotificationCondition or NotificationEvent or NotificationDelivery or NotificationTransportSettings or UserNotification or BackupPlatform.Infrastructure.Persistence.Configurations.NotificationHistorySettings)
             {
                 throw new InvalidOperationException("Notification writes require explicit platform operations.");
             }

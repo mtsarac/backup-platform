@@ -6,6 +6,7 @@ import { EmailTransportCard, SmsTransportCard } from '@/features/platform/notifi
 import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { NotificationAdministration } from '@/features/platform/notifications/administration'
 
 export function PlatformNotificationTransportsPage() {
   useLanguage()
@@ -18,5 +19,6 @@ export function PlatformNotificationTransportsPage() {
         {isFeatureEnabled('sms') && <SmsTransportCard transport={query.data.sms} />}
       </>}
     </QueryState>
+    <NotificationAdministration />
   </div>
 }

@@ -132,6 +132,8 @@ public static class SecurityServiceCollectionExtensions
         AddStorageConnections(services);
         AddRestores(services);
         AddNotifications(services);
+        services.AddSingleton<InAppNotificationFanout>();
+        services.AddHostedService(provider => provider.GetRequiredService<InAppNotificationFanout>());
         services.AddScoped<IDownloadStore, PostgreSqlDownloadStore>();
         services.AddScoped<DownloadService>();
         services.AddScoped<DownloadStreamer>();
