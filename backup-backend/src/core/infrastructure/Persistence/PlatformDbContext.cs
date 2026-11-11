@@ -112,6 +112,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<NotificationCondition> NotificationConditions => Set<NotificationCondition>();
     public DbSet<NotificationEvent> NotificationEvents => Set<NotificationEvent>();
     public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<NotificationTransportSettings> NotificationTransports => Set<NotificationTransportSettings>();
     public DbSet<DiscoveryAgentState> DiscoveryAgentStates => Set<DiscoveryAgentState>();
     public DbSet<DiscoveredInstance> DiscoveredInstances => Set<DiscoveredInstance>();
@@ -120,6 +121,19 @@ public sealed class PlatformDbContext : DbContext
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
     public static PlatformDbContext CreateForPlatformOperations(DbContextOptions<PlatformDbContext> options) => new(options);
+    public IQueryable<UserId> TenantAdminIds(TenantId? tenantId) =>
+        from membership in TenantMemberships
+        join user in Users on membership.UserId equals user.Id
+        where membership.TenantId == tenantId && user.Role == UserRole.UserAdmin
+        select user.Id;
+
+    public IQueryable<UserNotification> VisibleUserNotifications(UserId userId) =>
+        from item in UserNotifications
+        join notificationEvent in NotificationEvents on item.EventId equals notificationEvent.Id
+        where item.UserId == userId && (notificationEvent.TenantId == null
+            || Users.Any(user => user.Id == userId && user.Role == UserRole.PlatformAdmin)
+            || TenantMemberships.Any(membership => membership.UserId == userId && membership.TenantId == notificationEvent.TenantId))
+        select item;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -128,6 +142,9 @@ public sealed class PlatformDbContext : DbContext
             IsPlatformOperations || (CurrentTenantId != null && tenant.Id == CurrentTenantId));
         modelBuilder.Entity<AuditEvent>().HasQueryFilter(audit =>
             IsPlatformOperations || (CurrentTenantId != null && audit.TenantId == CurrentTenantId));
+        modelBuilder.Entity<NotificationEvent>().HasQueryFilter(notification =>
+            IsPlatformOperations || (CurrentTenantId != null && notification.TenantId == CurrentTenantId));
+        modelBuilder.Entity<UserNotification>().HasQueryFilter(_ => IsPlatformOperations);
         var configureFilter = typeof(PlatformDbContext).GetMethod(nameof(ConfigureTenantFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
@@ -227,7 +244,7 @@ public sealed class PlatformDbContext : DbContext
             {
                 throw new InvalidOperationException("Storage connection writes require explicit platform operations.");
             }
-            if (!IsPlatformOperations && entry.Entity is NotificationChannel or NotificationPolicy or NotificationCondition or NotificationEvent or NotificationDelivery or NotificationTransportSettings)
+            if (!IsPlatformOperations && entry.Entity is NotificationChannel or NotificationPolicy or NotificationCondition or NotificationEvent or NotificationDelivery or NotificationTransportSettings or UserNotification or BackupPlatform.Infrastructure.Persistence.Configurations.NotificationHistorySettings)
             {
                 throw new InvalidOperationException("Notification writes require explicit platform operations.");
             }

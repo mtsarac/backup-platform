@@ -4,6 +4,7 @@ using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Infrastructure.Persistence.Configurations;
 using BackupPlatform.Notifications;
 using BackupPlatform.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -18,9 +19,8 @@ namespace BackupPlatform.Infrastructure.Notifications;
 /// <remarks>
 /// Every tenant write takes the tenant's notification lock (<c>pg_advisory_xact_lock</c>) first, so on any node channel changes, policy changes and the
 /// engine's decisions for one tenant are serialized, and an event, its deliveries and the condition's new state commit together (the outbox). Audit
-/// events are written in the same transaction as the change they describe. Deliveries are claimed with <c>FOR UPDATE SKIP LOCKED</c> under a lease, and
-/// every result is a fenced update (owner + attempt), so concurrent workers never process one delivery at the same time and a stale worker cannot
-/// overwrite its successor.
+/// events are written in the same transaction as the change they describe. Deliveries are claimed with <c>FOR UPDATE SKIP LOCKED</c> under a lease,
+/// and every result is fenced by owner and attempt. A stale worker cannot overwrite its successor, but an external send can outlive its lease.
 /// </remarks>
 public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbContext> options, TimeProvider time, FeatureFlags? flags = null) : INotificationStore
 {
@@ -31,7 +31,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
     private static Task LockAsync(PlatformDbContext context, string scope, CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({scope}, 0))", cancellationToken);
 
-    private static string TenantLock(TenantId tenantId) => "notifications:" + tenantId.Value.ToString("D");
+    internal static string TenantLock(TenantId tenantId) => "notifications:" + tenantId.Value.ToString("D");
 
     // ---- channels -----------------------------------------------------------------------------------------------------------------------
 
@@ -188,6 +188,68 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
             .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
         return new(rows.Select(row => new NotificationDeliveryRecord(row.delivery, row.notificationEvent.Type, row.notificationEvent.Phase, row.notificationEvent.Severity,
             row.notificationEvent.SubjectKind, row.notificationEvent.SubjectName)).ToList(), total, page, pageSize);
+    }
+
+    public async Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(int page, int pageSize, CancellationToken cancellationToken)
+    {
+        await using var context = Open();
+        var query = from delivery in context.NotificationDeliveries.AsNoTracking()
+                    join notificationEvent in context.NotificationEvents.AsNoTracking() on new { delivery.EventId, delivery.TenantId } equals new { EventId = notificationEvent.Id, notificationEvent.TenantId }
+                    where delivery.Status == NotificationDeliveryStatus.Failed
+                    select new { delivery, notificationEvent };
+        var total = await query.LongCountAsync(cancellationToken);
+        var rows = await query.OrderByDescending(row => row.delivery.CreatedAt).ThenByDescending(row => row.delivery.Id)
+            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
+        return new(rows.Select(row => new NotificationDeliveryRecord(row.delivery, row.notificationEvent.Type, row.notificationEvent.Phase, row.notificationEvent.Severity,
+            row.notificationEvent.SubjectKind, row.notificationEvent.SubjectName)).ToList(), total, page, pageSize);
+    }
+
+    public async Task<bool> RetryFailedDeliveryAsync(Guid id, NotificationActor actor, CancellationToken cancellationToken)
+    {
+        await using var context = Open();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockAsync(context, "notifications:history-prune", cancellationToken);
+        var now = time.GetUtcNow();
+        var changed = await context.NotificationDeliveries.Where(delivery => delivery.Id == id && delivery.Status == NotificationDeliveryStatus.Failed)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(delivery => delivery.Status, NotificationDeliveryStatus.Pending)
+                .SetProperty(delivery => delivery.AttemptCount, 0)
+                .SetProperty(delivery => delivery.NextAttemptAt, now)
+                .SetProperty(delivery => delivery.ErrorCode, (string?)null)
+                .SetProperty(delivery => delivery.CompletedAt, (DateTimeOffset?)null)
+                .SetProperty(delivery => delivery.LastAttemptAt, (DateTimeOffset?)null)
+                .SetProperty(delivery => delivery.LeaseOwner, (string?)null)
+                .SetProperty(delivery => delivery.LeaseExpiresAt, (DateTimeOffset?)null)
+                .SetProperty(delivery => delivery.UpdatedAt, now), cancellationToken);
+        if (changed == 0) return false;
+        var delivery = await context.NotificationDeliveries.AsNoTracking().SingleAsync(row => row.Id == id, cancellationToken);
+        context.AuditEvents.Add(AuditEvent.Record(now, actor.UserId, actor.Kind, NotificationAuditActions.DeliveryRetried, delivery.TenantId,
+            "notification_delivery", id.ToString("D"), new Dictionary<string, object?>()));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<int> GetHistoryRetentionDaysAsync(CancellationToken cancellationToken)
+    {
+        await using var context = Open();
+        return (await context.Set<NotificationHistorySettings>().AsNoTracking().SingleOrDefaultAsync(cancellationToken))?.RetentionDays ?? 90;
+    }
+
+    public async Task SetHistoryRetentionDaysAsync(int days, NotificationActor actor, CancellationToken cancellationToken)
+    {
+        if (days is < 1 or > 36500) throw new ArgumentOutOfRangeException(nameof(days));
+        await using var context = Open();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockAsync(context, "notifications:history-retention", cancellationToken);
+        var settings = await context.Set<NotificationHistorySettings>().SingleOrDefaultAsync(cancellationToken);
+        if ((settings?.RetentionDays ?? 90) == days) return;
+        if (settings is null) context.Set<NotificationHistorySettings>().Add(settings = new NotificationHistorySettings());
+        settings.RetentionDays = days;
+        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, NotificationAuditActions.HistoryRetentionUpdated, null,
+            "notification_history", "retention", new Dictionary<string, object?> { ["retentionDays"] = days }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     // ---- transports ---------------------------------------------------------------------------------------------------------------------
@@ -354,6 +416,8 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
     public async Task<int> PruneAsync(DateTimeOffset olderThan, CancellationToken cancellationToken)
     {
         await using var context = Open();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockAsync(context, "notifications:history-prune", cancellationToken);
         // Events with a delivery still in flight are kept whatever their age; deliveries go with their event (cascade).
         var removed = await context.NotificationEvents
             .Where(notificationEvent => notificationEvent.CreatedAt < olderThan
@@ -361,6 +425,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
                     && (delivery.Status == NotificationDeliveryStatus.Pending || delivery.Status == NotificationDeliveryStatus.InProgress)))
             .ExecuteDeleteAsync(cancellationToken);
         await context.NotificationConditions.Where(condition => !condition.IsActive && condition.ResolvedAt < olderThan).ExecuteDeleteAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return removed;
     }
 }

@@ -38,8 +38,10 @@ public sealed class NotificationDetectionWorker(IServiceScopeFactory scopes, Not
         if (now >= _nextPrune)
         {
             _nextPrune = now.AddHours(1);
-            var removed = await scope.ServiceProvider.GetRequiredService<INotificationStore>().PruneAsync(now.AddDays(-options.HistoryRetentionDays), cancellationToken);
-            if (removed > 0) logger.LogInformation("Removed {Count} notification events past the {Days}-day retention.", removed, options.HistoryRetentionDays);
+            var store = scope.ServiceProvider.GetRequiredService<INotificationStore>();
+            var days = await store.GetHistoryRetentionDaysAsync(cancellationToken);
+            var removed = await store.PruneAsync(now.AddDays(-days), cancellationToken);
+            if (removed > 0) logger.LogInformation("Removed {Count} notification events past the {Days}-day retention.", removed, days);
         }
         return events;
     }
@@ -52,7 +54,6 @@ public sealed class NotificationDetectionWorker(IServiceScopeFactory scopes, Not
 /// </summary>
 public sealed class NotificationDeliveryWorker(IServiceScopeFactory scopes, NotificationOptions options, TimeProvider time, ILogger<NotificationDeliveryWorker> logger) : BackgroundService
 {
-    private readonly string _owner = $"{Environment.MachineName}-{Guid.NewGuid():N}";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -79,7 +80,7 @@ public sealed class NotificationDeliveryWorker(IServiceScopeFactory scopes, Noti
         do
         {
             await using var scope = scopes.CreateAsyncScope();
-            claimed = await scope.ServiceProvider.GetRequiredService<NotificationDeliveryProcessor>().ProcessAsync(_owner, cancellationToken);
+            claimed = await scope.ServiceProvider.GetRequiredService<NotificationDeliveryProcessor>().ProcessAsync($"{Environment.MachineName}-{Guid.NewGuid():N}", cancellationToken);
             total += claimed;
         }
         while (claimed >= options.DeliveryBatchSize);

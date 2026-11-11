@@ -34,6 +34,10 @@ internal class FakeNotificationStore : INotificationStore
     public Task<NotificationPolicy?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<(NotificationPolicy Policy, bool Changed)?> UpdatePolicyAsync(TenantId tenantId, NotificationActor actor, Func<NotificationPolicy, bool> apply, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, int page, int pageSize, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(int page, int pageSize, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<bool> RetryFailedDeliveryAsync(Guid id, NotificationActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public virtual Task<int> GetHistoryRetentionDaysAsync(CancellationToken cancellationToken) => Task.FromResult(90);
+    public Task SetHistoryRetentionDaysAsync(int days, NotificationActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<TransportMutationResult> MutateTransportAsync(string key, NotificationActor actor, Func<NotificationTransportSettings, TransportChange?> mutate, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<IReadOnlyList<NotificationPolicy>> ListEnabledPoliciesAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<int> PruneAsync(DateTimeOffset olderThan, CancellationToken cancellationToken) => throw new NotSupportedException();

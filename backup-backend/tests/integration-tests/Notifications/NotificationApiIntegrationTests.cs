@@ -70,6 +70,37 @@ public sealed class NotificationApiIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Only_platform_administrators_can_list_retry_and_configure_notification_history()
+    {
+        var (world, setup) = await CreateAsync();
+        await using var _ = world;
+        var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
+        const string root = "/api/platform/notifications";
+        var hook = await ReadAsync(await setup.Admin.SendAsync(HttpMethod.Post, Notifications(setup) + "/channels", new { kind = "webhook", name = "Hook", target = WebhookUrl }), HttpStatusCode.Created);
+        var queued = await ReadAsync(await setup.Admin.SendAsync(HttpMethod.Post, Notifications(setup) + $"/channels/{hook.GetProperty("id").GetGuid()}/test"), HttpStatusCode.Accepted);
+        var id = queued.GetProperty("deliveryId").GetGuid();
+        await using (var context = fixture.CreatePlatformContext())
+            await context.NotificationDeliveries.Where(row => row.Id == id).ExecuteUpdateAsync(set => set
+                .SetProperty(row => row.Status, NotificationDeliveryStatus.Failed)
+                .SetProperty(row => row.NextAttemptAt, (DateTimeOffset?)null)
+                .SetProperty(row => row.CompletedAt, DateTimeOffset.UtcNow));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await setup.Admin.GetAsync(root + "/deliveries/failed")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await setup.Admin.SendAsync(HttpMethod.Post, root + $"/deliveries/{id}/retry")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await setup.Admin.GetAsync(root + "/history-retention")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await setup.Admin.SendAsync(HttpMethod.Put, root + "/history-retention", new { retentionDays = 30 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await world.Anonymous.GetAsync(root + "/deliveries/failed")).StatusCode);
+        Assert.Equal(90, (await ReadAsync(await platform.GetAsync(root + "/history-retention"), HttpStatusCode.OK)).GetProperty("retentionDays").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, (await platform.SendAsync(HttpMethod.Put, root + "/history-retention", new { retentionDays = 0 })).StatusCode);
+        Assert.Equal(30, (await ReadAsync(await platform.SendAsync(HttpMethod.Put, root + "/history-retention", new { retentionDays = 30 }), HttpStatusCode.OK)).GetProperty("retentionDays").GetInt32());
+        Assert.Equal(30, (await ReadAsync(await platform.GetAsync(root + "/history-retention"), HttpStatusCode.OK)).GetProperty("retentionDays").GetInt32());
+        var failed = await ReadAsync(await platform.GetAsync(root + "/deliveries/failed"), HttpStatusCode.OK);
+        Assert.Equal(id, Assert.Single(failed.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.NoContent, (await platform.SendAsync(HttpMethod.Post, root + $"/deliveries/{id}/retry")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await platform.SendAsync(HttpMethod.Post, root + $"/deliveries/{id}/retry")).StatusCode);
+    }
+
+    [Fact]
     public async Task Another_tenants_administrator_cannot_reach_or_find_the_channels_of_this_tenant()
     {
         var (world, a) = await CreateAsync();

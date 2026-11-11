@@ -23,6 +23,9 @@ public static class NotificationAuditActions
     public const string TransportUpdated = "notification_transport.updated";
     public const string TransportSecretRotated = "notification_transport.secret_rotated";
     public const string TransportSecretCleared = "notification_transport.secret_cleared";
+    public const string DeliveryRetried = "notification_delivery.retried";
+    public const string HistoryRetentionUpdated = "notification_history.retention_updated";
+
 
     public const string ChannelTarget = "notification_channel";
     public const string PolicyTarget = "notification_policy";
@@ -140,6 +143,10 @@ public interface INotificationStore
     /// <summary>Null when the tenant does not exist. The row is created on the first change.</summary>
     Task<(NotificationPolicy Policy, bool Changed)?> UpdatePolicyAsync(TenantId tenantId, NotificationActor actor, Func<NotificationPolicy, bool> apply, CancellationToken cancellationToken);
     Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(int page, int pageSize, CancellationToken cancellationToken);
+    Task<bool> RetryFailedDeliveryAsync(Guid id, NotificationActor actor, CancellationToken cancellationToken);
+    Task<int> GetHistoryRetentionDaysAsync(CancellationToken cancellationToken);
+    Task SetHistoryRetentionDaysAsync(int days, NotificationActor actor, CancellationToken cancellationToken);
     Task<NotificationTransportSettings?> GetTransportAsync(string key, CancellationToken cancellationToken);
     Task<TransportMutationResult> MutateTransportAsync(string key, NotificationActor actor, Func<NotificationTransportSettings, TransportChange?> mutate, CancellationToken cancellationToken);
 

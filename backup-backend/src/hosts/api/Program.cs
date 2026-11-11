@@ -61,6 +61,7 @@ app.MapQuotaEndpoints();
 app.MapStorageConnectionEndpoints();
 app.MapNotificationEndpoints();
 app.MapNotificationRecipientEndpoints();
+app.MapUserNotificationEndpoints();
 app.MapBackupEndpoints();
 app.MapBackupHealthEndpoints();
 app.MapBackupArtifactEndpoints();
@@ -75,6 +76,7 @@ app.MapArtifactEncryptionEndpoints();
 app.MapAgentDownloadEndpoints();
 app.MapAgentStorageTransferEndpoints();
 app.MapAgentDistributionEndpoints();
+app.MapHub<InAppNotificationHub>("/hubs/notifications").RequireAuthorization();
 app.MapAgentHub();
 
 app.Run();

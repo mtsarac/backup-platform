@@ -13,6 +13,12 @@ export default defineConfig({
         secure: process.env.BACKUP_API_PROXY_INSECURE !== 'true',
         changeOrigin: true,
       },
+      '/hubs': {
+        target: process.env.BACKUP_API_PROXY_TARGET ?? 'https://localhost:5001',
+        secure: process.env.BACKUP_API_PROXY_INSECURE !== 'true',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   resolve: {

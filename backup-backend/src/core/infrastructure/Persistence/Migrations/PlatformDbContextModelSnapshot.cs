@@ -2776,8 +2776,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_notification_deliveries_event_channel");
 
-                    b.HasIndex("EventId", "TenantId");
-
                     b.HasIndex("TenantId", "CreatedAt")
                         .HasDatabaseName("ix_notification_deliveries_history");
 
@@ -2844,8 +2842,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<Guid>("TenantId")
-                        .IsConcurrencyToken()
+                    b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Type")
@@ -2864,7 +2861,13 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_notification_events_created");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("DedupKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_events_global_dedup")
+                        .HasFilter("\"TenantId\" IS NULL");
+
+                    b.HasIndex("Id", "TenantId")
+                        .IsUnique();
 
                     b.HasIndex("TenantId", "CreatedAt")
                         .HasDatabaseName("ix_notification_events_recent");
@@ -2875,13 +2878,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.ToTable("notification_events", null, t =>
                         {
-                            t.HasCheckConstraint("ck_notification_events_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-
                             t.HasCheckConstraint("ck_notification_events_phase", "\"Phase\" IN ('Raised','Recovered','Test')");
 
                             t.HasCheckConstraint("ck_notification_events_severity", "\"Severity\" IN ('Info','Warning','Critical')");
-
-                            t.HasCheckConstraint("ck_notification_events_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
                 });
 
@@ -3004,6 +3003,30 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_notification_transport_settings_secret", "(\"SecretReference\" IS NULL) = (\"SecretUpdatedAt\" IS NULL)");
                         });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.UserNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("EventId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("user_notifications", (string)null);
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Restores.RestoreAttempt", b =>
@@ -4162,6 +4185,24 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Infrastructure.Persistence.Configurations.NotificationHistorySettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RetentionDays")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("notification_history_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_history_settings_retention", "\"RetentionDays\" BETWEEN 1 AND 36500");
+
+                            t.HasCheckConstraint("ck_notification_history_settings_singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Infrastructure.Secrets.SecretCiphertextRecord", b =>
                 {
                     b.Property<string>("Name")
@@ -4951,17 +4992,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationDelivery", b =>
                 {
+                    b.HasOne("BackupPlatform.Domain.Notifications.NotificationEvent", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("BackupPlatform.Domain.Notifications.NotificationEvent", null)
-                        .WithMany()
-                        .HasForeignKey("EventId", "TenantId")
-                        .HasPrincipalKey("Id", "TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -4970,8 +5010,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationPolicy", b =>
@@ -4979,6 +5018,21 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.UserNotification", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Notifications.NotificationEvent", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

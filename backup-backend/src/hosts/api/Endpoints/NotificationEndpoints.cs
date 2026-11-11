@@ -44,6 +44,11 @@ public sealed class NotificationSecretRequest
     public string? Value { get; init; }
 }
 
+public sealed class NotificationHistoryRetentionRequest
+{
+    public int? RetentionDays { get; init; }
+}
+
 
 public sealed class EmailTransportRequest
 {
@@ -113,6 +118,11 @@ public static class NotificationEndpoints
         if (endpoints.IsFeatureEnabled(Features.Sms)) platform.MapPut("/sms", PutSmsTransportAsync);
         platform.MapPut("/{key}/secret", SetTransportSecretAsync);
         platform.MapDelete("/{key}/secret", ClearTransportSecretAsync);
+        var administration = endpoints.MapGroup("/api/platform/notifications").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+        administration.MapGet("/deliveries/failed", ListFailedDeliveriesAsync);
+        administration.MapPost("/deliveries/{id:guid}/retry", RetryDeliveryAsync);
+        administration.MapGet("/history-retention", GetHistoryRetentionAsync);
+        administration.MapPut("/history-retention", PutHistoryRetentionAsync);
         return endpoints;
     }
 
@@ -258,6 +268,43 @@ public static class NotificationEndpoints
                 }).ToList(),
                 totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize
             });
+        });
+
+    private static Task<IResult> ListFailedDeliveriesAsync(int? page, int? pageSize, INotificationStore store, CancellationToken cancellationToken) =>
+        GuardAsync(async () =>
+        {
+            var p = page ?? 1;
+            var size = pageSize ?? DefaultPageSize;
+            if (p is < 1 or > 1_000_000 || size is < 1 or > MaximumPageSize) throw new InvalidNotificationException("page", "invalid_value");
+            var result = await store.ListFailedDeliveriesAsync(p, size, cancellationToken);
+            return Results.Ok(new
+            {
+                items = result.Items.Select(row => new
+                {
+                    id = row.Delivery.Id, tenantId = row.Delivery.TenantId.Value, eventId = row.Delivery.EventId, eventType = row.EventType,
+                    phase = row.Phase.ToString().ToLowerInvariant(), severity = row.Severity.ToString().ToLowerInvariant(),
+                    subjectKind = row.SubjectKind, subjectName = row.SubjectName, channelKind = row.Delivery.ChannelKind.ToString().ToLowerInvariant(),
+                    channelName = row.Delivery.ChannelName, targetDisplay = row.Delivery.TargetDisplay, attempts = row.Delivery.AttemptCount,
+                    errorCode = row.Delivery.ErrorCode, createdAt = row.Delivery.CreatedAt, completedAt = row.Delivery.CompletedAt
+                }).ToList(),
+                totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize
+            });
+        });
+
+    private static async Task<IResult> RetryDeliveryAsync(Guid id, ICurrentUser user, INotificationStore store, CancellationToken cancellationToken) =>
+        await store.RetryFailedDeliveryAsync(id, PlatformActor(user), cancellationToken)
+            ? Results.NoContent() : Results.Conflict(new { error = "delivery_not_failed" });
+
+    private static async Task<IResult> GetHistoryRetentionAsync(INotificationStore store, CancellationToken cancellationToken) =>
+        Results.Ok(new { retentionDays = await store.GetHistoryRetentionDaysAsync(cancellationToken) });
+
+    private static Task<IResult> PutHistoryRetentionAsync(NotificationHistoryRetentionRequest request, ICurrentUser user, INotificationStore store, CancellationToken cancellationToken) =>
+        GuardAsync(async () =>
+        {
+            var days = request.RetentionDays ?? throw new InvalidNotificationException("retentionDays", "required");
+            if (days is < 1 or > 36500) throw new InvalidNotificationException("retentionDays", "invalid_value");
+            await store.SetHistoryRetentionDaysAsync(days, PlatformActor(user), cancellationToken);
+            return Results.Ok(new { retentionDays = days });
         });
 
     // ---- platform transports ------------------------------------------------------------------------------------------------------------

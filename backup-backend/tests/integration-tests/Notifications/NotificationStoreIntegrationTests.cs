@@ -4,6 +4,9 @@ using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Notifications;
 using Microsoft.EntityFrameworkCore;
+using BackupPlatform.Api.Notifications;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BackupPlatform.IntegrationTests.Notifications;
 
@@ -327,6 +330,55 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
 
         Assert.Empty(await store.ClaimDueAsync("w1", now.AddSeconds(59), 10, TimeSpan.FromMinutes(2), 4, default));
         Assert.Equal(2, Assert.Single(await store.ClaimDueAsync("w1", now.AddSeconds(60), 10, TimeSpan.FromMinutes(2), 4, default)).Attempt);
+    }
+
+    [Fact]
+    public async Task Manual_retry_is_atomic_failed_only_and_audited_with_the_platform_actor()
+    {
+        var (tenant, _) = await SeedDueAsync(1);
+        var store = _world.Store();
+        var now = _world.Clock.GetUtcNow();
+        var first = Assert.Single(await store.ClaimDueAsync("old-worker", now, 10, TimeSpan.FromMinutes(1), 4, default));
+        Assert.False(await store.RetryFailedDeliveryAsync(first.DeliveryId, _world.PlatformActor, default));
+        Assert.True(await store.CompleteAsync(first.DeliveryId, "old-worker", first.Attempt, new DeliveryResult(NotificationDeliveryStatus.Failed, "http_400"), now, default));
+        Assert.Single((await store.ListFailedDeliveriesAsync(1, 25, default)).Items);
+
+        var retries = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => _world.Store().RetryFailedDeliveryAsync(first.DeliveryId, _world.PlatformActor, default)));
+        Assert.Single(retries, changed => changed);
+        Assert.Empty((await store.ListFailedDeliveriesAsync(1, 25, default)).Items);
+        var retry = Assert.Single(await store.ClaimDueAsync("new-worker", now, 10, TimeSpan.FromMinutes(1), 4, default));
+        Assert.Equal(1, retry.Attempt);
+        Assert.False(await store.CompleteAsync(first.DeliveryId, "old-worker", first.Attempt, new DeliveryResult(NotificationDeliveryStatus.Sent), now, default));
+        var audit = Assert.Single(await _world.AuditAsync(tenant), row => row.Action == NotificationAuditActions.DeliveryRetried);
+        Assert.Equal(_world.PlatformActor.UserId, audit.ActorUserId);
+        Assert.Equal(_world.PlatformActor.Kind, audit.ActorKind);
+    }
+
+    [Fact]
+    public async Task Configured_retention_is_persisted_and_pruning_uses_it()
+    {
+        var (tenant, _) = await SeedDueAsync(1);
+        var store = _world.Store();
+        var now = _world.Clock.GetUtcNow();
+        var claim = Assert.Single(await store.ClaimDueAsync("worker", now, 10, TimeSpan.FromMinutes(1), 4, default));
+        await store.CompleteAsync(claim.DeliveryId, "worker", claim.Attempt, new DeliveryResult(NotificationDeliveryStatus.Sent), now, default);
+        Assert.Equal(90, await store.GetHistoryRetentionDaysAsync(default));
+        await store.SetHistoryRetentionDaysAsync(30, _world.PlatformActor, default);
+        Assert.Equal(30, await _world.Store().GetHistoryRetentionDaysAsync(default));
+        using var services = new ServiceCollection()
+            .AddSingleton<INotificationStore>(store)
+            .AddSingleton(_world.Engine())
+            .BuildServiceProvider();
+        var worker = new NotificationDetectionWorker(services.GetRequiredService<IServiceScopeFactory>(), _world.Options, _world.Clock, NullLogger<NotificationDetectionWorker>.Instance);
+        _world.Clock.Advance(TimeSpan.FromDays(29));
+        await worker.RunOnceAsync(default);
+        Assert.Single(await _world.EventsAsync(tenant));
+        _world.Clock.Advance(TimeSpan.FromDays(2));
+        await worker.RunOnceAsync(default);
+        Assert.Empty(await _world.EventsAsync(tenant));
+        var audit = Assert.Single(await _world.AuditAsync(null), row => row.Action == NotificationAuditActions.HistoryRetentionUpdated);
+        Assert.Equal(_world.PlatformActor.UserId, audit.ActorUserId);
+        Assert.Equal(_world.PlatformActor.Kind, audit.ActorKind);
     }
 
     [Fact]

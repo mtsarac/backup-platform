@@ -9,6 +9,7 @@ import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { tx } from '@/lib/i18n'
 
 vi.mock('@/features/platform/notifications/api')
+vi.mock('@/features/platform/notifications/administration', () => ({ NotificationAdministration: () => null }))
 
 const SECRET = 'smtp-pass-123'
 const email = (overrides: Partial<EmailTransport> = {}): EmailTransport => ({

@@ -37,9 +37,6 @@ public sealed class NotificationOptions
     /// <summary>A condition that flaps inside this window is not announced again (it is, once the window passes and it still holds).</summary>
     public TimeSpan FlapCooldown { get; init; } = TimeSpan.FromMinutes(15);
 
-    /// <summary>Events and deliveries older than this are deleted by the maintenance pass.</summary>
-    public int HistoryRetentionDays { get; init; } = 90;
-
     public int MaxChannelsPerTenant { get; init; } = 20;
 
     /// <summary>Test notifications one channel accepts per hour.</summary>
@@ -97,7 +94,6 @@ public sealed class NotificationOptions
         if (BackoffBase < TimeSpan.FromSeconds(1) || BackoffMax < BackoffBase) problems.Add("BackoffBase must be at least one second and not exceed BackoffMax.");
         if (SendTimeout < TimeSpan.FromSeconds(1) || LeaseDuration < SendTimeout * 3) problems.Add("LeaseDuration must be at least three times SendTimeout.");
         if (FlapCooldown < TimeSpan.Zero) problems.Add("FlapCooldown must not be negative.");
-        if (HistoryRetentionDays < 1) problems.Add("HistoryRetentionDays must be at least 1.");
         if (MaxChannelsPerTenant < 1) problems.Add("MaxChannelsPerTenant must be at least 1.");
         if (TestNotificationsPerChannelPerHour < 1) problems.Add("TestNotificationsPerChannelPerHour must be at least 1.");
         if (MaxNotificationsPerHourCeiling < 1) problems.Add("MaxNotificationsPerHourCeiling must be at least 1.");

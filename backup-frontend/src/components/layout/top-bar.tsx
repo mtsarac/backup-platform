@@ -11,6 +11,7 @@ import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
 import { Select } from '@/components/ui/text-input'
+import { InAppNotifications } from '@/features/notifications/in-app'
 
 /** Shared by the tenant and platform shells: context on the left, account and display controls on the right. */
 export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () => void; context: ReactNode; badges?: ReactNode }) {
@@ -28,6 +29,7 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="hidden items-center gap-2 sm:inline-flex">{badges}</span>
         <A11yToolbar />
+        {user && <InAppNotifications key={user.userId} userId={user.userId} />}
         <LanguageSwitcher />
         <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/sessions">{tx('Oturumlarım')}</Link>
         <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/security">{tx('Güvenlik')}</Link>

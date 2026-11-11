@@ -121,7 +121,13 @@ internal sealed class NotificationEventConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<NotificationEvent> builder)
     {
-        BackupMapping.Base(builder, "notification_events");
+        builder.ToTable("notification_events");
+        builder.HasKey(notificationEvent => notificationEvent.Id);
+        builder.Property(notificationEvent => notificationEvent.Id).ValueGeneratedNever();
+        builder.Property(notificationEvent => notificationEvent.TenantId).HasConversion<TenantIdConverter>();
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(notificationEvent => notificationEvent.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.Property<uint>("xmin").IsRowVersion();
+        builder.HasIndex(notificationEvent => new { notificationEvent.Id, notificationEvent.TenantId }).IsUnique();
         builder.ToTable("notification_events", table =>
         {
             table.HasCheckConstraint("ck_notification_events_phase", "\"Phase\" IN ('Raised','Recovered','Test')");
@@ -137,6 +143,7 @@ internal sealed class NotificationEventConfiguration : IEntityTypeConfiguration<
         builder.Property(notificationEvent => notificationEvent.OccurredAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property(notificationEvent => notificationEvent.CreatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.HasIndex(notificationEvent => new { notificationEvent.TenantId, notificationEvent.DedupKey }).IsUnique().HasDatabaseName("ux_notification_events_dedup");
+        builder.HasIndex(notificationEvent => notificationEvent.DedupKey).IsUnique().HasFilter("\"TenantId\" IS NULL").HasDatabaseName("ux_notification_events_global_dedup");
         builder.HasIndex(notificationEvent => new { notificationEvent.TenantId, notificationEvent.CreatedAt }).HasDatabaseName("ix_notification_events_recent");
         builder.HasIndex(notificationEvent => notificationEvent.CreatedAt).HasDatabaseName("ix_notification_events_created");
     }
@@ -171,9 +178,7 @@ internal sealed class NotificationDeliveryConfiguration : IEntityTypeConfigurati
             builder.Property(name).HasColumnType("timestamp with time zone");
         builder.Property(delivery => delivery.CreatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property(delivery => delivery.UpdatedAt).HasColumnType("timestamp with time zone").IsRequired();
-        // The event and its deliveries always belong to one tenant (composite key), and pruning an event takes its deliveries with it.
-        builder.HasOne<NotificationEvent>().WithMany().HasForeignKey(delivery => new { delivery.EventId, delivery.TenantId })
-            .HasPrincipalKey(notificationEvent => new { notificationEvent.Id, notificationEvent.TenantId }).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<NotificationEvent>().WithMany().HasForeignKey(delivery => delivery.EventId).OnDelete(DeleteBehavior.Cascade);
         // Idempotency: one delivery per (event, channel), however many workers fan an event out.
         builder.HasIndex(delivery => new { delivery.EventId, delivery.ChannelId }).IsUnique().HasDatabaseName("ux_notification_deliveries_event_channel");
         builder.HasIndex(delivery => delivery.NextAttemptAt).HasDatabaseName("ix_notification_deliveries_due").HasFilter("\"Status\" = 'Pending'");
@@ -201,5 +206,26 @@ internal sealed class NotificationTransportSettingsConfiguration : IEntityTypeCo
         builder.Property(settings => settings.UpdatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property<uint>("xmin").IsRowVersion();
         builder.Ignore(settings => settings.HasSecret);
+    }
+}
+
+internal sealed class NotificationHistorySettings
+{
+    public int Id { get; set; } = 1;
+    public int RetentionDays { get; set; } = 90;
+}
+
+internal sealed class NotificationHistorySettingsConfiguration : IEntityTypeConfiguration<NotificationHistorySettings>
+{
+    public void Configure(EntityTypeBuilder<NotificationHistorySettings> builder)
+    {
+        builder.ToTable("notification_history_settings", table =>
+        {
+            table.HasCheckConstraint("ck_notification_history_settings_singleton", "\"Id\" = 1");
+            table.HasCheckConstraint("ck_notification_history_settings_retention", "\"RetentionDays\" BETWEEN 1 AND 36500");
+        });
+        builder.HasKey(settings => settings.Id);
+        builder.Property(settings => settings.Id).ValueGeneratedNever();
+        builder.Property(settings => settings.RetentionDays).IsRequired();
     }
 }

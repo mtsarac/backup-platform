@@ -5,13 +5,8 @@ using BackupPlatform.Domain.Tenancy;
 
 namespace BackupPlatform.Domain.Notifications;
 
-/// <summary>
-/// One thing worth telling a tenant about. The event is the durable outbox record: it is written in the same transaction that decides to
-/// notify and its deliveries, so nothing is lost across a crash and nothing is sent twice for the same <see cref="DedupKey"/>.
-/// It carries only what a message needs: a type, a severity, the subject's display name and a few scalar facts, never paths, connection details or
-/// provider output.
-/// </summary>
-public sealed class NotificationEvent : ITenantOwned
+/// <summary>The durable outbox record, written in the same transaction as its recipients and channel deliveries.</summary>
+public sealed class NotificationEvent
 {
     public const int MaximumFacts = 8;
     public const int MaximumFactLength = 100;
@@ -29,12 +24,11 @@ public sealed class NotificationEvent : ITenantOwned
     }
 
     public NotificationEvent(
-        Guid id, TenantId tenantId, string type, NotificationPhase phase, NotificationSeverity severity, NotificationSubject subject,
+        Guid id, TenantId? tenantId, string type, NotificationPhase phase, NotificationSeverity severity, NotificationSubject subject,
         IReadOnlyDictionary<string, string>? facts, string dedupKey, DateTimeOffset occurredAt, DateTimeOffset now)
     {
         BackupGuard.Id(id);
-        ArgumentNullException.ThrowIfNull(tenantId);
-        if (type is not (NotificationEventTypes.Test or NotificationEventTypes.RecipientVerification) && !NotificationEventTypes.IsDetectable(type)) throw new ArgumentException("Unknown event type.", nameof(type));
+        if (string.IsNullOrWhiteSpace(type) || type.Length > 32 || type.Any(character => !(char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character == '_'))) throw new ArgumentException("Invalid event type.", nameof(type));
         if (!Enum.IsDefined(phase) || !Enum.IsDefined(severity)) throw new ArgumentException("Unknown phase or severity.");
         BackupGuard.Text(dedupKey, NotificationCondition.MaximumKeyLength + 32);
         Id = id;
@@ -52,7 +46,7 @@ public sealed class NotificationEvent : ITenantOwned
     }
 
     public Guid Id { get; private set; }
-    public TenantId TenantId { get; private set; }
+    public TenantId? TenantId { get; private set; }
     public string Type { get; private set; }
     public NotificationPhase Phase { get; private set; }
     public NotificationSeverity Severity { get; private set; }
@@ -61,7 +55,7 @@ public sealed class NotificationEvent : ITenantOwned
     public string SubjectName { get; private set; }
     /// <summary>Scalar, message-safe values (a percentage, an hour count, a stable failure code).</summary>
     public IReadOnlyDictionary<string, string> Facts { get; private set; }
-    /// <summary>Unique per tenant: the same fact observed twice, by any number of workers, produces one event.</summary>
+    /// <summary>Unique within the tenant, or globally for an event without a tenant.</summary>
     public string DedupKey { get; private set; }
     public DateTimeOffset OccurredAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
