@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { HubConnectionBuilder } from '@microsoft/signalr'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { QueryClientContext, useMutation, useQuery, type QueryClient } from '@tanstack/react-query'
 import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
@@ -20,9 +20,14 @@ export interface InAppNotification {
 }
 
 export function InAppNotifications({ userId }: { userId: string }) {
+  const client = useContext(QueryClientContext)
+  if (!client) return null
+  return <InAppNotificationsConnected userId={userId} client={client} />
+}
+
+function InAppNotificationsConnected({ userId, client }: { userId: string; client: QueryClient }) {
   useLanguage()
   const [open, setOpen] = useState(false)
-  const client = useQueryClient()
   const key = ['in-app-notifications', userId] as const
   const list = useQuery({ queryKey: key, queryFn: ({ signal }) => apiRequest<InAppNotification[]>('notifications/in-app', { signal }) })
   const markRead = useMutation({
