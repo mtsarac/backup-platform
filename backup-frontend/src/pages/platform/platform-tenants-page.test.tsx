@@ -25,13 +25,15 @@ describe('platform tenants list', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Yükleniyor')
   })
 
-  it('renders rows with detail links and enrollment state', async () => {
+  it('renders rows with detail links, enrollment state and Yönet action', async () => {
     renderPlatform(<PlatformTenantsPage />)
     const row = (await screen.findByRole('link', { name: 'Acme A.Ş.' })).closest('tr')!
     expect(screen.getByRole('link', { name: 'Acme A.Ş.' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
     expect(within(row).getByText('4')).toBeInTheDocument()
     expect(within(row).getByText('Kayıt açık')).toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/tenants/tenant-a')
     expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByText('Kayıt kapalı')).toBeInTheDocument()
+    expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/tenants/tenant-b')
     expect(api.getTenants).toHaveBeenCalledWith({ search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
   })
 
