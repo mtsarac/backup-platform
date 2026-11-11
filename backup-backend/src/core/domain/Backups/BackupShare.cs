@@ -105,6 +105,15 @@ public sealed class BackupShare : ITenantOwned
 
     public bool IsActive(DateTimeOffset now) => GetStatus(now) == BackupShareStatus.Active;
 
+    public bool CanBeManagedBy(UserRole role)
+    {
+        if (CreatedByRole == UserRole.PlatformAdmin)
+        {
+            return role == UserRole.PlatformAdmin;
+        }
+        return true;
+    }
+
     public void Revoke(UserId actor, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(actor);
@@ -115,6 +124,16 @@ public sealed class BackupShare : ITenantOwned
 
         RevokedAtUtc = now.ToUniversalTime();
         RevokedByUserId = actor;
+    }
+
+    public void Revoke(UserId actor, UserRole actorRole, DateTimeOffset now)
+    {
+        if (!CanBeManagedBy(actorRole))
+        {
+            throw new InvalidOperationException("A tenant UserAdmin cannot revoke a share created by a PlatformAdmin.");
+        }
+
+        Revoke(actor, now);
     }
 
     public static BackupShare Create(

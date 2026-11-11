@@ -63,10 +63,14 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
 
         context.BackupShares.Add(share);
 
+        var actorKind = createdByRole == UserRole.PlatformAdmin
+            ? AuditActorKind.PlatformAdmin
+            : AuditActorKind.TenantAdministrator;
+
         context.AuditEvents.Add(AuditEvent.Record(
             createdAtUtc,
             createdByUserId,
-            AuditActorKind.TenantAdministrator,
+            actorKind,
             AuditActions.BackupShareCreated,
             tenantId,
             "backup_share",
@@ -75,6 +79,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             {
                 ["actor"] = createdByUserId.ToString(),
                 ["role"] = createdByRole.ToString(),
+                ["actorRole"] = createdByRole.ToString(),
                 ["tenant"] = tenantId.Value.ToString("D"),
                 ["artifact"] = artifactId.ToString("D"),
                 ["expiry"] = share.ExpiresAtUtc.ToString("o"),
@@ -86,7 +91,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         await transaction.CommitAsync(cancellationToken);
 
         var userNames = await ResolveUserNamesAsync(context, [createdByUserId], cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, tenantId, [artifactId], cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, [artifactId], cancellationToken, tenantId);
+        var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
 
         return new BackupShareCreateResult(
             BackupShareCreateOutcome.Success,
@@ -94,7 +100,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
                 share,
                 now,
                 artifactNames.GetValueOrDefault(artifactId),
-                userNames.GetValueOrDefault(createdByUserId)));
+                userNames.GetValueOrDefault(createdByUserId),
+                tenantNames.GetValueOrDefault(tenantId)));
     }
 
     public async Task<BackupShareView?> GetAsync(
@@ -114,13 +121,15 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         }
 
         var userNames = await ResolveUserNamesAsync(context, [share.CreatedByUserId], cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, tenantId, [share.ArtifactId], cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
+        var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
 
         return ToView(
             share,
             now,
             artifactNames.GetValueOrDefault(share.ArtifactId),
-            userNames.GetValueOrDefault(share.CreatedByUserId));
+            userNames.GetValueOrDefault(share.CreatedByUserId),
+            tenantNames.GetValueOrDefault(tenantId));
     }
 
     public async Task<IReadOnlyList<BackupShareView>> ListAsync(
@@ -145,20 +154,101 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         var artifactIds = shares.Select(s => s.ArtifactId).Distinct().ToArray();
 
         var userNames = await ResolveUserNamesAsync(context, userIds, cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, tenantId, artifactIds, cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, artifactIds, cancellationToken, tenantId);
+        var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
 
         return shares.Select(share => ToView(
             share,
             now,
             artifactNames.GetValueOrDefault(share.ArtifactId),
-            userNames.GetValueOrDefault(share.CreatedByUserId))).ToList();
+            userNames.GetValueOrDefault(share.CreatedByUserId),
+            tenantNames.GetValueOrDefault(share.TenantId))).ToList();
+    }
+
+    public async Task<IReadOnlyList<BackupShareView>> ListPlatformAsync(
+        TenantId? tenantId,
+        BackupShareStatus? status,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var query = context.BackupShares.AsNoTracking();
+
+        if (tenantId != null)
+        {
+            query = query.Where(s => s.TenantId == tenantId);
+        }
+
+        var utcNow = now.ToUniversalTime();
+        if (status.HasValue)
+        {
+            query = status.Value switch
+            {
+                BackupShareStatus.Revoked => query.Where(s => s.RevokedAtUtc != null),
+                BackupShareStatus.Expired => query.Where(s => s.RevokedAtUtc == null && s.ExpiresAtUtc <= utcNow),
+                BackupShareStatus.Active => query.Where(s => s.RevokedAtUtc == null && s.ExpiresAtUtc > utcNow),
+                _ => query
+            };
+        }
+
+        var shares = await query
+            .OrderByDescending(s => s.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        if (shares.Count == 0)
+        {
+            return [];
+        }
+
+        var userIds = shares.Select(s => s.CreatedByUserId).Distinct().ToArray();
+        var artifactIds = shares.Select(s => s.ArtifactId).Distinct().ToArray();
+        var tenantIds = shares.Select(s => s.TenantId).Distinct().ToArray();
+
+        var userNames = await ResolveUserNamesAsync(context, userIds, cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, artifactIds, cancellationToken, tenantId);
+        var tenantNames = await ResolveTenantNamesAsync(context, tenantIds, cancellationToken);
+
+        return shares.Select(share => ToView(
+            share,
+            now,
+            artifactNames.GetValueOrDefault(share.ArtifactId),
+            userNames.GetValueOrDefault(share.CreatedByUserId),
+            tenantNames.GetValueOrDefault(share.TenantId))).ToList();
+    }
+
+    public async Task<BackupShareView?> GetPlatformAsync(
+        Guid shareId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var share = await context.BackupShares
+            .AsNoTracking()
+            .SingleOrDefaultAsync(s => s.Id == shareId, cancellationToken);
+
+        if (share is null)
+        {
+            return null;
+        }
+
+        var userNames = await ResolveUserNamesAsync(context, [share.CreatedByUserId], cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, share.TenantId);
+        var tenantNames = await ResolveTenantNamesAsync(context, [share.TenantId], cancellationToken);
+
+        return ToView(
+            share,
+            now,
+            artifactNames.GetValueOrDefault(share.ArtifactId),
+            userNames.GetValueOrDefault(share.CreatedByUserId),
+            tenantNames.GetValueOrDefault(share.TenantId));
     }
 
     private static BackupShareView ToView(
         BackupShare share,
         DateTimeOffset now,
         string? artifactName,
-        string? createdByDisplayName)
+        string? createdByDisplayName,
+        string? tenantName = null)
     {
         return new BackupShareView(
             share.Id,
@@ -173,7 +263,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             share.RevokedByUserId?.Value,
             share.GetStatus(now).ToString(),
             artifactName,
-            createdByDisplayName);
+            createdByDisplayName,
+            tenantName);
     }
 
     private static async Task<Dictionary<UserId, string>> ResolveUserNamesAsync(
@@ -188,28 +279,50 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             .ToDictionaryAsync(u => u.Id, u => u.DisplayName, cancellationToken);
     }
 
+    private static async Task<Dictionary<TenantId, string>> ResolveTenantNamesAsync(
+        PlatformDbContext context,
+        IReadOnlyCollection<TenantId> tenantIds,
+        CancellationToken cancellationToken)
+    {
+        if (tenantIds.Count == 0) return [];
+        return await context.Tenants
+            .AsNoTracking()
+            .Where(t => tenantIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, cancellationToken);
+    }
+
     private static async Task<Dictionary<Guid, string>> ResolveArtifactNamesAsync(
         PlatformDbContext context,
-        TenantId tenantId,
         IReadOnlyCollection<Guid> artifactIds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TenantId? tenantId = null)
     {
         if (artifactIds.Count == 0) return [];
 
-        var rows = await (from artifact in context.BackupArtifacts.AsNoTracking()
-                          join attempt in context.BackupRunAttempts.AsNoTracking() on new { artifact.AttemptId, artifact.TenantId } equals new { AttemptId = attempt.Id, attempt.TenantId }
-                          join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
-                          join job in context.BackupJobs.AsNoTracking() on new { run.JobId, run.TenantId } equals new { JobId = job.Id, job.TenantId }
-                          where artifact.TenantId == tenantId && artifactIds.Contains(artifact.Id)
-                          select new
-                          {
-                              ArtifactId = artifact.Id,
-                              DatabaseName = run.Configuration.Database,
-                              JobName = job.Name
-                          }).ToListAsync(cancellationToken);
+        var query = from artifact in context.BackupArtifacts.AsNoTracking()
+                    join attempt in context.BackupRunAttempts.AsNoTracking() on new { artifact.AttemptId, artifact.TenantId } equals new { AttemptId = attempt.Id, attempt.TenantId }
+                    join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
+                    join job in context.BackupJobs.AsNoTracking() on new { run.JobId, run.TenantId } equals new { JobId = job.Id, job.TenantId }
+                    where artifactIds.Contains(artifact.Id)
+                    select new
+                    {
+                        ArtifactId = artifact.Id,
+                        TenantId = artifact.TenantId,
+                        DatabaseName = run.Configuration.Database,
+                        JobName = job.Name
+                    };
 
-        return rows.ToDictionary(
-            r => r.ArtifactId,
-            r => !string.IsNullOrWhiteSpace(r.DatabaseName) ? r.DatabaseName : r.JobName);
+        if (tenantId != null)
+        {
+            query = query.Where(r => r.TenantId == tenantId);
+        }
+
+        var rows = await query.ToListAsync(cancellationToken);
+
+        return rows
+            .DistinctBy(r => r.ArtifactId)
+            .ToDictionary(
+                r => r.ArtifactId,
+                r => !string.IsNullOrWhiteSpace(r.DatabaseName) ? r.DatabaseName : r.JobName);
     }
 }

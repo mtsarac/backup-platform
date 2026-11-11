@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
 import { SharesPage } from '@/pages/shares/shares-page'
+import { PlatformSharesPage } from '@/pages/platform/platform-shares-page'
 import { apiRequest } from '@/lib/api/client'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import type { BackupShareView } from './types'
@@ -13,6 +14,7 @@ vi.mock('@/lib/api/client', () => ({
   apiRequest: vi.fn(),
   API_BASE_URL: '/api',
   tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
+  isForbidden: () => false,
 }))
 
 const permissions = vi.hoisted(() => ({ canAdmin: true, canOperate: true, role: 'UserAdmin' }))
@@ -103,6 +105,23 @@ const revokedShare: BackupShareView = {
   reason: 'Cancelled early',
 }
 
+const platformShare: BackupShareView = {
+  id: 'share-platform-1',
+  tenantId: 'tenant-b',
+  tenantName: 'Acme Corp',
+  artifactId: 'artifact-2',
+  createdByUserId: 'platform-user-1',
+  createdByRole: 'PlatformAdmin',
+  reason: 'Platform incident investigation',
+  createdAtUtc: '2026-11-11T13:00:00Z',
+  expiresAtUtc: '2026-11-12T13:00:00Z',
+  revokedAtUtc: null,
+  revokedByUserId: null,
+  status: 'Active',
+  artifactName: 'AnalyticsDb',
+  createdByDisplayName: 'Super Admin',
+}
+
 const request = vi.mocked(apiRequest)
 
 afterEach(() => {
@@ -141,6 +160,22 @@ function renderSharesPage() {
       <MemoryRouter initialEntries={['/tenants/tenant-a/shares']}>
         <Routes>
           <Route path="/tenants/:tenantId/shares" element={<SharesPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  )
+  return queryClient
+}
+
+function renderPlatformSharesPage(path = '/platform/shares') {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/platform/shares" element={<PlatformSharesPage />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -287,6 +322,136 @@ describe('BackupShare frontend', () => {
       expect(
         screen.getByText('Yedek dosyası detayından PlatformAdmin için paylaşım oluşturabilirsiniz.')
       ).toBeInTheDocument()
+    })
+  })
+
+  it('shows PlatformAdmin-created shares in Paylaşımlarım as read-only with PlatformAdmin role', async () => {
+    request.mockImplementation(async () => [platformShare])
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('AnalyticsDb')).toBeInTheDocument()
+      expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
+      expect(screen.getByText('Super Admin')).toBeInTheDocument()
+      expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()
+      expect(screen.getByText('Aktif')).toBeInTheDocument()
+      // Ensure tenant view is read-only (no extend or revoke buttons exist)
+      expect(screen.queryByRole('button', { name: /uzat|iptal/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders Paylaşılan Yedekler page with cross-tenant shares, tenant column, and status filter', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('platform/backup-shares')) return [platformShare, testShare]
+      if (path.includes('platform/tenants')) {
+        return {
+          items: [
+            { tenantId: 'tenant-a', name: 'Tenant A' },
+            { tenantId: 'tenant-b', name: 'Acme Corp' },
+          ],
+          totalCount: 2,
+          pageSize: 100,
+          page: 1,
+        }
+      }
+      return []
+    })
+
+    renderPlatformSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Paylaşılan Yedekler' })).toBeInTheDocument()
+      expect(screen.getByText('Acme Corp')).toBeInTheDocument()
+      expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
+      expect(screen.getByText('Super Admin')).toBeInTheDocument()
+      expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Paylaşım filtreleri' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
+    })
+  })
+
+  it('creates a share from Paylaşılan Yedekler screen via CreatePlatformShareDialog', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string, options?: { method?: string; json?: unknown }) => {
+      if (options?.method === 'POST') {
+        return platformShare
+      }
+      if (path.includes('platform/backup-shares')) return []
+      if (path.includes('platform/tenants')) {
+        return {
+          items: [{ tenantId: 'tenant-b', name: 'Acme Corp' }],
+          totalCount: 1,
+          pageSize: 100,
+          page: 1,
+        }
+      }
+      if (path.includes('tenants/tenant-b/backup-artifacts')) {
+        return {
+          items: [testArtifact],
+          totalCount: 1,
+          page: 1,
+          pageSize: 100,
+        }
+      }
+      return []
+    })
+
+    renderPlatformSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Paylaşım oluştur' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Yeni paylaşım oluştur')).toBeInTheDocument()
+    })
+
+    // Select tenant
+    const tenantInput = screen.getByRole('combobox', { name: 'Çalışma Alanı' })
+    fireEvent.change(tenantInput, { target: { value: 'Acme' } })
+
+    await waitFor(() => {
+      expect(screen.getByText('Acme Corp')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('Acme Corp'))
+
+    // Select artifact
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Yedek dosyası' })).toBeInTheDocument()
+    })
+    const artifactInput = screen.getByRole('combobox', { name: 'Yedek dosyası' })
+    fireEvent.change(artifactInput, { target: { value: 'ProductionDb' } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/ProductionDb/)).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText(/ProductionDb/))
+
+    // Enter reason
+    const reasonInput = screen.getByPlaceholderText('Paylaşım gerekçesini yazın')
+    fireEvent.change(reasonInput, { target: { value: 'Platform urgent access' } })
+
+    // Submit
+    const submitButtons = screen.getAllByRole('button', { name: 'Paylaşım oluştur' })
+    fireEvent.click(submitButtons[submitButtons.length - 1])
+
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(
+        'platform/backup-shares',
+        expect.objectContaining({
+          method: 'POST',
+          json: expect.objectContaining({
+            tenantId: 'tenant-b',
+            artifactId: 'artifact-1',
+            durationHours: 24,
+            reason: 'Platform urgent access',
+          }),
+        })
+      )
     })
   })
 })
