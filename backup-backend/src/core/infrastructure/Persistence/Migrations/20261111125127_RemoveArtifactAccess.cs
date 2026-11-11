@@ -11,6 +11,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                LOCK TABLE download_sessions IN ACCESS EXCLUSIVE MODE;
+                UPDATE download_sessions
+                SET "State" = 'Cancelled',
+                    "ReleasedAt" = CURRENT_TIMESTAMP,
+                    "LeaseOwner" = NULL,
+                    "LeaseExpiresAt" = NULL
+                WHERE "BreakGlassRequestId" IS NOT NULL AND "ReleasedAt" IS NULL
+                """);
+
             migrationBuilder.DropForeignKey(
                 name: "FK_download_sessions_artifact_break_glass_requests_BreakGlassR~",
                 table: "download_sessions");
