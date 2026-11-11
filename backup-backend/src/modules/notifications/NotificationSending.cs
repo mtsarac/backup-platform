@@ -91,7 +91,7 @@ public sealed class NotificationDeliveryProcessor(
         timeout.CancelAfter(options.SendTimeout);
         try
         {
-            // WaitAsync enforces the deadline even for a sender that ignores its token; the lease only has to outlive this call.
+            // A sender that ignores cancellation can continue after timeout and overlap a retry
             return await sender.SendAsync(work, timeout.Token).WaitAsync(timeout.Token);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

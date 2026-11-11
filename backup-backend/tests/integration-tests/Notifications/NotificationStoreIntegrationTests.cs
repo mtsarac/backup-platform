@@ -344,12 +344,12 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
         Assert.Single((await store.ListFailedDeliveriesAsync(1, 25, default)).Items);
 
         var retries = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => _world.Store().RetryFailedDeliveryAsync(first.DeliveryId, _world.PlatformActor, default)));
-        Assert.Single(retries.Where(changed => changed));
+        Assert.Single(retries, changed => changed);
         Assert.Empty((await store.ListFailedDeliveriesAsync(1, 25, default)).Items);
         var retry = Assert.Single(await store.ClaimDueAsync("new-worker", now, 10, TimeSpan.FromMinutes(1), 4, default));
         Assert.Equal(1, retry.Attempt);
         Assert.False(await store.CompleteAsync(first.DeliveryId, "old-worker", first.Attempt, new DeliveryResult(NotificationDeliveryStatus.Sent), now, default));
-        var audit = Assert.Single((await _world.AuditAsync(tenant)).Where(row => row.Action == NotificationAuditActions.DeliveryRetried));
+        var audit = Assert.Single(await _world.AuditAsync(tenant), row => row.Action == NotificationAuditActions.DeliveryRetried);
         Assert.Equal(_world.PlatformActor.UserId, audit.ActorUserId);
         Assert.Equal(_world.PlatformActor.Kind, audit.ActorKind);
     }
@@ -376,7 +376,7 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
         _world.Clock.Advance(TimeSpan.FromDays(2));
         await worker.RunOnceAsync(default);
         Assert.Empty(await _world.EventsAsync(tenant));
-        var audit = Assert.Single((await _world.AuditAsync(null)).Where(row => row.Action == NotificationAuditActions.HistoryRetentionUpdated));
+        var audit = Assert.Single(await _world.AuditAsync(null), row => row.Action == NotificationAuditActions.HistoryRetentionUpdated);
         Assert.Equal(_world.PlatformActor.UserId, audit.ActorUserId);
         Assert.Equal(_world.PlatformActor.Kind, audit.ActorKind);
     }

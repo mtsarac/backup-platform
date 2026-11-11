@@ -19,9 +19,8 @@ namespace BackupPlatform.Infrastructure.Notifications;
 /// <remarks>
 /// Every tenant write takes the tenant's notification lock (<c>pg_advisory_xact_lock</c>) first, so on any node channel changes, policy changes and the
 /// engine's decisions for one tenant are serialized, and an event, its deliveries and the condition's new state commit together (the outbox). Audit
-/// events are written in the same transaction as the change they describe. Deliveries are claimed with <c>FOR UPDATE SKIP LOCKED</c> under a lease, and
-/// every result is a fenced update (owner + attempt), so concurrent workers never process one delivery at the same time and a stale worker cannot
-/// overwrite its successor.
+/// events are written in the same transaction as the change they describe. Deliveries are claimed with <c>FOR UPDATE SKIP LOCKED</c> under a lease,
+/// and every result is fenced by owner and attempt. A stale worker cannot overwrite its successor, but an external send can outlive its lease.
 /// </remarks>
 public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbContext> options, TimeProvider time, FeatureFlags? flags = null) : INotificationStore
 {
@@ -32,7 +31,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
     private static Task LockAsync(PlatformDbContext context, string scope, CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({scope}, 0))", cancellationToken);
 
-    private static string TenantLock(TenantId tenantId) => "notifications:" + tenantId.Value.ToString("D");
+    internal static string TenantLock(TenantId tenantId) => "notifications:" + tenantId.Value.ToString("D");
 
     // ---- channels -----------------------------------------------------------------------------------------------------------------------
 

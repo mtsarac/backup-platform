@@ -80,6 +80,70 @@ public sealed class UserNotificationIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Tenant_engine_and_user_writer_share_the_outbox_lock()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync(false);
+        var existing = Event(setup.Tenant.Id, "concurrent-outbox");
+        var store = new PostgreSqlNotificationStore(fixture.Options, TimeProvider.System);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var engine = store.InTenantSessionAsync(setup.Tenant.Id, async session =>
+        {
+            session.AddEvent(existing);
+            entered.SetResult();
+            await release.Task;
+        }, default);
+        await entered.Task;
+        var writer = WriteAsync();
+        try
+        {
+            await Task.Delay(200);
+            Assert.False(writer.IsCompleted);
+        }
+        finally { release.SetResult(); }
+        Assert.True(await engine);
+        Assert.Equal(existing.Id, await writer);
+        await using var check = fixture.CreatePlatformContext();
+        Assert.Single(await check.NotificationEvents.Where(row => row.DedupKey == existing.DedupKey).ToListAsync());
+        Assert.Single(await check.UserNotifications.Where(row => row.EventId == existing.Id).ToListAsync());
+
+        async Task<Guid> WriteAsync()
+        {
+            await using var context = fixture.CreatePlatformContext();
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var id = await UserNotificationWriter.RecordAsync(context, Event(setup.Tenant.Id, existing.DedupKey),
+                [setup.Account.UserId], false, false, null, default);
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return id;
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_global_writers_create_one_event_and_recipient()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var account = await world.SeedUserAsync(platformAdmin: true);
+        var ids = await Task.WhenAll(WriteAsync(), WriteAsync());
+        Assert.Equal(ids[0], ids[1]);
+        await using var check = fixture.CreatePlatformContext();
+        Assert.Single(await check.NotificationEvents.Where(row => row.DedupKey == "concurrent-global").ToListAsync());
+        Assert.Single(await check.UserNotifications.Where(row => row.EventId == ids[0]).ToListAsync());
+
+        async Task<Guid> WriteAsync()
+        {
+            await using var context = fixture.CreatePlatformContext();
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var id = await UserNotificationWriter.RecordAsync(context, Event(null, "concurrent-global"),
+                [account.UserId], false, false, null, default);
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return id;
+        }
+    }
+
+    [Fact]
     public async Task Failed_email_does_not_remove_in_app_notification()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);

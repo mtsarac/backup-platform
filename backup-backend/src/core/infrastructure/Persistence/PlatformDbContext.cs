@@ -121,6 +121,19 @@ public sealed class PlatformDbContext : DbContext
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
     public static PlatformDbContext CreateForPlatformOperations(DbContextOptions<PlatformDbContext> options) => new(options);
+    public IQueryable<UserId> TenantAdminIds(TenantId? tenantId) =>
+        from membership in TenantMemberships
+        join user in Users on membership.UserId equals user.Id
+        where membership.TenantId == tenantId && user.Role == UserRole.UserAdmin
+        select user.Id;
+
+    public IQueryable<UserNotification> VisibleUserNotifications(UserId userId) =>
+        from item in UserNotifications
+        join notificationEvent in NotificationEvents on item.EventId equals notificationEvent.Id
+        where item.UserId == userId && (notificationEvent.TenantId == null
+            || Users.Any(user => user.Id == userId && user.Role == UserRole.PlatformAdmin)
+            || TenantMemberships.Any(membership => membership.UserId == userId && membership.TenantId == notificationEvent.TenantId))
+        select item;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

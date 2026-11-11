@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using BackupPlatform.Domain.Identity;
-using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
@@ -134,8 +133,7 @@ public sealed class InAppNotificationFanout(
                     connection.Context.Abort();
                     return;
                 }
-                if (item.TenantId is not null && !await context.Users.AsNoTracking().AnyAsync(user => user.Id == connection.UserId &&
-                    (user.Role == UserRole.PlatformAdmin || context.TenantMemberships.Any(membership => membership.UserId == user.Id && membership.TenantId == item.TenantId)), cancellationToken))
+                if (item.TenantId is not null && !await context.VisibleUserNotifications(connection.UserId).AsNoTracking().AnyAsync(row => row.Id == item.Message.Id, cancellationToken))
                     continue;
                 await hub.Clients.Client(connection.Context.ConnectionId).SendAsync("notificationReceived", item.Message, cancellationToken);
                 connection.Seen.Add(item.Message.Id);
