@@ -105,7 +105,10 @@ function Header({ tenant }: { tenant: PlatformTenantDetail }) {
     meta={<>
       <StatusPill level={tenant.enrollment.enabled ? 'safe' : 'neutral'}>{tenant.enrollment.enabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</StatusPill>
     </>}
-    actions={<Link className={buttonVariants({ variant: 'outline' })} to={platformPaths.agents(tenant.tenantId)}>{tx("Yedekleme bilgisayarlarını görüntüle")}</Link>} />
+    actions={<div className="flex flex-wrap gap-2">
+      <Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${encodeURIComponent(tenant.tenantId)}`}>{tx("Yönet")}</Link>
+      <Link className={buttonVariants({ variant: 'outline' })} to={platformPaths.agents(tenant.tenantId)}>{tx("Yedekleme bilgisayarlarını görüntüle")}</Link>
+    </div>} />
 }
 
 /** Tenant-scoped endpoint: it needs a tenant Owner/Admin membership, which platform administration alone does not grant (the 403 is expected for a non-member). */

@@ -11,7 +11,7 @@ public static class UserEndpoints
     {
         endpoints.MapGet("/api/me", GetCurrentUserAsync).RequireAuthorization();
         endpoints.MapGet("/api/me/tenants", GetTenantsAsync).RequireAuthorization();
-        endpoints.MapGet("/api/tenants/{tenantId}/context", GetTenantContext)
+        endpoints.MapGet("/api/tenants/{tenantId:guid}/context", GetTenantContext)
             .WithMetadata(new TenantScopedEndpoint())
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
         return endpoints;
@@ -19,7 +19,8 @@ public static class UserEndpoints
 
     private static async Task<IResult> GetCurrentUserAsync(ICurrentUser currentUser, IUserAccessStore userAccessStore, CancellationToken cancellationToken)
     {
-        var profile = await userAccessStore.GetUserAsync(currentUser.UserId!, cancellationToken);
+        if (currentUser.UserId is not { } userId) return Results.Unauthorized();
+        var profile = await userAccessStore.GetUserAsync(userId, cancellationToken);
         return profile is null
             ? Results.Unauthorized()
             : Results.Ok(new
@@ -33,7 +34,8 @@ public static class UserEndpoints
 
     private static async Task<IResult> GetTenantsAsync(ICurrentUser currentUser, IUserAccessStore userAccessStore, CancellationToken cancellationToken)
     {
-        var memberships = await userAccessStore.ListTenantsAsync(currentUser.UserId!, cancellationToken);
+        if (currentUser.UserId is not { } userId) return Results.Unauthorized();
+        var memberships = await userAccessStore.ListTenantsAsync(userId, cancellationToken);
         return Results.Ok(memberships.Select(membership => new
         {
             tenantId = membership.TenantId.Value,
@@ -43,7 +45,8 @@ public static class UserEndpoints
 
     private static IResult GetTenantContext(ITenantContext tenantContext)
     {
-        var membership = ((ResolvedTenantContext)tenantContext).Membership;
+        if (tenantContext is not ResolvedTenantContext resolved) return Results.NotFound(new { error = "tenant_not_found" });
+        var membership = resolved.Membership;
         return Results.Ok(new
         {
             tenantId = membership.TenantId.Value,

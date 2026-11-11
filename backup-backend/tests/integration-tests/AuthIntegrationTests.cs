@@ -205,10 +205,61 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         var selected = await ReadJsonAsync(adminContext);
         Assert.Equal(adminTenant.Id.Value, selected.GetProperty("tenantId").GetGuid());
         Assert.Equal(adminTenant.Name, selected.GetProperty("name").GetString());
+        using var nonexistentContext = await browser.GetAsync($"/api/tenants/{Guid.NewGuid()}/context");
         using var missingContext = await browser.GetAsync($"/api/tenants/{absentTenant.Id.Value}/context");
         Assert.Equal(HttpStatusCode.Forbidden, missingContext.StatusCode);
+        Assert.Equal(nonexistentContext.StatusCode, missingContext.StatusCode);
         using var platform = await browser.GetAsync("/api/test/platform");
         Assert.Equal(HttpStatusCode.Forbidden, platform.StatusCode);
+
+        var platformSeed = await SeedUserAsync(UserRole.PlatformAdmin);
+        using var platformBrowser = factory.CreateBrowser();
+        await AuthenticateAsync(platformBrowser, platformSeed);
+        using var platformListed = await platformBrowser.GetAsync("/api/me/tenants");
+        Assert.Equal(HttpStatusCode.OK, platformListed.StatusCode);
+        var platformTenants = (await ReadJsonAsync(platformListed)).EnumerateArray().Select(t => t.GetProperty("tenantId").GetGuid()).ToHashSet();
+        Assert.Contains(adminTenant.Id.Value, platformTenants);
+        Assert.Contains(absentTenant.Id.Value, platformTenants);
+        using var platformContext = await platformBrowser.GetAsync($"/api/tenants/{absentTenant.Id.Value}/context");
+        Assert.Equal(HttpStatusCode.OK, platformContext.StatusCode);
+    }
+
+    [Fact]
+    public async Task MultiTenantUserAdminReceivesOnlyActiveMembershipsAndRemovedMembershipBecomesUnreachable()
+    {
+        var seed = await SeedUserAsync();
+        var tenant1 = await AddTenantAsync(seed.UserId, true);
+        var tenant2 = await AddTenantAsync(seed.UserId, true);
+        var otherTenant = await AddTenantAsync(null, false);
+        await using var factory = new AuthApiFactory(fixture.ConnectionString);
+        using var browser = factory.CreateBrowser();
+        await AuthenticateAsync(browser, seed);
+
+        using var listed = await browser.GetAsync("/api/me/tenants");
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var memberships = (await ReadJsonAsync(listed)).EnumerateArray().Select(t => t.GetProperty("tenantId").GetGuid()).ToArray();
+        Assert.Equal(2, memberships.Length);
+        Assert.Contains(tenant1.Id.Value, memberships);
+        Assert.Contains(tenant2.Id.Value, memberships);
+        Assert.DoesNotContain(otherTenant.Id.Value, memberships);
+
+        await using (var database = fixture.CreatePlatformContext())
+        {
+            var membership = await database.TenantMemberships.SingleAsync(m => m.UserId == seed.UserId && m.TenantId == tenant1.Id);
+            database.TenantMemberships.Remove(membership);
+            await database.SaveChangesAsync();
+        }
+
+        using var listedAfter = await browser.GetAsync("/api/me/tenants");
+        Assert.Equal(HttpStatusCode.OK, listedAfter.StatusCode);
+        var afterMemberships = (await ReadJsonAsync(listedAfter)).EnumerateArray().Select(t => t.GetProperty("tenantId").GetGuid()).ToArray();
+        Assert.Single(afterMemberships);
+        Assert.Equal(tenant2.Id.Value, afterMemberships[0]);
+
+        using var revokedContext = await browser.GetAsync($"/api/tenants/{tenant1.Id.Value}/context");
+        Assert.Equal(HttpStatusCode.Forbidden, revokedContext.StatusCode);
+        using var activeContext = await browser.GetAsync($"/api/tenants/{tenant2.Id.Value}/context");
+        Assert.Equal(HttpStatusCode.OK, activeContext.StatusCode);
     }
 
     [Fact]
@@ -267,9 +318,9 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         Assert.Equal(PostgresErrorCodes.RestrictViolation, Assert.IsType<PostgresException>(error.InnerException).SqlState);
     }
 
-    private async Task<SeededUser> SeedUserAsync()
+    private async Task<SeededUser> SeedUserAsync(UserRole role = UserRole.UserAdmin)
     {
-        var user = new User(UserId.New(), "Local test user");
+        var user = new User(UserId.New(), "Local test user", role);
         var identifier = $"user-{Guid.NewGuid():N}";
         var password = $"Local-only-{Guid.NewGuid():N}!";
         var hash = new PasswordHashService().Hash(user.Id, password);

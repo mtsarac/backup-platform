@@ -8,6 +8,8 @@ import { AuthContext } from '@/features/auth/auth-context'
 import { TenantProvider } from './tenant-provider'
 import { useTenant } from './use-tenant'
 import { apiRequest } from '@/lib/api/client'
+import { TopBar } from '@/components/layout/top-bar'
+import { ThemeProvider } from '@/components/theme-provider'
 import type * as ApiClient from '@/lib/api/client'
 
 vi.mock('@/lib/api/client', async (importOriginal) => ({ ...await importOriginal<typeof ApiClient>(), apiRequest: vi.fn() }))
@@ -31,12 +33,19 @@ describe('tenant switching and permissions', () => {
     expect(apiRequest).toHaveBeenCalledWith('tenants/tenant-c/context', expect.objectContaining({ signal: expect.any(AbortSignal) }))
     cache.clear()
   })
-  it('denies a user administrator without membership without requesting tenant context', () => {
+  it('displays not-found state for a user administrator deep-linking to foreign tenant without requesting context', () => {
     vi.mocked(apiRequest).mockClear()
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     setup(cache, 'UserAdmin', '/tenants/tenant-c')
-    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.getByText('Sayfa bulunamadı.')).toBeInTheDocument()
     expect(apiRequest).not.toHaveBeenCalled()
+    cache.clear()
+  })
+  it('displays not-found state for a platform administrator deep-linking to a nonexistent tenant', async () => {
+    vi.mocked(apiRequest).mockRejectedValueOnce(new Error('tenant_not_found'))
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    setup(cache, 'PlatformAdmin', '/tenants/nonexistent-tenant')
+    expect(await screen.findByText('Sayfa bulunamadı.')).toBeInTheDocument()
     cache.clear()
   })
   it.each(['Switch tenant', 'Direct navigation'])('clears previous tenant cache with %s and does not keep its state on screen', async action => {
@@ -49,6 +58,45 @@ describe('tenant switching and permissions', () => {
     expect(screen.queryByText('Private A')).not.toBeInTheDocument()
     expect(screen.queryByText("Şimdi çalıştır")).not.toBeInTheDocument()
     await waitFor(() => expect(cache.getQueryData(['tenant', 'tenant-a', 'backup-runs'])).toBeUndefined())
+    cache.clear()
+  })
+})
+
+describe('top-bar tenant selector and role navigation', () => {
+  it('allows user administrator to switch tenants from the top-bar selector', async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={cache}>
+        <AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', role: 'UserAdmin', isPlatformAdmin: false }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}>
+          <MemoryRouter initialEntries={['/tenants/tenant-a']}>
+            <Routes>
+              <Route path="/tenants/:tenantId" element={<ThemeProvider><TenantProvider><TopBar onMenuToggle={() => undefined} /><TenantProbe /></TenantProvider></ThemeProvider>} />
+            </Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    )
+    const select = screen.getByLabelText('Çalışma Alanı')
+    expect(select).toHaveValue('tenant-a')
+    await userEvent.selectOptions(select, 'tenant-b')
+    expect(await screen.findByText('Public B')).toBeInTheDocument()
+    expect(screen.queryByText('Private A')).not.toBeInTheDocument()
+    cache.clear()
+  })
+  it('provides role navigation link to platform management for platform administrator in the top bar', async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={cache}>
+        <AuthContext.Provider value={{ user: { userId: 'admin', displayName: 'Platform Admin', role: 'PlatformAdmin', isPlatformAdmin: true }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}>
+          <MemoryRouter initialEntries={['/tenants/tenant-a']}>
+            <Routes>
+              <Route path="/tenants/:tenantId" element={<ThemeProvider><TenantProvider><TopBar onMenuToggle={() => undefined} /><TenantProbe /></TenantProvider></ThemeProvider>} />
+            </Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    )
+    expect(screen.getByRole('link', { name: 'Platform Yönetimi' })).toHaveAttribute('href', '/platform')
     cache.clear()
   })
 })
