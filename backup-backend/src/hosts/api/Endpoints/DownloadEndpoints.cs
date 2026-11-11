@@ -35,17 +35,27 @@ public static class DownloadEndpoints
         }
     }
 
-    private static async Task<IResult> PrepareAsync(Guid artifactId, PrepareDownloadRequest request, ITenantContext tenant, ICurrentUser user,
+    private static async Task<IResult> PrepareAsync(Guid artifactId, PrepareDownloadRequest request, HttpContext httpContext, ITenantContext tenant, ICurrentUser user,
         DownloadService service, ILogger<DownloadService> logger, CancellationToken cancellationToken)
     {
         try
         {
-            var result = await service.PrepareAsync(tenant.TenantId!, artifactId, user.UserId!.Value, request, cancellationToken);
+            var shareId = request.ShareId
+                ?? (Guid.TryParse(httpContext.Request.Query["shareId"], out var qSid) ? (Guid?)qSid : null)
+                ?? (Guid.TryParse(httpContext.Request.Headers["X-Share-Id"], out var hSid) ? (Guid?)hSid : null);
+            var req = request.ShareId == shareId ? request : request with { ShareId = shareId };
+            var result = await service.PrepareAsync(tenant.TenantId!, artifactId, user.UserId!.Value, req, cancellationToken);
             return result is null ? Results.NotFound() : Results.Ok(result);
         }
         catch (DownloadUnavailableException exception)
         {
-            return exception.Code == "replica_not_found" ? Results.NotFound(new { error = exception.Code }) : Results.Conflict(new { error = exception.Code });
+            return exception.Code switch
+            {
+                "replica_not_found" => Results.NotFound(new { error = exception.Code }),
+                "share_missing" or "share_not_found" or "share_tenant_mismatch" or "share_artifact_mismatch" or "share_expired" or "share_revoked" or "forbidden"
+                    => Results.Json(new { error = exception.Code }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Conflict(new { error = exception.Code })
+            };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

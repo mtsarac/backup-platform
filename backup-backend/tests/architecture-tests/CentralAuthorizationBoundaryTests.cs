@@ -102,4 +102,17 @@ public sealed class CentralAuthorizationBoundaryTests(DependencyGraphFixture fix
             }
         }
     }
+
+    [Fact]
+    public void AllContentAuthorizationDecisionsAreMadeInOneComponent()
+    {
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../src"));
+        Assert.True(Directory.Exists(root), $"Source directory not found: {root}");
+
+        var interfaceFile = Path.Combine(root, "core", "application", "Tenancy", "ICentralAuthorizationService.cs");
+        Assert.True(File.Exists(interfaceFile), $"Interface file missing: {interfaceFile}");
+        var interfaceContent = File.ReadAllText(interfaceFile);
+        Assert.Contains("EvaluateDownloadAccessAsync", interfaceContent, StringComparison.Ordinal);
+        Assert.Contains("EvaluateAgentSessionAccessAsync", interfaceContent, StringComparison.Ordinal);
+    }
 }

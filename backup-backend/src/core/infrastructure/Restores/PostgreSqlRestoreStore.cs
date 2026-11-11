@@ -691,17 +691,34 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
 
     private static void AddAudit(PlatformDbContext context, RestoreOperation operation, DateTimeOffset now, Guid? actorId, string action)
     {
+        AuditActorKind actorKind = AuditActorKind.System;
+        string? actorRole = null;
+        if (actorId is { } uid)
+        {
+            var actorEntity = context.Users.AsNoTracking().FirstOrDefault(u => u.Id == new UserId(uid));
+            if (actorEntity?.Role == UserRole.PlatformAdmin)
+            {
+                actorKind = AuditActorKind.PlatformAdmin;
+                actorRole = "PlatformAdmin";
+            }
+            else
+            {
+                actorKind = AuditActorKind.TenantAdministrator;
+                actorRole = actorEntity?.Role.ToString() ?? "UserAdmin";
+            }
+        }
         var details = new Dictionary<string, object?>
         {
             ["artifactId"] = operation.ArtifactId, ["replicaId"] = operation.ReplicaId, ["agentId"] = operation.AgentId.Value,
             ["purpose"] = operation.Purpose.ToString(), ["mode"] = operation.Mode.ToString(), ["precheckId"] = operation.PrecheckId,
-            ["result"] = action == "restore.replica_fallback" ? "changed" : "accepted"
+            ["result"] = action == "restore.replica_fallback" ? "changed" : "accepted",
+            ["actor"] = actorId?.ToString(),
+            ["role"] = actorRole
         };
         context.AuditEvents.Add(AuditEvent.Record(now, actorId is { } user ? new UserId(user) : UserId.System,
-            actorId is null ? AuditActorKind.System : AuditActorKind.User, action, operation.TenantId,
+            actorKind, action, operation.TenantId,
             "restore", operation.Id.ToString("D"), details));
     }
-
     /// <summary>Terminal transitions are audited in the same save.</summary>
     internal static void AddTerminalAudits(PlatformDbContext context)
     {

@@ -55,12 +55,25 @@ export interface DownloadStatus {
   failureCode?: string | null
   transferredBytes: number
 }
-export function getDownloadAvailability(tenantId: string, id: string, signal: AbortSignal) {
-  return apiRequest<DownloadAvailability>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/download-availability`), { signal })
+export function getDownloadAvailability(tenantId: string, id: string, signal: AbortSignal, shareId?: string) {
+  const query = shareId ? `?shareId=${encodeURIComponent(shareId)}` : ''
+  return apiRequest<DownloadAvailability>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/download-availability${query}`), {
+    signal,
+    ...(shareId ? { headers: { 'X-Share-Id': shareId } } : {}),
+  })
 }
 /** `decrypt` is only meaningful (and only sent) for encrypted artifacts: the default download is the stored file, unchanged. */
-export function prepareDownload(tenantId: string, id: string, replicaId?: string, decrypt?: boolean) {
-  return apiRequest<PreparedDownload>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/downloads`), { method: 'POST', json: { ...(replicaId ? { replicaId } : {}), ...(decrypt ? { decrypt: true } : {}) } })
+export function prepareDownload(tenantId: string, id: string, replicaId?: string, decrypt?: boolean, shareId?: string) {
+  const query = shareId ? `?shareId=${encodeURIComponent(shareId)}` : ''
+  return apiRequest<PreparedDownload>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/downloads${query}`), {
+    method: 'POST',
+    ...(shareId ? { headers: { 'X-Share-Id': shareId } } : {}),
+    json: {
+      ...(replicaId ? { replicaId } : {}),
+      ...(decrypt ? { decrypt: true } : {}),
+      ...(shareId ? { shareId } : {}),
+    },
+  })
 }
 export function getDownloadStatus(tenantId: string, id: string, sessionId: string, signal: AbortSignal) {
   return apiRequest<DownloadStatus>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/downloads/${encodeURIComponent(sessionId)}`), { signal })

@@ -100,5 +100,19 @@ public sealed class TenantResolutionTests
 
         public Task<bool> IsPlatformAdminAsync(UserId userId, CancellationToken cancellationToken) =>
             Task.FromResult(PlatformAdmins.Contains(userId));
+
+        public Task<DownloadAuthorizationResult> EvaluateDownloadAccessAsync(UserId userId, TenantId tenantId, Guid artifactId, Guid? shareId, CancellationToken cancellationToken, bool allowExpiredShare = false)
+        {
+            if (PlatformAdmins.Contains(userId))
+            {
+                if (shareId is null) return Task.FromResult(new DownloadAuthorizationResult(false, "share_missing", IsPlatformAdmin: true));
+                return Task.FromResult(new DownloadAuthorizationResult(true, AuthorizedShareId: shareId, IsPlatformAdmin: true));
+            }
+            var member = Memberships.ContainsKey((userId, tenantId));
+            return Task.FromResult(new DownloadAuthorizationResult(member, member ? null : "forbidden", IsPlatformAdmin: false));
+        }
+
+        public Task<bool> EvaluateAgentSessionAccessAsync(TenantId tenantId, Guid artifactId, Guid? shareId, UserId sessionUserId, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
     }
 }
