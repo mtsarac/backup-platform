@@ -33,15 +33,11 @@ public static class LoginIdentifierNormalizer
 
     public static string NormalizeEmail(string email)
     {
-        ArgumentNullException.ThrowIfNull(email);
-        var value = email.Trim();
-        if (value.Length is < 3 or > 254 || value.Any(c => c < 33 || c > 126) ||
-            !System.Net.Mail.MailAddress.TryCreate(value, out var address) ||
-            !string.Equals(address.Address, value, StringComparison.Ordinal) ||
-            value.Count(c => c == '@') != 1)
-        {
-            throw new ArgumentException("Invalid email address.", nameof(email));
-        }
-        return value.ToUpperInvariant();
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+        var trimmed = email.Trim();
+        if (trimmed.Length > 254 || trimmed.Any(c => c > 127) ||
+            !System.Net.Mail.MailAddress.TryCreate(trimmed, out var address) || address.Address != trimmed)
+            throw new ArgumentException("A valid email address is required.", nameof(email));
+        return trimmed.ToUpperInvariant();
     }
 }

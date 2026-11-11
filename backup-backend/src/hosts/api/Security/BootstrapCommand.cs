@@ -11,9 +11,10 @@ internal static class BootstrapCommand
     {
         var login = RequireEnvironment("BACKUP_PLATFORM_BOOTSTRAP_LOGIN");
         var displayName = RequireEnvironment("BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME");
+        var email = RequireEnvironment("BACKUP_PLATFORM_BOOTSTRAP_EMAIL");
         var password = RequireEnvironment("BACKUP_PLATFORM_BOOTSTRAP_PASSWORD");
         var options = services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
-        var userId = await UserBootstrapper.CreateInitialUserAsync(options, login, displayName, password, CancellationToken.None);
+        var userId = await UserBootstrapper.CreateInitialUserAsync(options, login, displayName, email, password, CancellationToken.None);
         Console.WriteLine($"Initial platform administrator created: {userId}.");
     }
 
