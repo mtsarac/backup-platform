@@ -6,16 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
 import { SharesPage } from '@/pages/shares/shares-page'
 import { PlatformSharesPage } from '@/pages/platform/platform-shares-page'
-import { apiRequest } from '@/lib/api/client'
+import { ApiError, apiRequest } from '@/lib/api/client'
+import type * as ApiClient from '@/lib/api/client'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import type { BackupShareView } from './types'
 
-vi.mock('@/lib/api/client', () => ({
-  apiRequest: vi.fn(),
-  API_BASE_URL: '/api',
-  tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
-  isForbidden: () => false,
-}))
+vi.mock('@/lib/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof ApiClient>()
+  return {
+    ...actual,
+    apiRequest: vi.fn(),
+    API_BASE_URL: '/api',
+    tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
+    isForbidden: () => false,
+  }
+})
 
 const permissions = vi.hoisted(() => ({ canAdmin: true, canOperate: true, role: 'UserAdmin' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({
@@ -122,6 +127,13 @@ const platformShare: BackupShareView = {
   createdByDisplayName: 'Super Admin',
 }
 
+const platformAdminShare: BackupShareView = {
+  ...testShare,
+  id: 'share-pa',
+  createdByUserId: 'platform-admin-1',
+  createdByRole: 'PlatformAdmin',
+  createdByDisplayName: 'Platform Admin Peter',
+}
 const request = vi.mocked(apiRequest)
 
 afterEach(() => {
@@ -452,6 +464,135 @@ describe('BackupShare frontend', () => {
           }),
         })
       )
+    })
+  })
+
+  it('extends active share from Paylaşımlarım', async () => {
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/extend')) {
+        return { ...testShare, expiresAtUtc: '2026-11-13T00:00:00Z' }
+      }
+      return [testShare]
+    })
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Süreyi uzat' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Süreyi uzat' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Paylaşım süresini uzat')).toBeInTheDocument()
+    })
+
+    const input = screen.getByDisplayValue('24')
+    fireEvent.change(input, { target: { value: '12' } })
+
+    const form = input.closest('form')!
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(
+        'tenants/tenant-a/backup-shares/share-1/extend',
+        expect.objectContaining({
+          method: 'POST',
+          json: { additionalHours: 12 },
+        })
+      )
+    })
+  })
+
+  it('revokes active share from Paylaşımlarım', async () => {
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/revoke')) {
+        return { ...testShare, status: 'Revoked', revokedAtUtc: '2026-11-11T13:00:00Z' }
+      }
+      return [testShare]
+    })
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'İptal et' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'İptal et' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Paylaşım iptal edilsin mi?' })).toBeInTheDocument()
+    })
+
+    // Submit confirm form in dialog
+    const confirmButtons = screen.getAllByRole('button', { name: 'İptal et' })
+    const dialogConfirmBtn = confirmButtons[confirmButtons.length - 1]
+    fireEvent.click(dialogConfirmBtn)
+
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(
+        'tenants/tenant-a/backup-shares/share-1/revoke',
+        expect.objectContaining({
+          method: 'POST',
+          json: {},
+        })
+      )
+    })
+  })
+
+  it('UserAdmin cannot see extend/revoke actions on PlatformAdmin-created share, expired share, or revoked share', async () => {
+    permissions.role = 'UserAdmin'
+    permissions.canAdmin = true
+    request.mockImplementation(async () => [testShare, platformAdminShare, expiredShare, revokedShare])
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      // Only 1 extend button and 1 revoke button for testShare
+      expect(screen.getAllByRole('button', { name: 'Süreyi uzat' })).toHaveLength(1)
+      expect(screen.getAllByRole('button', { name: 'İptal et' })).toHaveLength(1)
+    })
+  })
+
+  it('PlatformAdmin can see extend/revoke actions on both PlatformAdmin-created and UserAdmin-created shares', async () => {
+    permissions.role = 'PlatformAdmin'
+    permissions.canAdmin = false
+    request.mockImplementation(async () => [testShare, platformAdminShare, expiredShare, revokedShare])
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      // 2 active shares (testShare and platformAdminShare) both have buttons
+      expect(screen.getAllByRole('button', { name: 'Süreyi uzat' })).toHaveLength(2)
+      expect(screen.getAllByRole('button', { name: 'İptal et' })).toHaveLength(2)
+    })
+  })
+
+  it('handles refusal on revoke gracefully by displaying error', async () => {
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/revoke')) {
+        throw new ApiError(403, { error: 'forbidden' })
+      }
+      return [testShare]
+    })
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'İptal et' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'İptal et' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Paylaşım iptal edilsin mi?' })).toBeInTheDocument()
+    })
+
+    const confirmButtons = screen.getAllByRole('button', { name: 'İptal et' })
+    fireEvent.click(confirmButtons[confirmButtons.length - 1])
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
     })
   })
 })

@@ -7,7 +7,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 
 export function SharesPage() {
   useLanguage()
-  const { tenantId } = useTenant()
+  const { tenantId, canAdmin } = useTenant()
   const query = useShares(tenantId)
   const shares = query.data ?? []
 
@@ -21,6 +21,7 @@ export function SharesPage() {
       <QueryState isPending={query.isPending} error={query.error}>
         <SharesTable
           shares={shares}
+          canAdmin={canAdmin}
           caption={tx('Paylaşımlarım')}
           emptyMessage={tx('Henüz paylaşım yapılmamış.')}
           emptyAction={

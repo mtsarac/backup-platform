@@ -1,17 +1,23 @@
-import type { ReactNode } from 'react'
+import { useState, useContext, type ReactNode } from 'react'
 import { Share2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { linkClass, rowLinkClass } from '@/components/ui/form-styles'
+import { Notice } from '@/components/ui/notice'
+import { useAuth } from '@/features/auth/use-auth'
+import { TenantContext } from '@/features/tenancy/tenant-context'
 import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
-import type { BackupShareView } from './types'
+import { ShareActionDialogs } from './share-dialogs'
+import { canManageShare, type BackupShareView } from './types'
 
 export interface SharesTableProps {
   shares: BackupShareView[]
   showTenant?: boolean
+  canAdmin?: boolean
   emptyMessage?: string
   emptyAction?: ReactNode
   caption?: string
@@ -20,11 +26,19 @@ export interface SharesTableProps {
 export function SharesTable({
   shares,
   showTenant = false,
+  canAdmin: canAdminProp,
   emptyMessage,
   emptyAction,
   caption,
 }: SharesTableProps) {
   useLanguage()
+  const { user } = useAuth()
+  const tenantContext = useContext(TenantContext)
+  const canAdmin = canAdminProp ?? tenantContext?.canAdmin ?? false
+
+  const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<BackupShareView | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const columns: Column<BackupShareView>[] = [
     ...(showTenant
@@ -82,6 +96,33 @@ export function SharesTable({
       wrap: true,
       render: (share: BackupShareView) => share.reason || '—',
     },
+    {
+      key: 'actions',
+      header: tx('İşlemler'),
+      render: (share: BackupShareView) => {
+        if (!canManageShare(share, user?.role, canAdmin)) {
+          return '—'
+        }
+        return (
+          <div className="flex gap-2 justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setExtendTarget(share)}
+            >
+              {tx('Süreyi uzat')}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setRevokeTarget(share)}
+            >
+              {tx('İptal et')}
+            </Button>
+          </div>
+        )
+      },
+    },
   ]
 
   if (shares.length === 0) {
@@ -95,11 +136,24 @@ export function SharesTable({
   }
 
   return (
-    <DataList
-      rows={shares}
-      columns={columns}
-      keyExtractor={(share) => share.id}
-      caption={caption || tx('Paylaşımlar')}
-    />
+    <div className="space-y-4">
+      {notice && <Notice tone="success">{notice}</Notice>}
+      <DataList
+        rows={shares}
+        columns={columns}
+        keyExtractor={(share) => share.id}
+        caption={caption || tx('Paylaşımlar')}
+      />
+      <ShareActionDialogs
+        tenantId={extendTarget?.tenantId || revokeTarget?.tenantId || tenantContext?.tenantId || ''}
+        extendTarget={extendTarget}
+        revokeTarget={revokeTarget}
+        onClose={() => {
+          setExtendTarget(null)
+          setRevokeTarget(null)
+        }}
+        onSuccess={(msg) => setNotice(msg)}
+      />
+    </div>
   )
 }

@@ -104,6 +104,264 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
                 tenantNames.GetValueOrDefault(tenantId)));
     }
 
+    public async Task<BackupShareModifyResult> ExtendAsync(
+        TenantId tenantId,
+        Guid shareId,
+        UserId actor,
+        UserRole actorRole,
+        ExtendBackupShareRequest request,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        var locked = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_shares
+            WHERE "TenantId" = {tenantId.Value} AND "Id" = {shareId}
+            FOR UPDATE
+            """).ToListAsync(cancellationToken);
+
+        if (locked.Count == 0)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.NotFound,
+                ErrorCode: "share_not_found",
+                ErrorMessage: "Backup share was not found.");
+        }
+
+        var share = await context.BackupShares.SingleAsync(s => s.TenantId == tenantId && s.Id == shareId, cancellationToken);
+
+        if (share.CreatedByRole == UserRole.PlatformAdmin && actorRole != UserRole.PlatformAdmin)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.Forbidden,
+                ErrorCode: "forbidden",
+                ErrorMessage: "A share created by a PlatformAdmin can only be extended by a PlatformAdmin.");
+        }
+
+        if (share.RevokedAtUtc is not null)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.AlreadyRevoked,
+                ErrorCode: "share_revoked",
+                ErrorMessage: "Cannot extend a revoked share.");
+        }
+
+        if (share.ExpiresAtUtc <= now)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.Expired,
+                ErrorCode: "share_expired",
+                ErrorMessage: "Cannot extend an expired share.");
+        }
+
+        DateTimeOffset newExpiresAtUtc;
+        if (request.ExpiresAtUtc.HasValue)
+        {
+            newExpiresAtUtc = request.ExpiresAtUtc.Value.ToUniversalTime();
+        }
+        else if (request.DurationHours.HasValue)
+        {
+            if (request.DurationHours.Value <= 0 || request.DurationHours.Value > 72)
+            {
+                return new BackupShareModifyResult(
+                    BackupShareModifyOutcome.InvalidExpiry,
+                    ErrorCode: "invalid_duration",
+                    ErrorMessage: "Duration must be positive and not exceed 72 hours.");
+            }
+            newExpiresAtUtc = share.CreatedAtUtc + TimeSpan.FromHours(request.DurationHours.Value);
+        }
+        else if (request.AdditionalHours.HasValue)
+        {
+            if (request.AdditionalHours.Value <= 0)
+            {
+                return new BackupShareModifyResult(
+                    BackupShareModifyOutcome.InvalidExpiry,
+                    ErrorCode: "invalid_duration",
+                    ErrorMessage: "Additional hours must be positive.");
+            }
+            newExpiresAtUtc = share.ExpiresAtUtc + TimeSpan.FromHours(request.AdditionalHours.Value);
+        }
+        else if (request.Duration.HasValue)
+        {
+            if (request.Duration.Value <= TimeSpan.Zero || request.Duration.Value > BackupShare.MaximumDuration)
+            {
+                return new BackupShareModifyResult(
+                    BackupShareModifyOutcome.InvalidExpiry,
+                    ErrorCode: "invalid_duration",
+                    ErrorMessage: "Duration must be positive and not exceed 72 hours.");
+            }
+            newExpiresAtUtc = share.CreatedAtUtc + request.Duration.Value;
+        }
+        else if (request.Extension.HasValue)
+        {
+            if (request.Extension.Value <= TimeSpan.Zero)
+            {
+                return new BackupShareModifyResult(
+                    BackupShareModifyOutcome.InvalidExpiry,
+                    ErrorCode: "invalid_duration",
+                    ErrorMessage: "Extension must be positive.");
+            }
+            newExpiresAtUtc = share.ExpiresAtUtc + request.Extension.Value;
+        }
+        else
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.InvalidExpiry,
+                ErrorCode: "missing_expiry",
+                ErrorMessage: "New expiry or duration must be provided.");
+        }
+
+        if (newExpiresAtUtc <= share.ExpiresAtUtc)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.InvalidExpiry,
+                ErrorCode: "cannot_shorten",
+                ErrorMessage: "New expiry must be later than the current expiry.");
+        }
+
+        if (newExpiresAtUtc > share.CreatedAtUtc + BackupShare.MaximumDuration)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.InvalidExpiry,
+                ErrorCode: "duration_exceeded",
+                ErrorMessage: "Share duration cannot exceed 72 hours from creation.");
+        }
+
+        var oldExpiry = share.ExpiresAtUtc;
+        share.Extend(newExpiresAtUtc, now);
+
+        var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        context.AuditEvents.Add(AuditEvent.Record(
+            now.ToUniversalTime(),
+            actor,
+            actorKind,
+            AuditActions.BackupShareExtended,
+            tenantId,
+            "backup_share",
+            share.Id.ToString("D"),
+            new Dictionary<string, object?>
+            {
+                ["actor"] = actor.ToString(),
+                ["role"] = actorRole.ToString(),
+                ["tenant"] = tenantId.Value.ToString("D"),
+                ["artifact"] = share.ArtifactId.ToString("D"),
+                ["oldExpiry"] = oldExpiry.ToString("o"),
+                ["newExpiry"] = share.ExpiresAtUtc.ToString("o"),
+                ["result"] = "extended"
+            }));
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var userNames = await ResolveUserNamesAsync(context, [share.CreatedByUserId], cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
+        var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
+
+        return new BackupShareModifyResult(
+            BackupShareModifyOutcome.Success,
+            Share: ToView(
+                share,
+                now,
+                artifactNames.GetValueOrDefault(share.ArtifactId),
+                userNames.GetValueOrDefault(share.CreatedByUserId),
+                tenantNames.GetValueOrDefault(tenantId)));
+    }
+
+    public async Task<BackupShareModifyResult> RevokeAsync(
+        TenantId tenantId,
+        Guid shareId,
+        UserId actor,
+        UserRole actorRole,
+        string? reason,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        var locked = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_shares
+            WHERE "TenantId" = {tenantId.Value} AND "Id" = {shareId}
+            FOR UPDATE
+            """).ToListAsync(cancellationToken);
+
+        if (locked.Count == 0)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.NotFound,
+                ErrorCode: "share_not_found",
+                ErrorMessage: "Backup share was not found.");
+        }
+
+        var share = await context.BackupShares.SingleAsync(s => s.TenantId == tenantId && s.Id == shareId, cancellationToken);
+
+        if (share.CreatedByRole == UserRole.PlatformAdmin && actorRole != UserRole.PlatformAdmin)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.Forbidden,
+                ErrorCode: "forbidden",
+                ErrorMessage: "A share created by a PlatformAdmin can only be revoked by a PlatformAdmin.");
+        }
+
+        if (share.RevokedAtUtc is not null)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.AlreadyRevoked,
+                ErrorCode: "already_revoked",
+                ErrorMessage: "Share is already revoked.");
+        }
+
+        if (share.ExpiresAtUtc <= now)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.Expired,
+                ErrorCode: "share_expired",
+                ErrorMessage: "Cannot revoke an expired share.");
+        }
+
+        var oldExpiry = share.ExpiresAtUtc;
+        share.Revoke(actor, now);
+
+        var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        context.AuditEvents.Add(AuditEvent.Record(
+            now.ToUniversalTime(),
+            actor,
+            actorKind,
+            AuditActions.BackupShareRevoked,
+            tenantId,
+            "backup_share",
+            share.Id.ToString("D"),
+            new Dictionary<string, object?>
+            {
+                ["actor"] = actor.ToString(),
+                ["role"] = actorRole.ToString(),
+                ["tenant"] = tenantId.Value.ToString("D"),
+                ["artifact"] = share.ArtifactId.ToString("D"),
+                ["oldExpiry"] = oldExpiry.ToString("o"),
+                ["revokedAt"] = share.RevokedAtUtc?.ToString("o"),
+                ["reason"] = reason,
+                ["result"] = "revoked"
+            }));
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var userNames = await ResolveUserNamesAsync(context, [share.CreatedByUserId], cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
+        var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
+
+        return new BackupShareModifyResult(
+            BackupShareModifyOutcome.Success,
+            Share: ToView(
+                share,
+                now,
+                artifactNames.GetValueOrDefault(share.ArtifactId),
+                userNames.GetValueOrDefault(share.CreatedByUserId),
+                tenantNames.GetValueOrDefault(tenantId)));
+    }
+
     public async Task<BackupShareView?> GetAsync(
         TenantId tenantId,
         Guid shareId,

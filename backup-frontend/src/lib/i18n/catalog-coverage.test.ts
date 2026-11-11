@@ -4,8 +4,8 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { sourceCatalog } from './source-catalog'
 
-const sources = import.meta.glob<string> /* v3 */(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx}', '!/src/test/**', '!/src/lib/i18n/source-catalog.ts'], { query: '?raw', import: 'default', eager: true })
-const references = import.meta.glob<string> /* v3 */(['/src/**/*.{ts,tsx}', '!/src/lib/i18n/source-catalog.ts'], { query: '?raw', import: 'default', eager: true })
+const sources = import.meta.glob<string> /* v4 */(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx}', '!/src/test/**', '!/src/lib/i18n/source-catalog.ts'], { query: '?raw', import: 'default', eager: true })
+const references = import.meta.glob<string> /* v4 */(['/src/**/*.{ts,tsx}', '!/src/lib/i18n/source-catalog.ts'], { query: '?raw', import: 'default', eager: true })
 const literal = String.raw`(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|` + '`(?:[^`\\\\\\n$]|\\\\.)*`' + ')'
 const unquote = (quoted: string) => new Function(`return ${quoted}`)() as string
 /** Technical text shown exactly as written: example values, identifiers and product names. */

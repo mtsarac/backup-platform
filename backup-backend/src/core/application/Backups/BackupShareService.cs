@@ -39,6 +39,84 @@ public sealed class BackupShareService(
             cancellationToken);
     }
 
+    public async Task<BackupShareModifyResult> ExtendShareAsync(
+        TenantId tenantId,
+        Guid shareId,
+        UserId actor,
+        ExtendBackupShareRequest request,
+        CancellationToken cancellationToken)
+    {
+        var profile = await userStore.GetUserAsync(actor, cancellationToken);
+        if (profile is null)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.Forbidden,
+                ErrorCode: "forbidden",
+                ErrorMessage: "User profile not found.");
+        }
+
+        if (profile.Role != UserRole.PlatformAdmin)
+        {
+            var membership = await userStore.GetMembershipAsync(actor, tenantId, cancellationToken);
+            if (membership is null)
+            {
+                return new BackupShareModifyResult(
+                    BackupShareModifyOutcome.Forbidden,
+                    ErrorCode: "forbidden",
+                    ErrorMessage: "User is not a member of this tenant.");
+            }
+        }
+
+        var now = timeProvider.GetUtcNow();
+        return await store.ExtendAsync(
+            tenantId,
+            shareId,
+            actor,
+            profile.Role,
+            request,
+            now,
+            cancellationToken);
+    }
+
+    public async Task<BackupShareModifyResult> RevokeShareAsync(
+        TenantId tenantId,
+        Guid shareId,
+        UserId actor,
+        RevokeBackupShareRequest request,
+        CancellationToken cancellationToken)
+    {
+        var profile = await userStore.GetUserAsync(actor, cancellationToken);
+        if (profile is null)
+        {
+            return new BackupShareModifyResult(
+                BackupShareModifyOutcome.Forbidden,
+                ErrorCode: "forbidden",
+                ErrorMessage: "User profile not found.");
+        }
+
+        if (profile.Role != UserRole.PlatformAdmin)
+        {
+            var membership = await userStore.GetMembershipAsync(actor, tenantId, cancellationToken);
+            if (membership is null)
+            {
+                return new BackupShareModifyResult(
+                    BackupShareModifyOutcome.Forbidden,
+                    ErrorCode: "forbidden",
+                    ErrorMessage: "User is not a member of this tenant.");
+            }
+        }
+
+        var now = timeProvider.GetUtcNow();
+        return await store.RevokeAsync(
+            tenantId,
+            shareId,
+            actor,
+            profile.Role,
+            request.Reason,
+            now,
+            cancellationToken);
+    }
+
     public async Task<BackupShareView?> GetShareAsync(
         TenantId tenantId,
         Guid shareId,

@@ -1,5 +1,5 @@
 import { apiRequest } from '@/lib/api/client'
-import type { BackupShareView, CreatePlatformShareRequest, CreateShareRequest } from './types'
+import type { BackupShareView, CreatePlatformShareRequest, CreateShareRequest, ExtendShareRequest, RevokeShareRequest } from './types'
 
 export async function listShares(tenantId: string, artifactId?: string, signal?: AbortSignal): Promise<BackupShareView[]> {
   const query = artifactId ? `?artifactId=${encodeURIComponent(artifactId)}` : ''
@@ -37,4 +37,31 @@ export async function createPlatformShare(request: CreatePlatformShareRequest): 
     method: 'POST',
     json: request,
   })
+}
+export async function extendShare(
+  tenantId: string,
+  shareId: string,
+  request: ExtendShareRequest
+): Promise<BackupShareView> {
+  return apiRequest<BackupShareView>(
+    `tenants/${encodeURIComponent(tenantId)}/backup-shares/${encodeURIComponent(shareId)}/extend`,
+    {
+      method: 'POST',
+      json: request,
+    }
+  )
+}
+
+export async function revokeShare(
+  tenantId: string,
+  shareId: string,
+  request?: RevokeShareRequest
+): Promise<BackupShareView> {
+  return apiRequest<BackupShareView>(
+    `tenants/${encodeURIComponent(tenantId)}/backup-shares/${encodeURIComponent(shareId)}/revoke`,
+    {
+      method: 'POST',
+      json: request ?? {},
+    }
+  )
 }
