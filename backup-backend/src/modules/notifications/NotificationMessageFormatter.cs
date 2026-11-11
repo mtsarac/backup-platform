@@ -46,8 +46,6 @@ public static class NotificationMessageFormatter
             NotificationEventTypes.AgentOffline => ($"Agent offline: {name}", $"Agent \"{name}\" has not been seen for about {Fact("minutes")} minutes."),
             NotificationEventTypes.QuotaCritical => ($"Storage quota {Fact("state", "critical")}: {Fact("percent")}% used",
                 $"The tenant's backup storage is at {Fact("percent")}% of its limit ({Fact("state", "critical")})."),
-            NotificationEventTypes.BreakGlassAccess => ($"Platform administrator access to a backup: {name}",
-                $"Two platform administrators approved decrypted access to \"{name}\". Who asked, why and whether it was used are listed for your account administrators in the web console."),
             NotificationEventTypes.ReplicaDegraded => ($"Backup replicas {Fact("status", "degraded")}: {name}",
                 $"The latest backup of job \"{name}\" has {Fact("verified")} of {Fact("required")} required verified replicas."),
             NotificationEventTypes.StorageCapacityCritical => ($"Storage capacity critical: {name}",

@@ -81,13 +81,16 @@ public sealed class DownloadApiTests(PostgreSqlFixture fixture) : IClassFixture<
     public async Task PlatformAdministratorHasNoTenantMembershipBypass()
     {
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
+        await scenario.EncryptAsync();
         var platform = await scenario.World.SignInAsync(await scenario.World.SeedUserAsync(platformAdmin: true));
         var created = await scenario.CreateSessionAsync();
         using var availability = await platform.GetAsync(scenario.ArtifactPath + "/download-availability");
         using var create = await scenario.CreateRawAsync(platform);
+        using var decrypt = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/downloads", new { decrypt = true });
         using var status = await platform.GetAsync(scenario.ArtifactPath + $"/downloads/{created.GetProperty("sessionId").GetGuid()}");
         using var content = await platform.GetAsync(created.GetProperty("downloadUrl").GetString()!);
-        Assert.All(new[] { availability, create, status, content }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+        using var postContent = await platform.SendAsync(HttpMethod.Post, created.GetProperty("downloadUrl").GetString()!, new { sdp = DownloadAgentApiTests.Sdp });
+        Assert.All(new[] { availability, create, decrypt, status, content, postContent }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
     }
 
     [Fact]

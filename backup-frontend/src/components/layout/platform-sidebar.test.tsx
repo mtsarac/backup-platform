@@ -32,31 +32,33 @@ describe('Platform sidebar', () => {
     ])
     expect(links('Güvenlik ve destek')).toEqual([
       ['Destek oturumları', '/platform/support-sessions'],
-      ['Acil destek erişimi', '/platform/break-glass'],
       ['Denetim kaydı', '/platform/audit'],
     ])
     expect(links('Ayarlar')).toEqual([['Bildirim altyapısı', '/platform/notification-transports'], ['Yedekleme bilgisayarı ayarları', '/platform/agent-settings']])
     expect(within(nav()).getByRole('link', { name: 'Çalışma alanı arayüzüne dön' })).toHaveAttribute('href', '/')
   })
 
-  it('uses plain words only: no English or break-glass jargon in either language', () => {
+  it('uses plain words in either language', () => {
     render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
     const labels = () => within(nav()).getAllByRole('link').map((link) => link.textContent ?? '')
-    expect(labels().join(' ')).not.toMatch(/break-glass|ajan|tenant|audit/i)
+    expect(labels().join(' ')).not.toMatch(/ajan|tenant|audit/i)
     act(() => changeLanguage('en'))
     expect(links('Overview').map(([label]) => label)).toEqual(['Platform overview'])
     expect(links('Customers').map(([label]) => label)).toEqual(['Workspaces', 'Users', 'Plans'])
     expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Storage', 'Quota policies'])
-    expect(links('Security and support').map(([label]) => label)).toEqual(['Support sessions', 'Emergency support access', 'Audit log'])
+    expect(links('Security and support').map(([label]) => label)).toEqual(['Support sessions', 'Audit log'])
     expect(links('Settings').map(([label]) => label)).toEqual(['Notification infrastructure', 'Backup computer settings'])
-    expect(labels().join(' ')).not.toMatch(/break-glass|agent\b/i)
+    expect(labels().join(' ')).not.toMatch(/agent\b/i)
   })
 
   it('never links to a page that has no route', () => {
     render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(platformRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith('/platform'))
-    expect(targets).toHaveLength(12)
+    expect(targets).toHaveLength(11)
+    const removedRoute = `/${['break', 'glass'].join('-')}`
+    expect(matchRoutes(routes, removedRoute)?.at(-1)?.route.path).toBe('*')
+    expect(matchRoutes(routes, `${removedRoute}/request-a`)?.at(-1)?.route.path).toBe('*')
     for (const href of targets) expect(matchRoutes(routes, href.slice('/platform'.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 

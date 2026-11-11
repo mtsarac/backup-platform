@@ -5,7 +5,6 @@ describe('audit action labels', () => {
   it.each([
     ['plan.created', 'Plan oluşturuldu'],
     ['support.restore.requested', 'Geri yükleme istendi'],
-    ['break_glass.approved', 'Acil destek erişimi onaylandı'],
     ['tenant_wrap_key.rotated', 'Şifreleme anahtarı yenilendi'],
     ['notification_transport.secret_cleared', 'Bildirim altyapısı gizli değeri temizlendi'],
   ])('one map answers %s with a plain sentence', (code, label) => {

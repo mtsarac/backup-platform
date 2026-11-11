@@ -43,7 +43,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
         </Notice>
         <Facts>
           <Fact label={tx("Kendi kurtarma anahtarınız")}>{tenantRecovery ? tx('Kurtarma anahtarınız eklenmiş') : tx('Kurtarma anahtarınız eklenmemiş')}</Fact>
-          {platformRecovery.configured && <Fact label={tx("Acil destek erişimi")}>{tx('Platform kurtarma anahtarı hazır')}</Fact>}
+          {platformRecovery.configured && <Fact label={tx("Platform kurtarma anahtarı")}>{tx('Platform kurtarma anahtarı hazır')}</Fact>}
         </Facts>
         {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa kendi kurtarma anahtarınızla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
         <TechnicalDetails items={[
@@ -98,7 +98,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
 
     <ConfirmDialog open={removing} onClose={() => setRemoving(false)} name={tenantName} title={tx("Kurtarma anahtarınız kaldırılsın mı?")}
       consequence={{
-        what: tx("Sonraki şifreli yedeklere bu kurtarma anahtarı eklenmez. Kendi özel anahtarınızla acil kurtarma yolunuz bu yeni yedeklerde kullanılamaz; platformun acil destek erişimi değişmez."),
+        what: tx("Sonraki şifreli yedeklere bu kurtarma anahtarı eklenmez. Kendi özel anahtarınızla acil kurtarma yolunuz bu yeni yedeklerde kullanılamaz."),
         who: tx("Yalnızca bundan sonra alınacak yedekler etkilenir; mevcut dosyalardaki kayıt değişmez ve özel anahtarınız onları açmaya devam eder."),
         reversible: tx("Evet. Aynı genel anahtarı yeniden yükleyerek tekrar ekleyebilirsiniz."),
       }}

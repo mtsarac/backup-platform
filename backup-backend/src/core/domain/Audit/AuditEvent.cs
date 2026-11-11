@@ -90,19 +90,6 @@ public static class AuditActions
     public const string TenantRecoveryKeySet = "tenant_recovery_key.set";
     public const string TenantRecoveryKeyRemoved = "tenant_recovery_key.removed";
 
-    // Break-glass decrypt of one tenant artifact by a PlatformAdmin (dual control). Ids and reasons only, never key material.
-    public const string BreakGlassRequested = "break_glass.requested";
-    public const string BreakGlassApproved = "break_glass.approved";
-    public const string BreakGlassDenied = "break_glass.denied";
-    public const string BreakGlassConsumed = "break_glass.consumed";
-    public const string BreakGlassExpired = "break_glass.expired";
-    public const string BreakGlassDownloadStarted = "break_glass.download_started";
-    public const string BreakGlassDownloadCompleted = "break_glass.download_completed";
-    public const string BreakGlassDownloadFailed = "break_glass.download_failed";
-    /// <summary>An approve, deny or use was refused (self-approval, already decided, expired, not the requester); the attempt stays on record.</summary>
-    public const string BreakGlassRefused = "break_glass.refused";
-    public const string BreakGlassOwnerNotificationQueued = "break_glass.owner_notification_queued";
-    public const string BreakGlassOwnerNotificationUnavailable = "break_glass.owner_notification_unavailable";
 }
 
 /// <summary>

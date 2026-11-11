@@ -13,10 +13,10 @@ beforeEach(() => {
 
 describe('platform audit page', () => {
   it('lists plain action labels with the raw codes collapsed', async () => {
-    vi.mocked(api.getAudit).mockResolvedValue(paged([{ id: 'audit-1', at: new Date().toISOString(), actorUserId: 'admin-id', actorDisplayName: 'Platform Operatörü', actorKind: 'PlatformAdmin', action: 'break_glass.approved', tenantId: 'tenant-a', tenantName: 'Acme A.Ş.', targetType: 'break_glass_request', targetId: 'request-1', details: {} }]))
+    vi.mocked(api.getAudit).mockResolvedValue(paged([{ id: 'audit-1', at: new Date().toISOString(), actorUserId: 'admin-id', actorDisplayName: 'Platform Operatörü', actorKind: 'PlatformAdmin', action: 'tenant_wrap_key.rotated', tenantId: 'tenant-a', tenantName: 'Acme A.Ş.', targetType: 'tenant_wrap_key', targetId: 'request-1', details: {} }]))
     renderPlatform(<PlatformAuditPage />)
-    expect(await screen.findByText('Acil destek erişimi onaylandı')).toBeVisible()
-    expect(screen.getByText('break_glass.approved')).not.toBeVisible()
+    expect(await screen.findByText('Şifreleme anahtarı yenilendi')).toBeVisible()
+    expect(screen.getByText('tenant_wrap_key.rotated')).not.toBeVisible()
     expect(screen.getByText('request-1')).not.toBeVisible()
   })
 

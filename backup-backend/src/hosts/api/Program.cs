@@ -70,7 +70,6 @@ app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();
 app.MapDownloadEndpoints();
 app.MapArtifactEncryptionEndpoints();
-app.MapArtifactBreakGlassEndpoints();
 if (app.IsFeatureEnabled(Features.SupportSessions))
 {
     app.MapSupportEndpoints();

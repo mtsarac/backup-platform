@@ -4,7 +4,7 @@ using BackupPlatform.Encryption;
 namespace BackupPlatform.Tools;
 
 /// <summary>
-/// Offline break-glass decryptor: needs only the .bpe file and either a PEM private key or at least <c>threshold</c> Recovery Key share files
+/// Offline decryptor: needs only the .bpe file and either a PEM private key or at least <c>threshold</c> Recovery Key share files
 /// (no backend, no network, no database). The recipient is selected by the key id recorded in the artifact header, so the same tool opens
 /// tenant-wrap, platform-recovery and tenant-recovery artifacts.
 /// </summary>

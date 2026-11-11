@@ -42,15 +42,12 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
             BackupArtifactEngine.Read(artifact.SourceMetadataJson), artifact.Format);
     }
 
-    /// <summary>
-    /// Starts a download. A support session can only ever download the stored bytes; a break-glass request always downloads decrypted; a tenant administrator may ask for either.
-    /// </summary>
+    /// <summary>A support session can only download stored bytes; a tenant administrator may also request decryption.</summary>
     /// <exception cref="BackupPlatform.Domain.Support.SupportAccessDeniedException">A support session was given and it can no longer authorize the download.</exception>
-    /// <exception cref="BreakGlassDeniedException">A break-glass request was given and it cannot be used (not approved, expired, already spent, not the requester).</exception>
     public async Task<PreparedDownload?> PrepareAsync(TenantId tenantId, Guid artifactId, Guid userId, PrepareDownloadRequest request, CancellationToken cancellationToken,
-        Guid? supportSessionId = null, Guid? breakGlassRequestId = null)
+        Guid? supportSessionId = null)
     {
-        var decrypt = request.Decrypt || breakGlassRequestId is not null;
+        var decrypt = request.Decrypt;
         if (decrypt && supportSessionId is not null) throw new DownloadUnavailableException("decrypt_not_permitted");
         var availability = await GetAvailabilityAsync(tenantId, artifactId, cancellationToken, reportMissing: true);
         if (availability is null) return null;
@@ -80,25 +77,21 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         var extension = availability.Engine switch { DatabaseEngines.PostgreSql => "dump", DatabaseEngines.MsSql => "bak", DatabaseEngines.FileSystem => "zip", _ => "bin" };
         var filename = $"backup-{artifactId:N}.{extension}" + (availability.Format == BackupArtifact.BpeFormat && !decrypt ? ".bpe" : string.Empty);
         var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime, supportSessionId,
-            decrypt, breakGlassRequestId, directAgent), cancellationToken);
+            decrypt, directAgent), cancellationToken);
         if (session is null) throw new DownloadUnavailableException("replica_unavailable");
-        var url = breakGlassRequestId is { } breakGlass
-            ? $"/api/platform/artifact-break-glass/{breakGlass}/downloads/{session.Id}/content"
-            : supportSessionId is { } support
-                ? $"/api/platform/support-sessions/{support}/artifacts/{artifactId}/downloads/{session.Id}/content"
-                : $"/api/tenants/{tenantId.Value}/backup-artifacts/{artifactId}/downloads/{session.Id}/content";
+        var url = supportSessionId is { } support
+            ? $"/api/platform/support-sessions/{support}/artifacts/{artifactId}/downloads/{session.Id}/content"
+            : $"/api/tenants/{tenantId.Value}/backup-artifacts/{artifactId}/downloads/{session.Id}/content";
         return new PreparedDownload(session.Id, url, filename, decrypt ? artifact.SourceChecksum : session.Checksum, session.SizeBytes, decrypt, session.AgentId is not null);
     }
 
     /// <summary>
-    /// The caller's own download of this artifact. A download belongs to the channel it was created through: an ordinary route never serves a support or break-glass download
-    /// (even to the same user) and a support or break-glass route serves only the downloads of that session or request, so a claim cannot be carried across.
+    /// The caller's download belongs to its original channel; ordinary and support routes cannot serve each other's sessions.
     /// </summary>
-    public async Task<DownloadSession?> GetOwnedAsync(TenantId tenantId, Guid artifactId, Guid sessionId, Guid userId, CancellationToken cancellationToken, Guid? supportSessionId = null,
-        Guid? breakGlassRequestId = null)
+    public async Task<DownloadSession?> GetOwnedAsync(TenantId tenantId, Guid artifactId, Guid sessionId, Guid userId, CancellationToken cancellationToken, Guid? supportSessionId = null)
     {
         var session = await store.GetAsync(tenantId, sessionId, cancellationToken);
-        if (session is null || session.ArtifactId != artifactId || session.UserId != userId || session.SupportSessionId != supportSessionId || session.BreakGlassRequestId != breakGlassRequestId) return null;
+        if (session is null || session.ArtifactId != artifactId || session.UserId != userId || session.SupportSessionId != supportSessionId) return null;
         if (!session.IsTerminal && !session.IsPinned(time.GetUtcNow()))
         {
             session = await store.ExpireSessionAsync(tenantId, sessionId, time.GetUtcNow(), cancellationToken);

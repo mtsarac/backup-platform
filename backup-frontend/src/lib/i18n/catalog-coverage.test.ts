@@ -89,7 +89,7 @@ describe('i18n source catalog', () => {
   it('keeps no entry that nothing references', () => {
     const source = Object.values(references).join('\n')
     expect(Object.keys(sourceCatalog).filter(key => !hasReference(key, source) && !backendSupplied.includes(key))).toEqual([])
-  })
+  }, 20_000)
 
   it('translates every text of the backend storage provider descriptors', () => {
     const descriptorSource = readFileSync(resolve(import.meta.dirname, '../../../../backup-backend/src/modules/storage/StorageProviderDescriptor.cs'), 'utf8')

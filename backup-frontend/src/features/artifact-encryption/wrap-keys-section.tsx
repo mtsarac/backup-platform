@@ -1,14 +1,11 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { bareListClass } from '@/features/platform/list-empty'
-import { platformPaths } from '@/features/platform/paths'
-import { linkClass } from '@/components/ui/form-styles'
 import { useWrapKeyActions, useWrapKeys } from './hooks'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import type { WrapKey } from './types'
@@ -41,7 +38,6 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
   ]
   return <Section title={tx("Şifreleme anahtarları")} description={tx("Anahtarı döndürmek yeni yedeklerde yeni bir anahtar kullanılmasını sağlar. Eski yedekler önceki anahtarla açılmaya devam eder.")} flush className="overflow-hidden"
     actions={<>
-      <Link className={`${linkClass} inline-flex min-h-9 pointer-coarse:min-h-11 items-center text-sm`} to={`${platformPaths.breakGlass}?tenantId=${encodeURIComponent(tenantId)}`}>{tx("Acil destek erişimi istekleri")}</Link>
       <Button onClick={() => { rotate.reset(); setRotating(true) }}>{tx("Anahtarı döndür")}</Button>
     </>}>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={keys.isPending} error={keys.error}>

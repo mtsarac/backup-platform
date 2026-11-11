@@ -438,96 +438,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("BackupPlatform.Domain.Backups.ArtifactBreakGlassRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ArtifactId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("ConsumedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("DecidedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DecidedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DecisionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid?>("DownloadSessionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid>("RequestedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<Guid>("TenantId")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid");
-
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DecidedBy");
-
-                    b.HasIndex("ExpiresAt")
-                        .HasDatabaseName("ix_artifact_break_glass_expiry")
-                        .HasFilter("\"Status\" IN ('Pending','Approved')");
-
-                    b.HasIndex("RequestedBy");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("ArtifactId", "TenantId");
-
-                    b.HasIndex("TenantId", "CreatedAt")
-                        .HasDatabaseName("ix_artifact_break_glass_tenant");
-
-                    b.ToTable("artifact_break_glass_requests", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_artifact_break_glass_consumed", "(\"Status\" = 'Consumed') = (\"ConsumedAt\" IS NOT NULL AND \"DownloadSessionId\" IS NOT NULL)");
-
-                            t.HasCheckConstraint("ck_artifact_break_glass_decision", "(\"Status\" IN ('Approved','Denied','Consumed')) = (\"DecidedBy\" IS NOT NULL AND \"DecidedAt\" IS NOT NULL) OR \"Status\" = 'Expired'");
-
-                            t.HasCheckConstraint("ck_artifact_break_glass_dual_control", "\"DecidedBy\" IS NULL OR \"DecidedBy\" <> \"RequestedBy\"");
-
-                            t.HasCheckConstraint("ck_artifact_break_glass_reason", "\"Reason\" ~ '[^[:space:]]' AND length(\"Reason\") <= 500");
-
-                            t.HasCheckConstraint("ck_artifact_break_glass_requests_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-
-                            t.HasCheckConstraint("ck_artifact_break_glass_requests_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-
-                            t.HasCheckConstraint("ck_artifact_break_glass_status", "\"Status\" IN ('Pending','Approved','Denied','Consumed','Expired')");
-
-                            t.HasCheckConstraint("ck_artifact_break_glass_window", "\"ExpiresAt\" > \"CreatedAt\" AND \"ExpiresAt\" <= \"CreatedAt\" + interval '4 hours'");
-                        });
-                });
-
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupArtifact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2380,9 +2290,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ArtifactId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("BreakGlassRequestId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Checksum")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2467,10 +2374,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasAlternateKey("Id", "TenantId");
 
-                    b.HasIndex("BreakGlassRequestId")
-                        .HasDatabaseName("ix_download_sessions_break_glass")
-                        .HasFilter("\"BreakGlassRequestId\" IS NOT NULL");
-
                     b.HasIndex("ExpiresAt")
                         .HasDatabaseName("ix_download_sessions_expiry")
                         .HasFilter("\"ReleasedAt\" IS NULL");
@@ -2487,8 +2390,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ArtifactId", "TenantId");
 
-                    b.HasIndex("BreakGlassRequestId", "TenantId");
-
                     b.HasIndex("ReplicaId", "TenantId");
 
                     b.HasIndex("SupportSessionId", "TenantId");
@@ -2499,7 +2400,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_download_sessions_bytes", "\"SizeBytes\" >= 0 AND \"TransferredBytes\" BETWEEN 0 AND \"SizeBytes\"");
 
-                            t.HasCheckConstraint("ck_download_sessions_channel", "(\"BreakGlassRequestId\" IS NULL OR \"Decrypted\") AND (NOT \"Decrypted\" OR \"SupportSessionId\" IS NULL)");
+                            t.HasCheckConstraint("ck_download_sessions_channel", "NOT \"Decrypted\" OR \"SupportSessionId\" IS NULL");
 
                             t.HasCheckConstraint("ck_download_sessions_expiry", "\"ExpiresAt\" > \"CreatedAt\"");
 
@@ -2561,9 +2462,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("SecretUpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("SecurityOwnerUserId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Target")
                         .IsRequired()
                         .HasMaxLength(512)
@@ -2588,8 +2486,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasAlternateKey("Id", "TenantId");
-
-                    b.HasIndex("SecurityOwnerUserId");
 
                     b.HasIndex("TenantId");
 
@@ -4673,33 +4569,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("BackupPlatform.Domain.Backups.ArtifactBreakGlassRequest", b =>
-                {
-                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
-                        .WithMany()
-                        .HasForeignKey("DecidedBy")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
-                        .WithMany()
-                        .HasForeignKey("RequestedBy")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("BackupPlatform.Domain.Backups.BackupArtifact", null)
-                        .WithMany()
-                        .HasForeignKey("ArtifactId", "TenantId")
-                        .HasPrincipalKey("Id", "TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupArtifact", b =>
                 {
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
@@ -4992,12 +4861,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("BackupPlatform.Domain.Backups.ArtifactBreakGlassRequest", null)
-                        .WithMany()
-                        .HasForeignKey("BreakGlassRequestId", "TenantId")
-                        .HasPrincipalKey("Id", "TenantId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("BackupPlatform.Domain.Backups.BackupReplica", null)
                         .WithMany()
                         .HasForeignKey("ReplicaId", "TenantId")
@@ -5014,11 +4877,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationChannel", b =>
                 {
-                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
-                        .WithMany()
-                        .HasForeignKey("SecurityOwnerUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

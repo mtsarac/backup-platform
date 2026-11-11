@@ -67,18 +67,6 @@ public sealed class NotificationChannel : ITenantOwned
     /// (which sends a new invitation) or pointing it at another address clears it.
     /// </summary>
     public DateTimeOffset? UnsubscribedAt { get; private set; }
-    /// <summary>An Owner explicitly designated this confirmed email for mandatory tenant security notices; never inferred from a general recipient.</summary>
-    public UserId? SecurityOwnerUserId { get; private set; }
-
-    public bool SetSecurityOwner(UserId? owner, DateTimeOffset now)
-    {
-        if (owner is not null && (Kind != NotificationChannelKind.Email || !IsDeliverable))
-            throw new ArgumentException("A security recipient must be an enabled, confirmed email channel.");
-        if (SecurityOwnerUserId == owner) return false;
-        SecurityOwnerUserId = owner;
-        Touch(now);
-        return true;
-    }
 
     /// <summary>Alerts may be sent: enabled, and for email a confirmed recipient (an unconfirmed address could be anyone's inbox).</summary>
     public bool IsDeliverable => Enabled && (Kind != NotificationChannelKind.Email || RecipientVerifiedAt is not null);
@@ -126,7 +114,6 @@ public sealed class NotificationChannel : ITenantOwned
         // A new address has not agreed to receive anything yet.
         RecipientVerifiedAt = null;
         UnsubscribedAt = null;
-        SecurityOwnerUserId = null;
         Touch(now);
         return true;
     }
@@ -147,7 +134,6 @@ public sealed class NotificationChannel : ITenantOwned
         Enabled = false;
         UnsubscribedAt = BackupGuard.Timestamp(now);
         RecipientVerifiedAt = null;
-        SecurityOwnerUserId = null;
         Touch(now);
         return true;
     }

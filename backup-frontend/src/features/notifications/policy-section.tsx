@@ -56,7 +56,6 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
     <CheckField role="switch" className="font-medium" label={tx("Bildirimler etkin")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Olay türleri")}</legend>
       <div className="flex flex-wrap gap-x-6">{visibleEventTypes().map((type) => <CheckField key={type} label={eventTypeLabels[type]} checked={events.includes(type)} onChange={(event) => setEvents(toggle(events, type, event.target.checked))} />)}</div>
-      <p className="text-sm text-text-muted">{tx("Bir platform yöneticisi şifreli yedeklerinize acil destek erişimi kullandığında kritik uyarı gönderilir. Bu olay kapatılamaz; genel kanallara gönderim için bildirimlerin etkin ve en az bir kanalın hazır olması gerekir. Sahiplerin kayıtlı güvenlik adresleri ayrıca her zaman bilgilendirilir.")}</p>
     </fieldset>
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Kanal türleri")}</legend>
       <div className="flex flex-wrap gap-x-6">{visibleChannelKinds().map((kind) => <CheckField key={kind} label={kindLabels[kind]} checked={kinds.includes(kind)} onChange={(event) => setKinds(toggle(kinds, kind, event.target.checked))} />)}</div>

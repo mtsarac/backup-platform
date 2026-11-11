@@ -1,7 +1,7 @@
 import { tx } from '@/lib/i18n'
-import type { ChannelKind, EventType, MandatoryEventType, Severity, WebhookAuthentication } from './types'
+import type { ChannelKind, EventType, Severity, WebhookAuthentication } from './types'
 
-export const eventTypeLabels: Record<EventType | MandatoryEventType | 'test' | 'recipient_verification', string> = {
+export const eventTypeLabels: Record<EventType | 'test' | 'recipient_verification', string> = {
   get backup_failed() { return tx("Backup başarısız") },
   get backup_stale() { return tx("Backup güncel değil") },
   get agent_offline() { return tx("Agent çevrimdışı") },
@@ -11,7 +11,6 @@ export const eventTypeLabels: Record<EventType | MandatoryEventType | 'test' | '
   get backup_size_anomaly() { return tx("Boyut Anomalisi") },
   get test() { return tx("Test bildirimi") },
   get recipient_verification() { return tx("E-posta onay isteği") },
-  get break_glass_access() { return tx("Acil destek erişimi") },
 }
 export const severityLabels: Record<Severity, string> = { get info() { return tx("Bilgi") }, get warning() { return tx("Uyarı") }, get critical() { return tx("Kritik") } }
 export const kindLabels: Record<ChannelKind, string> = { get email() { return tx("E-posta") }, get webhook() { return tx("Webhook") }, sms: 'SMS' }

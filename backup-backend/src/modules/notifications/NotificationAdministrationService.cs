@@ -115,16 +115,6 @@ public sealed class NotificationAdministrationService(
         return Respond(result);
     }
 
-    /// <summary>The endpoint authorizes an Owner, and persistence rechecks the binding against current Owner membership.</summary>
-    public async Task<NotificationResult<NotificationChannelView>> SetSecurityOwnerAsync(TenantId tenantId, Guid id, bool enabled, NotificationActor actor, CancellationToken cancellationToken)
-    {
-        var now = time.GetUtcNow();
-        var result = await store.MutateChannelAsync(tenantId, id, actor, channel =>
-            channel.SetSecurityOwner(enabled ? actor.UserId : null, now)
-                ? new ChannelChange(NotificationAuditActions.ChannelSecurityOwnerChanged, Details: new Dictionary<string, object?> { ["enabled"] = enabled, ["ownerUserId"] = actor.UserId.Value })
-                : null, cancellationToken);
-        return Respond(result);
-    }
 
     public async Task<NotificationResult<NotificationChannelView>> SetSecretAsync(TenantId tenantId, Guid id, string? value, NotificationActor actor, CancellationToken cancellationToken)
     {
@@ -267,7 +257,7 @@ public sealed class NotificationAdministrationService(
         return new(channel.Id, Lower(channel.Kind), channel.Name, NotificationTargets.Display(channel.Kind, channel.Target), channel.Enabled,
             channel.Kind == NotificationChannelKind.Email ? channel.RecipientVerifiedAt is not null : null, Lower(channel.Authentication),
             channel.HasSecret, channel.SecretUpdatedAt, channel.CreatedAt, channel.UpdatedAt,
-            record.Last is { } last ? new LastDeliveryView(Snake(last.Status), last.At, last.ErrorCode) : null, channel.SecurityOwnerUserId?.Value);
+            record.Last is { } last ? new LastDeliveryView(Snake(last.Status), last.At, last.ErrorCode) : null);
     }
 
     private static NotificationDeliveryView ToView(NotificationDeliveryRecord record)

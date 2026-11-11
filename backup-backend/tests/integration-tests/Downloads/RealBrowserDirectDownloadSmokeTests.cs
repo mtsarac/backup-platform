@@ -38,11 +38,13 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
         {
             app.Use(async (context, nextMiddleware) =>
             {
-                if (context.Request.Path.Value?.EndsWith("/content", StringComparison.Ordinal) == true
-                    && context.Response.ContentType?.Contains("octet-stream", StringComparison.OrdinalIgnoreCase) == true)
+                if (context.Request.Path.Value?.EndsWith("/content", StringComparison.Ordinal) == true)
                 {
                     var original = context.Response.Body;
-                    using var counter = new CountingStream(original, onBytes);
+                    using var counter = new CountingStream(original, count =>
+                    {
+                        if (context.Response.ContentType?.Contains("octet-stream", StringComparison.OrdinalIgnoreCase) == true) onBytes(count);
+                    });
                     context.Response.Body = counter;
                     try { await nextMiddleware(); }
                     finally { context.Response.Body = original; }
@@ -89,14 +91,14 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
         });
         await DownloadAgentApiTests.MakeOnlineAsync(scenario);
 
-        var created = await scenario.CreateSessionAsync();
+        var cookies = new CookieContainer();
+        var browserSession = await scenario.World.SignInAsync(scenario.Backup.Backup.Setup.Account, cookies);
+        var created = await scenario.CreateSessionAsync(browserSession);
         Assert.True(created.GetProperty("direct").GetBoolean());
         var sessionId = created.GetProperty("sessionId").GetGuid();
         var downloadUrl = created.GetProperty("downloadUrl").GetString()!;
-
-        var cookies = new CookieContainer();
-        using var client = AgentWorld.CreateTrustingClient(scenario.World.ServerAddress!, handleCookies: true, cookies);
-        var antiforgeryResponse = await client.GetAsync("/api/auth/antiforgery");
+        using var client = AgentWorld.CreateTrustingClient(scenario.World.ServerAddress!, handleCookies: false);
+        using var antiforgeryResponse = await browserSession.GetAsync("/api/auth/antiforgery");
         var csrf = AgentWorld.ReadJson(antiforgeryResponse).GetProperty("requestToken").GetString()!;
         var cookieHeader = cookies.GetCookieHeader(scenario.World.ServerAddress!);
 
@@ -104,27 +106,42 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
             scenario.Backup.Agent.InstallationId, new AgentStoredCredential(scenario.Backup.Agent.CredentialId, scenario.Backup.Agent.Secret, 1));
         var credStore = new StaticCredentialStore(agentIdentity);
         var directClient = new HttpDownloadTaskClient(client, new AgentBackendEndpoint(scenario.World.ServerAddress!), scenario.Backup.Clock);
-        var worker = new DownloadTaskWorker(directClient, credStore, [new LocalStorageProvider(new LocalStorageOptions(scenario.DirectoryPath))],
+        var worker = new DownloadTaskWorker(directClient, credStore, [new LocalStorageProvider(new LocalStorageOptions(Path.Combine(scenario.DirectoryPath, "tenants", "download-tenant")))],
             new AgentSoftwareInfo("1.0.0", "linux", null, null), scenario.Backup.Clock, NullLogger<DownloadTaskWorker>.Instance);
 
         using var workerCts = new CancellationTokenSource();
         var workerTask = worker.RunAsync(workerCts.Token);
 
-        var jsRunner = Path.Combine(Path.GetTempPath(), $"smoke-runner-{Guid.NewGuid():N}.mjs");
         var script = $$"""
-        import { sha256 } from '@noble/hashes/sha2.js';
-        import { bytesToHex } from '@noble/hashes/utils.js';
-
-        const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] });
+        import { chromium } from 'playwright-core';
+        const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox'] });
+        try {
+        const context = await browser.newContext({ ignoreHTTPSErrors: true });
+        const origin = {{JsonSerializer.Serialize(scenario.World.ServerAddress!.GetLeftPart(UriPartial.Authority))}};
+        const cookieHeader = {{JsonSerializer.Serialize(cookieHeader)}};
+        await context.addCookies(cookieHeader.split('; ').map(pair => {
+          const at = pair.indexOf('=');
+          return { name: pair.slice(0, at), value: pair.slice(at + 1), url: origin };
+        }));
+        const page = await context.newPage();
+        page.on('console', message => { if (message.text() === 'OFFER') console.log('OFFER'); });
+        await page.goto(origin + '/api/auth/antiforgery');
+        const result = await page.evaluate(async ({ url, csrf }) => {
+        const peer = new RTCPeerConnection({ iceServers: [] });
         const channel = peer.createDataChannel('backup-download-v1', { ordered: true });
         channel.binaryType = 'arraybuffer';
         let received = [];
         const done = new Promise((resolve, reject) => {
-          channel.onmessage = event => {
+          channel.onmessage = async event => {
             if (typeof event.data === 'string') {
               if (event.data === 'done') {
+                const length = received.reduce((n, chunk) => n + chunk.length, 0);
+                const bytes = new Uint8Array(length);
+                let offset = 0;
+                for (const chunk of received) { bytes.set(chunk, offset); offset += chunk.length; }
+                const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
                 channel.send('saved');
-                resolve(received);
+                resolve({ length, hash, bytes: Array.from(bytes) });
               } else {
                 channel.send('ready');
               }
@@ -146,23 +163,18 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
           else peer.onicegatheringstatechange = () => { if (peer.iceGatheringState === 'complete') r(); };
         });
 
-        const postRes = await fetch('{{scenario.World.ServerAddress!.AbsoluteUri.TrimEnd('/')}}{{downloadUrl}}', {
+        const postRes = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{csrf}}',
-            'Cookie': '{{cookieHeader}}'
-          },
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
           body: JSON.stringify({ sdp: peer.localDescription.sdp })
         });
         if (!postRes.ok) throw new Error('post offer failed: ' + postRes.status);
+        console.log('OFFER');
 
         let answer = null;
         for (let i = 0; i < 40; i++) {
           await new Promise(r => setTimeout(r, 250));
-          const getRes = await fetch('{{scenario.World.ServerAddress!.AbsoluteUri.TrimEnd('/')}}{{downloadUrl}}', {
-            headers: { 'Cookie': '{{cookieHeader}}' }
-          });
+          const getRes = await fetch(url);
           if (getRes.ok) {
             const body = await getRes.json();
             if (body.sdp) { answer = body.sdp; break; }
@@ -171,21 +183,32 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
         if (!answer) throw new Error('answer timeout');
         await peer.setRemoteDescription({ type: 'answer', sdp: answer });
 
-        const chunks = await done;
+        const result = await done;
         peer.close();
-        const totalLength = chunks.reduce((acc, c) => acc + c.byteLength, 0);
-        const combined = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const c of chunks) { combined.set(c, offset); offset += c.byteLength; }
-        console.log(JSON.stringify({ length: totalLength, hash: bytesToHex(sha256(combined)) }));
+        return result;
+        }, { url: {{JsonSerializer.Serialize(downloadUrl)}}, csrf: {{JsonSerializer.Serialize(csrf)}} });
+        console.log(JSON.stringify(result));
+        } finally { await browser.close(); }
         """;
 
-        await File.WriteAllTextAsync(jsRunner, script);
+        var frontend = new DirectoryInfo(AppContext.BaseDirectory);
+        while (frontend is not null && !Directory.Exists(Path.Combine(frontend.FullName, "backup-frontend")))
+            frontend = frontend.Parent;
+        Assert.NotNull(frontend);
+        using var browserProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo("bun", ["--eval", script])
+            {
+                WorkingDirectory = Path.Combine(frontend.FullName, "backup-frontend"),
+                UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true
+            }
+        };
+        Assert.True(browserProcess.Start());
+        var stderr = browserProcess.StandardError.ReadToEndAsync();
 
         try
         {
-            using var offer = await scenario.Admin.SendAsync(HttpMethod.Post, downloadUrl, new { sdp = DownloadAgentApiTests.Sdp });
-            Assert.Equal(HttpStatusCode.OK, offer.StatusCode);
+            Assert.Equal("OFFER", await browserProcess.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30)));
             var taskClaim = await DownloadAgentApiTests.ClaimAsync(scenario);
             var envelope = new AgentTaskEnvelope
             {
@@ -210,23 +233,27 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
 
             Assert.True(worker.TryPublish(envelope));
 
+            var output = await browserProcess.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(60));
+            await browserProcess.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(browserProcess.ExitCode == 0, await stderr);
+            Assert.NotNull(output);
+            using var result = JsonDocument.Parse(output);
+            Assert.Equal(scenario.Bytes.Length, result.RootElement.GetProperty("length").GetInt32());
+            Assert.Equal(scenario.Checksum, result.RootElement.GetProperty("hash").GetString());
+            Assert.Equal(scenario.Bytes, result.RootElement.GetProperty("bytes").EnumerateArray().Select(value => value.GetByte()).ToArray());
             var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
             DownloadSession? sessionRow = null;
-            while (DateTimeOffset.UtcNow < deadline && (sessionRow = await scenario.Store().GetAsync(scenario.Backup.Backup.Setup.Tenant.Id, sessionId, default))?.State != DownloadState.Preparing)
-            {
+            while (DateTimeOffset.UtcNow < deadline && (sessionRow = await scenario.Store().GetAsync(scenario.Backup.Backup.Setup.Tenant.Id, sessionId, default))?.State != DownloadState.Completed)
                 await Task.Delay(100);
-            }
             Assert.NotNull(sessionRow);
-            Assert.Equal(DownloadState.Preparing, sessionRow.State);
-            Assert.Equal(scenario.Bytes.Length, envelope.Download.SizeBytes);
-            Assert.Equal(scenario.Checksum, envelope.Download.Checksum);
-
-            // Key verification assertion: Zero artifact payload bytes passed through backend Kestrel
+            Assert.Equal(DownloadState.Completed, sessionRow.State);
+            using var status = await browserSession.GetAsync(scenario.ArtifactPath + $"/downloads/{sessionId}");
+            Assert.Equal("Completed", AgentWorld.ReadJson(status).GetProperty("state").GetString());
             Assert.Equal(0, backendPayloadBytes);
         }
         finally
         {
-            File.Delete(jsRunner);
+            if (!browserProcess.HasExited) browserProcess.Kill(entireProcessTree: true);
             await workerCts.CancelAsync();
             try { await workerTask; } catch (OperationCanceledException) { }
         }
