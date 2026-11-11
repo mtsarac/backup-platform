@@ -3,13 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/features/artifact-encryption/api'
 import { keyId, makeTenantEncryption } from '@/features/artifact-encryption/test-fixtures'
 import type { MembershipRole } from '@/features/platform/types'
-import { paged, renderPlatform } from '@/features/platform/test-utils'
+import { renderPlatform } from '@/features/platform/test-utils'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { EncryptionPage } from './encryption-page'
-import { formatDateTime } from '@/lib/format'
 
 vi.mock('@/features/artifact-encryption/api')
-const event = { id: 'event-a', artifactId: '11111111-1111-1111-1111-111111111111', status: 'Consumed' as const, reason: 'Incident 4711', createdAt: '2026-10-19T10:00:00Z', expiresAt: '2026-10-19T11:00:00Z', requestedByName: 'Ada Admin', decidedByName: 'Bo Admin', decidedAt: '2026-10-19T10:10:00Z', consumedAt: '2026-10-19T10:20:00Z' }
 function mount(role: MembershipRole = 'Owner') {
   const tenantId = 'tenant-a'
   return renderPlatform(<TenantContext.Provider value={{ tenantId, tenant: { tenantId, name: 'Acme', role }, canAdmin: role === 'Owner' || role === 'Admin', canOperate: role !== 'Viewer', switchTenant: vi.fn() }}><EncryptionPage /></TenantContext.Provider>, { path: '/tenants/tenant-a/encryption' })
@@ -17,7 +15,6 @@ function mount(role: MembershipRole = 'Owner') {
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.getTenantEncryption).mockResolvedValue(makeTenantEncryption())
-  vi.mocked(api.getTenantBreakGlass).mockResolvedValue(paged([event]))
 })
 
 describe('tenant encryption page', () => {
@@ -26,29 +23,15 @@ describe('tenant encryption page', () => {
     expect(screen.getByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(api.getTenantEncryption).not.toHaveBeenCalled()
-    expect(api.getTenantBreakGlass).not.toHaveBeenCalled()
   })
 
-  it.each(['Owner', 'Admin'] as const)('shows protection and emergency access with copyable collapsed key details for %s', async (role) => {
+  it.each(['Owner', 'Admin'] as const)('shows protection with copyable collapsed key details for %s', async (role) => {
     mount(role)
-    expect(await screen.findByText('Incident 4711')).toBeInTheDocument()
-    expect(screen.getByText('Ada Admin')).toBeInTheDocument()
-    expect(screen.getByText(/Bo Admin/)).toBeInTheDocument()
-    expect(screen.getByText('Kurtarma anahtarınız eklenmemiş')).toBeInTheDocument()
+    expect(await screen.findByText('Kurtarma anahtarınız eklenmemiş')).toBeInTheDocument()
     expect(screen.getByText('Şifreli yedekleriniz korunuyor')).toBeInTheDocument()
     const details = screen.getByText(keyId).closest('details')!
     expect(details).not.toHaveAttribute('open')
     expect(within(details).getByRole('button', { name: 'Kopyala: Yedekleme anahtarı kimliği', hidden: true })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Yedek dosyasını görüntüle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/11111111-1111-1111-1111-111111111111')
-    expect(screen.getByRole('list', { name: 'Acil destek erişimi geçmişi' })).toBeInTheDocument()
-    const history = screen.getByRole('list', { name: 'Acil destek erişimi geçmişi' })
-    for (const at of [event.createdAt, event.consumedAt]) {
-      const time = within(history).getByLabelText(formatDateTime(at))
-      expect(time).toHaveAttribute('dateTime', at)
-      expect(time.closest('details')).toBeNull()
-    }
-    expect(within(history).queryByText('Açılış')).not.toBeInTheDocument()
-    expect(within(history).queryByText('Kullanılma zamanı')).not.toBeInTheDocument()
   })
 
   it('warns when the platform has no recovery key configured', async () => {

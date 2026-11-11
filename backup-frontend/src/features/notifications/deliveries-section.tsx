@@ -19,10 +19,10 @@ import { StatusPill } from '@/components/data/status-pill'
 import { statusLabel } from '@/lib/status'
 import { Select } from '@/components/ui/text-input'
 
-const eventFilters = () => [...visibleEventTypes(), 'break_glass_access', 'test'] as const
+const eventFilters = () => [...visibleEventTypes(), 'test'] as const
 
 function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
-  const event = eventTypeLabels[delivery.eventType]
+  const event = eventTypeLabels[delivery.eventType] ?? delivery.eventType
   return <li><Card as="article" aria-label={tx('{0} · {1}', { '0': event, '1': delivery.subjectName })} className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <h3 className="min-w-0 break-words font-medium text-text-heading">{event} · {delivery.subjectName}</h3>

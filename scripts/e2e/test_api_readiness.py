@@ -163,7 +163,7 @@ class AcceptanceReadinessHookTests(unittest.TestCase):
         }
         for name, function in [
             ("mtls", "mtls"), ("central", "central"),
-            ("breakglass", "break_glass"), ("webrtc", "webrtc_direct"),
+            ("webrtc", "webrtc_direct"),
             ("selfupdate", "self_update"),
         ]:
             fn = Mock()
@@ -195,7 +195,7 @@ class AcceptanceReadinessHookTests(unittest.TestCase):
         }
         for name, function in [
             ("mtls", "mtls"), ("central", "central"),
-            ("breakglass", "break_glass"), ("webrtc", "webrtc_direct"),
+            ("webrtc", "webrtc_direct"),
             ("selfupdate", "self_update"),
         ]:
             fn = Mock()

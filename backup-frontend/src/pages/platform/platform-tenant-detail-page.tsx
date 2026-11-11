@@ -31,12 +31,9 @@ import { errorMessage, platformOnlyMessage } from '@/lib/api/failure-messages'
 import { WrapKeysSection } from '@/features/artifact-encryption/wrap-keys-section'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
-import { Pagination } from '@/components/data/pagination'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { useBreakGlassRequests, useTenantEncryption } from '@/features/artifact-encryption/hooks'
-import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
+import { useTenantEncryption } from '@/features/artifact-encryption/hooks'
 import { TenantKeysSection } from '@/features/artifact-encryption/tenant-recovery-key-section'
-import { LIST_PAGE_SIZE } from '@/features/platform/use-list-params'
 import { QueryState } from '@/components/data/query-state'
 
 const tabs = [
@@ -121,19 +118,6 @@ function RecoveryKeys({ tenant }: { tenant: PlatformTenantDetail }) {
   </QueryState>
 }
 
-function EmergencyAccessHistory({ tenantId }: { tenantId: string }) {
-  useLanguage()
-  const { page, update } = useListParams('breakGlassPage')
-  const query = useBreakGlassRequests({ tenantId, page, pageSize: LIST_PAGE_SIZE })
-  return <Section title={tx('Acil destek erişimi geçmişi')}>
-    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
-      {query.data && <div className="space-y-4">
-        <BreakGlassTable rows={query.data.items} />
-        {query.data.totalCount > 0 && <Pagination label={tx('Acil destek erişimi sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ breakGlassPage: next })} />}
-      </div>}
-    </QueryState>
-  </Section>
-}
 
 function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
   useLanguage()
@@ -141,7 +125,7 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
   const requested = get('tab')
   const tab: TabValue = tabs.find((item) => item.value === (requested === legacyStorageTab ? 'storage' : requested))?.value ?? 'summary'
   return <div className="space-y-6">
-    <Tabs label={tx("Tenant bölümleri")} idPrefix="tenant" value={tab} items={tabs} onChange={(value) => update({ tab: value, memberPage: '', subPage: '', breakGlassPage: '' })} />
+    <Tabs label={tx("Tenant bölümleri")} idPrefix="tenant" value={tab} items={tabs} onChange={(value) => update({ tab: value, memberPage: '', subPage: '' })} />
     <div role="tabpanel" id={`tenant-panel-${tab}`} aria-labelledby={`tenant-tab-${tab}`} className="space-y-6">
       {tab === 'summary' && <>
         <div className="grid gap-4 sm:grid-cols-3"><KpiCard label={tx("Kişiler")} value={tenant.memberCount} /><KpiCard label={tx("Yedekleme bilgisayarları")} value={tenant.agents.total} /><KpiCard label={tx("Etkin yedekleme işleri")} value={tenant.enabledBackupJobs} /></div>
@@ -164,7 +148,6 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
         {isFeatureEnabled('supportSessions') && <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
         <WrapKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <RecoveryKeys tenant={tenant} />
-        <EmergencyAccessHistory tenantId={tenant.tenantId} />
       </>}
     </div>
   </div>

@@ -931,7 +931,7 @@ def group_repair(c, only):
 GROUPS.append(group_repair)
 
 
-# ---- 5. encryption, recovery, break-glass, download ---------------------------------------------------------------------------------------
+# ---- 5. encryption, recovery, download ---------------------------------------------------------------------------------------
 import os, shutil, tempfile
 import matrix
 
@@ -1082,29 +1082,6 @@ def wrap_keys(t):
     return out
 
 
-def break_glass(t):
-    adm = api.login(); base = f"{api.BASE}/api/platform/artifact-break-glass"; art_id = KEEP.get("rec_art") or KEEP.get("file_enc_fedora") or next(a["id"] for a in all_artifacts(t) if a.get("encryption") and a["jobName"].startswith("fp "))
-    plain = KEEP.get("plain_art") or next(a["id"] for a in all_artifacts(t) if not a.get("encryption") and a["jobName"].startswith("fp ") and a["state"] == "Available")
-    out = {}
-    r = adm.post(base, json={"tenantId": t.id, "artifactId": art_id, "reason": ""}); out["emptyReason"] = r.status_code; assert r.status_code == 400, f"empty reason accepted: {r.status_code} {r.text[:150]}"
-    r = adm.post(base, json={"tenantId": t.id, "artifactId": plain, "reason": "e2e test plain artifact"}); out["plainArtifact"] = r.status_code
-    assert r.status_code == 409 and "not_encrypted" in r.text, f"break-glass on a plain artifact: {r.status_code} {r.text[:150]}"
-    r = adm.post(base, json={"tenantId": t.id, "artifactId": art_id, "reason": "e2e break-glass test, ticket E2E-1", "ttlMinutes": 5}); assert r.status_code == 201, f"open: {r.status_code} {r.text[:300]}"
-    req = r.json(); rid = req.get("id") or req.get("requestId"); out["opened"] = {k: req.get(k) for k in ("status", "reason", "ttlMinutes", "expiresAt") if k in req}
-    assert "wrapped" not in json.dumps(req).lower() and "privateKey" not in json.dumps(req)
-    ap = adm.post(f"{base}/{rid}/approve"); out["selfApprove"] = ap.status_code
-    assert ap.status_code == 403, f"self-approval not refused: {ap.status_code} {ap.text[:150]}"
-    dl = adm.post(f"{base}/{rid}/download", json={}); out["downloadBeforeApproval"] = dl.status_code
-    assert dl.status_code in (403, 409), f"download before approval: {dl.status_code} {dl.text[:150]}"
-    assert adm.get(f"{base}/{rid}").status_code == 200 and any((i.get("id") or i.get("requestId")) == rid for i in adm.get(base).json()["items"])
-    tv = t.call("GET", "/artifact-break-glass"); assert any((i.get("id") or i.get("requestId")) == rid for i in tv["items"]), "tenant owner does not see the break-glass request"
-    out["tenantViewKeys"] = sorted(tv["items"][0].keys())[:12]
-    dn = adm.post(f"{base}/{rid}/deny", json={"reason": "e2e deny"}); out["selfDeny"] = (dn.status_code, dn.text[:60])
-    assert dn.status_code == 403, f"requester could deny/withdraw its own request: {dn.status_code} {dn.text[:150]}"
-    dn2 = adm.post(f"{base}/{rid}/deny", json={}); out["denyWithoutReason"] = dn2.status_code
-    assert t.s.post(base, json={"tenantId": t.id, "artifactId": art_id, "reason": "x"}).status_code in (401, 403), "tenant user could open break-glass"
-    out["approvalByDifferentAdmin"] = "not testable: only one platform administrator exists and the API cannot create another"
-    return out
 
 
 def download_plain_s3(t, ag):
@@ -1177,7 +1154,6 @@ def group_enc(c, only):
               ("download/s3-encrypted-ciphertext-and-decrypted", lambda: download_encrypted_s3(t, ag)),
               ("download/sftp-replica", lambda: download_sftp(t, ag, fed, fa)),
               ("download/local-direct-signalling", lambda: download_local_direct(t, ag, fa)),
-              ("encryption/break-glass-api", lambda: break_glass(t)),
               ("encryption/wrap-key-rotation-and-retirement", lambda: wrap_keys(t))]
     run_all(only, items)
 

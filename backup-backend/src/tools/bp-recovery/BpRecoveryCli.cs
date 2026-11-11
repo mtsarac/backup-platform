@@ -6,7 +6,7 @@ namespace BackupPlatform.Tools;
 /// <summary>
 /// Recovery Key (RK) ceremony tool. Runs offline: <c>generate</c> creates the RSA keypair and writes only the public PEM plus one file per
 /// Shamir share (the private key is never written in one piece); <c>verify</c> proves a set of shares against the public PEM without
-/// materialising the key on disk; <c>combine</c> writes the private PEM for a manual break-glass session and must be used on an isolated machine.
+/// materialising the key on disk; <c>combine</c> writes the private PEM for manual recovery and must be used on an isolated machine.
 /// </summary>
 internal static class BpRecoveryCli
 {

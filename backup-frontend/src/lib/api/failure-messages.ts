@@ -153,19 +153,13 @@ const messages: Record<string, string> = {
   get scan_superseded() { return tx("Tarama sonucu daha yeni bir tarama tarafından değiştirildi. Sayfayı yenileyin.") },
   get transport_not_configured() { return tx("Bu kanal türü için platform aktarımı yapılandırılmamış. Platform yöneticisine başvurun.") },
   get EncryptionRequired() { return tx("İş şifreleme gerektiriyor ama yedek dosyası şifrelenmeden geldi; dosya yayımlanmadı.") },
-  get artifact_not_encrypted() { return tx("Bu yedek dosyası şifreli değil; şifre çözme veya acil destek erişimi uygulanamaz.") },
+  get artifact_not_encrypted() { return tx("Bu yedek dosyası şifreli değil; şifre çözme uygulanamaz.") },
   get key_unavailable() { return tx("Şifreleme anahtarı kullanılamıyor (emekli veya eksik). Dosya yalnızca Platform kurtarma anahtarı ile çevrimdışı çözülebilir.") },
-  get decrypt_not_permitted() { return tx("Destek oturumu üzerinden şifre çözülemez. Gerekirse acil destek erişimi isteği açın.") },
+  get decrypt_not_permitted() { return tx("Destek oturumu üzerinden şifre çözülemez.") },
   get artifact_not_found() { return tx("Backup bulunamadı veya bu tenant'a ait değil.") },
   get key_not_found() { return tx("Anahtar sürümü bulunamadı.") },
   get cannot_retire_active_key() { return tx("Etkin anahtar emekli edilemez. Önce anahtarı döndürün.") },
   get already_retired() { return tx("Anahtar zaten emekli edilmiş.") },
-  get self_approval_forbidden() { return tx("İsteği açan yönetici kendi isteğini onaylayamaz veya reddedemez; farklı bir PlatformAdmin gerekir.") },
-  get request_not_pending() { return tx("İstek artık onay beklemiyor; zaten karara bağlanmış veya kullanılmış.") },
-  get request_expired() { return tx("İsteğin süresi doldu. Yeni bir istek açın.") },
-  get request_not_approved() { return tx("İstek onaylanmadığı için indirilemez.") },
-  get request_consumed() { return tx("Onaylanan istek zaten kullanıldı. Tek kullanımlıktır; yeni bir istek açın.") },
-  get not_requester() { return tx("Yalnızca isteği açan yönetici indirebilir.") },
   get not_a_public_key() { return tx("Geçerli bir genel anahtar (PUBLIC KEY, SubjectPublicKeyInfo PEM) girin.") },
   get private_key_rejected() { return tx("Özel anahtar kabul edilmez. Yalnızca genel anahtarı girin; özel anahtar sizde kalmalıdır.") },
   get not_rsa() { return tx("Yalnızca RSA genel anahtarları desteklenir.") },
@@ -199,7 +193,7 @@ const scopedMessages: Record<ErrorScope, Record<string, string>> = {
   },
 }
 // Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true, self_approval_forbidden: true, not_requester: true, decrypt_not_permitted: true, key_not_found: true, artifact_not_found: true }
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true, decrypt_not_permitted: true, key_not_found: true, artifact_not_found: true }
 const lookup = (table: Record<string, string>, code: string) => Object.hasOwn(table, code) ? table[code] : undefined
 
 export function failureMessage(code?: string | null, scope?: ErrorScope): string {

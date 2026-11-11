@@ -67,7 +67,7 @@ const sampleArtifact = (destState = 'Failed', hasVerifiedReplica = true): Backup
   createdAt: '2026-10-11T12:00:00Z',
   state: 'Available',
   acceptedAt: '2026-10-11T12:00:00Z',
-  retentionExpiresAt: '2026-11-11T12:00:00Z',
+  retentionExpiresAt: new Date(Date.now() + 86400000).toISOString(),
   retentionPinnedAt: null,
   deleteAfter: null,
   deleteReason: null,

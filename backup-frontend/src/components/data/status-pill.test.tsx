@@ -27,12 +27,6 @@ describe('StatusPill', () => {
     expect(screen.getByText('Sırada bekliyor').closest('span')).toHaveClass('text-text-muted')
   })
 
-  it('keeps the same status word distinct per domain', () => {
-    render(<><StatusPill domain="subscription" status="Expired" /><StatusPill domain="breakGlass" status="Expired" /></>)
-    const [subscription, breakGlass] = screen.getAllByText('Süresi doldu').map(node => node.closest('span')!)
-    expect(subscription).toHaveClass('text-error')
-    expect(breakGlass).not.toHaveClass('text-error')
-  })
 
   it('shows an unknown status as neutral text, never hiding it', () => {
     render(<StatusPill status="SomethingNew" />)

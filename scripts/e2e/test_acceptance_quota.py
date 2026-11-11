@@ -1,9 +1,6 @@
-import json
 import runpy
 import sys
-import tempfile
 import unittest
-import uuid
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
@@ -100,29 +97,6 @@ class ConcurrentAdmissionCleanup(unittest.TestCase):
                 override.assert_called_once_with(tenant, 'none')
 
 
-class BreakGlassAdmin(unittest.TestCase):
-    def test_stale_admin_is_recreated_before_login(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            state = root / 'docs/test-environment/state.json'
-            state.parent.mkdir(parents=True)
-            state.write_text(json.dumps({'admin2': {'userId': str(uuid.uuid4()), 'login': 'old', 'password': 'old'}}))
-            uid = str(uuid.uuid4())
-            response = SimpleNamespace(status_code=201, json=lambda: {'id': uid})
-            session = SimpleNamespace(post=Mock(return_value=response))
-            login = Mock(side_effect=[session, 'new-session'])
-            api = module('api', ROOT=root, BASE='https://example.invalid', login=login)
-            modules = {'api': api, 'lib': module('lib', ST={}, scenario=scenario), 'flows': module('flows')}
-            with patch.dict(sys.modules, modules):
-                namespace = runpy.run_path(str(HERE / 'breakglass.py'))
-            result = SimpleNamespace(returncode=0, stdout='f\n', stderr='')
-            with patch.object(namespace['subprocess'], 'run', return_value=result) as run:
-                self.assertEqual(namespace['second_admin'](), 'new-session')
-            admin = json.loads(state.read_text())['admin2']
-            self.assertEqual(admin['userId'], uid)
-            self.assertNotEqual(admin['login'], 'old')
-            login.assert_called_with(admin['login'], admin['password'])
-            self.assertEqual(run.call_count, 2)
 
 
 class AcceptanceRouting(unittest.TestCase):
@@ -136,7 +110,7 @@ class AcceptanceRouting(unittest.TestCase):
                    'matrix': module('matrix', main=matrix_main),
                    'large': module('large', large_cell=large)}
         for name, function in [('mtls', 'mtls'), ('central', 'central'),
-                               ('breakglass', 'break_glass'), ('webrtc', 'webrtc_direct'),
+                               ('webrtc', 'webrtc_direct'),
                                ('selfupdate', 'self_update')]:
             fn = Mock()
             fn.scenario = 'other/' + name
@@ -169,7 +143,7 @@ class AcceptanceRouting(unittest.TestCase):
                    'matrix': module('matrix', main=matrix_main),
                    'large': module('large', large_cell=Mock(scenario='matrix/large'))}
         for name, function in [('mtls', 'mtls'), ('central', 'central'),
-                               ('breakglass', 'break_glass'), ('webrtc', 'webrtc_direct'),
+                               ('webrtc', 'webrtc_direct'),
                                ('selfupdate', 'self_update')]:
             fn = Mock()
             fn.scenario = 'other/' + name

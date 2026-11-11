@@ -1,7 +1,7 @@
-"""The acceptance scenario in one command: agent enrollment, a denied role, agent mTLS, Central storage, break-glass approve + decrypt, agent-direct WebRTC download bytes, agent self-update, the 27-cell matrix and the large cell.
+"""The acceptance scenario in one command: agent enrollment, a denied role, agent mTLS, Central storage, agent-direct WebRTC download bytes, agent self-update, the 27-cell matrix and the large cell.
 Every check is one PASS/FAIL row in results.jsonl; nothing is retried. Run: python3 acceptance.py [filter]"""
 import secrets, sys, uuid, requests
-import api, lib, matrix, mtls, central, breakglass, webrtc, selfupdate, large
+import api, lib, matrix, mtls, central, webrtc, selfupdate, large
 from lib import scenario
 
 BASE = api.BASE
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     t = lib.Tenant("a")
     for fn in (enrollment, role_denied):
         if not only or only in fn.scenario: fn()
-    for fn in (mtls.mtls, central.central, breakglass.break_glass, webrtc.webrtc_direct, selfupdate.self_update):
+    for fn in (mtls.mtls, central.central, webrtc.webrtc_direct, selfupdate.self_update):
         if not only or only in fn.scenario: fn(t)
     matrix.main(only)
     if not only or only in large.large_cell.scenario: large.large_cell()

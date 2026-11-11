@@ -4,6 +4,8 @@
     <IsPackable>false</IsPackable>
     <!-- Every API host compiles dynamic code; PGO instrumentation of it costs far more CPU than the tiering it buys in short-lived test hosts. -->
     <TieredPGO>false</TieredPGO>
+    <AgentPlatform Condition="'$(AgentPlatform)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">Windows</AgentPlatform>
+    <TargetFramework Condition="'$(AgentPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,6 +32,7 @@
     <!-- Aliased: the Agent.Core namespace would otherwise shadow the Agent domain entity in this project. -->
     <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" Aliases="AgentCore" />
     <ProjectReference Include="../../src/agent/transport/BackupPlatform.Agent.Transport.csproj" Aliases="AgentTransport" />
+    <ProjectReference Include="../../src/hosts/agent/BackupPlatform.Agent.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
     <ProjectReference Include="../../src/providers/backup/abstractions/BackupPlatform.BackupProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
@@ -42,5 +45,13 @@
     <ProjectReference Include="../../src/providers/storage/s3/BackupPlatform.StorageProviders.S3.csproj" />
     <ProjectReference Include="../../src/providers/storage/smb/BackupPlatform.StorageProviders.Smb.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyDirectDownloadHelper" AfterTargets="Build">
+    <PropertyGroup>
+      <DirectHelperName Condition="'$(AgentPlatform)' != 'Windows'">backup-direct-download</DirectHelperName>
+      <DirectHelperName Condition="'$(AgentPlatform)' == 'Windows'">backup-direct-download.exe</DirectHelperName>
+    </PropertyGroup>
+    <Copy SourceFiles="../../src/hosts/agent/bin/$(Configuration)/$(TargetFramework)/$(DirectHelperName)" DestinationFolder="$(OutDir)" Condition="Exists('../../src/hosts/agent/bin/$(Configuration)/$(TargetFramework)/$(DirectHelperName)')" />
+  </Target>
 
 </Project>

@@ -19,7 +19,6 @@ public static class NotificationAuditActions
     public const string ChannelVerificationRequested = "notification_channel.verification_requested";
     public const string ChannelRecipientConfirmed = "notification_channel.recipient_confirmed";
     public const string ChannelRecipientUnsubscribed = "notification_channel.recipient_unsubscribed";
-    public const string ChannelSecurityOwnerChanged = "notification_channel.security_owner_changed";
     public const string PolicyUpdated = "notification_policy.updated";
     public const string TransportUpdated = "notification_transport.updated";
     public const string TransportSecretRotated = "notification_transport.secret_rotated";
@@ -175,7 +174,7 @@ public sealed record DeliveryResult(NotificationDeliveryStatus Status, string? C
 
 public sealed record NotificationChannelView(
     Guid Id, string Kind, string Name, string TargetDisplay, bool Enabled, bool? RecipientVerified, string Authentication, bool HasSecret, DateTimeOffset? SecretUpdatedAt,
-    DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, LastDeliveryView? LastDelivery, Guid? SecurityOwnerUserId = null);
+    DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, LastDeliveryView? LastDelivery);
 
 public sealed record LastDeliveryView(string Status, DateTimeOffset At, string? ErrorCode);
 

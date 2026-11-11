@@ -46,7 +46,6 @@ beforeEach(() => {
   vi.mocked(connectionApi.getPlatformProviders).mockResolvedValue({ items: catalog })
   vi.mocked(encryptionApi.getWrapKeys).mockResolvedValue({ items: [] })
   vi.mocked(encryptionApi.getTenantEncryption).mockRejectedValue(new ApiError(403))
-  vi.mocked(encryptionApi.getBreakGlassRequests).mockResolvedValue(paged([]))
   vi.mocked(storageApi.getPlatformTenantQuota).mockRejectedValue(new ApiError(503))
 })
 
@@ -83,7 +82,6 @@ describe('platform tenant detail', () => {
   it('exposes six URL-addressable sections and loads only the active section', async () => {
     vi.mocked(encryptionApi.getWrapKeys).mockResolvedValue({ items: [] })
     vi.mocked(encryptionApi.getTenantEncryption).mockRejectedValue(new ApiError(403))
-    vi.mocked(encryptionApi.getBreakGlassRequests).mockResolvedValue(paged([]))
     mount()
     await screen.findByRole('heading', { name: tenant.name })
     expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Özet', 'Kişiler', 'Abonelik', 'Depolama', 'Yedekleme bilgisayarları', 'Güvenlik'])
@@ -94,7 +92,6 @@ describe('platform tenant detail', () => {
     expect(supportApi.getSessions).not.toHaveBeenCalled()
     expect(encryptionApi.getWrapKeys).not.toHaveBeenCalled()
     expect(encryptionApi.getTenantEncryption).not.toHaveBeenCalled()
-    expect(encryptionApi.getBreakGlassRequests).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
     expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
@@ -122,7 +119,6 @@ describe('platform tenant detail', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('?tab=security')
     await waitFor(() => expect(encryptionApi.getTenantEncryption).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal)))
     expect(encryptionApi.getWrapKeys).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
-    expect(encryptionApi.getBreakGlassRequests).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 25 }, expect.any(AbortSignal))
     expect(await screen.findByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
     expect(screen.getByText(/yalnızca bu çalışma alanının Owner veya Admin üyeleri/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Anahtarı kaydet' })).not.toBeInTheDocument()

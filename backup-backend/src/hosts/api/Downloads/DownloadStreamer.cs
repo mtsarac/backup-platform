@@ -39,13 +39,7 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
             return;
         }
         long transferred = 0;
-        using var expiry = new CancellationTokenSource();
-        if (claimed.BreakGlassRequestId is not null)
-        {
-            var remaining = claimed.ExpiresAt - time.GetUtcNow();
-            expiry.CancelAfter(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
-        }
-        using var transfer = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, expiry.Token);
+        using var transfer = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         using var renewStop = new CancellationTokenSource();
         var renewal = RenewAsync(session.Id, owner, () => Interlocked.Read(ref transferred), transfer, renewStop.Token);
         var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);

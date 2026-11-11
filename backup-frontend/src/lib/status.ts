@@ -134,13 +134,6 @@ const dictionary = {
     DecryptOnly: { level: 'info', get label() { return tx("Yalnızca çözme") } },
     Retired: { level: 'neutral', get label() { return tx("Emekli") } },
   },
-  breakGlass: {
-    Pending: { level: 'attention', get label() { return tx("Onay bekliyor") } },
-    Approved: { level: 'info', get label() { return tx("Onaylandı") } },
-    Denied: { level: 'urgent', get label() { return tx("Reddedildi") } },
-    Consumed: { level: 'safe', get label() { return tx("Kullanıldı") } },
-    Expired: { level: 'neutral', get label() { return tx("Süresi doldu") } },
-  },
   encryptionPolicy: {
     Off: { level: 'neutral', get label() { return tx("Kapalı") } },
     Optional: { level: 'safe', get label() { return tx("İsteğe bağlı") } },

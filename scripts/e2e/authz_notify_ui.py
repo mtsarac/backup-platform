@@ -122,7 +122,7 @@ def probes():
 LISTS = ["/agents", "/agents/connectivity-summary", "/backup-jobs", "/backup-runs", "/backup-artifacts", "/restores", "/storage-connections", "/storage-quota",
          "/notifications/channels", "/notifications/deliveries", "/notifications/policy", "/agent-enrollment-tokens", "/agent-enrollment", "/dashboard",
          "/observability/health-summary", "/reports/backups", "/discovery/instances", "/discovery/agents", "/bandwidth-profiles", "/upload-bandwidth",
-         "/artifact-break-glass", "/encryption", "/context"]
+         "/encryption", "/context"]
 
 
 def leaks(text):
@@ -212,7 +212,7 @@ def role_matrix():
         ("notifications", "POST", f"/notifications/channels/{g}/owner-security-recipient", {"enabled": False}, OWN),
         ("quota/bandwidth", "GET", "/storage-quota", None, V), ("quota/bandwidth", "GET", "/upload-bandwidth", None, V), ("quota/bandwidth", "PUT", "/upload-bandwidth/tenant", {}, A),
         ("quota/bandwidth", "POST", "/bandwidth-profiles", {}, A), ("quota/bandwidth", "GET", "/bandwidth-profiles", None, V),
-        ("encryption", "GET", "/encryption", None, A), ("encryption", "PUT", "/encryption/recovery-key", {}, A), ("encryption", "GET", "/artifact-break-glass", None, A),
+        ("encryption", "GET", "/encryption", None, A), ("encryption", "PUT", "/encryption/recovery-key", {}, A),
         ("reports", "GET", "/reports/backups", None, V), ("reports", "GET", "/dashboard", None, V), ("reports", "GET", "/context", None, V),
     ]
 
@@ -222,7 +222,7 @@ PLATFORM_ROUTES = [("GET", "/api/platform/users"), ("POST", "/api/platform/users
                    ("GET", "/api/platform/audit"), ("GET", "/api/platform/audit/integrity"), ("GET", "/api/platform/summary"), ("GET", "/api/platform/agents"),
                    ("GET", "/api/platform/plans"), ("PUT", f"/api/platform/tenants/{TA}/agent-enrollment"), ("GET", "/api/platform/notification-transports"),
                    ("PUT", "/api/platform/notification-transports/email"), ("GET", "/api/platform/storage-connections"), ("GET", "/api/platform/quota-policies"),
-                   ("GET", f"/api/platform/tenants/{TA}/quota"), ("GET", f"/api/platform/tenants/{TA}/wrap-keys"), ("GET", "/api/platform/artifact-break-glass"),
+                   ("GET", f"/api/platform/tenants/{TA}/quota"), ("GET", f"/api/platform/tenants/{TA}/wrap-keys"),
                    ("POST", "/api/platform/agent-updates"), ("PUT", f"/api/platform/tenants/{TA}/subscription"),
                    ("GET", "/api/platform/agent-settings"), ("PUT", "/api/platform/agent-settings")]
 

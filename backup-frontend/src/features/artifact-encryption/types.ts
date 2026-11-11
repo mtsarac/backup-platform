@@ -1,5 +1,3 @@
-import type { PageParams } from '@/features/platform/types'
-
 export const encryptionPolicies = ['Off', 'Optional', 'Required'] as const
 export type EncryptionPolicy = (typeof encryptionPolicies)[number]
 
@@ -23,25 +21,4 @@ export interface TenantEncryption {
   platformRecovery: { configured: boolean; keyId: string | null; keyVersion: number | null }
   tenantRecovery: { keyId: string; keyVersion: number; createdAt: string } | null
   wrapKey: { version: number; keyId: string; state: WrapKeyState } | null
-}
-
-export type BreakGlassStatus = 'Pending' | 'Approved' | 'Denied' | 'Consumed' | 'Expired'
-export const breakGlassStatuses: readonly BreakGlassStatus[] = ['Pending', 'Approved', 'Denied', 'Consumed', 'Expired']
-/** What the request dialog may pick: an encrypted, available backup named by database and job only. */
-export interface BreakGlassArtifact { id: string; databaseName: string | null; jobName: string | null; createdAt: string }
-export interface BreakGlassRequest {
-  id: string; tenantId: string; tenantName: string | null; artifactId: string
-  status: BreakGlassStatus
-  reason: string; createdAt: string; expiresAt: string; serverNow: string
-  requestedBy: string; requestedByName: string | null
-  decidedBy: string | null; decidedByName: string | null; decidedAt: string | null; decisionReason: string | null
-  consumedAt: string | null; downloadId: string | null
-  isRequester: boolean; canApprove: boolean; canDownload: boolean
-}
-export interface BreakGlassFilters extends PageParams { tenantId?: string; status?: BreakGlassStatus | ''; mine?: boolean }
-export interface CreateBreakGlassInput { tenantId: string; artifactId: string; reason: string; ttlMinutes?: number }
-
-export interface TenantBreakGlassEvent {
-  id: string; artifactId: string; status: BreakGlassStatus; reason: string; createdAt: string; expiresAt: string
-  requestedByName: string | null; decidedByName: string | null; decidedAt: string | null; consumedAt: string | null
 }

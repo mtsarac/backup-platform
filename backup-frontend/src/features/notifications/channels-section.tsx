@@ -8,17 +8,15 @@ import { Section, Fact, Facts } from '@/components/ui/section'
 import { Card } from '@/components/ui/card'
 import { QueryState } from '@/components/data/query-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { useAuth } from '@/features/auth/use-auth'
-import { useTenant } from '@/features/tenancy/use-tenant'
 import { AddChannelDialog, ChannelSecretDialog, EditChannelDialog } from './channel-dialogs'
-import { useClearChannelSecret, useDeleteChannel, useNotificationChannels, useSetChannelEnabled, useSetOwnerSecurityRecipient, useTestChannel } from './hooks'
+import { useClearChannelSecret, useDeleteChannel, useNotificationChannels, useSetChannelEnabled, useTestChannel } from './hooks'
 import { authenticationLabels, kindLabels } from './labels'
 import type { NotificationChannel } from './types'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 
-type Dialog = 'edit' | 'secret' | 'clearSecret' | 'delete' | 'ownerSecurity'
+type Dialog = 'edit' | 'secret' | 'clearSecret' | 'delete'
 
 function ChannelCard({ channel }: { channel: NotificationChannel }) {
   useLanguage()
@@ -27,11 +25,6 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
   const test = useTestChannel()
   const clearSecret = useClearChannelSecret()
   const remove = useDeleteChannel()
-  const securityRecipient = useSetOwnerSecurityRecipient()
-  const { user } = useAuth()
-  const { tenant } = useTenant()
-  const owner = tenant.role === 'Owner' || tenant.membershipRole === 'Owner'
-  const boundToMe = Boolean(user && channel.securityOwnerUserId === user.userId)
   const close = () => setDialog(null)
   const label = (text: string) => tx("{0} kanalı: {1}", { "0": channel.name, "1": text })
   const usesSecret = channel.kind === 'webhook' && channel.authentication !== 'none'
@@ -59,12 +52,8 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       ...(channel.kind === 'webhook' ? [{ label: tx('Kimlik doğrulama'), value: authenticationLabels[channel.authentication] }] : []),
       ...(usesSecret ? [{ label: tx('Gizli anahtar'), value: channel.hasSecret ? tx('Secret kayıtlı') : tx('Secret ayarlanmadı') }] : []),
     ]}>
-      {channel.kind === 'email' && <p className="text-sm text-text-muted">{channel.securityOwnerUserId ? tx('Bu adres bir tenant sahibinin zorunlu güvenlik bildirimlerini alır. Hedef adres değişirse kayıt kaldırılır.') : tx('Acil destek erişimi bildirimi için tenant sahibi doğrulanmış kendi e-posta adresini güvenlik alıcısı olarak kaydetmelidir. Genel bildirim politikası bu bildirimleri kapatmaz.')}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" aria-label={label(channel.enabled ? tx('devre dışı bırak') : tx('etkinleştir'))} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: channel.id, enabled: !channel.enabled })}>{channel.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
-        {owner && channel.kind === 'email' && (boundToMe || !channel.securityOwnerUserId) && <Button variant="outline"
-        disabled={securityRecipient.isPending || (!boundToMe && (!channel.enabled || channel.recipientVerified !== true))}
-        onClick={() => { securityRecipient.reset(); setDialog('ownerSecurity') }}>{boundToMe ? tx('Güvenlik alıcımı kaldır') : tx('Güvenlik alıcım olarak kaydet')}</Button>}
         {usesSecret && <Button variant="outline" aria-label={label(tx('secret ayarla'))} onClick={() => { setDialog('secret') }}>{channel.hasSecret ? tx('Secret yenile') : tx('Secret ayarla')}</Button>}
         {usesSecret && channel.hasSecret && <Button variant="outline" aria-label={label(tx('secret temizle'))} onClick={() => { clearSecret.reset(); setDialog('clearSecret') }}>{tx("Secret temizle")}</Button>}
         <Button variant="destructive" aria-label={label(tx('sil'))} onClick={() => { remove.reset(); setDialog('delete') }}>{tx("Sil")}</Button>
@@ -91,14 +80,6 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       }}
       pending={remove.isPending} error={remove.error}
       onConfirm={() => remove.mutate(channel.id, { onSuccess: close })} />
-    <ConfirmDialog open={dialog === 'ownerSecurity'} onClose={close}
-      title={boundToMe ? tx('Güvenlik alıcısı kaldırılsın mı?') : tx('Bu adres güvenlik alıcınız olsun mu?')}
-      consequence={boundToMe
-        ? { what: tx('Bu adres artık zorunlu acil destek erişimi bildirimlerinizi almaz.'), who: tx('Yalnızca sizin bildirimleriniz etkilenir.'), reversible: tx('Evet. Aynı adresi yeniden güvenlik alıcısı yapabilirsiniz; önce başka bir doğrulanmış adres kaydedin.') }
-        : { what: tx('Bu e-posta adresinin size ait olduğunu onaylıyorsunuz. Tenant sahibi olduğunuz sürece zorunlu acil destek erişimi bildirimleri, genel politika kapalı olsa da bu adrese gönderilir.'), who: tx('Yalnızca sizin bildirimleriniz etkilenir.'), reversible: tx('Evet. Daha sonra güvenlik alıcılığını kaldırabilirsiniz.') }}
-      confirmLabel={boundToMe ? tx('Kaldır') : tx('Kaydet')} pending={securityRecipient.isPending}
-      error={securityRecipient.error}
-      onConfirm={() => securityRecipient.mutate({ id: channel.id, enabled: !boundToMe }, { onSuccess: close })} />
   </Card></li>
 }
 

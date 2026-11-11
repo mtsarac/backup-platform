@@ -37,9 +37,6 @@ export function setChannelEnabled(tenantId: string, id: string, enabled: boolean
   return apiRequest<NotificationChannel>(channel(tenantId, id, enabled ? '/enable' : '/disable'), { method: 'POST' })
 }
 
-export function setOwnerSecurityRecipient(tenantId: string, id: string, enabled: boolean) {
-  return apiRequest<NotificationChannel>(channel(tenantId, id, '/owner-security-recipient'), { method: 'POST', json: { enabled } })
-}
 
 export function deleteChannel(tenantId: string, id: string) {
   return apiRequest<void>(channel(tenantId, id), { method: 'DELETE' })
