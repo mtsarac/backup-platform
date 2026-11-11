@@ -3283,4 +3283,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Kullanıcı yöneticisi için en az bir çalışma alanı seçin.": {"tr":"Kullanıcı yöneticisi için en az bir çalışma alanı seçin.","en":"Select at least one workspace for a user administrator."},
   "Var olan bir kullanıcıyı bu çalışma alanına ekleyin. Kullanıcı hesabı burada oluşturulmaz.": {"tr":"Var olan bir kullanıcıyı bu çalışma alanına ekleyin. Kullanıcı hesabı burada oluşturulmaz.","en":"Add an existing user to this workspace. This does not create a user account."},
   "Üyeliği kaldırmak kullanıcı hesabını silmez.": {"tr":"Üyeliği kaldırmak kullanıcı hesabını silmez.","en":"Removing a membership does not delete the user account."},
+  "Bu kodları güvenli bir yerde saklayın. Her kod yalnızca bir kez kullanılabilir.": {"tr":"Bu kodları güvenli bir yerde saklayın. Her kod yalnızca bir kez kullanılabilir.","en":"Store these codes in a safe place. Each code can only be used once."},
+  "Şifreyle doğrula": {"tr":"Şifreyle doğrula","en":"Verify with password"},
+  "Geçiş anahtarıyla doğrula": {"tr":"Geçiş anahtarıyla doğrula","en":"Verify with passkey"},
 }
