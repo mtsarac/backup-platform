@@ -87,6 +87,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<RestoreAttempt> RestoreAttempts => Set<RestoreAttempt>();
     public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
     public DbSet<DownloadSession> DownloadSessions => Set<DownloadSession>();
+    public DbSet<BackupShare> BackupShares => Set<BackupShare>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();

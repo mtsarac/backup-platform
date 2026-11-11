@@ -1,4 +1,4 @@
-import { Activity, Bell, Database, DatabaseBackup, Gauge, HardDrive, KeyRound, LayoutDashboard, Monitor, Radar, RotateCcw, ShieldCheck, Upload } from 'lucide-react'
+import { Activity, Bell, Database, DatabaseBackup, Gauge, HardDrive, KeyRound, LayoutDashboard, Monitor, Radar, RotateCcw, Share2, ShieldCheck, Upload } from 'lucide-react'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { SidebarFrame, type NavGroup, type NavItem } from './nav'
@@ -19,6 +19,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
       { label: tx("Yedekleme denemeleri"), to: `${base}/backup-runs`, icon: Activity },
       { label: tx("Yedek dosyaları"), to: `${base}/artifacts`, icon: HardDrive },
       { label: tx("Geri yüklemeler"), to: `${base}/restores`, icon: RotateCcw },
+      { label: tx("Paylaşımlarım"), to: `${base}/shares`, icon: Share2 },
     ] },
     { heading: tx("Altyapı"), items: [
       { label: tx("Yedekleme bilgisayarları"), to: `${base}/agents`, icon: Monitor },
