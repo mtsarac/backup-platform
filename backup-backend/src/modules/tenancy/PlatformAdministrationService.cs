@@ -40,7 +40,7 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
         string? username, string? email, string? displayName, string? password, string? role, Guid[]? tenantIds, UserId actor, CancellationToken cancellationToken)
     {
         var (name, login, address, accountRole) = ValidateAccount(displayName, username, email, role);
-        if (password is null || password.Length is < MinimumPasswordLength or > MaximumPasswordLength)
+        if (string.IsNullOrWhiteSpace(password) || password.Length is < MinimumPasswordLength or > MaximumPasswordLength)
         {
             throw new InvalidPlatformRequestException("password", "invalid_length");
         }

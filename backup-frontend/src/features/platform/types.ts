@@ -64,8 +64,8 @@ export type AccountRole = 'PlatformAdmin' | 'UserAdmin'
 export interface PlatformUser {
   userId: string
   displayName: string
-  username: string
-  email: string
+  username: string | null
+  email: string | null
   role: AccountRole
   membershipCount: number
 }

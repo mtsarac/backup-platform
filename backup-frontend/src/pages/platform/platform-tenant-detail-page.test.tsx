@@ -8,7 +8,7 @@ import { makeTenantEncryption } from '@/features/artifact-encryption/test-fixtur
 import * as connectionApi from '@/features/storage-connections/api'
 import { catalog, makeConnection, makeManaged, noPermissions } from '@/features/storage-connections/test-fixtures'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
-import type { PlatformAuditEntry, PlatformMembership, PlatformTenantDetail, PlatformUser } from '@/features/platform/types'
+import type { PagedResult, PlatformAuditEntry, PlatformMembership, PlatformTenantDetail, PlatformUser } from '@/features/platform/types'
 import { ApiError } from '@/lib/api/client'
 import { PlatformTenantDetailPage } from './platform-tenant-detail-page'
 
@@ -200,6 +200,26 @@ describe('platform tenant detail', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Üye ekle' }))
     expect(api.addMembership).toHaveBeenCalledWith('tenant-a', 'user-3')
     expect(await screen.findByText('Deniz Kaya')).toBeInTheDocument()
+  })
+
+  it('does not offer stale users while a membership search is loading', async () => {
+    const { promise, resolve } = Promise.withResolvers<PagedResult<PlatformUser>>()
+    vi.mocked(api.getUsers).mockResolvedValueOnce(paged(users)).mockReturnValueOnce(promise)
+    mount('people')
+    await screen.findByRole('option', { name: 'Deniz Kaya (deniz)' })
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'other')
+    await userEvent.click(screen.getByRole('button', { name: 'Ara' }))
+    expect(screen.getByRole('combobox', { name: 'Kullanıcı' })).toBeDisabled()
+    resolve(paged([]))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Kullanıcı' })).toBeEnabled())
+    expect(screen.queryByRole('option', { name: 'Deniz Kaya (deniz)' })).not.toBeInTheDocument()
+  })
+
+  it('reports failure to load users for membership selection', async () => {
+    vi.mocked(api.getUsers).mockRejectedValue(new ApiError(503))
+    mount('people')
+    expect(await screen.findByText('Sunucu isteği tamamlayamadı. Daha sonra tekrar deneyin.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Üye ekle' })).toBeDisabled()
   })
 
   it('reports an existing member (409) and a missing user (404) with safe messages', async () => {

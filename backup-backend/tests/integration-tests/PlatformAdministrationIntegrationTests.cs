@@ -42,7 +42,7 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
             (HttpMethod.Post, $"/api/platform/tenants/{id}/memberships", new { userId = user }),
             (HttpMethod.Delete, $"/api/platform/tenants/{id}/memberships/{user}", null),
             (HttpMethod.Get, "/api/platform/users", null),
-            (HttpMethod.Post, "/api/platform/users", new { loginIdentifier = "nope.user", displayName = "Nope", password = "Local-only-0123456789!" }),
+            (HttpMethod.Post, "/api/platform/users", new { username = "nope.user", email = "nope@example.com", displayName = "Nope", password = "Local-only-0123456789!", role = "UserAdmin", tenantIds = new[] { id } }),
             (HttpMethod.Put, $"/api/platform/users/{user}", new { username = "nope.user", email = "nope@example.com", displayName = "Nope", role = "UserAdmin" }),
             (HttpMethod.Get, "/api/platform/agents", null),
             (HttpMethod.Get, $"/api/platform/tenants/{id}/agents/{Guid.NewGuid()}", null),
@@ -159,6 +159,8 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, email = "bad", create.displayName, create.password, create.role, create.tenantIds })).Status);
         Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { username = "bad username", create.email, create.displayName, create.password, create.role, create.tenantIds })).Status);
         Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, password = "short", create.role, create.tenantIds })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, create.password, role = "UserAdmin,PlatformAdmin", create.tenantIds })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, create.password, create.role, tenantIds = new[] { first.Id.Value, first.Id.Value } })).Status);
         Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, create.password, create.role, tenantIds = new[] { Guid.NewGuid() } })).Status);
 
         var created = await CallAsync(admin, HttpMethod.Post, "/api/platform/users", create);
@@ -179,12 +181,14 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         var updated = await CallAsync(admin, HttpMethod.Put, $"/api/platform/users/{userId}", new { create.username, create.email, displayName = "Updated", create.role });
         Assert.Equal(HttpStatusCode.OK, updated.Status);
         Assert.Equal("Updated", updated.Json.GetProperty("displayName").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(admin, HttpMethod.Put, $"/api/platform/users/{actor.UserId.Value}", new { username = login.ToUpperInvariant(), email = $"other-{email}", displayName = "Other", role = "PlatformAdmin" })).Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(admin, HttpMethod.Put, $"/api/platform/users/{actor.UserId.Value}", new { username = "other-" + login, email = email.ToUpperInvariant(), displayName = "Other", role = "PlatformAdmin" })).Status);
         await using var context = fixture.CreatePlatformContext();
         var audit = await context.AuditEvents.AsNoTracking().Where(row => row.TargetId == userId.ToString("D")).ToListAsync();
         Assert.Contains(audit, row => row.Action == AuditActions.UserCreated);
         Assert.Contains(audit, row => row.Action == AuditActions.UserUpdated);
         Assert.Equal(2, audit.Count(row => row.Action == AuditActions.MembershipAdded));
-        Assert.All(audit, row => { Assert.Equal(actor.UserId, row.ActorUserId); Assert.DoesNotContain(password, row.DetailsJson); });
+        Assert.All(audit, row => { Assert.Equal(AuditActorKind.PlatformAdmin, row.ActorKind); Assert.Equal(actor.UserId, row.ActorUserId); Assert.DoesNotContain(password, row.DetailsJson); });
     }
 
     [Fact]
@@ -195,9 +199,35 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         var login = $"race-{Guid.NewGuid():N}";
         var email = $"{Guid.NewGuid():N}@example.com";
         var request = new { username = login, email, displayName = "Concurrent", password = "local-password-123", role = "PlatformAdmin", tenantIds = Array.Empty<Guid>() };
-        var results = await Task.WhenAll(CallAsync(admin, HttpMethod.Post, "/api/platform/users", request), CallAsync(admin, HttpMethod.Post, "/api/platform/users", request));
+        var other = new { username = login.ToUpperInvariant(), email = $"other-{email}", request.displayName, request.password, request.role, request.tenantIds };
+        var results = await Task.WhenAll(CallAsync(admin, HttpMethod.Post, "/api/platform/users", request), CallAsync(admin, HttpMethod.Post, "/api/platform/users", other));
         Assert.Equal(1, results.Count(result => result.Status == HttpStatusCode.Created));
         Assert.Equal(1, results.Count(result => result.Status == HttpStatusCode.Conflict));
+        await using var context = fixture.CreatePlatformContext();
+        var normalizedLogin = login.ToUpperInvariant();
+        Assert.Equal(1, await context.PasswordCredentials.CountAsync(row => row.NormalizedLoginIdentifier == normalizedLogin));
+    }
+
+    [Fact]
+    public async Task FailedSignInDoesNotRevealWhetherUsernameOrEmailExists()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var admin = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
+        var username = $"login-{Guid.NewGuid():N}";
+        var email = $"{Guid.NewGuid():N}@example.com";
+        var created = await CallAsync(admin, HttpMethod.Post, "/api/platform/users",
+            new { username, email, displayName = "Account", password = "local-password-123", role = "PlatformAdmin", tenantIds = Array.Empty<Guid>() });
+        Assert.Equal(HttpStatusCode.Created, created.Status);
+
+        var browser = new BrowserSession(world.Factory.CreateBrowser());
+        var replies = new List<Reply>();
+        foreach (var identifier in new[] { username, email, $"missing-{Guid.NewGuid():N}", $"{Guid.NewGuid():N}@example.com" })
+            replies.Add(await CallAsync(browser, HttpMethod.Post, "/api/auth/login", new { loginIdentifier = identifier, password = "wrong-password" }));
+        Assert.All(replies, reply =>
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, reply.Status);
+            Assert.Equal(replies[0].Json.GetRawText(), reply.Json.GetRawText());
+        });
     }
 
     [Fact]

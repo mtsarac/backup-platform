@@ -85,6 +85,30 @@ describe('platform users', () => {
     expect(screen.getByRole('dialog')).not.toHaveTextContent('secret-password')
   })
 
+  it('marks the field rejected by account validation and permits a retry', async () => {
+    vi.mocked(api.createUser).mockRejectedValueOnce(new ApiError(400, { error: 'invalid_request', field: 'username', code: 'invalid_value' })).mockResolvedValueOnce(member)
+    renderPlatform(<PlatformUsersPage />)
+    await screen.findByText('Root Admin')
+    await createForm()
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Acme' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Kullanıcı oluştur' }))
+    await waitFor(() => expect(screen.getByLabelText('Kullanıcı adı')).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText('Girilen değer geçersiz.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText(/Şifre/), 'secret-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Kullanıcı oluştur' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(api.createUser).toHaveBeenCalledTimes(2)
+  })
+
+  it('allows editing accounts without a password credential', async () => {
+    vi.mocked(api.getUsers).mockResolvedValue(paged([{ ...member, username: null, email: null }]))
+    renderPlatform(<PlatformUsersPage />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Ayşe Yılmaz kullanıcısını düzenle' }))
+    expect(screen.getByLabelText('Kullanıcı adı')).toHaveValue('')
+    expect(screen.getByLabelText('E-posta')).toHaveValue('')
+  })
+
   it('shows update errors and keeps the dialog open', async () => {
     vi.mocked(api.updateUser).mockRejectedValue(new ApiError(400, { error: 'platform_admin_membership_not_allowed' }))
     renderPlatform(<PlatformUsersPage />)

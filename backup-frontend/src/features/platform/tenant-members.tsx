@@ -36,9 +36,9 @@ function AddMemberForm({ tenantId }: { tenantId: string }) {
     <div className="space-y-4">
       <div className="flex max-w-xl"><SearchForm label={tx("Kullanıcı ara")} value={userSearch} onSearch={(value) => { setUserSearch(value); setUserId('') }} placeholder={tx("Ad veya kullanıcı adı")} /></div>
       <form onSubmit={submit} className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <Field label={tx("Kullanıcı")}>{(control) => <Select {...control} value={userId} onChange={(event) => setUserId(event.target.value)} disabled={users.isPending}>
+        <Field label={tx("Kullanıcı")}>{(control) => <Select {...control} value={userId} onChange={(event) => setUserId(event.target.value)} disabled={users.isPending || users.isPlaceholderData}>
           <option value="">{users.isPending ? tx('Kullanıcılar yükleniyor…') : users.error ? tx('Kullanıcılar alınamadı') : tx('Kullanıcı seçin')}</option>
-          {users.data?.items.filter((user) => user.role === 'UserAdmin').map((user) => <option key={user.userId} value={user.userId}>{user.displayName} ({user.username})</option>)}
+          {users.data?.items.filter((user) => user.role === 'UserAdmin').map((user) => <option key={user.userId} value={user.userId}>{user.displayName}{user.username && ` (${user.username})`}</option>)}
         </Select>}</Field>
         <Button type="submit" disabled={!userId || add.isPending}>{add.isPending ? tx('Ekleniyor…') : tx('Üye ekle')}</Button>
       </form>

@@ -3260,7 +3260,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Çalışma alanları (en az birini seçin)": {"tr":"Çalışma alanları (en az birini seçin)","en":"Workspaces (select at least one)"},
   "{0} kullanıcısını düzenle": {"tr":"{0} kullanıcısını düzenle","en":"Edit user {0}"},
   "“{0}” kullanıcısı kaydedildi.": {"tr":"“{0}” kullanıcısı kaydedildi.","en":"User “{0}” was saved."},
-  "UserAdmin": {"tr":"Kullanıcı Yöneticisi","en":"User Administrator"},
   "Kullanıcı adı veya e-posta zaten kullanılıyor.": {"tr":"Kullanıcı adı veya e-posta zaten kullanılıyor.","en":"The username or email is already in use."},
   "Platform yöneticisinin çalışma alanı üyeliği olamaz.": {"tr":"Platform yöneticisinin çalışma alanı üyeliği olamaz.","en":"A platform administrator cannot have workspace memberships."},
   "Kullanıcı yöneticisi için en az bir çalışma alanı seçin.": {"tr":"Kullanıcı yöneticisi için en az bir çalışma alanı seçin.","en":"Select at least one workspace for a user administrator."},

@@ -47,14 +47,14 @@ function UserDialog({ user, onClose, onSaved }: { user?: PlatformUser; onClose: 
     <Field label={tx('E-posta')}>{(control) => <TextInput {...control} type="email" value={email} required autoComplete="off" aria-invalid={invalidField === 'email'} onChange={(event) => setEmail(event.target.value)} />}</Field>
     <Field label={tx('Görünen ad')}>{(control) => <TextInput {...control} value={displayName} required autoComplete="off" aria-invalid={invalidField === 'displayName'} onChange={(event) => setDisplayName(event.target.value)} />}</Field>
     {!user && <SecretField label={tx('Şifre')} required value={password.value} invalid={invalidField === 'password'} onChange={password.set} />}
-    <Field label={tx('Rol')}>{(control) => <Select {...control} value={role} onChange={(event) => setRole(event.target.value as AccountRole)}><option value="UserAdmin">{tx('UserAdmin')}</option><option value="PlatformAdmin">{tx('PlatformAdmin')}</option></Select>}</Field>
-    {!user && role === 'UserAdmin' && <TenantSelection page={tenantPage} setPage={setTenantPage} selected={tenantIds} setSelected={setTenantIds} />}
+    <Field label={tx('Rol')}>{(control) => <Select {...control} value={role} aria-invalid={invalidField === 'role'} onChange={(event) => setRole(event.target.value as AccountRole)}><option value="UserAdmin">{tx('UserAdmin')}</option><option value="PlatformAdmin">{tx('PlatformAdmin')}</option></Select>}</Field>
+    {!user && role === 'UserAdmin' && <TenantSelection page={tenantPage} setPage={setTenantPage} selected={tenantIds} setSelected={setTenantIds} invalid={invalidField === 'tenantIds'} />}
   </FormDialog>
 }
 
-function TenantSelection({ page, setPage, selected, setSelected }: { page: number; setPage: (page: number) => void; selected: string[]; setSelected: (ids: string[]) => void }) {
+function TenantSelection({ page, setPage, selected, setSelected, invalid }: { page: number; setPage: (page: number) => void; selected: string[]; setSelected: (ids: string[]) => void; invalid: boolean }) {
   const tenants = usePlatformTenants({ page, pageSize: LIST_PAGE_SIZE })
-  return <fieldset className="space-y-2">
+  return <fieldset className="space-y-2" aria-invalid={invalid}>
     <legend className="text-sm font-medium">{tx('Çalışma alanları (en az birini seçin)')}</legend>
     <QueryState isPending={tenants.isPending} error={tenants.error}>
       {tenants.data?.items.map((tenant) => <label key={tenant.tenantId} className="flex items-center gap-2"><input type="checkbox" checked={selected.includes(tenant.tenantId)} onChange={(event) => setSelected(event.target.checked ? [...selected, tenant.tenantId] : selected.filter((id) => id !== tenant.tenantId))} />{tenant.name}</label>)}
