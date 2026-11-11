@@ -26,9 +26,12 @@ export function TenantSelectPage() {
           <span className="min-w-0"><span className="block break-words font-semibold text-text-heading">{tenant.name}</span></span>
           <ArrowRight aria-hidden="true" className="size-5 shrink-0 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
         </Link></li>)}</ul>}
-    <div className="flex gap-4">
+    <div className="flex items-center gap-4">
       <Link className="inline-flex text-sm text-primary underline-offset-4 hover:underline" to="/sessions">{tx('Oturumlarım')}</Link>
+      <span className="text-text-muted">·</span>
       <Link className="inline-flex text-sm text-primary underline-offset-4 hover:underline" to="/security">{tx('Güvenlik')}</Link>
+      <span className="text-text-muted">·</span>
+      <Link className="inline-flex text-sm text-primary underline-offset-4 hover:underline" to="/passkeys">{tx('Geçiş anahtarları')}</Link>
     </div>
     {user?.role === 'PlatformAdmin' && <Link className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3 font-medium text-primary shadow-card hover:border-primary focus-visible:outline-2 focus-visible:outline-ring" to="/platform"><ShieldCheck aria-hidden="true" className="size-5" />{tx("Platform Administration")}</Link>}
     {error && <ErrorNotice {...error} />}

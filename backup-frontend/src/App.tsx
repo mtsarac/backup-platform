@@ -11,6 +11,7 @@ import { LoginPage } from './pages/login/login-page'
 import { TenantSelectPage } from './pages/tenancy/tenant-select-page'
 import { SessionsPage } from './pages/login/sessions-page'
 import { SecurityPage } from './pages/login/security-page'
+import { PasskeysPage } from './pages/login/passkeys-page'
 import { Button } from './components/ui/button'
 import { platformRoutes, tenantRoutes } from './route-tables'
 
@@ -25,6 +26,7 @@ function AppRoutes() {
       <Route path="/" element={<TenantSelectPage />} />
       <Route path="/sessions" element={<SessionsPage />} />
       <Route path="/security" element={<SecurityPage />} />
+      <Route path="/passkeys" element={<PasskeysPage />} />
       <Route path="/tenants/:tenantId/*" element={<TenantProvider><AppShell><Routes>{tenantRoutes}</Routes></AppShell></TenantProvider>} />
       <Route path="/platform" element={<PlatformAdminRoute />}>
         <Route element={<PlatformShell />}>{platformRoutes}</Route>

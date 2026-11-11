@@ -1,14 +1,16 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { userEvent } from '@testing-library/user-event'
 import { LoginPage } from './login-page'
 import * as client from '@/lib/api/client'
 
 const loginMock = vi.fn()
 const completeSecondFactorMock = vi.fn()
 const logoutMock = vi.fn()
+const loginWithPasskeyMock = vi.fn()
+const verifySecondFactorMock = vi.fn()
 const apiMock = vi.fn()
 
 vi.mock('@/lib/api/client', async (importOriginal) => ({
@@ -21,6 +23,8 @@ vi.mock('@/features/auth/use-auth', () => ({
     login: loginMock,
     completeSecondFactor: completeSecondFactorMock,
     logout: logoutMock,
+    loginWithPasskey: loginWithPasskeyMock,
+    verifySecondFactor: verifySecondFactorMock,
     isAuthenticated: false,
     sessionExpired: false,
   }),
@@ -105,5 +109,35 @@ describe('Sign-in page', () => {
 
     expect(logoutMock).toHaveBeenCalled()
     expect(await screen.findByRole('heading', { name: 'Giriş yapın' })).toBeInTheDocument()
+  })
+
+  it('renders passkey sign-in option and calls loginWithPasskey on click', async () => {
+    loginWithPasskeyMock.mockResolvedValueOnce(undefined)
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    const passkeyBtn = screen.getByRole('button', { name: 'Geçiş anahtarı ile giriş yap' })
+    expect(passkeyBtn).toBeInTheDocument()
+
+    await userEvent.click(passkeyBtn)
+    await waitFor(() => expect(loginWithPasskeyMock).toHaveBeenCalled())
+  })
+
+  it('switches to second-factor view when password login requires second factor', async () => {
+    loginMock.mockResolvedValueOnce({ requiresSecondFactor: true })
+    verifySecondFactorMock.mockResolvedValueOnce(undefined)
+
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    await userEvent.type(screen.getByLabelText('Kullanıcı adı'), 'testuser')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'password123!')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('İkinci faktör doğrulaması')).toBeInTheDocument()
+    })
+
+    const verifyBtn = screen.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' })
+    expect(verifyBtn).toBeInTheDocument()
+
+    await userEvent.click(verifyBtn)
+    await waitFor(() => expect(verifySecondFactorMock).toHaveBeenCalled())
   })
 })

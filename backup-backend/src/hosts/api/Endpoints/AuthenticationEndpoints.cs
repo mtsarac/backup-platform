@@ -47,6 +47,37 @@ public sealed class RegenerateRecoveryCodesRequest
     public string? Code { get; init; }
 }
 
+public sealed class RegisterPasskeyRequest
+{
+    public Guid ChallengeId { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public Fido2NetLib.AuthenticatorAttestationRawResponse Response { get; init; } = default!;
+    public string? CurrentPassword { get; init; }
+}
+
+public sealed class RemovePasskeyRequest
+{
+    public string? CurrentPassword { get; init; }
+}
+
+public sealed class PasskeyLoginOptionsRequest
+{
+    public string? LoginIdentifier { get; init; }
+}
+
+public sealed class PasskeyLoginRequest
+{
+    public Guid ChallengeId { get; init; }
+    public Fido2NetLib.AuthenticatorAssertionRawResponse Response { get; init; } = default!;
+    public bool RememberMe { get; init; }
+}
+
+public sealed class SecondFactorVerifyRequest
+{
+    public Guid ChallengeId { get; init; }
+    public Fido2NetLib.AuthenticatorAssertionRawResponse Response { get; init; } = default!;
+}
+
 public static class AuthenticationEndpoints
 {
     public static IEndpointRouteBuilder MapAuthenticationEndpoints(this IEndpointRouteBuilder endpoints)
@@ -69,6 +100,15 @@ public static class AuthenticationEndpoints
         auth.MapPost("/security/totp/enroll", EnrollTotpAsync).RequireAuthorization();
         auth.MapPost("/security/totp/remove", RemoveTotpAsync).RequireAuthorization();
         auth.MapPost("/security/recovery-codes/regenerate", RegenerateRecoveryCodesAsync).RequireAuthorization();
+        // Passkey endpoints
+        auth.MapGet("/passkeys", ListPasskeysAsync).RequireAuthorization();
+        auth.MapPost("/passkeys/register/options", CreatePasskeyRegistrationOptionsAsync).RequireAuthorization();
+        auth.MapPost("/passkeys/register", RegisterPasskeyAsync).RequireAuthorization();
+        auth.MapDelete("/passkeys/{id:guid}", RemovePasskeyAsync).RequireAuthorization();
+        auth.MapPost("/passkeys/login/options", CreatePasskeyLoginOptionsAsync).AllowAnonymous();
+        auth.MapPost("/passkeys/login", PasskeyLoginAsync).AllowAnonymous();
+        auth.MapPost("/passkeys/second-factor/options", CreateSecondFactorOptionsAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
+        auth.MapPost("/passkeys/second-factor", VerifySecondFactorAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
         return endpoints;
     }
 
@@ -119,7 +159,7 @@ public static class AuthenticationEndpoints
         });
         if (session.SecondFactorRequired)
         {
-            return Results.Ok(new { secondFactorRequired = true });
+            return Results.Ok(new { secondFactorRequired = true, requiresSecondFactor = true });
         }
         return Results.NoContent();
     }
@@ -267,7 +307,7 @@ public static class AuthenticationEndpoints
         if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _))
             return Results.Unauthorized();
 
-        var hasTotp = await identityStore.HasSecondFactorAsync(userId!, context.RequestAborted);
+        var hasTotp = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted) is not null;
         var recoveryCodesCount = await identityStore.GetRemainingRecoveryCodesCountAsync(userId!, context.RequestAborted);
         return Results.Ok(new { hasTotp, remainingRecoveryCodes = recoveryCodesCount });
     }
@@ -464,5 +504,136 @@ public static class AuthenticationEndpoints
         await identityStore.SaveRecoveryCodesAsync(userId!, hashes, now, context.RequestAborted);
 
         return Results.Ok(new { recoveryCodes });
+    }
+    private static async Task<IResult> ListPasskeysAsync(HttpContext context, IIdentityStore store)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
+        var passkeys = await store.ListPasskeysAsync(userId!, context.RequestAborted);
+        return Results.Ok(passkeys.Select(p => new
+        {
+            id = p.Id,
+            name = p.Name,
+            createdAt = p.CreatedAt,
+            lastUsedAt = p.LastUsedAt
+        }));
+    }
+
+    private static async Task<IResult> CreatePasskeyRegistrationOptionsAsync(HttpContext context, PasskeyService passkeyService)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
+        var (options, challengeId) = await passkeyService.CreateRegistrationOptionsAsync(userId!, context, context.RequestAborted);
+        return Results.Ok(new { options, challengeId });
+    }
+
+    private static async Task<IResult> RegisterPasskeyAsync(RegisterPasskeyRequest request, HttpContext context, PasskeyService passkeyService)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
+        try
+        {
+            var passkey = await passkeyService.RegisterPasskeyAsync(
+                userId!,
+                request.ChallengeId,
+                request.Name,
+                request.Response,
+                request.CurrentPassword,
+                context,
+                context.RequestAborted);
+
+            if (passkey is null)
+            {
+                return Results.Json(new { error = "Security verification failed or invalid challenge." }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            return Results.Json(new { id = passkey.Id, name = passkey.Name, createdAt = passkey.CreatedAt }, statusCode: StatusCodes.Status201Created);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    private static async Task<IResult> RemovePasskeyAsync(Guid id, RemovePasskeyRequest request, HttpContext context, PasskeyService passkeyService, IIdentityStore store)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
+        var existing = await store.FindPasskeyByIdAsync(id, userId!, context.RequestAborted);
+        if (existing is null) return Results.NotFound();
+
+        var success = await passkeyService.RemovePasskeyAsync(userId!, id, request.CurrentPassword, context.RequestAborted);
+        if (!success)
+        {
+            return Results.Json(new { error = "Security verification failed." }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> CreatePasskeyLoginOptionsAsync(PasskeyLoginOptionsRequest? request, HttpContext context, PasskeyService passkeyService)
+    {
+        var (options, challengeId) = await passkeyService.CreateLoginOptionsAsync(request?.LoginIdentifier, context, context.RequestAborted);
+        return Results.Ok(new { options, challengeId });
+    }
+
+    private static async Task<IResult> PasskeyLoginAsync(PasskeyLoginRequest request, HttpContext context, PasskeyService passkeyService, LoginThrottle throttle)
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString();
+        if (await throttle.RetryAfterAsync("passkey_assertion", null, ip, context.RequestAborted) is { } wait)
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Results.Json(new { error = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        var session = await passkeyService.LoginWithPasskeyAsync(
+            request.ChallengeId,
+            request.Response,
+            request.RememberMe,
+            context,
+            context.RequestAborted);
+
+        if (session is null)
+        {
+            return Results.Json(new { error = "Invalid passkey assertion or account disabled." }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> CreateSecondFactorOptionsAsync(HttpContext context, PasskeyService passkeyService)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out var sessionId)) return Results.Unauthorized();
+        try
+        {
+            var (options, challengeId) = await passkeyService.CreateSecondFactorOptionsAsync(userId!, sessionId, context, context.RequestAborted);
+            return Results.Ok(new { options, challengeId });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    private static async Task<IResult> VerifySecondFactorAsync(SecondFactorVerifyRequest request, HttpContext context, PasskeyService passkeyService, LoginThrottle throttle)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out var sessionId)) return Results.Unauthorized();
+        var ip = context.Connection.RemoteIpAddress?.ToString();
+
+        if (await throttle.RetryAfterAsync("passkey_assertion", null, ip, context.RequestAborted) is { } wait)
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Results.Json(new { error = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        var success = await passkeyService.VerifySecondFactorAsync(
+            userId!,
+            sessionId,
+            request.ChallengeId,
+            request.Response,
+            context,
+            context.RequestAborted);
+
+        if (!success)
+        {
+            return Results.Json(new { error = "Invalid passkey assertion." }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        return Results.NoContent();
     }
 }

@@ -18,6 +18,10 @@ public sealed class User
     public UserId Id { get; }
     public string DisplayName { get; private set; }
     public UserRole Role { get; private set; }
+    public bool IsDisabled { get; private set; }
+
+    public void Disable() => IsDisabled = true;
+    public void Enable() => IsDisabled = false;
 
     public void Rename(string displayName)
     {

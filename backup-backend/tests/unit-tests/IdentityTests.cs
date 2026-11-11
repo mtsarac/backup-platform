@@ -194,7 +194,6 @@ public sealed class IdentityTests
 
         public Task RecordLoginFailureAsync(UserId? targetUserId, DateTimeOffset now, CancellationToken cancellationToken) =>
             Task.CompletedTask;
-
         public TotpCredential? Totp { get; set; }
         public List<RecoveryCode> RecoveryCodes { get; } = [];
 
@@ -254,5 +253,17 @@ public sealed class IdentityTests
 
         public Task<int> GetRemainingRecoveryCodesCountAsync(UserId userId, CancellationToken cancellationToken) =>
             Task.FromResult(RecoveryCodes.Count(c => c.UserId == userId && c.RedeemedAt == null));
+
+        public Task<bool> HasPasskeysAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<IReadOnlyList<PasskeyCredential>> ListPasskeysAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PasskeyCredential>>([]);
+        public Task<PasskeyCredential?> FindPasskeyByCredentialIdAsync(byte[] credentialId, CancellationToken cancellationToken) => Task.FromResult<PasskeyCredential?>(null);
+        public Task<PasskeyCredential?> FindPasskeyByIdAsync(Guid id, UserId userId, CancellationToken cancellationToken) => Task.FromResult<PasskeyCredential?>(null);
+        public Task AddPasskeyAsync(PasskeyCredential passkey, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<bool> RemovePasskeyAsync(Guid id, UserId userId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task UpdatePasskeyUsageAsync(Guid id, uint newCounter, DateTimeOffset usedAt, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveChallengeAsync(PasskeyChallenge challenge, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<PasskeyChallenge?> ConsumeChallengeAsync(Guid challengeId, string purpose, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult<PasskeyChallenge?>(null);
+        public Task<bool> IsUserDisabledAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<string?> GetUserDisplayNameAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult<string?>("Test User");
     }
 }

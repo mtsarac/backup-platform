@@ -35,6 +35,8 @@ public static class AuditActions
     public const string TotpRemoved = "auth.totp_removed";
     public const string RecoveryCodesRegenerated = "auth.recovery_codes_regenerated";
     public const string RecoveryCodeConsumed = "auth.recovery_code_consumed";
+    public const string PasskeyRegistered = "auth.passkey_registered";
+    public const string PasskeyRemoved = "auth.passkey_removed";
 
     // Agent lifecycle events
     public const string AgentEnrollmentTokenCreated = "agent.enrollment_token_created";

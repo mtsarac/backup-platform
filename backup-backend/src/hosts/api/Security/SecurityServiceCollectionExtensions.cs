@@ -89,6 +89,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<ICentralAuthorizationService, PostgreSqlCentralAuthorizationService>();
         services.AddSingleton<PasswordHashService>();
         services.AddScoped<AuthenticationService>();
+        services.AddScoped<PasskeyService>();
         services.AddScoped<TenantResolutionService>();
         services.AddScoped<IPlatformAdministrationStore, PostgreSqlPlatformAdministrationStore>();
         services.AddScoped<PlatformAdministrationService>();

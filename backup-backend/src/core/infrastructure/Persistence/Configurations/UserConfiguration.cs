@@ -23,6 +23,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired();
         builder.Property(user => user.DisplayName).IsRequired();
         builder.Property(user => user.Role).HasConversion<int>().HasDefaultValue(UserRole.UserAdmin).IsRequired();
+        builder.Property(user => user.IsDisabled).HasDefaultValue(false).IsRequired();
         builder.Property<uint>("xmin").IsRowVersion();
     }
 }

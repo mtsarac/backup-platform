@@ -22,4 +22,15 @@ public interface IIdentityStore
     Task SaveRecoveryCodesAsync(UserId userId, IEnumerable<string> codeHashes, DateTimeOffset now, CancellationToken cancellationToken);
     Task<bool> TryRedeemRecoveryCodeAsync(UserId userId, string codeHash, DateTimeOffset now, CancellationToken cancellationToken);
     Task<int> GetRemainingRecoveryCodesCountAsync(UserId userId, CancellationToken cancellationToken);
+    Task<bool> HasPasskeysAsync(UserId userId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PasskeyCredential>> ListPasskeysAsync(UserId userId, CancellationToken cancellationToken);
+    Task<PasskeyCredential?> FindPasskeyByCredentialIdAsync(byte[] credentialId, CancellationToken cancellationToken);
+    Task<PasskeyCredential?> FindPasskeyByIdAsync(Guid id, UserId userId, CancellationToken cancellationToken);
+    Task AddPasskeyAsync(PasskeyCredential passkey, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> RemovePasskeyAsync(Guid id, UserId userId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task UpdatePasskeyUsageAsync(Guid id, uint newCounter, DateTimeOffset usedAt, CancellationToken cancellationToken);
+    Task SaveChallengeAsync(PasskeyChallenge challenge, CancellationToken cancellationToken);
+    Task<PasskeyChallenge?> ConsumeChallengeAsync(Guid challengeId, string purpose, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> IsUserDisabledAsync(UserId userId, CancellationToken cancellationToken);
+    Task<string?> GetUserDisplayNameAsync(UserId userId, CancellationToken cancellationToken);
 }
