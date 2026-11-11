@@ -1,5 +1,7 @@
 using System.Net;
 using BackupPlatform.Domain.Audit;
+using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.Extensions.DependencyInjection;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Identity;
@@ -124,6 +126,30 @@ public sealed class SessionLifecycleIntegrationTests(PostgreSqlFixture fixture) 
         }
     }
 
+    [Theory]
+    [InlineData(false, HttpStatusCode.TemporaryRedirect)]
+    [InlineData(true, HttpStatusCode.OK)]
+    public async Task ForwardedHttpsRequiresTrustedProxyAndProcessesOnlyOneHop(bool trusted, HttpStatusCode expected)
+    {
+        var configuration = new Dictionary<string, string?>
+        {
+            ["ForwardedHeaders_Enabled"] = "true",
+            ["Authentication:TrustedProxies:0"] = trusted ? "127.0.0.1" : "192.0.2.10"
+        };
+        await using var world = await AgentWorld.CreateAsync(fixture, configuration: configuration,
+            configureServices: services => services.Configure<HttpsRedirectionOptions>(options => options.HttpsPort = 443));
+        var response = await world.Factory.Server.SendAsync(context =>
+        {
+            context.Connection.RemoteIpAddress = IPAddress.Loopback;
+            context.Request.Scheme = "http";
+            context.Request.Host = new Microsoft.AspNetCore.Http.HostString("localhost");
+            context.Request.Path = "/api/auth/antiforgery";
+            context.Request.Headers["X-Forwarded-For"] = "192.0.2.45, 127.0.0.1";
+            context.Request.Headers["X-Forwarded-Proto"] = "http, https";
+        });
+        Assert.Equal((int)expected, response.Response.StatusCode);
+    }
+
     [Fact]
     public async Task ConfiguredProxySuppliesClientAddress()
     {
@@ -133,8 +159,13 @@ public sealed class SessionLifecycleIntegrationTests(PostgreSqlFixture fixture) 
         using var client = AgentWorld.CreateTrustingClient(world.ServerAddress!, handleCookies: true);
         var browser = new BrowserSession(client);
         client.DefaultRequestHeaders.Add("X-Forwarded-For", "192.0.2.45");
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
         using var login = await browser.SendAsync(HttpMethod.Post, "/api/auth/login", new { loginIdentifier = account.Identifier, password = account.Password });
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        var cookie = Assert.Single(login.Headers.GetValues("Set-Cookie"), value => value.StartsWith("__Host-BackupPlatform.Auth=", StringComparison.Ordinal));
+        Assert.Contains("; secure", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("; httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("; samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
         using var response = await browser.GetAsync("/api/auth/sessions");
         Assert.Equal("192.0.2.45", Assert.Single(AgentWorld.ReadJson(response).EnumerateArray()).GetProperty("ipAddress").GetString());
     }

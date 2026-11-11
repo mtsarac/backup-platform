@@ -11,7 +11,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("DELETE FROM user_sessions; DELETE FROM login_throttle_entries;");
             migrationBuilder.DropPrimaryKey(
                 name: "PK_login_throttle_entries",
                 table: "login_throttle_entries");
@@ -66,6 +65,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                 type: "boolean",
                 nullable: false,
                 defaultValue: false);
+            migrationBuilder.Sql("UPDATE user_sessions SET \"CreatedAt\" = CURRENT_TIMESTAMP, \"LastActivityAt\" = CURRENT_TIMESTAMP; DELETE FROM login_throttle_entries;");
 
             migrationBuilder.AddColumn<string>(
                 name: "Kind",

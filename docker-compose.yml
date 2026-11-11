@@ -25,7 +25,6 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform_dev;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
       BACKUP_PLATFORM_BOOTSTRAP_LOGIN: ${BOOTSTRAP_ADMIN_LOGIN:-admin}
       BACKUP_PLATFORM_BOOTSTRAP_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-PlatformAdmin123!}

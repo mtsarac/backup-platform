@@ -92,6 +92,19 @@ public sealed class NotificationRecipientApiIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RecipientActionNeedsItsOwnTokenEvenWhenBrowserHasASession()
+    {
+        var scene = await CreateAsync();
+        await using var _ = scene.World;
+        using var invalid = await scene.Setup.Admin.Client.PostAsync(Confirm, new FormUrlEncodedContent([new("token", "invalid")]));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal((true, (bool?)false), await scene.StateAsync());
+        using var confirmed = await scene.Setup.Admin.Client.PostAsync(Confirm, new FormUrlEncodedContent([new("token", scene.Token(RecipientAction.Confirm))]));
+        Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
+        Assert.Equal((true, (bool?)true), await scene.StateAsync());
+    }
+
+    [Fact]
     public async Task A_genuine_one_click_unsubscribe_still_works_after_a_flood_of_invalid_requests_exhausted_the_clients_budget()
     {
         var scene = await CreateAsync(invalidPerClient: 3);

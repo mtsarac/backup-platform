@@ -5,7 +5,9 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using BackupPlatform.Api.Security;
 using BackupPlatform.Domain.Tenancy;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
@@ -87,6 +89,35 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
     }
 
     private static object? EmptyBodyFor(Route route) => route.Method is "GET" or "DELETE" ? null : new { };
+
+    [Fact]
+    public async Task AntiforgeryExemptionsAreLimitedToTokenOnlyRecipientAndAgentRoutes()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var routes = Routes(world.Factory.Services);
+        var recipients = routes.Where(route => route.Endpoint.Metadata.GetMetadata<TokenOnlyEndpoint>() is not null).ToArray();
+        var recipient = Assert.Single(recipients);
+        Assert.Equal(("/api/notifications/recipient/{route}", "POST"), (recipient.Pattern, recipient.Method));
+        Assert.True(AnonymousAllowed(recipient));
+
+        var agents = routes.Where(route => route.Endpoint.Metadata.GetMetadata<AgentApiEndpoint>() is not null).ToArray();
+        Assert.NotEmpty(agents);
+        foreach (var route in agents)
+        {
+            if (route.Pattern == "/api/agent/enroll")
+            {
+                Assert.Equal("POST", route.Method);
+                Assert.True(AnonymousAllowed(route));
+            }
+            else
+            {
+                Assert.False(AnonymousAllowed(route));
+                var authorization = Assert.Single(route.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>());
+                Assert.Equal(AuthorizationPolicies.Agent, authorization.Policy);
+                Assert.True(string.IsNullOrEmpty(authorization.AuthenticationSchemes));
+            }
+        }
+    }
 
     [Theory]
     [InlineData("a\u0000b")]

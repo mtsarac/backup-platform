@@ -169,6 +169,24 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task AuthorizationHeaderDoesNotBypassCsrfForCookieAuthenticatedRequests()
+    {
+        var seed = await SeedUserAsync();
+        await using var factory = new AuthApiFactory(fixture.ConnectionString);
+        using var browser = factory.CreateBrowser();
+        await AuthenticateAsync(browser, seed);
+        var token = await FetchTokenAsync(browser);
+        foreach (var csrf in new string?[] { null, "invalid-token", token })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "unrelated-token");
+            if (csrf is not null) request.Headers.Add("X-CSRF-TOKEN", csrf);
+            using var response = await browser.SendAsync(request);
+            Assert.Equal(csrf == token ? HttpStatusCode.NoContent : HttpStatusCode.BadRequest, response.StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task TenantRolesStayIndependentAndPlatformAdminCannotBypassMembership()
     {
         var seed = await SeedUserAsync();

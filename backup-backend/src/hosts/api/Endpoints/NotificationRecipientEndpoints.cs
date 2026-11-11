@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using BackupPlatform.Api.Notifications;
+using BackupPlatform.Api.Security;
 using BackupPlatform.Notifications;
 using Microsoft.AspNetCore.Mvc;
 
@@ -32,7 +33,7 @@ public static class NotificationRecipientEndpoints
     {
         var recipient = endpoints.MapGroup("/api/notifications/recipient").AllowAnonymous();
         recipient.MapGet("/{route}", PageAsync);
-        recipient.MapPost("/{route}", ApplyAsync).DisableAntiforgery().WithMetadata(new RequestSizeLimitAttribute(4096));
+        recipient.MapPost("/{route}", ApplyAsync).WithMetadata(new TokenOnlyEndpoint(), new RequestSizeLimitAttribute(4096));
         return endpoints;
     }
 
