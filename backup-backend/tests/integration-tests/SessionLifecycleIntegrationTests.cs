@@ -176,9 +176,9 @@ public sealed class SessionLifecycleIntegrationTests(PostgreSqlFixture fixture) 
     public async Task RestrictedSessionCannotReachTenantOrPlatformButCanLogout(SessionAuthenticationState state)
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
-        var account = await world.SeedUserAsync(platformAdmin: true);
+        var account = await world.SeedUserAsync(platformAdmin: false);
         var tenant = await world.AddTenantAsync();
-        await world.GrantAsync(tenant, account, TenantRole.Owner);
+        await world.GrantAsync(tenant, account);
         var browser = await SignInAsync(world, account);
         await using var db = fixture.CreatePlatformContext();
         var session = await db.UserSessions.SingleAsync(row => row.UserId == account.UserId);
