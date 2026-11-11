@@ -3,6 +3,9 @@ import { ApiError } from './client'
 import type { TechnicalItem } from '@/components/ui/technical-details'
 
 const messages: Record<string, string> = {
+  get identity_taken() { return tx('Kullanıcı adı veya e-posta zaten kullanılıyor.') },
+  get platform_admin_membership_not_allowed() { return tx('Platform yöneticisinin çalışma alanı üyeliği olamaz.') },
+  get user_admin_membership_required() { return tx('Kullanıcı yöneticisi için en az bir çalışma alanı seçin.') },
   get DirectPathUnavailable() { return tx('DirectPathUnavailable: Doğrudan Agent bağlantısı veya güvenli diske yazma desteği kullanılamıyor. Backend aktarımına geçilmez.') },
   get replica_unavailable() { return tx("Replica şu anda indirme için kullanılamıyor.") },
   get replica_not_found() { return tx("Replica bulunamadı veya bu Backup altında erişilemiyor.") },

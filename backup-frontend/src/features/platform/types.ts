@@ -59,18 +59,27 @@ export interface PlatformMembership {
   loginIdentifier: string | null
 }
 
+export type AccountRole = 'PlatformAdmin' | 'UserAdmin'
+
 export interface PlatformUser {
   userId: string
   displayName: string
-  loginIdentifier: string | null
-  isPlatformAdmin: boolean
+  username: string
+  email: string
+  role: AccountRole
   membershipCount: number
 }
 
-export interface CreateUserInput {
-  loginIdentifier: string
+export interface UpdateUserInput {
   displayName: string
+  username: string
+  email: string
+  role: AccountRole
+}
+
+export interface CreateUserInput extends UpdateUserInput {
   password: string
+  tenantIds: string[]
 }
 
 export type AgentConnectivity = 'online' | 'offline' | 'unknown'

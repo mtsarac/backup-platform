@@ -169,7 +169,7 @@ export function LoginPage() {
             </Card>
           ) : (
             <Card as="form" padding="lg" onSubmit={handlePasswordSubmit} className="space-y-4">
-              <Field label={tx('Kullanıcı adı')}>
+              <Field label={tx('Kullanıcı adı')} hint={tx('E-posta adresinizle de giriş yapabilirsiniz.')}>
                 {(control) => <TextInput {...control} autoComplete="username" value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} required />}
               </Field>
               <Field label={tx('Şifre')}>

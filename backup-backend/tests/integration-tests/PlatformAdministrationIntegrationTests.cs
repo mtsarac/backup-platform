@@ -43,6 +43,7 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
             (HttpMethod.Delete, $"/api/platform/tenants/{id}/memberships/{user}", null),
             (HttpMethod.Get, "/api/platform/users", null),
             (HttpMethod.Post, "/api/platform/users", new { loginIdentifier = "nope.user", displayName = "Nope", password = "Local-only-0123456789!" }),
+            (HttpMethod.Put, $"/api/platform/users/{user}", new { username = "nope.user", email = "nope@example.com", displayName = "Nope", role = "UserAdmin" }),
             (HttpMethod.Get, "/api/platform/agents", null),
             (HttpMethod.Get, $"/api/platform/tenants/{id}/agents/{Guid.NewGuid()}", null),
             (HttpMethod.Get, "/api/platform/audit", null)
@@ -141,40 +142,62 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
     }
 
     [Fact]
-    public async Task UserCreationAuthenticatesAndNeverAuditsTheSecret()
+    public async Task AccountManagementEnforcesIdentityRolesMembershipsAndAudits()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var actor = await world.SeedUserAsync(platformAdmin: true);
+        var admin = await world.SignInAsync(actor);
+        var first = await world.AddTenantAsync();
+        var second = await world.AddTenantAsync();
+        var login = $"new.user-{Guid.NewGuid():N}";
+        var email = $"{Guid.NewGuid():N}@example.com";
+        var password = $"Initial-{Guid.NewGuid():N}!";
+        var create = new { username = login, email, displayName = "New User", password, role = "UserAdmin", tenantIds = new[] { first.Id.Value } };
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, create.password, create.role, tenantIds = Array.Empty<Guid>() })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, create.password, role = "PlatformAdmin", create.tenantIds })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, email = "bad", create.displayName, create.password, create.role, create.tenantIds })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { username = "bad username", create.email, create.displayName, create.password, create.role, create.tenantIds })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, password = "short", create.role, create.tenantIds })).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { create.username, create.email, create.displayName, create.password, create.role, tenantIds = new[] { Guid.NewGuid() } })).Status);
+
+        var created = await CallAsync(admin, HttpMethod.Post, "/api/platform/users", create);
+        Assert.Equal(HttpStatusCode.Created, created.Status);
+        var userId = created.Json.GetProperty("userId").GetGuid();
+        Assert.Equal("UserAdmin", created.Json.GetProperty("role").GetString());
+        Assert.DoesNotContain(password, created.Json.GetRawText());
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { username = login.ToUpperInvariant(), email = $"other-{email}", create.displayName, create.password, create.role, create.tenantIds })).Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { username = "other-" + login, email = email.ToUpperInvariant(), create.displayName, create.password, create.role, create.tenantIds })).Status);
+
+        var member = await world.SignInAsync(new Account(new UserId(userId), login.ToUpperInvariant(), password));
+        var emailSession = await world.SignInAsync(new Account(new UserId(userId), email.ToUpperInvariant(), password));
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(member, HttpMethod.Get, $"/api/tenants/{first.Id.Value}/context")).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(emailSession, HttpMethod.Get, "/api/platform/users")).Status);
+        Assert.Equal(HttpStatusCode.Created, (await CallAsync(admin, HttpMethod.Post, $"/api/platform/tenants/{second.Id.Value}/memberships", new { userId })).Status);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(member, HttpMethod.Get, $"/api/tenants/{second.Id.Value}/context")).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Put, $"/api/platform/users/{userId}", new { create.username, create.email, create.displayName, role = "PlatformAdmin" })).Status);
+        var updated = await CallAsync(admin, HttpMethod.Put, $"/api/platform/users/{userId}", new { create.username, create.email, displayName = "Updated", create.role });
+        Assert.Equal(HttpStatusCode.OK, updated.Status);
+        Assert.Equal("Updated", updated.Json.GetProperty("displayName").GetString());
+        await using var context = fixture.CreatePlatformContext();
+        var audit = await context.AuditEvents.AsNoTracking().Where(row => row.TargetId == userId.ToString("D")).ToListAsync();
+        Assert.Contains(audit, row => row.Action == AuditActions.UserCreated);
+        Assert.Contains(audit, row => row.Action == AuditActions.UserUpdated);
+        Assert.Equal(2, audit.Count(row => row.Action == AuditActions.MembershipAdded));
+        Assert.All(audit, row => { Assert.Equal(actor.UserId, row.ActorUserId); Assert.DoesNotContain(password, row.DetailsJson); });
+    }
+
+    [Fact]
+    public async Task ConcurrentAccountCreationHasOneWinner()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var admin = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
-        var login = $"new.user-{Guid.NewGuid():N}"[..40];
-        var password = $"Initial-{Guid.NewGuid():N}!";
-
-        var shortPassword = await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { loginIdentifier = login, displayName = "New User", password = "short" });
-        Assert.Equal(HttpStatusCode.BadRequest, shortPassword.Status);
-        Assert.Equal("password", shortPassword.Json.GetProperty("field").GetString());
-        var badLogin = await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { loginIdentifier = "bad login!", displayName = "New User", password });
-        Assert.Equal("loginIdentifier", badLogin.Json.GetProperty("field").GetString());
-
-        var created = await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { loginIdentifier = login, displayName = "New User", password });
-        Assert.Equal(HttpStatusCode.Created, created.Status);
-        var userId = created.Json.GetProperty("userId").GetGuid();
-        Assert.False(created.Json.GetProperty("isPlatformAdmin").GetBoolean());
-        Assert.DoesNotContain(password, created.Json.GetRawText());
-
-        Assert.Equal(HttpStatusCode.Conflict,
-            (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { loginIdentifier = login.ToUpperInvariant(), displayName = "Other", password })).Status);
-
-        // The new account can sign in, and holds neither a membership nor a platform grant.
-        var session = await world.SignInAsync(new Account(new UserId(userId), login, password));
-        Assert.False((await CallAsync(session, HttpMethod.Get, "/api/me")).Json.GetProperty("isPlatformAdmin").GetBoolean());
-        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(session, HttpMethod.Get, "/api/platform/summary")).Status);
-
-        await using var context = fixture.CreatePlatformContext();
-        var audit = await context.AuditEvents.AsNoTracking().SingleAsync(row => row.TargetId == userId.ToString("D"));
-        Assert.Equal(AuditActions.UserCreated, audit.Action);
-        Assert.Equal(AuditActorKind.PlatformAdmin, audit.ActorKind);
-        Assert.Null(audit.TenantId);
-        Assert.DoesNotContain(password, audit.DetailsJson);
-        Assert.DoesNotContain("assword", audit.DetailsJson);
+        var login = $"race-{Guid.NewGuid():N}";
+        var email = $"{Guid.NewGuid():N}@example.com";
+        var request = new { username = login, email, displayName = "Concurrent", password = "local-password-123", role = "PlatformAdmin", tenantIds = Array.Empty<Guid>() };
+        var results = await Task.WhenAll(CallAsync(admin, HttpMethod.Post, "/api/platform/users", request), CallAsync(admin, HttpMethod.Post, "/api/platform/users", request));
+        Assert.Equal(1, results.Count(result => result.Status == HttpStatusCode.Created));
+        Assert.Equal(1, results.Count(result => result.Status == HttpStatusCode.Conflict));
     }
 
     [Fact]

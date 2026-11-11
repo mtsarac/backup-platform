@@ -21,8 +21,8 @@ const tenant: PlatformTenantDetail = { tenantId: 'tenant-a', name: 'Acme A.Ş.',
 const ayse: PlatformMembership = { userId: 'user-1', displayName: 'Ayşe Yılmaz', loginIdentifier: 'ayse' }
 const can: PlatformMembership = { userId: 'user-2', displayName: 'Can Demir', loginIdentifier: null }
 const users: PlatformUser[] = [
-  { userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz', isPlatformAdmin: false, membershipCount: 0 },
-  { userId: 'user-4', displayName: 'Root', loginIdentifier: 'root', isPlatformAdmin: true, membershipCount: 0 },
+  { userId: 'user-3', displayName: 'Deniz Kaya', username: 'deniz', email: 'deniz@example.com', role: 'UserAdmin', membershipCount: 0 },
+  { userId: 'user-4', displayName: 'Root', username: 'root', email: 'root@example.com', role: 'PlatformAdmin', membershipCount: 0 },
 ]
 const audit: PlatformAuditEntry = { id: 'audit-1', at: '2026-10-06T08:00:00Z', actorUserId: 'admin-id', actorDisplayName: 'Platform Operatörü', actorKind: 'PlatformAdmin', action: 'membership.role_changed', tenantId: 'tenant-a', tenantName: 'Acme A.Ş.', targetType: 'Membership', targetId: 'user-1', details: { role: 'Admin', changed: true, note: null } }
 
@@ -159,6 +159,7 @@ describe('platform tenant detail', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
     expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
     expect(screen.getByText('Can Demir')).toBeInTheDocument()
+    expect(screen.getByText('ayse')).toBeInTheDocument()
   })
 
   it('renames the tenant', async () => {
@@ -193,7 +194,7 @@ describe('platform tenant detail', () => {
     await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'den')
     await userEvent.click(screen.getByRole('button', { name: 'Ara' }))
     await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ search: 'den', page: 1, pageSize: 20 }, expect.any(AbortSignal)))
-    expect(screen.getByRole('option', { name: /Root \(root\) · (?:PlatformAdmin|Platform Yöneticisi)/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Root/ })).not.toBeInTheDocument()
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kullanıcı' }), 'user-3')
     vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, can, { userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz' }]))
     await userEvent.click(screen.getByRole('button', { name: 'Üye ekle' }))

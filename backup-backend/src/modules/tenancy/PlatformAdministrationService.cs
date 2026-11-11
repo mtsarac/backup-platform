@@ -37,26 +37,49 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
     }
 
     public Task<PlatformChange<PlatformUserItem>> CreateUserAsync(
-        string? loginIdentifier, string? displayName, string? password, UserId actor, CancellationToken cancellationToken)
+        string? username, string? email, string? displayName, string? password, string? role, Guid[]? tenantIds, UserId actor, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(actor);
-        var name = ValidName(displayName, "displayName");
-        string login;
-        try
-        {
-            login = loginIdentifier is null ? throw new ArgumentException("missing") : LoginIdentifierNormalizer.Normalize(loginIdentifier);
-        }
-        catch (ArgumentException)
-        {
-            throw new InvalidPlatformRequestException("loginIdentifier", "invalid_value");
-        }
+        var (name, login, address, accountRole) = ValidateAccount(displayName, username, email, role);
         if (password is null || password.Length is < MinimumPasswordLength or > MaximumPasswordLength)
         {
             throw new InvalidPlatformRequestException("password", "invalid_length");
         }
+        if (tenantIds is null || tenantIds.Any(id => id == Guid.Empty) || tenantIds.Distinct().Count() != tenantIds.Length)
+        {
+            throw new InvalidPlatformRequestException("tenantIds", "invalid_value");
+        }
+        if (accountRole == UserRole.UserAdmin && tenantIds.Length == 0)
+        {
+            throw new InvalidPlatformRequestException("tenantIds", "membership_required");
+        }
+        if (accountRole == UserRole.PlatformAdmin && tenantIds.Length != 0)
+        {
+            throw new InvalidPlatformRequestException("tenantIds", "membership_not_allowed");
+        }
         var userId = UserId.New();
-        // The trimmed original spelling is kept for display; uniqueness is decided on the normalized form.
-        return store.CreateUserAsync(userId, name, loginIdentifier!.Trim(), passwordHasher.Hash(userId, password), actor, timeProvider.GetUtcNow(), cancellationToken);
+        return store.CreateUserAsync(userId, name, login, address, passwordHasher.Hash(userId, password), accountRole,
+            tenantIds.Select(id => new TenantId(id)).ToArray(), actor, timeProvider.GetUtcNow(), cancellationToken);
+    }
+
+    public Task<PlatformChange<PlatformUserItem>> UpdateUserAsync(
+        UserId userId, string? username, string? email, string? displayName, string? role, UserId actor, CancellationToken cancellationToken)
+    {
+        var (name, login, address, accountRole) = ValidateAccount(displayName, username, email, role);
+        return store.UpdateUserAsync(userId, name, login, address, accountRole, actor, timeProvider.GetUtcNow(), cancellationToken);
+    }
+
+    private static (string Name, string Username, string Email, UserRole Role) ValidateAccount(string? displayName, string? username, string? email, string? role)
+    {
+        var name = ValidName(displayName, "displayName");
+        try { LoginIdentifierNormalizer.Normalize(username!); }
+        catch (ArgumentException) { throw new InvalidPlatformRequestException("username", "invalid_value"); }
+        try { LoginIdentifierNormalizer.NormalizeEmail(email!); }
+        catch (ArgumentException) { throw new InvalidPlatformRequestException("email", "invalid_value"); }
+        if (!Enum.TryParse<UserRole>(role, out var parsedRole) || !Enum.IsDefined(parsedRole) || role != parsedRole.ToString())
+        {
+            throw new InvalidPlatformRequestException("role", "invalid_value");
+        }
+        return (name, username!.Trim(), email!.Trim(), parsedRole);
     }
 
     public Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(

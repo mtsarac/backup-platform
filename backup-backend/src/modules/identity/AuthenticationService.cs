@@ -12,7 +12,9 @@ public sealed class AuthenticationService(IIdentityStore identityStore, Password
         string normalizedIdentifier;
         try
         {
-            normalizedIdentifier = LoginIdentifierNormalizer.Normalize(loginIdentifier);
+            normalizedIdentifier = loginIdentifier?.Contains('@') == true
+                ? LoginIdentifierNormalizer.NormalizeEmail(loginIdentifier)
+                : LoginIdentifierNormalizer.Normalize(loginIdentifier!);
         }
         catch (ArgumentException)
         {

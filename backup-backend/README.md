@@ -193,6 +193,12 @@ dotnet run --project src/hosts/agent
 
 `--bootstrap-user` reads `BACKUP_PLATFORM_BOOTSTRAP_LOGIN`, `BACKUP_PLATFORM_BOOTSTRAP_PASSWORD`, and `BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME`. Other settings are listed in `.env.example`. The .NET tools do not load dotenv files, so export variables or use a secret store.
 
+Platform administrators manage accounts through `/api/platform/users`. Creation requires a username,
+email, initial password and role; `UserAdmin` accounts also require at least one tenant ID, while
+`PlatformAdmin` accounts cannot have memberships. Usernames and email addresses are case-insensitively
+unique, and either can be used to sign in. Existing bootstrap credentials without an email can be
+updated by a platform administrator. Account and membership changes are audited without passwords.
+
 To enroll an agent, see "Connecting an agent" in the [root README](../README.md).
 
 The `Dockerfile` builds the API image. `docker-compose.yml` in the repository root starts it with PostgreSQL, SQL Server, and the frontend.

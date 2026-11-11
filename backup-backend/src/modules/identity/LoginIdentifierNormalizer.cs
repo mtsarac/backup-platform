@@ -30,4 +30,18 @@ public static class LoginIdentifierNormalizer
         normalized = trimmed.ToUpperInvariant();
         return true;
     }
+
+    public static string NormalizeEmail(string email)
+    {
+        ArgumentNullException.ThrowIfNull(email);
+        var value = email.Trim();
+        if (value.Length is < 3 or > 254 || value.Any(c => c < 33 || c > 126) ||
+            !System.Net.Mail.MailAddress.TryCreate(value, out var address) ||
+            !string.Equals(address.Address, value, StringComparison.Ordinal) ||
+            value.Count(c => c == '@') != 1)
+        {
+            throw new ArgumentException("Invalid email address.", nameof(email));
+        }
+        return value.ToUpperInvariant();
+    }
 }

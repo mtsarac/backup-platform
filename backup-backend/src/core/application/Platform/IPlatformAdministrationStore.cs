@@ -11,7 +11,7 @@ public sealed record PlatformTenantItem(TenantId TenantId, string Name, int Memb
 public sealed record PlatformTenantDetail(
     TenantId TenantId, string Name, int MemberCount, int EnabledBackupJobs, bool EnrollmentEnabled, DateTimeOffset? EnrollmentChangedAt);
 
-public sealed record PlatformUserItem(UserId UserId, string DisplayName, string? LoginIdentifier, bool IsPlatformAdmin, int MembershipCount);
+public sealed record PlatformUserItem(UserId UserId, string DisplayName, string? Username, string? Email, UserRole Role, int MembershipCount);
 
 public sealed record PlatformMembershipItem(UserId UserId, string DisplayName, string? LoginIdentifier);
 
@@ -32,7 +32,8 @@ public enum PlatformChangeOutcome
     MembershipNotFound = 5,
     AlreadyMember = 6,
     LoginTaken = 7,
-    PlatformAdminCannotBeMember = 8
+    PlatformAdminCannotBeMember = 8,
+    UserAdminMembershipRequired = 9
 }
 
 public sealed record PlatformChange<T>(PlatformChangeOutcome Outcome, T? Value = default) where T : class;
@@ -53,7 +54,9 @@ public interface IPlatformAdministrationStore
 
     Task<PagedResult<PlatformUserItem>> ListUsersAsync(string? search, int page, int pageSize, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformUserItem>> CreateUserAsync(
-        UserId userId, string displayName, string loginIdentifier, string passwordHash, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+        UserId userId, string displayName, string username, string email, string passwordHash, UserRole role, IReadOnlyList<TenantId> tenantIds, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<PlatformChange<PlatformUserItem>> UpdateUserAsync(
+        UserId userId, string displayName, string username, string email, UserRole role, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>Null when the tenant does not exist.</summary>
     Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken);

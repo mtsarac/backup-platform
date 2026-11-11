@@ -18,9 +18,12 @@ public sealed class PlatformTenantRequest
 
 public sealed class PlatformUserRequest
 {
-    public string? LoginIdentifier { get; init; }
+    public string? Username { get; init; }
+    public string? Email { get; init; }
     public string? DisplayName { get; init; }
     public string? Password { get; init; }
+    public string? Role { get; init; }
+    public Guid[]? TenantIds { get; init; }
 }
 
 public sealed class PlatformMembershipRequest
@@ -52,6 +55,7 @@ public static class PlatformEndpoints
         platform.MapGet("/tenants/{tenantId:guid}/agents/{agentId:guid}", GetAgentAsync);
         platform.MapGet("/users", ListUsersAsync);
         platform.MapPost("/users", CreateUserAsync);
+        platform.MapPut("/users/{userId:guid}", UpdateUserAsync);
         platform.MapGet("/agents", ListAgentsAsync);
         platform.MapGet("/audit", ListAuditAsync);
         return endpoints;
@@ -184,16 +188,39 @@ public static class PlatformEndpoints
     {
         try
         {
-            var change = await service.CreateUserAsync(request?.LoginIdentifier, request?.DisplayName, request?.Password, currentUser.UserId!, cancellationToken);
-            return change.Outcome == PlatformChangeOutcome.LoginTaken
-                ? Results.Conflict(new { error = "login_taken" })
-                : Results.Json(ToResponse(change.Value!), statusCode: StatusCodes.Status201Created);
+            var change = await service.CreateUserAsync(request?.Username, request?.Email, request?.DisplayName, request?.Password, request?.Role, request?.TenantIds, currentUser.UserId!, cancellationToken);
+            return UserChange(change, true);
         }
         catch (InvalidPlatformRequestException exception)
         {
             return Invalid(exception);
         }
     }
+
+    private static async Task<IResult> UpdateUserAsync(
+        Guid userId, PlatformUserRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
+    {
+        if (userId == Guid.Empty) return Results.NotFound(new { error = "user_not_found" });
+        try
+        {
+            var change = await service.UpdateUserAsync(new UserId(userId), request?.Username, request?.Email, request?.DisplayName, request?.Role, currentUser.UserId!, cancellationToken);
+            return UserChange(change, false);
+        }
+        catch (InvalidPlatformRequestException exception)
+        {
+            return Invalid(exception);
+        }
+    }
+
+    private static IResult UserChange(PlatformChange<PlatformUserItem> change, bool created) => change.Outcome switch
+    {
+        PlatformChangeOutcome.LoginTaken => Results.Conflict(new { error = "identity_taken" }),
+        PlatformChangeOutcome.TenantNotFound => TenantNotFound(),
+        PlatformChangeOutcome.UserNotFound => Results.NotFound(new { error = "user_not_found" }),
+        PlatformChangeOutcome.PlatformAdminCannotBeMember => Results.BadRequest(new { error = "platform_admin_membership_not_allowed" }),
+        PlatformChangeOutcome.UserAdminMembershipRequired => Results.BadRequest(new { error = "user_admin_membership_required" }),
+        _ => Results.Json(ToResponse(change.Value!), statusCode: created ? StatusCodes.Status201Created : StatusCodes.Status200OK)
+    };
 
     private static async Task<IResult> ListAgentsAsync(
         Guid? tenantId, string? connectivity, string? status, string? search, int? page, int? pageSize,
@@ -317,8 +344,9 @@ public static class PlatformEndpoints
     {
         userId = user.UserId.Value,
         displayName = user.DisplayName,
-        loginIdentifier = user.LoginIdentifier,
-        isPlatformAdmin = user.IsPlatformAdmin,
+        username = user.Username,
+        email = user.Email,
+        role = user.Role.ToString(),
         membershipCount = user.MembershipCount
     };
 

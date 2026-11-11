@@ -30,15 +30,15 @@ function AddMemberForm({ tenantId }: { tenantId: string }) {
     event.preventDefault()
     setAdded('')
     const chosen = users.data?.items.find((user) => user.userId === userId)
-    add.mutate({ userId }, { onSuccess: () => { setUserId(''); setAdded(chosen?.displayName ?? '') } })
+    add.mutate(userId, { onSuccess: () => { setUserId(''); setAdded(chosen?.displayName ?? '') } })
   }
-  return <Section title={tx("Üye ekle")} description={tx("Var olan bir kullanıcıyı bu tenant'a ekleyin. Kullanıcı hesabı burada oluşturulmaz.")}>
+  return <Section title={tx("Üye ekle")} description={tx("Var olan bir kullanıcıyı bu çalışma alanına ekleyin. Kullanıcı hesabı burada oluşturulmaz.")}>
     <div className="space-y-4">
       <div className="flex max-w-xl"><SearchForm label={tx("Kullanıcı ara")} value={userSearch} onSearch={(value) => { setUserSearch(value); setUserId('') }} placeholder={tx("Ad veya kullanıcı adı")} /></div>
-      <form onSubmit={submit} className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_10rem_auto]">
+      <form onSubmit={submit} className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
         <Field label={tx("Kullanıcı")}>{(control) => <Select {...control} value={userId} onChange={(event) => setUserId(event.target.value)} disabled={users.isPending}>
           <option value="">{users.isPending ? tx('Kullanıcılar yükleniyor…') : users.error ? tx('Kullanıcılar alınamadı') : tx('Kullanıcı seçin')}</option>
-          {users.data?.items.map((user) => <option key={user.userId} value={user.userId}>{user.displayName}{user.loginIdentifier ? ` (${user.loginIdentifier})` : ''}{user.isPlatformAdmin ? tx(' · PlatformAdmin') : ''}</option>)}
+          {users.data?.items.filter((user) => user.role === 'UserAdmin').map((user) => <option key={user.userId} value={user.userId}>{user.displayName} ({user.username})</option>)}
         </Select>}</Field>
         <Button type="submit" disabled={!userId || add.isPending}>{add.isPending ? tx('Ekleniyor…') : tx('Üye ekle')}</Button>
       </form>

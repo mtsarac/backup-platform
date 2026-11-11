@@ -1,11 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   addMembership, createTenant, createUser, getAudit, getMemberships, getPlatformAgent,
-  getPlatformAgents, getSummary, getTenant, getTenants, getUsers, removeMembership, renameTenant, setTenantEnrollment,
+  getPlatformAgents, getSummary, getTenant, getTenants, getUsers, removeMembership, renameTenant, setTenantEnrollment, updateUser,
 } from './api'
 import type { PlanFilters } from './plans/types'
 import type { StorageUsageFilters } from '@/features/storage/types'
-import type { AuditFilters, CreateUserInput, PageParams, PlatformAgentFilters, SearchParams } from './types'
+import type { AuditFilters, CreateUserInput, PageParams, PlatformAgentFilters, SearchParams, UpdateUserInput } from './types'
 
 export const platformKeys = {
   all: ['platform'] as const,
@@ -100,7 +100,7 @@ export function useSetTenantEnrollment(tenantId: string) {
   })
 }
 
-/** The `tenants` prefix covers the membership pages and tenant detail; users carry membership counts. */
+/** The `tenants` prefix covers membership pages and tenant detail. */
 function invalidateMembershipViews(client: ReturnType<typeof useQueryClient>) {
   return Promise.all([
     client.invalidateQueries({ queryKey: platformKeys.tenants }),
@@ -112,7 +112,7 @@ function invalidateMembershipViews(client: ReturnType<typeof useQueryClient>) {
 export function useAddMembership(tenantId: string) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (input: { userId: string }) => addMembership(tenantId, input.userId),
+    mutationFn: (userId: string) => addMembership(tenantId, userId),
     onSuccess: () => invalidateMembershipViews(client),
   })
 }
@@ -132,7 +132,19 @@ export function useCreateUser() {
     mutationFn: (input: CreateUserInput) => createUser(input),
     onSuccess: () => Promise.all([
       client.invalidateQueries({ queryKey: platformKeys.users }),
+      client.invalidateQueries({ queryKey: platformKeys.tenants }),
       client.invalidateQueries({ queryKey: platformKeys.summary }),
+      client.invalidateQueries({ queryKey: platformKeys.audit }),
+    ]),
+  })
+}
+
+export function useUpdateUser(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: UpdateUserInput) => updateUser(id, input),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: platformKeys.users }),
       client.invalidateQueries({ queryKey: platformKeys.audit }),
     ]),
   })

@@ -15,14 +15,18 @@ internal sealed class PasswordCredentialConfiguration : IEntityTypeConfiguration
             table.HasCheckConstraint("ck_password_credentials_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
             table.HasCheckConstraint("ck_password_credentials_login", "\"LoginIdentifier\" ~ '^[A-Za-z0-9._-]{3,128}$'");
             table.HasCheckConstraint("ck_password_credentials_normalized_login", "\"NormalizedLoginIdentifier\" = upper(\"LoginIdentifier\" COLLATE \"C\")");
+            table.HasCheckConstraint("ck_password_credentials_normalized_email", "(\"Email\" IS NULL AND \"NormalizedEmail\" IS NULL) OR (\"Email\" IS NOT NULL AND \"NormalizedEmail\" IS NOT NULL AND \"NormalizedEmail\" = upper(\"Email\" COLLATE \"C\"))");
             table.HasCheckConstraint("ck_password_credentials_hash", "\"PasswordHash\" ~ '[^[:space:]]'");
         });
         builder.HasKey(credential => credential.UserId);
         builder.Property(credential => credential.UserId).HasConversion<UserIdConverter>().HasColumnType("uuid").ValueGeneratedNever();
         builder.Property(credential => credential.LoginIdentifier).HasMaxLength(128).IsRequired();
         builder.Property(credential => credential.NormalizedLoginIdentifier).HasMaxLength(128).IsRequired();
+        builder.Property(credential => credential.Email).HasMaxLength(254);
+        builder.Property(credential => credential.NormalizedEmail).HasMaxLength(254);
         builder.Property(credential => credential.PasswordHash).IsRequired();
         builder.HasIndex(credential => credential.NormalizedLoginIdentifier).IsUnique();
+        builder.HasIndex(credential => credential.NormalizedEmail).IsUnique();
         builder.HasOne<User>().WithMany().HasForeignKey(credential => credential.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.Property<uint>("xmin").IsRowVersion();
     }

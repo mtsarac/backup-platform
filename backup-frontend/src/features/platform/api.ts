@@ -2,7 +2,7 @@ import { apiRequest } from '@/lib/api/client'
 import type {
   AuditFilters, CreateUserInput, PageParams, PagedResult, PlatformAgent, PlatformAgentDetail,
   PlatformAgentFilters, PlatformAuditEntry, PlatformMembership, PlatformSummary, PlatformTenant, PlatformTenantDetail,
-  PlatformUser, SearchParams, TenantEnrollmentResult,
+  PlatformUser, SearchParams, TenantEnrollmentResult, UpdateUserInput,
 } from './types'
 import type {
   AssignSubscriptionInput, AssignSubscriptionResult, CreatePlanInput, Plan, PlanFilters, PlanInput, StorageLimitOverride,
@@ -52,6 +52,7 @@ export function addMembership(tenantId: string, userId: string) {
   return apiRequest<PlatformMembership>(`${tenantUrl(tenantId)}/memberships`, { method: 'POST', json: { userId } })
 }
 
+
 export function removeMembership(tenantId: string, userId: string) {
   return apiRequest<void>(`${tenantUrl(tenantId)}/memberships/${encodeURIComponent(userId)}`, { method: 'DELETE' })
 }
@@ -62,6 +63,10 @@ export function getUsers(params: SearchParams, signal?: AbortSignal) {
 
 export function createUser(input: CreateUserInput) {
   return apiRequest<PlatformUser>('platform/users', { method: 'POST', json: input })
+}
+
+export function updateUser(id: string, input: UpdateUserInput) {
+  return apiRequest<PlatformUser>(`platform/users/${encodeURIComponent(id)}`, { method: 'PUT', json: input })
 }
 
 export function getPlatformAgents(filters: PlatformAgentFilters, signal?: AbortSignal) {
