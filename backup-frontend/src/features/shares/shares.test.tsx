@@ -595,4 +595,86 @@ describe('BackupShare frontend', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
   })
+
+  it('renders download button on Paylaşılan Yedekler for active shares and triggers download', async () => {
+    permissions.role = 'PlatformAdmin'
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/downloads')) {
+        return {
+          sessionId: 'session-123',
+          downloadUrl: '/api/tenants/tenant-b/backup-artifacts/art-123/downloads/session-123/content',
+          filename: 'backup-123.bak',
+          checksum: 'abc123',
+          sizeBytes: 4096,
+          decrypted: true,
+        }
+      }
+      if (path.includes('platform/backup-shares')) return [platformShare, expiredShare]
+      if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
+      return []
+    })
+
+    renderPlatformSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'İndir' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'İndir' }))
+
+    await waitFor(() => {
+      expect(click).toHaveBeenCalled()
+      expect(screen.getByText('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.')).toBeInTheDocument()
+    })
+    click.mockRestore()
+  })
+
+  it('displays refusal states when download is refused or fails on Paylaşılan Yedekler', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/downloads')) {
+        throw new ApiError(403, { error: 'share_expired' })
+      }
+      if (path.includes('platform/backup-shares')) return [platformShare]
+      if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
+      return []
+    })
+
+    renderPlatformSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'İndir' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'İndir' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('İndirme yetkisi reddedildi veya paylaşım süresi doldu.')
+    })
+  })
+
+  it('displays replica unavailable refusal when replica is not downloadable', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/downloads')) {
+        throw new ApiError(409, { error: 'replica_unavailable' })
+      }
+      if (path.includes('platform/backup-shares')) return [platformShare]
+      if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
+      return []
+    })
+
+    renderPlatformSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'İndir' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'İndir' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Kopya şu anda indirme için kullanılamıyor.')
+    })
+  })
 })

@@ -2405,6 +2405,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ReleasedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ShareId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ReplicaId")
                         .HasColumnType("uuid");
 
@@ -2455,6 +2458,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasFilter("\"ReleasedAt\" IS NULL");
 
                     b.HasIndex("TenantId");
+                    b.HasIndex("ShareId");
+
 
                     b.HasIndex("ArtifactId", "TenantId");
 
@@ -4918,6 +4923,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupShare", null)
+                        .WithMany()
+                        .HasForeignKey("ShareId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationChannel", b =>
@@ -4928,6 +4938,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
+
 
             modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationCondition", b =>
                 {

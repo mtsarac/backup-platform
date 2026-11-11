@@ -1,4 +1,5 @@
 using BackupPlatform.Domain.Storage;
+using BackupPlatform.Domain.Identity;
 using BackupPlatform.Api.Backups;
 using System.Security.Cryptography;
 using BackupPlatform.Api.Endpoints;
@@ -13,6 +14,7 @@ using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Downloads;
+using BackupPlatform.Application.Tenancy;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BackupPlatform.Api.Downloads;
@@ -63,10 +65,11 @@ public static class AgentDownloadEndpoints
     }
 
     private static async Task<IResult> KeyAsync(Guid sessionId, DownloadSignalRequest request, HttpContext http, ICurrentAgent agent,
-        AgentDownloadSource source, IDownloadStore store, ITenantWrapKeyStore keys, CancellationToken cancellationToken)
+        AgentDownloadSource source, IDownloadStore store, ITenantWrapKeyStore keys, ICentralAuthorizationService centralAuth, CancellationToken cancellationToken)
     {
         var session = await source.GetFencedAsync(agent.Identity!, sessionId, request.LeaseToken, cancellationToken);
         if (session is not { Decrypted: true }) return Rejected();
+        if (!await centralAuth.EvaluateAgentSessionAccessAsync(session.TenantId, session.ArtifactId, session.ShareId, new UserId(session.UserId), cancellationToken)) return Rejected();
         var artifact = await store.GetArtifactAsync(session.TenantId, session.ArtifactId, cancellationToken);
         if (artifact is not { Format: BackupArtifact.BpeFormat, EncryptionKeyId: { } keyId, EncryptionWrappedDekBase64: { } wrapped }) return Rejected();
         byte[] dek;
@@ -81,11 +84,12 @@ public static class AgentDownloadEndpoints
     }
 
     private static async Task<IResult> AccessAsync(Guid sessionId, HttpRequest request, ICurrentAgent agent, AgentDownloadSource source, IDownloadStore store,
-        IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+        IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, ICentralAuthorizationService centralAuth, CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease)) return Rejected();
         var session = await source.GetFencedAsync(agent.Identity!, sessionId, lease, cancellationToken);
         if (session is null || !StorageProviderTypes.AgentExecuted(session.StorageProvider)) return Rejected();
+        if (!await centralAuth.EvaluateAgentSessionAccessAsync(session.TenantId, session.ArtifactId, session.ShareId, new UserId(session.UserId), cancellationToken)) return Rejected();
         var artifact = await store.GetArtifactAsync(session.TenantId, session.ArtifactId, cancellationToken);
         var replica = artifact?.Replicas.SingleOrDefault(item => item.Id == session.ReplicaId);
         if (replica is null) return Rejected();

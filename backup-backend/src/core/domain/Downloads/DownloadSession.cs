@@ -12,7 +12,7 @@ public sealed class DownloadSession : ITenantOwned
 {
     private DownloadSession() { TenantId = null!; StorageProvider = null!; StorageTarget = null!; Key = null!; Checksum = null!; Filename = null!; }
     public DownloadSession(Guid id, BackupArtifact artifact, BackupReplica replica, Guid userId, string filename, DateTimeOffset now, TimeSpan lifetime,
-        bool decrypted = false, Guid? directAgentId = null)
+        bool decrypted = false, Guid? directAgentId = null, Guid? shareId = null)
     {
         if (decrypted && artifact.Format != BackupArtifact.BpeFormat)
             throw new ArgumentException("Only an encrypted artifact can be downloaded decrypted.");
@@ -21,7 +21,7 @@ public sealed class DownloadSession : ITenantOwned
             replica.VerificationState != "Verified" || replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes ||
             artifact.ChecksumAlgorithm != "sha256") throw new ArgumentException("The replica cannot be downloaded.");
         Id = id; TenantId = artifact.TenantId; ArtifactId = artifact.Id; ReplicaId = replica.Id; UserId = userId;
-        Decrypted = decrypted;
+        Decrypted = decrypted; ShareId = shareId;
         if (directAgentId == Guid.Empty || directAgentId is not null && !StorageProviderTypes.AgentExecuted(replica.StorageProvider))
             throw new ArgumentException("A direct executor is only valid for external storage.");
         AgentId = replica.ExecutionLocation == BackupStorageExecutionLocation.Agent ? replica.OwningAgentId : directAgentId;
@@ -35,6 +35,7 @@ public sealed class DownloadSession : ITenantOwned
     public Guid ArtifactId { get; private set; }
     public Guid ReplicaId { get; private set; }
     public Guid UserId { get; private set; }
+    public Guid? ShareId { get; private set; }
     /// <summary>The serving host verifies private ciphertext and plaintext staging before streaming; metadata still describes stored ciphertext.</summary>
     public bool Decrypted { get; private set; }
     public Guid? AgentId { get; private set; }

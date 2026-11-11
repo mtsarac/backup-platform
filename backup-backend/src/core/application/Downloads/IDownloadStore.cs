@@ -5,7 +5,8 @@ using BackupPlatform.Domain.Identity;
 namespace BackupPlatform.Application.Downloads;
 
 public sealed record DownloadCreateCommand(TenantId TenantId, Guid ArtifactId, Guid ReplicaId, Guid UserId, string Filename, DateTimeOffset Now, TimeSpan Lifetime,
-    bool Decrypted = false, Guid? DirectAgentId = null);
+    bool Decrypted = false, Guid? DirectAgentId = null, Guid? ShareId = null);
+public sealed record DownloadRefusalCommand(TenantId TenantId, Guid ArtifactId, Guid UserId, Guid? ShareId, string Reason, DateTimeOffset Now, bool IsPlatformAdmin = false);
 public sealed record DownloadTransition(DownloadState ExpectedState, DownloadState State, string? ExpectedOwner, string? Owner,
     DateTimeOffset Now, TimeSpan? LeaseDuration = null, long Bytes = 0, string? FailureCode = null);
 
@@ -20,6 +21,7 @@ public interface IDownloadStore
     Task<int> ExpireAsync(DateTimeOffset now, CancellationToken cancellationToken);
     Task<DownloadSession?> ExpireSessionAsync(TenantId tenantId, Guid sessionId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<DownloadSession?> SwitchReplicaAsync(Guid sessionId, Guid currentReplicaId, string? expectedOwner, BackupReplica newReplica, CancellationToken cancellationToken);
+    Task RecordRefusalAsync(DownloadRefusalCommand command, CancellationToken cancellationToken);
 }
 
 /// <summary>Agent availability and control-plane selection. Direct browser sessions never expose a backend payload stream.</summary>

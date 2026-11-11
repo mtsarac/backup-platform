@@ -19,6 +19,9 @@ internal sealed class DownloadSessionConfiguration : IEntityTypeConfiguration<Do
         builder.Property(session => session.Filename).HasMaxLength(255).IsRequired();
         builder.Property(session => session.LeaseOwner).HasMaxLength(128);
         builder.Property(session => session.FailureCode).HasMaxLength(128);
+        builder.Property(session => session.ShareId);
+        builder.HasOne<BackupShare>().WithMany().HasForeignKey(session => session.ShareId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(session => session.ShareId);
         builder.HasOne<BackupArtifact>().WithMany().HasForeignKey(session => new { session.ArtifactId, session.TenantId })
             .HasPrincipalKey(artifact => new { artifact.Id, artifact.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<BackupReplica>().WithMany().HasForeignKey(session => new { session.ReplicaId, session.TenantId })

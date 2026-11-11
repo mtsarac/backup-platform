@@ -30,23 +30,81 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var downloadId = Guid.NewGuid();
-        if (!await centralAuth.EvaluateContentAccessAsync(new UserId(command.UserId), command.TenantId, cancellationToken)) return null;
+        if (command.ShareId is { } shareId)
+        {
+            if (!await centralAuth.IsPlatformAdminAsync(new UserId(command.UserId), cancellationToken))
+            {
+                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, shareId, "forbidden", command.Now, false), cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+            var shareLocked = await context.Database.SqlQuery<Guid>($"""
+                SELECT "Id" AS "Value" FROM backup_shares
+                WHERE "TenantId" = {command.TenantId.Value} AND "Id" = {shareId} FOR UPDATE
+                """).ToListAsync(cancellationToken);
+            if (shareLocked.Count == 0)
+            {
+                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, shareId, "share_not_found", command.Now, true), cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+            var share = await context.BackupShares.AsNoTracking().SingleAsync(s => s.TenantId == command.TenantId && s.Id == shareId, cancellationToken);
+            if (share.ArtifactId != command.ArtifactId)
+            {
+                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, shareId, "share_artifact_mismatch", command.Now, true), cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+            if (share.RevokedAtUtc is not null)
+            {
+                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, shareId, "share_revoked", command.Now, true), cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+            if (share.ExpiresAtUtc <= command.Now)
+            {
+                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, shareId, "share_expired", command.Now, true), cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+        }
+        else if (!await centralAuth.EvaluateContentAccessAsync(new UserId(command.UserId), command.TenantId, cancellationToken))
+        {
+            await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, null, "forbidden", command.Now, false), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
         var artifactLocked = await context.Database.SqlQuery<Guid>($"""
             SELECT "Id" AS "Value" FROM backup_artifacts
             WHERE "TenantId" = {command.TenantId.Value} AND "Id" = {command.ArtifactId} FOR NO KEY UPDATE
             """).ToListAsync(cancellationToken);
-        if (artifactLocked.Count == 0) return null;
+        if (artifactLocked.Count == 0)
+        {
+            await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, command.ShareId, "artifact_not_found", command.Now, command.ShareId != null), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
         var replicaLocked = await context.Database.SqlQuery<Guid>($"""
             SELECT "Id" AS "Value" FROM backup_replicas
             WHERE "TenantId" = {command.TenantId.Value} AND "ArtifactId" = {command.ArtifactId} AND "Id" = {command.ReplicaId} FOR UPDATE
             """).ToListAsync(cancellationToken);
-        if (replicaLocked.Count == 0) return null;
+        if (replicaLocked.Count == 0)
+        {
+            await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, command.ShareId, "replica_not_found", command.Now, command.ShareId != null), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
         // Fresh statements after both locks: neither a retention mutation nor a physical claim can invalidate eligibility before the hold commits.
         var artifact = await context.BackupArtifacts.AsNoTracking().SingleAsync(entity => entity.TenantId == command.TenantId && entity.Id == command.ArtifactId, cancellationToken);
         var replica = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == command.TenantId && entity.ArtifactId == command.ArtifactId && entity.Id == command.ReplicaId, cancellationToken);
         if (replica.Status != BackupReplicaStatus.Available || replica.VerificationState != "Verified" ||
-            replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes || artifact.ChecksumAlgorithm != "sha256") return null;
-        var download = new DownloadSession(downloadId, artifact, replica, command.UserId, command.Filename, command.Now, command.Lifetime, command.Decrypted, command.DirectAgentId);
+            replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes || artifact.ChecksumAlgorithm != "sha256")
+        {
+            await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(command.TenantId, command.ArtifactId, command.UserId, command.ShareId, "replica_unavailable", command.Now, command.ShareId != null), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
+        var download = new DownloadSession(downloadId, artifact, replica, command.UserId, command.Filename, command.Now, command.Lifetime, command.Decrypted, command.DirectAgentId, command.ShareId);
         context.DownloadSessions.Add(download);
         AddAudit(context, download, command.Now, "download.requested");
         await context.SaveChangesAsync(cancellationToken);
@@ -75,12 +133,22 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var startsStreaming = transition.State == DownloadState.Streaming && transition.ExpectedState != DownloadState.Streaming;
+        var requiresActiveAuthorization = transition.State is not (DownloadState.Failed or DownloadState.Cancelled);
+        var target = await context.DownloadSessions.AsNoTracking().Where(entity => entity.Id == sessionId)
+            .Select(entity => new { entity.TenantId, entity.ArtifactId, entity.AgentId, entity.ShareId }).SingleOrDefaultAsync(cancellationToken);
+        if (target is null) return null;
+        if (requiresActiveAuthorization && target.ShareId is { } preLockShareId)
+        {
+            var shareLocked = await context.Database.SqlQuery<Guid>($"""
+                SELECT "Id" AS "Value" FROM backup_shares
+                WHERE "TenantId" = {target.TenantId.Value} AND "Id" = {preLockShareId} FOR UPDATE
+                """).ToListAsync(cancellationToken);
+            if (shareLocked.Count == 0) return null;
+        }
         if (transition.ExpectedState == DownloadState.Preparing && transition.State == DownloadState.Preparing &&
             transition.ExpectedOwner is null && transition.Owner is not null)
         {
-            var target = await context.DownloadSessions.AsNoTracking().Where(entity => entity.Id == sessionId)
-                .Select(entity => new { entity.TenantId, entity.AgentId }).SingleOrDefaultAsync(cancellationToken);
-            if (target?.AgentId is not { } agentId ||
+            if (target.AgentId is not { } agentId ||
                 !await BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore.LockAgentAsync(context, target.TenantId, new AgentId(agentId), cancellationToken)) return null;
             // Lock the shared agent before any session, so concurrent polls cannot claim different downloads for its single worker.
             var busy = await context.DownloadSessions.AnyAsync(entity => entity.TenantId == target.TenantId && entity.AgentId == agentId &&
@@ -90,7 +158,38 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         }
         var session = await LockSessionAsync(context, sessionId, cancellationToken);
         if (session is null) return null;
-        if (startsStreaming && !await centralAuth.EvaluateContentAccessAsync(new UserId(session.UserId), session.TenantId, cancellationToken)) return null;
+        if (requiresActiveAuthorization)
+        {
+            if (session.ShareId is { } shareId)
+            {
+                var share = await context.BackupShares.AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == session.TenantId && s.Id == shareId, cancellationToken);
+                if (share is null || share.ArtifactId != session.ArtifactId || share.RevokedAtUtc is not null)
+                {
+                    if (startsStreaming)
+                    {
+                        var reason = share?.RevokedAtUtc is not null ? "share_revoked" : "share_not_found";
+                        await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, shareId, reason, transition.Now, true), cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+                    }
+                    return null;
+                }
+                if (session.State != DownloadState.Streaming && share.ExpiresAtUtc <= transition.Now)
+                {
+                    if (startsStreaming)
+                    {
+                        await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, shareId, "share_expired", transition.Now, true), cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+                    }
+                    return null;
+                }
+            }
+            else if (startsStreaming && !await centralAuth.EvaluateContentAccessAsync(new UserId(session.UserId), session.TenantId, cancellationToken))
+            {
+                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, null, "forbidden", transition.Now, false), cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+        }
         var previous = session.State;
         if (!session.Transition(transition.ExpectedState, transition.ExpectedOwner, transition.State, transition.Owner,
             transition.Now, transition.LeaseDuration, transition.Bytes, transition.FailureCode)) return null;
@@ -193,14 +292,58 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
     {
         var details = new Dictionary<string, object?>
         {
-            ["artifactId"] = session.ArtifactId, ["replicaId"] = session.ReplicaId, ["sessionId"] = session.Id,
-            ["transferredBytes"] = session.TransferredBytes, ["status"] = session.State.ToString(), ["failure"] = session.FailureCode,
+            ["shareId"] = session.ShareId,
+            ["artifactId"] = session.ArtifactId,
+            ["replicaId"] = session.ReplicaId,
+            ["sessionId"] = session.Id,
+            ["tenantId"] = session.TenantId.Value,
+            ["initiatingUser"] = session.UserId,
+            ["transferredBytes"] = session.TransferredBytes,
+            ["bytesTransferred"] = session.TransferredBytes,
+            ["status"] = session.State.ToString(),
+            ["failure"] = session.FailureCode,
+            ["failureReason"] = session.FailureCode,
             ["startedAt"] = action == "download.streaming" ? now : (DateTimeOffset?)null,
-            ["completedAt"] = session.ReleasedAt, ["result"] = session.IsTerminal ? session.State.ToString() : null, ["decrypted"] = session.Decrypted
+            ["startTime"] = action == "download.streaming" ? now : session.CreatedAt,
+            ["completedAt"] = session.ReleasedAt,
+            ["endTime"] = session.ReleasedAt,
+            ["result"] = session.IsTerminal ? session.State.ToString() : (action == "download.streaming" ? "streaming" : "requested"),
+            ["decrypted"] = session.Decrypted
         };
-        context.AuditEvents.Add(AuditEvent.Record(now, new UserId(session.UserId), AuditActorKind.TenantAdministrator, action, session.TenantId,
+        var actorKind = session.ShareId is not null ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        context.AuditEvents.Add(AuditEvent.Record(now, new UserId(session.UserId), actorKind, action, session.TenantId,
             "download", session.Id.ToString("D"), details));
     }
 
+    public async Task RecordRefusalAsync(DownloadRefusalCommand command, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await RecordRefusalInternalAsync(context, command, cancellationToken);
+    }
+
+    private static async Task RecordRefusalInternalAsync(PlatformDbContext context, DownloadRefusalCommand command, CancellationToken cancellationToken)
+    {
+        var details = new Dictionary<string, object?>
+        {
+            ["shareId"] = command.ShareId,
+            ["artifactId"] = command.ArtifactId,
+            ["tenantId"] = command.TenantId.Value,
+            ["initiatingUser"] = command.UserId,
+            ["startTime"] = command.Now,
+            ["startedAt"] = command.Now,
+            ["endTime"] = command.Now,
+            ["completedAt"] = command.Now,
+            ["result"] = "refused",
+            ["status"] = "Refused",
+            ["bytesTransferred"] = 0L,
+            ["transferredBytes"] = 0L,
+            ["failureReason"] = command.Reason,
+            ["failure"] = command.Reason
+        };
+        var actorKind = command.IsPlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        context.AuditEvents.Add(AuditEvent.Record(command.Now, new UserId(command.UserId), actorKind, "download.refused", command.TenantId,
+            "download", command.ShareId?.ToString("D") ?? command.ArtifactId.ToString("D"), details));
+        await context.SaveChangesAsync(cancellationToken);
+    }
 
 }

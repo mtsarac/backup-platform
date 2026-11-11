@@ -201,8 +201,8 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
 
         Assert.Equal(HttpStatusCode.Forbidden, viewerStart.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, viewerCancel.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, viewerList.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, viewerGet.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, viewerList.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, viewerGet.StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, operatorStart.StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, adminStart.StatusCode);
         Assert.Equal(HttpStatusCode.OK, operatorCancel.StatusCode);

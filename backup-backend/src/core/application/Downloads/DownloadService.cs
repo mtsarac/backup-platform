@@ -2,6 +2,7 @@ using BackupPlatform.Domain.Storage;
 using System.Buffers;
 using System.Security.Cryptography;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
@@ -14,14 +15,14 @@ public sealed record ReplicaDownloadAvailability(Guid ReplicaId, string StorageP
 public sealed record DownloadAvailability(bool Available, string? Reason, IReadOnlyList<ReplicaDownloadAvailability> Replicas, string Checksum, long SizeBytes, string? Engine = DatabaseEngines.MsSql,
     string Format = BackupArtifact.PlainFormat);
 /// <param name="Decrypt">Tenant administrators only: the serving agent verifies ciphertext and plaintext before direct delivery.</param>
-public sealed record PrepareDownloadRequest(Guid? ReplicaId = null, bool Decrypt = false);
+public sealed record PrepareDownloadRequest(Guid? ReplicaId = null, bool Decrypt = false, Guid? ShareId = null);
 /// <param name="Checksum">What the client can verify: the plaintext SHA-256 for a decrypted download, otherwise the stored file's. <paramref name="SizeBytes"/> is always the stored size.</param>
 public sealed record PreparedDownload(Guid SessionId, string DownloadUrl, string Filename, string Checksum, long SizeBytes, bool Decrypted = false, bool Direct = false);
 public sealed record DownloadStatus(Guid SessionId, string State, string? FailureCode, long TransferredBytes);
 public sealed class DownloadUnavailableException(string code) : Exception("The backup cannot be downloaded.") { public string Code { get; } = code; }
 
 public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver storage, IAgentDownloadSource agentSource,
-    TimeProvider time, ILogger<DownloadService> logger, ITenantWrapKeyStore? wrapKeys = null, IReplicaMissingReporter? missing = null)
+    TimeProvider time, ILogger<DownloadService> logger, ITenantWrapKeyStore? wrapKeys = null, IReplicaMissingReporter? missing = null, ICentralAuthorizationService? centralAuth = null)
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromMinutes(15);
@@ -44,9 +45,19 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
 
     public async Task<PreparedDownload?> PrepareAsync(TenantId tenantId, Guid artifactId, Guid userId, PrepareDownloadRequest request, CancellationToken cancellationToken)
     {
-        var decrypt = request.Decrypt;
+        DownloadAuthorizationResult? auth = null;
+        if (centralAuth is not null)
+        {
+            auth = await centralAuth.EvaluateDownloadAccessAsync(new UserId(userId), tenantId, artifactId, request.ShareId, cancellationToken);
+            if (!auth.Authorized)
+            {
+                await store.RecordRefusalAsync(new DownloadRefusalCommand(tenantId, artifactId, userId, request.ShareId, auth.RefusalReason ?? "forbidden", time.GetUtcNow(), auth.IsPlatformAdmin), cancellationToken);
+                throw new DownloadUnavailableException(auth.RefusalReason ?? "forbidden");
+            }
+        }
         var availability = await GetAvailabilityAsync(tenantId, artifactId, cancellationToken, reportMissing: true);
         if (availability is null) return null;
+        var decrypt = auth?.IsPlatformAdmin == true ? availability.Format == BackupArtifact.BpeFormat : request.Decrypt;
         BackupArtifact? artifact = null;
         if (decrypt)
         {
@@ -73,7 +84,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         var extension = availability.Engine switch { DatabaseEngines.PostgreSql => "dump", DatabaseEngines.MsSql => "bak", DatabaseEngines.FileSystem => "zip", _ => "bin" };
         var filename = $"backup-{artifactId:N}.{extension}" + (availability.Format == BackupArtifact.BpeFormat && !decrypt ? ".bpe" : string.Empty);
         var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime,
-            decrypt, directAgent), cancellationToken);
+            decrypt, directAgent, auth is not null ? auth.AuthorizedShareId : request.ShareId), cancellationToken);
         if (session is null) throw new DownloadUnavailableException("replica_unavailable");
         var url = $"/api/tenants/{tenantId.Value}/backup-artifacts/{artifactId}/downloads/{session.Id}/content";
         return new PreparedDownload(session.Id, url, filename, decrypt ? artifact.SourceChecksum : session.Checksum, session.SizeBytes, decrypt, session.AgentId is not null);

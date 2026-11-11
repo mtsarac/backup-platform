@@ -34,6 +34,44 @@ public static class RestoreEndpoints
         // Retrying the removal of a verification's own disposable database is routine; removing the only copy of a replaced database is an administrator's decision.
         tenant.MapPost("/restores/{restoreId:guid}/cleanup/retry", RetryCleanupAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/restores/{restoreId:guid}/rollback-removal", RemoveRollbackAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.AddEndpointFilter(async (invocationContext, next) =>
+        {
+            var httpContext = invocationContext.HttpContext;
+            if (httpContext.Request.Query.ContainsKey("shareId") || httpContext.Request.Query.ContainsKey("ShareId") ||
+                httpContext.Request.Headers.ContainsKey("X-Share-Id") || httpContext.Request.Headers.ContainsKey("x-share-id"))
+            {
+                return Results.BadRequest(new { error = "invalid_request", message = "Restore does not accept a ShareId." });
+            }
+            foreach (var arg in invocationContext.Arguments)
+            {
+                if (arg is IRestoreRequestPayload { ShareId: not null })
+                {
+                    return Results.BadRequest(new { error = "invalid_request", field = "shareId", message = "Restore does not accept a ShareId." });
+                }
+            }
+
+            if (httpContext.Request.HasJsonContentType())
+            {
+                httpContext.Request.EnableBuffering();
+                using var reader = new StreamReader(httpContext.Request.Body, leaveOpen: true);
+                var body = await reader.ReadToEndAsync();
+                httpContext.Request.Body.Position = 0;
+                if (!string.IsNullOrWhiteSpace(body))
+                {
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(body);
+                        if (doc.RootElement.TryGetProperty("shareId", out _) || doc.RootElement.TryGetProperty("ShareId", out _))
+                        {
+                            return Results.BadRequest(new { error = "invalid_request", message = "Restore does not accept a ShareId." });
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            return await next(invocationContext);
+        });
         return endpoints;
     }
 

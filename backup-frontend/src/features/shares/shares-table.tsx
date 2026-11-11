@@ -6,13 +6,14 @@ import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { linkClass, rowLinkClass } from '@/components/ui/form-styles'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
 import { ShareActionDialogs } from './share-dialogs'
 import { canManageShare, type BackupShareView } from './types'
+import { prepareDownload } from '@/features/artifacts/api'
 
 export interface SharesTableProps {
   shares: BackupShareView[]
@@ -39,6 +40,41 @@ export function SharesTable({
   const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<BackupShareView | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [errorNotice, setErrorNotice] = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  async function handleDownload(share: BackupShareView) {
+    setDownloadingId(share.id)
+    setErrorNotice(null)
+    setNotice(null)
+    try {
+      const prepared = await prepareDownload(share.tenantId, share.artifactId, undefined, undefined, share.id)
+      const anchor = document.createElement('a')
+      anchor.href = prepared.downloadUrl
+      anchor.download = prepared.filename
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setNotice(tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.'))
+    } catch (err: unknown) {
+      let msg = tx('İndirme başlatılamadı.')
+      if (err && typeof err === 'object') {
+        const errorObj = err as { code?: string; reason?: string; error?: string; status?: number; message?: string }
+        const code = errorObj.code || errorObj.error || errorObj.reason || errorObj.message || ''
+        const status = errorObj.status
+        if (code === 'replica_unavailable' || code === 'no_downloadable_replica') {
+          msg = tx('Kopya şu anda indirme için kullanılamıyor.')
+        } else if (code === 'share_revoked') {
+          msg = tx('Paylaşım iptal edildiği için indirme yapılamaz.')
+        } else if (code === 'share_expired' || status === 403 || code.includes('403')) {
+          msg = tx('İndirme yetkisi reddedildi veya paylaşım süresi doldu.')
+        }
+      }
+      setErrorNotice(msg)
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   const columns: Column<BackupShareView>[] = [
     ...(showTenant
@@ -100,25 +136,41 @@ export function SharesTable({
       key: 'actions',
       header: tx('İşlemler'),
       render: (share: BackupShareView) => {
-        if (!canManageShare(share, user?.role, canAdmin)) {
+        const canManage = canManageShare(share, user?.role, canAdmin)
+        const canDownload = user?.role === 'PlatformAdmin' && share.status === 'Active'
+        if (!canManage && !canDownload) {
           return '—'
         }
         return (
           <div className="flex gap-2 justify-end">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setExtendTarget(share)}
-            >
-              {tx('Süreyi uzat')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRevokeTarget(share)}
-            >
-              {tx('İptal et')}
-            </Button>
+            {canDownload && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={downloadingId === share.id}
+                onClick={() => void handleDownload(share)}
+              >
+                {downloadingId === share.id ? tx('İndirme hazırlanıyor…') : tx('İndir')}
+              </Button>
+            )}
+            {canManage && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setExtendTarget(share)}
+                >
+                  {tx('Süreyi uzat')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setRevokeTarget(share)}
+                >
+                  {tx('İptal et')}
+                </Button>
+              </>
+            )}
           </div>
         )
       },
@@ -138,6 +190,13 @@ export function SharesTable({
   return (
     <div className="space-y-4">
       {notice && <Notice tone="success">{notice}</Notice>}
+      {errorNotice && (
+        <ErrorNotice
+          what={errorNotice}
+          dataImpact={tx('Mevcut yedekleriniz etkilenmedi.')}
+          action={tx('Ayrıntıları kontrol edip yeniden deneyin.')}
+        />
+      )}
       <DataList
         rows={shares}
         columns={columns}
