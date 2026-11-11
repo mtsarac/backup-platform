@@ -13,7 +13,6 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Notifications;
-using BackupPlatform.Domain.Support;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Backups;
@@ -88,7 +87,6 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
     public DbSet<DownloadSession> DownloadSessions => Set<DownloadSession>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
-    public DbSet<SupportAccessSession> SupportAccessSessions => Set<SupportAccessSession>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
     public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
@@ -230,10 +228,6 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is StorageConnection)
             {
                 throw new InvalidOperationException("Storage connection writes require explicit platform operations.");
-            }
-            if (!IsPlatformOperations && entry.Entity is SupportAccessSession)
-            {
-                throw new InvalidOperationException("Support access sessions require explicit platform operations.");
             }
             if (!IsPlatformOperations && entry.Entity is NotificationChannel or NotificationPolicy or NotificationCondition or NotificationEvent or NotificationDelivery or NotificationTransportSettings)
             {

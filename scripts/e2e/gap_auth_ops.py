@@ -312,8 +312,7 @@ def extra_probes(d):
             ("dl.status", "GET", f"/backup-artifacts/{a}/downloads/{dl}", None), ("dl.content", "GET", f"/backup-artifacts/{a}/downloads/{dl}/content", None),
             ("dl.content.post", "POST", f"/backup-artifacts/{a}/downloads/{dl}/content", {}),
             ("inst.cred", "PUT", f"/discovery/instances/{inst}/credential", {"integratedSecurity": False, "databaseLogin": {"userName": "pwn", "password": "pwn-pwn-pwn"}}),
-            ("inst.verify", "POST", f"/discovery/instances/{inst}/verify", {}),
-            ("support.session", "GET", f"/support-access/sessions/{guid()}", None), ("support.activity", "GET", f"/support-access/sessions/{guid()}/activity", None)]
+            ("inst.verify", "POST", f"/discovery/instances/{inst}/verify", {})]
 
 
 FILTER_LISTS = lambda d: [("list.artifacts?jobId", f"/backup-artifacts?jobId={d['job']['id']}"), ("list.runs?jobId", f"/backup-runs?jobId={d['job']['id']}"),

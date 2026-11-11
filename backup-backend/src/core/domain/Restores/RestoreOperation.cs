@@ -34,7 +34,7 @@ public sealed class RestoreOperation : ITenantOwned
     public RestoreOperation(Guid id, TenantId tenantId, Guid artifactId, Guid replicaId, RestoreSourceAccess sourceAccess, AgentId agentId,
         RestoreTarget target, string databaseName, RestoreMode mode, bool overwriteConfirmed, RestoreOptions? options, string idempotencyKey,
         string requestFingerprint, Guid? requestedByUserId, DateTimeOffset createdAt, RestorePurpose purpose = RestorePurpose.Execution, Guid? precheckId = null,
-        Guid? supportSessionId = null, string engine = DatabaseEngines.MsSql)
+        string engine = DatabaseEngines.MsSql)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -51,7 +51,7 @@ public sealed class RestoreOperation : ITenantOwned
         {
             // The backend names the disposable database before anything exists, so a lost agent can never leave an unknown leftover; only a new database may ever be created.
             ValidateDatabaseName(databaseName, engine, verification: true);
-            if (mode != RestoreMode.NewDatabase || supportSessionId is not null) throw new ArgumentException("A verification only creates a new disposable database.");
+            if (mode != RestoreMode.NewDatabase) throw new ArgumentException("A verification only creates a new disposable database.");
         }
         else if (purpose != RestorePurpose.Discovery) ValidateDatabaseName(databaseName, engine);
         else if (databaseName != string.Empty) throw new ArgumentException("Discovery has no target database.");
@@ -62,17 +62,9 @@ public sealed class RestoreOperation : ITenantOwned
             throw new ArgumentException("Only a replace restore can confirm an overwrite.");
         if (purpose != RestorePurpose.Execution && overwriteConfirmed)
             throw new ArgumentException("Read-only preparation cannot acknowledge an overwrite.");
-        // A support restore can only ever create a new database: the customer's existing databases are never replaced through a support session.
-        if (supportSessionId is { } support)
-        {
-            BackupGuard.Id(support);
-            if (mode != RestoreMode.NewDatabase) throw new ArgumentException("A support restore can only create a new database.");
-            if (requestedByUserId is null) throw new ArgumentException("A support restore records the platform administrator who requested it.");
-        }
         Purpose = purpose;
         Cleanup = purpose == RestorePurpose.Verification ? RestoreCleanup.ForVerification(databaseName) : RestoreCleanup.None;
         PrecheckId = precheckId;
-        SupportSessionId = supportSessionId;
         Id = id;
         TenantId = tenantId;
         ArtifactId = artifactId;
@@ -103,8 +95,6 @@ public sealed class RestoreOperation : ITenantOwned
     public TenantId TenantId { get; private set; }
     public RestorePurpose Purpose { get; private set; }
     public Guid? PrecheckId { get; private set; }
-    /// <summary>The support access session this restore was requested through; null for an ordinary tenant restore. Fixed at creation.</summary>
-    public Guid? SupportSessionId { get; private set; }
     public Guid ArtifactId { get; private set; }
     /// <summary>The replica this restore reads; chosen when the request was accepted and pinned from then on.</summary>
     public Guid ReplicaId { get; private set; }

@@ -11,17 +11,16 @@ public enum DownloadState { Preparing, Ready, Streaming, Completed, Failed, Canc
 public sealed class DownloadSession : ITenantOwned
 {
     private DownloadSession() { TenantId = null!; StorageProvider = null!; StorageTarget = null!; Key = null!; Checksum = null!; Filename = null!; }
-    public DownloadSession(Guid id, BackupArtifact artifact, BackupReplica replica, Guid userId, string filename, DateTimeOffset now, TimeSpan lifetime, Guid? supportSessionId = null,
+    public DownloadSession(Guid id, BackupArtifact artifact, BackupReplica replica, Guid userId, string filename, DateTimeOffset now, TimeSpan lifetime,
         bool decrypted = false, Guid? directAgentId = null)
     {
-        if (supportSessionId == Guid.Empty) throw new ArgumentException("A support session id must not be empty.", nameof(supportSessionId));
-        if (decrypted && (artifact.Format != BackupArtifact.BpeFormat || supportSessionId is not null))
-            throw new ArgumentException("Only an encrypted artifact can be downloaded decrypted, never through a support session.");
+        if (decrypted && artifact.Format != BackupArtifact.BpeFormat)
+            throw new ArgumentException("Only an encrypted artifact can be downloaded decrypted.");
         if (id == Guid.Empty || userId == Guid.Empty || lifetime <= TimeSpan.Zero) throw new ArgumentException("Invalid download identity or lifetime.");
         if (replica.TenantId != artifact.TenantId || replica.ArtifactId != artifact.Id || replica.Status != BackupReplicaStatus.Available ||
             replica.VerificationState != "Verified" || replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes ||
             artifact.ChecksumAlgorithm != "sha256") throw new ArgumentException("The replica cannot be downloaded.");
-        Id = id; TenantId = artifact.TenantId; ArtifactId = artifact.Id; ReplicaId = replica.Id; UserId = userId; SupportSessionId = supportSessionId;
+        Id = id; TenantId = artifact.TenantId; ArtifactId = artifact.Id; ReplicaId = replica.Id; UserId = userId;
         Decrypted = decrypted;
         if (directAgentId == Guid.Empty || directAgentId is not null && !StorageProviderTypes.AgentExecuted(replica.StorageProvider))
             throw new ArgumentException("A direct executor is only valid for external storage.");
@@ -36,8 +35,6 @@ public sealed class DownloadSession : ITenantOwned
     public Guid ArtifactId { get; private set; }
     public Guid ReplicaId { get; private set; }
     public Guid UserId { get; private set; }
-    /// <summary>The support access session this download was authorized through; null for an ordinary tenant download. Fixed at creation.</summary>
-    public Guid? SupportSessionId { get; private set; }
     /// <summary>The serving host verifies private ciphertext and plaintext staging before streaming; metadata still describes stored ciphertext.</summary>
     public bool Decrypted { get; private set; }
     public Guid? AgentId { get; private set; }
@@ -93,18 +90,6 @@ public sealed class DownloadSession : ITenantOwned
         return true;
     }
 
-    /// <summary>
-    /// Ends a not yet terminal download because the support session that authorized it was closed or revoked. A transfer in progress sees the
-    /// state change on its next lease renewal and stops. False (no change) when already terminal.
-    /// </summary>
-    public bool CancelForSupport(DateTimeOffset now, string failureCode)
-    {
-        if (SupportSessionId is null) throw new InvalidOperationException("Only a support download can be cancelled by its support session.");
-        if (IsTerminal) return false;
-        State = DownloadState.Cancelled; FailureCode = failureCode;
-        ReleasedAt = now; LeaseOwner = null; LeaseExpiresAt = null;
-        return true;
-    }
 
     public bool Expire(DateTimeOffset now)
     {

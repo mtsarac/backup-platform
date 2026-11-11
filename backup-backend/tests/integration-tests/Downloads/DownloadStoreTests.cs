@@ -46,6 +46,23 @@ public sealed class DownloadStoreTests(PostgreSqlFixture fixture) : IClassFixtur
         Assert.Null(await store.CreateAsync(command, default));
     }
 
+    [Fact]
+    public async Task RemovedMembershipPreventsCreationAndStartingAReadyDownload()
+    {
+        var command = await SeedAsync();
+        var store = Store();
+        var session = (await store.CreateAsync(command, default))!;
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            var membership = await context.TenantMemberships.SingleAsync(row => row.TenantId == command.TenantId && row.UserId == new UserId(command.UserId));
+            context.TenantMemberships.Remove(membership);
+            await context.SaveChangesAsync();
+        }
+        Assert.Null(await store.CreateAsync(command, default));
+        Assert.Null(await store.TransitionAsync(session.Id, new(DownloadState.Ready, DownloadState.Streaming, null, "node", Now, Lease), default));
+        Assert.Equal(DownloadState.Ready, (await store.GetAsync(command.TenantId, session.Id, default))!.State);
+    }
+
     [Theory]
     [InlineData(DownloadState.Completed)]
     [InlineData(DownloadState.Cancelled)]

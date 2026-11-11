@@ -1,6 +1,6 @@
 import { tx } from '@/lib/i18n'
 
-/** The one action-label map for the platform audit log, the support session audit tab and the tenant support-access page. */
+/** Action labels for the platform audit log, including historical events. */
 const actionLabels: Record<string, string> = {
   get 'tenant.created'() { return tx("Tenant oluşturuldu") },
   get 'tenant.renamed'() { return tx("Tenant yeniden adlandırıldı") },

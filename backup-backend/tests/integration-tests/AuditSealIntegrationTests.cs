@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
@@ -28,5 +29,15 @@ public sealed class AuditSealIntegrationTests(PostgreSqlFixture fixture) : IClas
         await reader.Database.ExecuteSqlInterpolatedAsync($"UPDATE audit_events SET \"Action\" = 'test.tampered' WHERE \"Id\" = {record.Id}");
         await reader.Entry(persisted).ReloadAsync();
         Assert.False(AuditSigningInterceptor.Verify(persisted, signature, key.ExportSubjectPublicKeyInfoPem()));
+    }
+
+    [Fact]
+    public void Historical_access_identifier_remains_in_canonical_signature_payload()
+    {
+        var id = Guid.NewGuid();
+        var record = AuditEvent.Record(DateTimeOffset.Parse("2026-10-21T10:00:00Z"), UserId.System, AuditActorKind.System,
+            "test.sealed", null, "test", Guid.NewGuid().ToString("D"), legacyAccessId: id);
+        using var payload = JsonDocument.Parse(AuditSigningInterceptor.Canonical(record));
+        Assert.Equal(id, payload.RootElement.GetProperty("SupportSessionId").GetGuid());
     }
 }

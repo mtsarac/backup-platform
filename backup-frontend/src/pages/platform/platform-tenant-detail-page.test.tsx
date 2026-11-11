@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/features/platform/api'
-import * as supportApi from '@/features/platform/support/api'
 import * as encryptionApi from '@/features/artifact-encryption/api'
 import * as storageApi from '@/features/platform/storage/api'
 import { makeTenantEncryption } from '@/features/artifact-encryption/test-fixtures'
@@ -15,7 +13,6 @@ import { ApiError } from '@/lib/api/client'
 import { PlatformTenantDetailPage } from './platform-tenant-detail-page'
 
 vi.mock('@/features/platform/api')
-vi.mock('@/features/platform/support/api')
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/artifact-encryption/api')
 vi.mock('@/features/platform/storage/api')
@@ -34,14 +31,12 @@ function mount(tab = '') {
 }
 
 beforeEach(() => {
-  setFeatureFlags({ supportSessions: true })
   vi.resetAllMocks()
   vi.mocked(api.getTenant).mockResolvedValue(tenant)
   vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, can]))
   vi.mocked(api.getUsers).mockResolvedValue(paged(users))
   vi.mocked(api.getAudit).mockResolvedValue(paged([audit]))
   vi.mocked(api.getTenantSubscription).mockResolvedValue({ tenantId: 'tenant-a', subscription: null })
-  vi.mocked(supportApi.getSessions).mockResolvedValue(paged([]))
   vi.mocked(connectionApi.getPlatformTenantConnections).mockResolvedValue({ items: [] })
   vi.mocked(connectionApi.getPlatformProviders).mockResolvedValue({ items: catalog })
   vi.mocked(encryptionApi.getWrapKeys).mockResolvedValue({ items: [] })
@@ -89,7 +84,6 @@ describe('platform tenant detail', () => {
     expect(api.getTenantSubscription).not.toHaveBeenCalled()
     expect(connectionApi.getPlatformTenantConnections).not.toHaveBeenCalled()
     expect(storageApi.getPlatformTenantQuota).not.toHaveBeenCalled()
-    expect(supportApi.getSessions).not.toHaveBeenCalled()
     expect(encryptionApi.getWrapKeys).not.toHaveBeenCalled()
     expect(encryptionApi.getTenantEncryption).not.toHaveBeenCalled()
 
@@ -112,10 +106,8 @@ describe('platform tenant detail', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Yedekleme bilgisayarları' }))
     expect(await screen.findByRole('switch')).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('?tab=computers')
-    expect(supportApi.getSessions).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Güvenlik' }))
-    expect(await screen.findByRole('heading', { name: 'Destek erişimi' })).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('?tab=security')
     await waitFor(() => expect(encryptionApi.getTenantEncryption).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal)))
     expect(encryptionApi.getWrapKeys).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
@@ -125,7 +117,6 @@ describe('platform tenant detail', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Özet' }))
     expect(screen.getByTestId('location')).toHaveTextContent('?tab=summary')
-    expect(screen.queryByRole('heading', { name: 'Destek erişimi' })).not.toBeInTheDocument()
   })
 
   it('sends an old storage-computers link to the storage section', async () => {
@@ -155,13 +146,6 @@ describe('platform tenant detail', () => {
     expect(screen.queryByText('Yeni bilgisayar kaydı açık')).not.toBeInTheDocument()
   })
 
-  it('hides the support section while the supportSessions feature is off', async () => {
-    setFeatureFlags({})
-    mount('security')
-    expect(await screen.findByRole('heading', { name: 'Acme A.Ş.' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Destek erişimi' })).not.toBeInTheDocument()
-    expect(supportApi.getSessions).not.toHaveBeenCalled()
-  })
 
   it('shows counts, filtered links, memberships and recent tenant audit', async () => {
     mount()
@@ -171,11 +155,7 @@ describe('platform tenant detail', () => {
     expect(await screen.findByText('Üyelik rolü değiştirildi')).toBeInTheDocument()
     expect(screen.getByText('Evet')).toBeInTheDocument()
     expect(api.getAudit).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 10 }, expect.any(AbortSignal))
-    expect(supportApi.getSessions).not.toHaveBeenCalled()
     expect(api.getMemberships).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('tab', { name: 'Güvenlik' }))
-    expect(await screen.findByRole('heading', { name: 'Destek erişimi' })).toBeInTheDocument()
-    expect(supportApi.getSessions).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 5 }, expect.any(AbortSignal))
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
     expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
     expect(screen.getByText('Can Demir')).toBeInTheDocument()

@@ -1,7 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { render } from '@/test/render'
 import { ThemeProvider } from '@/components/theme-provider'
 import { renderPlatform } from '@/features/platform/test-utils'
@@ -14,7 +13,7 @@ const nav = () => screen.getAllByRole('navigation')[0]
 const group = (name: string) => within(nav()).getByRole('group', { name })
 const links = (name: string) => within(group(name)).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])
 
-beforeEach(() => { localStorage.setItem('backup-theme', 'light'); setFeatureFlags({ supportSessions: true }) })
+beforeEach(() => { localStorage.setItem('backup-theme', 'light') })
 
 describe('Platform sidebar', () => {
   it('groups every platform page under plain-language headings with unchanged URLs', () => {
@@ -31,7 +30,6 @@ describe('Platform sidebar', () => {
       ['Kota ilkeleri', '/platform/quota-policies'],
     ])
     expect(links('Güvenlik ve destek')).toEqual([
-      ['Destek oturumları', '/platform/support-sessions'],
       ['Denetim kaydı', '/platform/audit'],
     ])
     expect(links('Ayarlar')).toEqual([['Bildirim altyapısı', '/platform/notification-transports'], ['Yedekleme bilgisayarı ayarları', '/platform/agent-settings']])
@@ -46,7 +44,7 @@ describe('Platform sidebar', () => {
     expect(links('Overview').map(([label]) => label)).toEqual(['Platform overview'])
     expect(links('Customers').map(([label]) => label)).toEqual(['Workspaces', 'Users', 'Plans'])
     expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Storage', 'Quota policies'])
-    expect(links('Security and support').map(([label]) => label)).toEqual(['Support sessions', 'Audit log'])
+    expect(links('Security and support').map(([label]) => label)).toEqual(['Audit log'])
     expect(links('Settings').map(([label]) => label)).toEqual(['Notification infrastructure', 'Backup computer settings'])
     expect(labels().join(' ')).not.toMatch(/agent\b/i)
   })
@@ -55,7 +53,7 @@ describe('Platform sidebar', () => {
     render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(platformRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith('/platform'))
-    expect(targets).toHaveLength(11)
+    expect(targets).toHaveLength(10)
     const removedRoute = `/${['break', 'glass'].join('-')}`
     expect(matchRoutes(routes, removedRoute)?.at(-1)?.route.path).toBe('*')
     expect(matchRoutes(routes, `${removedRoute}/request-a`)?.at(-1)?.route.path).toBe('*')

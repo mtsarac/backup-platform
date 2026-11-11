@@ -37,12 +37,9 @@ public sealed class RestoreVerificationDomainTests
         Assert.Throws<ArgumentException>(() => Verification(name));
 
     [Fact]
-    public void AVerificationCanNeverReplaceADatabaseOrRunThroughASupportSession()
+    public void AVerificationCanNeverReplaceADatabase()
     {
         Assert.Throws<ArgumentException>(() => Verification(mode: RestoreMode.ReplaceExistingDatabase));
-        Assert.Throws<ArgumentException>(() => new RestoreOperation(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), Guid.NewGuid(), RestoreSourceAccess.CentralStorage, AgentId.New(),
-            Target(), PlatformDatabaseNames.NewVerificationName(), RestoreMode.NewDatabase, false, null, "key", "fp", RequestedUserId, Now, RestorePurpose.Verification,
-            supportSessionId: Guid.NewGuid()));
     }
 
     [Theory]

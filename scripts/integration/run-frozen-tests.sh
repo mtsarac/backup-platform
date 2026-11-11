@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# On-demand run of the tests of frozen features (Windows VSS, Linux snapshots, size anomaly, external secrets, SMB, support sessions).
+# On-demand run of the tests of frozen features (Windows VSS, Linux snapshots, size anomaly, external secrets, SMB).
 # The default runs exclude them (backup-backend/tests/default.runsettings); the integration part starts its own PostgreSQL with Testcontainers.
 set +x
 set -euo pipefail

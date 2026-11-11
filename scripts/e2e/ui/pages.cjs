@@ -16,6 +16,6 @@ const tenantPages = (i) => [
   i.artifact && ['artifact-detail', '/artifacts/' + i.artifact], i.artifact && ['restore-wizard', `/artifacts/${i.artifact}/restore`], ['restores', '/restores'],
   i.restore && ['restore-detail', '/restores/' + i.restore], ['storage', '/storage'], ['storage-usage', '/storage/usage'], ['storage-providers', '/storage/providers'],
   ['storage-conn-new', '/storage/connections/new'], i.conn && ['storage-conn-detail', '/storage/connections/' + i.conn], ['discovery', '/discovery'], ['bandwidth', '/upload-bandwidth'],
-  ['notifications', '/notifications'], ['encryption', '/encryption'], ['support-access', '/support-access'],
+  ['notifications', '/notifications'], ['encryption', '/encryption'],
 ].filter(Boolean);
 module.exports = { ids, tenantPages };

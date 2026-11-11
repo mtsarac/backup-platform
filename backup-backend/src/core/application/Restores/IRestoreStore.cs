@@ -37,7 +37,7 @@ public static class RestoreAgentCapability
 /// </summary>
 public sealed record RestoreCommand(TenantId TenantId, Guid ArtifactId, Guid? ReplicaId, AgentId AgentId, RestoreTarget Target, string DatabaseName,
     RestoreMode Mode, bool OverwriteConfirmed, RestoreOptions Options, string IdempotencyKey, string RequestFingerprint, Guid? RequestedByUserId, DateTimeOffset Now,
-    RestorePurpose Purpose = RestorePurpose.Execution, Guid? PrecheckId = null, Guid? SupportSessionId = null);
+    RestorePurpose Purpose = RestorePurpose.Execution, Guid? PrecheckId = null);
 
 public enum RestoreCreateOutcome
 {
@@ -58,12 +58,9 @@ public enum RestoreCreateOutcome
     /// <summary>The same Idempotency-Key was used with a different request.</summary>
     IdempotencyConflict,
     PrecheckRejected,
-    /// <summary>The command named a support session and the database's view of it (owner, still active, RestoreBackup granted) refused. Nothing was created.</summary>
-    SupportAccessDenied
 }
 
-public sealed record RestoreCreateResult(RestoreCreateOutcome Outcome, RestoreOperation? Operation = null, RestoreSourceRejection? Rejection = null,
-    Domain.Support.SupportAccessDenial? SupportDenial = null);
+public sealed record RestoreCreateResult(RestoreCreateOutcome Outcome, RestoreOperation? Operation = null, RestoreSourceRejection? Rejection = null);
 
 /// <summary>A claimed restore attempt with the replica it reads (the persisted location, never a caller-supplied one).</summary>
 public sealed record RestoreClaim(RestoreOperation Operation, RestoreAttempt Attempt, BackupReplica Replica, string Engine = DatabaseEngines.MsSql, string ArtifactFormat = BackupArtifact.PlainFormat, string SourceChecksum = "");
@@ -80,7 +77,7 @@ public sealed record RestoreProgress(string Stage, double? Percent);
 /// <summary>The outcome of a start or a renewal: the lease the agent now holds and whether the user asked to cancel.</summary>
 public sealed record RestoreLeaseOutcome(BackupMutationResult Result, DateTimeOffset? LeaseExpiresAt = null, bool CancellationRequested = false);
 
-public sealed record RestoreQuery(RestoreStatus? Status = null, Guid? ArtifactId = null, Guid? AgentId = null, int Page = 1, int PageSize = 25, Guid? SupportSessionId = null,
+public sealed record RestoreQuery(RestoreStatus? Status = null, Guid? ArtifactId = null, Guid? AgentId = null, int Page = 1, int PageSize = 25,
     RestorePurpose Purpose = RestorePurpose.Execution);
 
 /// <summary>A removal of a platform-created database leased to its agent: the operation (for the target and the name), the engine and the fencing token.</summary>
@@ -126,12 +123,7 @@ public interface IRestoreStore
     /// Pending: withdrawn at once (Cancelled, target NotModified, pin released). Leased or Running: the request is recorded and delivered to the agent on its next
     /// lease renewal. Terminal: no change. Null when the operation does not exist in the tenant.
     /// </summary>
-    /// <remarks>
-    /// <paramref name="supportSessionId"/> set: the cancellation is requested through that support session; only a restore created through it is found (anything else is null)
-    /// and the audit says so. Cancelling is a safety action, so it is authorized by the caller's check of the session and not re-judged here.
-    /// </remarks>
-    Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null,
-        Guid? supportSessionId = null);
+    Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null);
 
     /// <summary>
     /// Claims the agent's oldest Pending restore. Expires the agent's stale leases and unclaimed restores first, and hands out nothing while the agent

@@ -3,7 +3,6 @@ using BackupPlatform.Api.Flags;
 using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Api.Downloads;
 using BackupPlatform.Api.Push;
-using BackupPlatform.Api.Support;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -70,11 +69,6 @@ app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();
 app.MapDownloadEndpoints();
 app.MapArtifactEncryptionEndpoints();
-if (app.IsFeatureEnabled(Features.SupportSessions))
-{
-    app.MapSupportEndpoints();
-    app.MapSupportTransparencyEndpoints();
-}
 app.MapAgentDownloadEndpoints();
 app.MapAgentStorageTransferEndpoints();
 app.MapAgentDistributionEndpoints();

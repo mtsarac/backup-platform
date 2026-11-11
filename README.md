@@ -30,11 +30,11 @@ The agent only connects outward. It polls the backend for work and renews a leas
 - **Upload bandwidth limits** per agent, tenant, or job.
 - **Resilience**: a transfer that moves no bytes for two minutes (`Agent:Backup:UploadStallTimeout`) pauses as a network error, and network pauses resume by themselves with backoff (at most 10 times). Operator and time-rule pauses never resume on their own.
 - **Agent install** with one command on Windows (service) or Linux (systemd).
-- **Multi-tenant access** with Owner, Admin, Operator, and Viewer roles, a separate platform admin, support access, and an audit log. The UI is available in Turkish and English. Five failed logins for one identifier lock it for five minutes (the counter is in PostgreSQL, so every API instance shares it).
+- **Multi-tenant access** with Owner, Admin, Operator, and Viewer roles, a separate platform admin, and an audit log. The UI is available in Turkish and English. Five failed logins for one identifier lock it for five minutes (the counter is in PostgreSQL, so every API instance shares it).
 
 Storage connections are added through a guided provider, name, settings, credentials and review flow; steps that do not apply are skipped. Credentials are write-only and cleared when submitted, even if saving fails. Paste multiline private keys into their masked field; their line breaks are preserved, and the clear action removes the whole entry. Saving and testing are separate operations; Google Drive asks for account authorization in its popup before testing. The review keeps connection internals in collapsed, copyable technical details.
 
-Tenant filters and managed storage setup search tenant names; restore filters search backup files and computers, and the support backup browser searches job names. Selections keep the existing IDs and API permissions. Emergency requests browse backup names only through an existing, owned support session with metadata-view permission; prefilled request targets still work without granting metadata access. Backup name search covers the newest 100 files, with older selected files resolved separately.
+Tenant filters and managed storage setup search tenant names; restore filters search backup files and computers. Selections keep the existing IDs and API permissions. Backup name search covers the newest 100 files, with older selected files resolved separately.
 
 ## Repository layout
 

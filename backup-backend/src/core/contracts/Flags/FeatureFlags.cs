@@ -12,7 +12,6 @@ public static class Features
     public static IReadOnlyList<Feature> All => all;
 
     public static readonly Feature Sms = Register("sms", enabledByDefault: false);
-    public static readonly Feature SupportSessions = Register("supportSessions", enabledByDefault: false);
     public static readonly Feature Smb = Register("smb", enabledByDefault: false);
     public static readonly Feature SizeAnomaly = Register("sizeAnomaly", enabledByDefault: false);
     /// <summary>Agent-side: a file source configured with a VSS snapshot.</summary>

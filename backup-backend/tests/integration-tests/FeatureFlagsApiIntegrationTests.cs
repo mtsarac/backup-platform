@@ -8,7 +8,7 @@ namespace BackupPlatform.IntegrationTests;
 
 public sealed class FeatureFlagsApiIntegrationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
-    private static readonly Feature[] Off = [Features.SupportSessions, Features.Smb, Features.Sms, Features.SizeAnomaly, Features.ReplicaRepair];
+    private static readonly Feature[] Off = [Features.Smb, Features.Sms, Features.SizeAnomaly, Features.ReplicaRepair];
 
     [Fact]
     public async Task A_disabled_feature_is_reported_off_and_its_routes_answer_404()
@@ -26,8 +26,6 @@ public sealed class FeatureFlagsApiIntegrationTests(PostgreSqlFixture fixture) :
             (HttpMethod.Post, env.TenantRoot + "/notifications/channels", new { kind = "sms", name = "Mobile", target = "+15551234567" }),
             (HttpMethod.Post, $"{env.TenantRoot}/backup-artifacts/{artifact}/repairs", new { }),
             (HttpMethod.Get, $"{env.TenantRoot}/backup-artifacts/{artifact}/repairs", null),
-            (HttpMethod.Get, "/api/platform/support-sessions", null),
-            (HttpMethod.Get, env.TenantRoot + "/support-access/sessions", null),
             (HttpMethod.Put, env.TenantRoot + "/notifications/policy", new { eventTypes = new[] { "backup_size_anomaly" } }),
         })
         {
@@ -38,6 +36,66 @@ public sealed class FeatureFlagsApiIntegrationTests(PostgreSqlFixture fixture) :
         using var list = await env.Admin.GetAsync(env.TenantRoot + "/storage-providers");
         var providers = await list.Content.ReadAsStringAsync();
         Assert.DoesNotContain("\"smb\"", providers);
+    }
+
+    [Fact]
+    public async Task Removed_support_routes_stay_unavailable_even_with_the_old_flag_enabled()
+    {
+        await using var env = await StorageConnectionApiIntegrationTests.ApiWorld.CreateAsync(fixture,
+            configuration: new Dictionary<string, string?> { ["Features:supportSessions"] = "true" });
+        var features = AgentWorld.ReadJson(await env.Admin.GetAsync("/api/features"));
+        Assert.False(features.TryGetProperty("supportSessions", out _));
+        var platform = await env.PlatformAdminAsync();
+        var session = Guid.NewGuid();
+        var artifact = Guid.NewGuid();
+        var run = Guid.NewGuid();
+        var download = Guid.NewGuid();
+        var restore = Guid.NewGuid();
+        var platformRoutes = new (HttpMethod, string, object?)[]
+        {
+            (HttpMethod.Post, "/api/platform/support-sessions", new { }),
+            (HttpMethod.Get, "/api/platform/support-sessions", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}", null),
+            (HttpMethod.Post, $"/api/platform/support-sessions/{session}/close", new { }),
+            (HttpMethod.Post, $"/api/platform/support-sessions/{session}/revoke", new { }),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/audit", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/backup-jobs", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/backup-runs", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/backup-runs/{run}", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/artifacts", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/artifacts/{artifact}", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/download-availability", null),
+            (HttpMethod.Post, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/downloads", new { }),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/downloads/{download}", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/downloads/{download}/content", null),
+            (HttpMethod.Post, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/downloads/{download}/content", new { }),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/downloads", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/restore-targets", null),
+            (HttpMethod.Post, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/restore-precheck", new { }),
+            (HttpMethod.Post, $"/api/platform/support-sessions/{session}/artifacts/{artifact}/restore", new { }),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/restores", null),
+            (HttpMethod.Get, $"/api/platform/support-sessions/{session}/restores/{restore}", null),
+            (HttpMethod.Post, $"/api/platform/support-sessions/{session}/restores/{restore}/cancel", new { }),
+        };
+        foreach (var (method, path, body) in platformRoutes)
+        {
+            using var response = await platform.SendAsync(method, path, body);
+            Assert.True(response.StatusCode == HttpStatusCode.NotFound, $"Platform route {method} {path} returned {(int)response.StatusCode}");
+        }
+
+        var tenantRoutes = new (HttpMethod, string, object?)[]
+        {
+            (HttpMethod.Get, env.TenantRoot + "/support-access/sessions", null),
+            (HttpMethod.Get, env.TenantRoot + $"/support-access/sessions/{session}", null),
+            (HttpMethod.Get, env.TenantRoot + $"/support-access/sessions/{session}/activity", null),
+        };
+        foreach (var (method, path, body) in tenantRoutes)
+        {
+            using var adminResponse = await env.Admin.SendAsync(method, path, body);
+            Assert.True(adminResponse.StatusCode == HttpStatusCode.NotFound, $"Tenant route {method} {path} returned {(int)adminResponse.StatusCode}");
+            using var platformResponse = await platform.SendAsync(method, path, body);
+            Assert.True(platformResponse.StatusCode == HttpStatusCode.NotFound, $"Tenant route {method} {path} for platform returned {(int)platformResponse.StatusCode}");
+        }
     }
 
     [Fact]
