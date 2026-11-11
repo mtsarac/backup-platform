@@ -235,4 +235,123 @@ public sealed class BackupShareDomainTests
         Assert.Equal(BackupShareStatus.Revoked, share.GetStatus(Now.AddHours(2)));
         Assert.Equal(anotherPlatformUser, share.RevokedByUserId);
     }
+
+    [Fact]
+    public void PlatformAdminShare_TenantUserAdminCannotExtend_ThrowsInvalidOperationException()
+    {
+        var (artifact, _) = CreateArtifact();
+        var platformUser = UserId.New();
+        var tenantUser = UserId.New();
+
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, platformUser, UserRole.PlatformAdmin, Now, TimeSpan.FromHours(24));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Extend(Now.AddHours(36), UserRole.UserAdmin, Now.AddHours(1)));
+    }
+
+    [Fact]
+    public void PlatformAdminShare_PlatformAdminCanExtend()
+    {
+        var (artifact, _) = CreateArtifact();
+        var platformUser = UserId.New();
+        var anotherPlatformUser = UserId.New();
+
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, platformUser, UserRole.PlatformAdmin, Now, TimeSpan.FromHours(24));
+        share.Extend(Now.AddHours(36), UserRole.PlatformAdmin, Now.AddHours(1));
+
+        Assert.Equal(Now.AddHours(36), share.ExpiresAtUtc);
+    }
+
+    [Fact]
+    public void Extend_Exceeding72HoursFromCreation_Throws()
+    {
+        var (artifact, _) = CreateArtifact();
+        var actor = UserId.New();
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, actor, UserRole.UserAdmin, Now, TimeSpan.FromHours(24));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Extend(Now.AddHours(73), Now.AddHours(1)));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Extend(TimeSpan.FromHours(73), Now.AddHours(1)));
+    }
+
+    [Fact]
+    public void Extend_CannotShortenExpiry()
+    {
+        var (artifact, _) = CreateArtifact();
+        var actor = UserId.New();
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, actor, UserRole.UserAdmin, Now, TimeSpan.FromHours(24));
+
+        // Shorter than current expiry
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Extend(Now.AddHours(12), Now.AddHours(1)));
+
+        // Equal to current expiry
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Extend(Now.AddHours(24), Now.AddHours(1)));
+    }
+
+    [Fact]
+    public void Extend_ExpiredShare_Throws()
+    {
+        var (artifact, _) = CreateArtifact();
+        var actor = UserId.New();
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, actor, UserRole.UserAdmin, Now, TimeSpan.FromHours(24));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Extend(Now.AddHours(36), Now.AddHours(25)));
+    }
+
+    [Fact]
+    public void Extend_RevokedShare_Throws()
+    {
+        var (artifact, _) = CreateArtifact();
+        var actor = UserId.New();
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, actor, UserRole.UserAdmin, Now, TimeSpan.FromHours(24));
+
+        share.Revoke(UserId.New(), Now.AddHours(2));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Extend(Now.AddHours(36), Now.AddHours(3)));
+    }
+
+    [Fact]
+    public void Revoke_ExpiredShare_Throws()
+    {
+        var (artifact, _) = CreateArtifact();
+        var actor = UserId.New();
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, actor, UserRole.UserAdmin, Now, TimeSpan.FromHours(24));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Revoke(UserId.New(), Now.AddHours(25)));
+    }
+
+    [Fact]
+    public void Revoke_AlreadyRevokedShare_Throws()
+    {
+        var (artifact, _) = CreateArtifact();
+        var actor = UserId.New();
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, actor, UserRole.UserAdmin, Now, TimeSpan.FromHours(24));
+
+        share.Revoke(UserId.New(), Now.AddHours(2));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            share.Revoke(UserId.New(), Now.AddHours(3)));
+    }
+
+    [Fact]
+    public void Extend_ValidExtensionWithin72Hours_Succeeds()
+    {
+        var (artifact, _) = CreateArtifact();
+        var actor = UserId.New();
+        var share = BackupShare.Create(Guid.NewGuid(), artifact, actor, UserRole.UserAdmin, Now, TimeSpan.FromHours(24));
+
+        share.Extend(Now.AddHours(48), Now.AddHours(2));
+
+        Assert.Equal(Now.AddHours(48), share.ExpiresAtUtc);
+        Assert.Equal(BackupShareStatus.Active, share.GetStatus(Now.AddHours(2)));
+        Assert.True(share.IsActive(Now.AddHours(47)));
+        Assert.False(share.IsActive(Now.AddHours(48)));
+    }
 }

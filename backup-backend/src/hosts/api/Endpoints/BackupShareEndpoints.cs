@@ -24,6 +24,14 @@ public static class BackupShareEndpoints
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-shares/{shareId:guid}", GetShareAsync)
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-shares/{shareId:guid}/extend", ExtendShareAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-shares/{shareId:guid}/revoke", RevokeShareAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/shares/{shareId:guid}/extend", ExtendShareForArtifactAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/shares/{shareId:guid}/revoke", RevokeShareForArtifactAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
 
         var platform = endpoints.MapGroup("/api/platform/backup-shares")
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -255,5 +263,77 @@ public static class BackupShareEndpoints
         return share is not null
             ? Results.Ok(share)
             : Results.NotFound(new { error = "share_not_found", message = "Backup share not found." });
+    }
+
+    private static async Task<IResult> ExtendShareAsync(
+        Guid shareId,
+        ExtendBackupShareRequest request,
+        ITenantContext tenant,
+        ICurrentUser user,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        if (user.UserId is not { } actor)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await service.ExtendShareAsync(tenant.TenantId!, shareId, actor, request, cancellationToken);
+        return MapModifyResult(result);
+    }
+
+    private static async Task<IResult> ExtendShareForArtifactAsync(
+        Guid artifactId,
+        Guid shareId,
+        ExtendBackupShareRequest request,
+        ITenantContext tenant,
+        ICurrentUser user,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        return await ExtendShareAsync(shareId, request, tenant, user, service, cancellationToken);
+    }
+
+    private static async Task<IResult> RevokeShareAsync(
+        Guid shareId,
+        RevokeBackupShareRequest? request,
+        ITenantContext tenant,
+        ICurrentUser user,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        if (user.UserId is not { } actor)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await service.RevokeShareAsync(tenant.TenantId!, shareId, actor, request ?? new RevokeBackupShareRequest(), cancellationToken);
+        return MapModifyResult(result);
+    }
+
+    private static async Task<IResult> RevokeShareForArtifactAsync(
+        Guid artifactId,
+        Guid shareId,
+        RevokeBackupShareRequest? request,
+        ITenantContext tenant,
+        ICurrentUser user,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        return await RevokeShareAsync(shareId, request, tenant, user, service, cancellationToken);
+    }
+
+    private static IResult MapModifyResult(BackupShareModifyResult result)
+    {
+        return result.Outcome switch
+        {
+            BackupShareModifyOutcome.Success => Results.Ok(result.Share),
+            BackupShareModifyOutcome.NotFound => Results.NotFound(new { error = "share_not_found", message = result.ErrorMessage ?? "Backup share not found." }),
+            BackupShareModifyOutcome.Forbidden => Results.Forbid(),
+            BackupShareModifyOutcome.AlreadyRevoked => Results.Conflict(new { error = result.ErrorCode ?? "already_revoked", message = result.ErrorMessage ?? "Share is already revoked." }),
+            BackupShareModifyOutcome.Expired => Results.Conflict(new { error = result.ErrorCode ?? "share_expired", message = result.ErrorMessage ?? "Share is expired." }),
+            BackupShareModifyOutcome.InvalidExpiry => Results.BadRequest(new { error = result.ErrorCode ?? "invalid_expiry", message = result.ErrorMessage ?? "Invalid expiry date/time." }),
+            _ => Results.BadRequest(new { error = result.ErrorCode ?? "modify_failed", message = result.ErrorMessage ?? "Failed to modify backup share." })
+        };
     }
 }

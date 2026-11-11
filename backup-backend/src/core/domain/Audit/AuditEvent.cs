@@ -95,6 +95,8 @@ public static class AuditActions
 
     // Backup share events
     public const string BackupShareCreated = "backup_share.created";
+    public const string BackupShareExtended = "backup_share.extended";
+    public const string BackupShareRevoked = "backup_share.revoked";
 
 }
 

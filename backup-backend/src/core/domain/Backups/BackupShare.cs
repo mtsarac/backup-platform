@@ -119,7 +119,12 @@ public sealed class BackupShare : ITenantOwned
         ArgumentNullException.ThrowIfNull(actor);
         if (RevokedAtUtc is not null)
         {
-            return;
+            throw new InvalidOperationException("Share is already revoked.");
+        }
+
+        if (ExpiresAtUtc <= now)
+        {
+            throw new InvalidOperationException("Cannot revoke an expired share.");
         }
 
         RevokedAtUtc = now.ToUniversalTime();
@@ -134,6 +139,47 @@ public sealed class BackupShare : ITenantOwned
         }
 
         Revoke(actor, now);
+    }
+
+    public void Extend(DateTimeOffset newExpiresAtUtc, DateTimeOffset now)
+    {
+        if (RevokedAtUtc is not null)
+        {
+            throw new InvalidOperationException("Cannot extend a revoked share.");
+        }
+
+        if (ExpiresAtUtc <= now)
+        {
+            throw new InvalidOperationException("Cannot extend an expired share.");
+        }
+
+        var newExpiresUtc = newExpiresAtUtc.ToUniversalTime();
+        if (newExpiresUtc <= ExpiresAtUtc)
+        {
+            throw new InvalidOperationException("New expiry must be later than the current expiry.");
+        }
+
+        if (newExpiresUtc > CreatedAtUtc + MaximumDuration)
+        {
+            throw new InvalidOperationException("Share duration cannot exceed 72 hours from creation.");
+        }
+
+        ExpiresAtUtc = newExpiresUtc;
+    }
+
+    public void Extend(DateTimeOffset newExpiresAtUtc, UserRole actorRole, DateTimeOffset now)
+    {
+        if (!CanBeManagedBy(actorRole))
+        {
+            throw new InvalidOperationException("A tenant UserAdmin cannot extend a share created by a PlatformAdmin.");
+        }
+
+        Extend(newExpiresAtUtc, now);
+    }
+
+    public void Extend(TimeSpan durationFromCreation, DateTimeOffset now)
+    {
+        Extend(CreatedAtUtc + durationFromCreation, now);
     }
 
     public static BackupShare Create(

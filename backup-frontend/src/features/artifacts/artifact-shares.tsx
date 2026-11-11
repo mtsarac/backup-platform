@@ -8,7 +8,10 @@ import { Section } from '@/components/ui/section'
 import { TextInput } from '@/components/ui/text-input'
 import { StatusPill } from '@/components/data/status-pill'
 import { formatDateTime } from '@/lib/format'
+import { useAuth } from '@/features/auth/use-auth'
 import { useCreateShare, useShares } from '@/features/shares/hooks'
+import { canManageShare, type BackupShareView } from '@/features/shares/types'
+import { ShareActionDialogs } from '@/features/shares/share-dialogs'
 import type { BackupArtifact } from './types'
 
 export function ArtifactSharesSection({
@@ -29,6 +32,9 @@ export function ArtifactSharesSection({
   const [reason, setReason] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const { user } = useAuth()
+  const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<BackupShareView | null>(null)
 
   const hasDownloadableReplica = artifact.replicas.some(
     (r) => r.verificationState === 'Verified' && r.status === 'Available'
@@ -97,7 +103,8 @@ export function ArtifactSharesSection({
                   <th className="py-2 pr-4">{tx('Oluşturulma')}</th>
                   <th className="py-2 pr-4">{tx('Bitiş')}</th>
                   <th className="py-2 pr-4">{tx('Durum')}</th>
-                  <th className="py-2">{tx('Gerekçe')}</th>
+                  <th className="py-2 pr-4">{tx('Gerekçe')}</th>
+                  <th className="py-2 text-right">{tx('İşlemler')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -112,7 +119,29 @@ export function ArtifactSharesSection({
                     <td className="py-2 pr-4">
                       <StatusPill domain="share" status={share.status} />
                     </td>
-                    <td className="py-2 text-text-muted">{share.reason || '—'}</td>
+                    <td className="py-2 pr-4 text-text-muted">{share.reason || '—'}</td>
+                    <td className="py-2 text-right">
+                      {canManageShare(share, user?.role, canAdmin) ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setExtendTarget(share)}
+                          >
+                            {tx('Süreyi uzat')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRevokeTarget(share)}
+                          >
+                            {tx('İptal et')}
+                          </Button>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -160,6 +189,17 @@ export function ArtifactSharesSection({
           </Field>
         </FormDialog>
       )}
+      <ShareActionDialogs
+        tenantId={tenantId}
+        extendTarget={extendTarget}
+        revokeTarget={revokeTarget}
+        onClose={() => {
+          setExtendTarget(null)
+          setRevokeTarget(null)
+        }}
+        onSuccess={(msg) => setNotice(msg)}
+      />
     </Section>
+
   )
 }

@@ -17,6 +17,31 @@ public sealed record CreatePlatformBackupShareRequest(
     TimeSpan? Duration = null,
     string? Reason = null);
 
+public sealed record ExtendBackupShareRequest(
+    DateTimeOffset? ExpiresAtUtc = null,
+    int? DurationHours = null,
+    int? AdditionalHours = null,
+    TimeSpan? Duration = null,
+    TimeSpan? Extension = null);
+
+public sealed record RevokeBackupShareRequest(
+    string? Reason = null);
+
+public enum BackupShareModifyOutcome
+{
+    Success = 1,
+    NotFound,
+    Forbidden,
+    Expired,
+    AlreadyRevoked,
+    InvalidExpiry
+}
+
+public sealed record BackupShareModifyResult(
+    BackupShareModifyOutcome Outcome,
+    BackupShareView? Share = null,
+    string? ErrorCode = null,
+    string? ErrorMessage = null);
 public enum BackupShareCreateOutcome
 {
     Success = 1,
@@ -55,6 +80,24 @@ public interface IBackupShareStore
         UserId createdByUserId,
         UserRole createdByRole,
         TimeSpan duration,
+        string? reason,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<BackupShareModifyResult> ExtendAsync(
+        TenantId tenantId,
+        Guid shareId,
+        UserId actor,
+        UserRole actorRole,
+        ExtendBackupShareRequest request,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<BackupShareModifyResult> RevokeAsync(
+        TenantId tenantId,
+        Guid shareId,
+        UserId actor,
+        UserRole actorRole,
         string? reason,
         DateTimeOffset now,
         CancellationToken cancellationToken);

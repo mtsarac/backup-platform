@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createPlatformShare, createShare, getPlatformShare, getShare, listPlatformShares, listShares } from './api'
-import type { CreatePlatformShareRequest, CreateShareRequest } from './types'
+import { createPlatformShare, createShare, extendShare, getPlatformShare, getShare, listPlatformShares, listShares, revokeShare } from './api'
+import type { CreatePlatformShareRequest, CreateShareRequest, ExtendShareRequest, RevokeShareRequest } from './types'
 
 export function useShares(tenantId: string, artifactId?: string) {
   return useQuery({
@@ -50,6 +50,32 @@ export function useCreatePlatformShare() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['platform-shares'] })
       void queryClient.invalidateQueries({ queryKey: ['shares'] })
+    },
+  })
+}
+
+export function useExtendShare(tenantId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shareId, request }: { shareId: string; request: ExtendShareRequest }) =>
+      extendShare(tenantId, shareId, request),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['shares', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['share', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['platform-shares'] })
+    },
+  })
+}
+
+export function useRevokeShare(tenantId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shareId, request }: { shareId: string; request?: RevokeShareRequest }) =>
+      revokeShare(tenantId, shareId, request),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['shares', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['share', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['platform-shares'] })
     },
   })
 }
