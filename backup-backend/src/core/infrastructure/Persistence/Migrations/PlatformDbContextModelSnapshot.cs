@@ -4014,6 +4014,14 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BackupPlatform.Identity.LoginThrottleEntry", b =>
                 {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
                     b.Property<string>("Identifier")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -4021,12 +4029,15 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<int>("Failures")
                         .HasColumnType("integer");
 
-                    b.Property<DateTimeOffset>("WindowStart")
+                    b.Property<DateTimeOffset>("LastFailureAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("Identifier");
+                    b.Property<DateTimeOffset>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.HasIndex("WindowStart");
+                    b.HasKey("Kind", "Scope", "Identifier");
+
+                    b.HasIndex("LastFailureAt");
 
                     b.ToTable("login_throttle_entries", (string)null);
                 });
@@ -4078,8 +4089,27 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTimeOffset>("ExpiresAt")
+                    b.Property<int>("AuthenticationState")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Device")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("RememberMe")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

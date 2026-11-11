@@ -4,13 +4,7 @@ public static class SecurityApplicationBuilderExtensions
 {
     public static WebApplication UsePlatformSecurity(this WebApplication app)
     {
-        var forwardedHeaders = new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
-        {
-            ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
-        };
-        forwardedHeaders.KnownIPNetworks.Clear();
-        forwardedHeaders.KnownProxies.Clear();
-        app.UseForwardedHeaders(forwardedHeaders);
+        app.UseForwardedHeaders(app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>>().Value);
         app.Use(async (context, next) =>
         {
             if (context.Request.Path.StartsWithSegments("/api"))
@@ -34,6 +28,16 @@ public static class SecurityApplicationBuilderExtensions
             branch => branch.UseHttpsRedirection());
         app.UseRouting();
         app.UseAuthentication();
+        app.Use(async (context, next) =>
+        {
+            if (context.Features.Get<BrowserSessionState>() is { Value: not BackupPlatform.Identity.SessionAuthenticationState.FullyAuthenticated }
+                && context.GetEndpoint()?.Metadata.GetMetadata<RestrictedSessionAllowed>() is null)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+            await next(context);
+        });
         app.UseMiddleware<TenantResolutionMiddleware>();
         app.UseAuthorization();
         // After authorization so per-agent limits key on the authenticated agent; before the protocol gate so a mismatched agent is still throttled.

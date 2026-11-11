@@ -9,7 +9,7 @@ import { ApiError, apiRequest, resetAntiforgery } from '@/lib/api/client'
 
 function AuthProbe() {
   const auth = useAuth()
-  return <><p>{auth.isLoading ? 'Loading' : auth.user?.displayName ?? 'Anonymous'}</p><p>{auth.tenants.map(item => item.name).join(',')}</p><p>{auth.sessionExpired ? 'Session expired' : ''}</p><button onClick={() => { void auth.login('owner', 'typed-password') }}>Login</button><button onClick={() => { void auth.logout() }}>Logout</button></>
+  return <><p>{auth.isLoading ? 'Loading' : auth.user?.displayName ?? 'Anonymous'}</p><p>{auth.tenants.map(item => item.name).join(',')}</p><p>{auth.sessionExpired ? 'Session expired' : ''}</p><button onClick={() => { void auth.login('owner', 'typed-password', true) }}>Login</button><button onClick={() => { void auth.logout() }}>Logout</button></>
 }
 let authenticated = false
 let requests: Request[] = []
@@ -39,6 +39,7 @@ describe('cookie session UI', () => {
     expect(screen.queryByText('Session expired')).not.toBeInTheDocument()
     await userEvent.click(screen.getByText('Login'))
     expect(await screen.findByText('Real Owner')).toBeInTheDocument()
+    expect(await requests.find(request => request.url.endsWith('/auth/login'))?.clone().json()).toEqual({ loginIdentifier: 'owner', password: 'typed-password', rememberMe: true })
     expect(screen.getByText('Tenant A')).toBeInTheDocument()
     cache.setQueryData(['tenant', 'tenant-a', 'backup-runs'], ['private run'])
     cache.setQueryData(['platform', 'summary'], { tenants: 1 })

@@ -54,8 +54,8 @@ public sealed class IdentityAuditSafetyIntegrationTests(PostgreSqlFixture fixtur
         var store = new PostgreSqlIdentityStore(fixture.Options);
         try
         {
-            await Assert.ThrowsAsync<DbUpdateException>(() => store.RevokeSessionAsync(session.Id, session.UserId, default));
-            Assert.True(await store.IsSessionActiveAsync(session.Id, session.UserId, DateTimeOffset.UtcNow, default));
+            await Assert.ThrowsAsync<DbUpdateException>(() => store.EndSessionAsync(session.Id, session.UserId, world.Clock.GetUtcNow(), default));
+            Assert.NotNull(await store.ValidateSessionAsync(session.Id, session.UserId, world.Clock.GetUtcNow(), default));
             Assert.False(await context.AuditEvents.AnyAsync(row => row.Action == AuditActions.UserLogout && row.TargetId == session.Id.ToString("D")));
         }
         finally
@@ -63,9 +63,9 @@ public sealed class IdentityAuditSafetyIntegrationTests(PostgreSqlFixture fixtur
             await fixture.ExecuteAsync($"DROP TRIGGER {name} ON audit_events; DROP FUNCTION {name}();");
         }
         await Task.WhenAll(
-            store.RevokeSessionAsync(session.Id, session.UserId, default),
-            store.RevokeSessionAsync(session.Id, session.UserId, default));
-        Assert.False(await store.IsSessionActiveAsync(session.Id, session.UserId, DateTimeOffset.UtcNow, default));
+            store.EndSessionAsync(session.Id, session.UserId, world.Clock.GetUtcNow(), default),
+            store.EndSessionAsync(session.Id, session.UserId, world.Clock.GetUtcNow(), default));
+        Assert.Null(await store.ValidateSessionAsync(session.Id, session.UserId, world.Clock.GetUtcNow(), default));
         var audit = await context.AuditEvents.AsNoTracking().SingleAsync(row => row.Action == AuditActions.UserLogout && row.TargetId == session.Id.ToString("D"));
         Assert.Equal(session.UserId, audit.ActorUserId);
         Assert.Null(audit.TenantId);

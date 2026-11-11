@@ -96,17 +96,18 @@ public sealed class IdentityTests
     }
 
     [Fact]
-    public void SessionRejectsEmptyIdentitiesAndPreservesExpiry()
+    public void SessionRejectsEmptyIdentitiesAndUsesStoredTimes()
     {
         var userId = UserId.New();
-        var expiresAt = new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
-        Assert.Throws<ArgumentException>(() => new UserSession(Guid.Empty, userId, expiresAt));
-        Assert.Throws<ArgumentNullException>(() => new UserSession(Guid.NewGuid(), null!, expiresAt));
-        var id = Guid.NewGuid();
-        var session = new UserSession(id, userId, expiresAt);
-        Assert.Equal(id, session.Id);
-        Assert.Equal(userId, session.UserId);
-        Assert.Equal(expiresAt, session.ExpiresAt);
+        var now = new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
+        Assert.Throws<ArgumentException>(() => new UserSession(Guid.Empty, userId, now, false, "", ""));
+        Assert.Throws<ArgumentNullException>(() => new UserSession(Guid.NewGuid(), null!, now, false, "", ""));
+        var session = new UserSession(Guid.NewGuid(), userId, now, false, "", "");
+        Assert.True(session.IsActive(now.AddHours(11)));
+        Assert.False(session.IsActive(now.AddHours(12)));
+        var remembered = new UserSession(Guid.NewGuid(), userId, now, true, "", "");
+        Assert.True(remembered.IsActive(now.AddDays(29)));
+        Assert.False(remembered.IsActive(now.AddDays(30)));
     }
 
     [Fact]
@@ -119,13 +120,13 @@ public sealed class IdentityTests
         var now = new DateTimeOffset(2026, 10, 2, 9, 0, 0, TimeSpan.Zero);
         var hashes = new PasswordHashService();
         var authentication = new AuthenticationService(store, hashes, new FixedTimeProvider(now));
-        var login = await authentication.LoginAsync(" alice ", "local-password", CancellationToken.None);
+        var login = await authentication.LoginAsync(" alice ", "local-password", false, "", "", CancellationToken.None);
         Assert.NotNull(login);
         Assert.Equal(userId, login.UserId);
-        Assert.Equal(now.AddHours(8), login.ExpiresAt);
+        Assert.Equal(now, store.Sessions[login.SessionId].CreatedAt);
         Assert.NotEqual(oldHash, store.Credential.PasswordHash);
         Assert.Equal(PasswordVerificationResult.Success, hashes.Verify(userId, store.Credential.PasswordHash, "local-password"));
-        var second = await authentication.LoginAsync("ALICE", "local-password", CancellationToken.None);
+        var second = await authentication.LoginAsync("ALICE", "local-password", false, "", "", CancellationToken.None);
         Assert.NotNull(second);
         Assert.NotEqual(login.SessionId, second.SessionId);
     }
@@ -144,7 +145,7 @@ public sealed class IdentityTests
         var hash = hashes.Hash(userId, "local-password");
         var store = new MemoryIdentityStore(new PasswordCredential(userId, "Alice", hash));
         var authentication = new AuthenticationService(store, hashes, TimeProvider.System);
-        Assert.Null(await authentication.LoginAsync(identifier!, password!, CancellationToken.None));
+        Assert.Null(await authentication.LoginAsync(identifier!, password!, false, "", "", CancellationToken.None));
         Assert.Empty(store.Sessions);
         Assert.Equal(hash, store.Credential.PasswordHash);
     }
@@ -178,17 +179,19 @@ public sealed class IdentityTests
             return Task.CompletedTask;
         }
 
-        public Task<bool> IsSessionActiveAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken) =>
-            Task.FromResult(Sessions.TryGetValue(sessionId, out var session) && session.UserId == userId && session.ExpiresAt > now);
-
-        public Task RevokeSessionAsync(Guid sessionId, UserId userId, CancellationToken cancellationToken)
+        public Task<SessionAuthenticationState?> ValidateSessionAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(Sessions.TryGetValue(sessionId, out var session) && session.UserId == userId && session.IsActive(now) ? (SessionAuthenticationState?)session.AuthenticationState : null);
+        public Task<IReadOnlyList<UserSession>> ListSessionsAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<UserSession>>(Sessions.Values.Where(session => session.UserId == userId && session.IsActive(now)).ToArray());
+        public Task<bool> EndSessionAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(Sessions.TryGetValue(sessionId, out var session) && session.UserId == userId && Sessions.Remove(sessionId));
+        public Task EndAllSessionsAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
         {
-            if (Sessions.TryGetValue(sessionId, out var session) && session.UserId == userId)
-            {
-                Sessions.Remove(sessionId);
-            }
+            foreach (var id in Sessions.Values.Where(session => session.UserId == userId).Select(session => session.Id).ToArray()) Sessions.Remove(id);
             return Task.CompletedTask;
         }
+        public Task SetSessionStateAsync(Guid sessionId, UserId userId, SessionAuthenticationState state, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task RecordLoginFailureAsync(UserId? targetUserId, DateTimeOffset now, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }

@@ -1,5 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { LogOut, Menu } from 'lucide-react'
 import { A11yToolbar } from './a11y-toolbar'
 import { LanguageSwitcher } from './language-switcher'
@@ -28,6 +29,7 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
         <span className="hidden items-center gap-2 sm:inline-flex">{badges}</span>
         <A11yToolbar />
         <LanguageSwitcher />
+        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/sessions">{tx('Oturumlarım')}</Link>
         <span className="hidden max-w-40 truncate text-sm text-text-muted xl:inline" title={user?.displayName}>{user?.displayName}</span>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => { void signOut() }}><LogOut aria-hidden="true" className="size-4" />{tx("Çıkış")}</Button>
       </div>

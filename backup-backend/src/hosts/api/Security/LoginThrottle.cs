@@ -1,56 +1,71 @@
+using System.Net;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Api.Security;
 
-/// <summary>
-/// Locks a login identifier after repeated failures so one account cannot be password-guessed. The counters live in PostgreSQL so every API instance
-/// enforces the same limit. A short lock keeps the cost of locking out someone else's account low.
-/// </summary>
 public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, TimeProvider time)
 {
     public const int MaxFailures = 5;
-    public static readonly TimeSpan Window = TimeSpan.FromMinutes(5);
-    private const int MaxTracked = 10_000;
+    public static readonly TimeSpan Window = TimeSpan.FromSeconds(5);
+    public static readonly TimeSpan MaxWait = TimeSpan.FromMinutes(15);
+    public static readonly TimeSpan Retention = TimeSpan.FromHours(24);
 
-    /// <summary>The time left to wait, or null when the identifier may try.</summary>
-    public async Task<TimeSpan?> RetryAfterAsync(string identifier, CancellationToken cancellationToken)
+    public async Task<TimeSpan?> RetryAfterAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken)
     {
-        if (Key(identifier) is not { } key) return null;
+        ValidateKind(kind);
+        var accountKey = AccountKey(account);
+        var ipKey = IpKey(ipAddress);
         var now = time.GetUtcNow();
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        var since = await db.LoginThrottleEntries.AsNoTracking().Where(entry => entry.Identifier == key && entry.Failures >= MaxFailures && entry.WindowStart > now - Window)
-            .Select(entry => (DateTimeOffset?)entry.WindowStart).SingleOrDefaultAsync(cancellationToken);
-        return since is { } start ? start + Window - now : null;
+        var until = await db.LoginThrottleEntries.AsNoTracking()
+            .Where(entry => entry.Kind == kind && entry.LockedUntil > now &&
+                ((accountKey != null && entry.Scope == "account" && entry.Identifier == accountKey) ||
+                 (ipKey != null && entry.Scope == "ip" && entry.Identifier == ipKey)))
+            .MaxAsync(entry => (DateTimeOffset?)entry.LockedUntil, cancellationToken);
+        return until is { } lockedUntil ? lockedUntil - now : null;
     }
 
-    public async Task FailedAsync(string identifier, CancellationToken cancellationToken)
+    public async Task FailedAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken)
     {
-        if (Key(identifier) is not { } key) return;
+        ValidateKind(kind);
+        var accountKey = AccountKey(account);
+        var ipKey = IpKey(ipAddress);
         var now = time.GetUtcNow();
-        var expired = now - Window;
+        var expired = now - Retention;
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "WindowStart" <= {expired}""", cancellationToken);
-        // An identifier already tracked always counts; a new one is dropped once the table is full, so a flood of distinct identifiers cannot grow it without bound.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "LastFailureAt" <= {expired}""", cancellationToken);
         await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO login_throttle_entries ("Identifier", "Failures", "WindowStart")
-            SELECT {key}, 1, {now}
-            WHERE EXISTS (SELECT 1 FROM login_throttle_entries WHERE "Identifier" = {key})
-               OR (SELECT count(*) FROM (SELECT 1 FROM login_throttle_entries LIMIT {MaxTracked}) tracked) < {MaxTracked}
-            ON CONFLICT ("Identifier") DO UPDATE SET
-                "Failures" = CASE WHEN login_throttle_entries."WindowStart" <= {expired} THEN 1 ELSE login_throttle_entries."Failures" + 1 END,
-                "WindowStart" = CASE WHEN login_throttle_entries."WindowStart" <= {expired} THEN {now} ELSE login_throttle_entries."WindowStart" END
+            INSERT INTO login_throttle_entries ("Kind", "Scope", "Identifier", "Failures", "LastFailureAt", "LockedUntil")
+            SELECT {kind}, keys.scope, keys.identifier, 1, {now}, {now}
+            FROM (VALUES ('account', CAST({accountKey} AS text)), ('ip', CAST({ipKey} AS text))) AS keys(scope, identifier)
+            WHERE keys.identifier IS NOT NULL
+            ON CONFLICT ("Kind", "Scope", "Identifier") DO UPDATE SET
+                "Failures" = CASE WHEN login_throttle_entries."LastFailureAt" <= {expired} THEN 1 ELSE LEAST(login_throttle_entries."Failures" + 1, 13) END,
+                "LastFailureAt" = GREATEST(login_throttle_entries."LastFailureAt", {now}),
+                "LockedUntil" = GREATEST(login_throttle_entries."LockedUntil", CASE
+                    WHEN login_throttle_entries."LastFailureAt" <= {expired} OR login_throttle_entries."Failures" + 1 < {MaxFailures} THEN {now}
+                    ELSE {now} + make_interval(secs => LEAST(900, 5 * power(2, LEAST(login_throttle_entries."Failures" + 1 - {MaxFailures}, 8))))
+                END)
             """, cancellationToken);
     }
 
-    public async Task SucceededAsync(string identifier, CancellationToken cancellationToken)
+    public async Task SucceededAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken)
     {
-        if (Key(identifier) is not { } key) return;
+        ValidateKind(kind);
+        if (AccountKey(account) is not { } key) return;
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "Identifier" = {key}""", cancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "Kind" = {kind} AND "Scope" = 'account' AND "Identifier" = {key}""", cancellationToken);
     }
 
-    // The login's own normal form, so padding or case cannot dodge the counter. An identifier no account can have is never counted: it cannot be guessed against, and PostgreSQL text cannot store a NUL.
-    private static string? Key(string? identifier) => LoginIdentifierNormalizer.TryNormalize(identifier, out var key) ? key : null;
+    private static string? AccountKey(string? account) => LoginIdentifierNormalizer.TryNormalize(account, out var key) ? key : null;
+
+    private static string? IpKey(string? ipAddress) => IPAddress.TryParse(ipAddress, out var ip) ? ip.MapToIPv6().ToString() : null;
+
+    private static void ValidateKind(string kind)
+    {
+        if (string.IsNullOrEmpty(kind) || kind.Length > 64 || kind.Any(c => c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')))
+            throw new ArgumentException("Attempt kind must contain 1 to 64 lowercase ASCII letters, digits, '-' or '_'.", nameof(kind));
+    }
 }

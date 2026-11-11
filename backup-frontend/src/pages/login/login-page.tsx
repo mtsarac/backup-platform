@@ -4,6 +4,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { BrandMark } from '@/components/ui/brand-mark'
 import { Card } from '@/components/ui/card'
+import { CheckField } from '@/components/ui/check-field'
 import { Field } from '@/components/ui/field'
 import { TextInput } from '@/components/ui/text-input'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -22,6 +23,7 @@ export function LoginPage() {
   const location = useLocation()
   const [loginIdentifier, setLoginIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -36,7 +38,7 @@ export function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      await login(loginIdentifier, password)
+      await login(loginIdentifier, password, rememberMe)
       setPassword('')
       navigate(from, { replace: true })
     } catch (error) {
@@ -55,6 +57,7 @@ export function LoginPage() {
           <Card as="form" padding="lg" onSubmit={handleSubmit} className="space-y-4">
             <Field label={tx("Kullanıcı adı")}>{(control) => <TextInput {...control} autoComplete="username" value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} required />}</Field>
             <Field label={tx("Şifre")}>{(control) => <TextInput {...control} type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} required />}</Field>
+            <CheckField label={tx('Beni hatırla')} checked={rememberMe} onChange={event => setRememberMe(event.target.checked)} />
             {sessionExpired && <Notice tone="warning">{tx("Oturumunuz sona erdi. Yeniden giriş yapın.")}</Notice>}
             {error && <ErrorNotice {...error} />}
             <Button type="submit" className="w-full" disabled={loading}>{loading ? tx('Giriş yapılıyor...') : tx('Giriş Yap')}</Button>
