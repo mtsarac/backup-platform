@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Api.Security;
 using Microsoft.AspNetCore.Mvc;
 using BackupPlatform.Application.Backups;
@@ -32,6 +33,16 @@ public static class BackupShareEndpoints
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/shares/{shareId:guid}/revoke", RevokeShareForArtifactAsync)
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/download-attempts", ListTenantDownloadAttemptsAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-shares/download-attempts", ListTenantDownloadAttemptsAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-shares/{shareId:guid}/download-attempts", ListTenantShareDownloadAttemptsAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-shares/{shareId:guid}/attempts", ListTenantShareDownloadAttemptsAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-artifacts/{artifactId:guid}/download-attempts", ListTenantArtifactDownloadAttemptsAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
 
         var platform = endpoints.MapGroup("/api/platform/backup-shares")
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -39,6 +50,21 @@ public static class BackupShareEndpoints
         platform.MapPost("", CreatePlatformShareAsync);
         platform.MapGet("", ListPlatformSharesAsync);
         platform.MapGet("/{shareId:guid}", GetPlatformShareAsync);
+        platform.MapGet("/download-attempts", ListPlatformDownloadAttemptsAsync);
+        platform.MapGet("/{shareId:guid}/download-attempts", ListPlatformShareDownloadAttemptsAsync);
+        platform.MapGet("/{shareId:guid}/attempts", ListPlatformShareDownloadAttemptsAsync);
+        platform.MapGet("/retention", GetAuditRetentionAsync);
+        platform.MapPut("/retention", UpdateAuditRetentionAsync);
+
+        var platformRoot = endpoints.MapGroup("/api/platform")
+            .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+        platformRoot.MapGet("/download-attempts", ListPlatformDownloadAttemptsAsync);
+        platformRoot.MapGet("/settings/audit-retention", GetAuditRetentionAsync);
+        platformRoot.MapPut("/settings/audit-retention", UpdateAuditRetentionAsync);
+        platformRoot.MapPost("/settings/audit-retention/prune", PruneAuditHistoryAsync);
+        platformRoot.MapGet("/audit-retention", GetAuditRetentionAsync);
+        platformRoot.MapPut("/audit-retention", UpdateAuditRetentionAsync);
+        platformRoot.MapPost("/audit-retention/prune", PruneAuditHistoryAsync);
 
         return endpoints;
     }
@@ -335,5 +361,210 @@ public static class BackupShareEndpoints
             BackupShareModifyOutcome.InvalidExpiry => Results.BadRequest(new { error = result.ErrorCode ?? "invalid_expiry", message = result.ErrorMessage ?? "Invalid expiry date/time." }),
             _ => Results.BadRequest(new { error = result.ErrorCode ?? "modify_failed", message = result.ErrorMessage ?? "Failed to modify backup share." })
         };
+    }
+
+    private static async Task<IResult> ListTenantDownloadAttemptsAsync(
+        [FromQuery] Guid? shareId,
+        [FromQuery] Guid? tenantId,
+        [FromQuery] Guid? artifactId,
+        [FromQuery] Guid? userId,
+        [FromQuery] Guid? initiatingUserId,
+        [FromQuery] Guid? initiatingUser,
+        [FromQuery] string? result,
+        [FromQuery] string? status,
+        ITenantContext tenant,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        var effectiveResult = result ?? status;
+        if (!IsValidResultFilter(effectiveResult))
+        {
+            return Results.BadRequest(new { error = "invalid_result", message = $"Invalid result filter: {effectiveResult}." });
+        }
+
+        var filter = new DownloadAttemptFilter(
+            ShareId: shareId,
+            TenantId: tenantId.HasValue ? new TenantId(tenantId.Value) : null,
+            ArtifactId: artifactId,
+            InitiatingUserId: userId ?? initiatingUserId ?? initiatingUser,
+            Result: effectiveResult);
+
+        var attempts = await service.ListTenantDownloadAttemptsAsync(tenant.TenantId!, filter, cancellationToken);
+        return Results.Ok(attempts);
+    }
+
+    private static async Task<IResult> ListTenantShareDownloadAttemptsAsync(
+        Guid shareId,
+        [FromQuery] Guid? userId,
+        [FromQuery] Guid? initiatingUserId,
+        [FromQuery] Guid? initiatingUser,
+        [FromQuery] string? result,
+        [FromQuery] string? status,
+        ITenantContext tenant,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        var effectiveResult = result ?? status;
+        if (!IsValidResultFilter(effectiveResult))
+        {
+            return Results.BadRequest(new { error = "invalid_result", message = $"Invalid result filter: {effectiveResult}." });
+        }
+
+        var filter = new DownloadAttemptFilter(
+            ShareId: shareId,
+            TenantId: tenant.TenantId!,
+            InitiatingUserId: userId ?? initiatingUserId ?? initiatingUser,
+            Result: effectiveResult);
+
+        var attempts = await service.ListTenantDownloadAttemptsAsync(tenant.TenantId!, filter, cancellationToken);
+        return Results.Ok(attempts);
+    }
+
+    private static async Task<IResult> ListTenantArtifactDownloadAttemptsAsync(
+        Guid artifactId,
+        [FromQuery] Guid? shareId,
+        [FromQuery] Guid? userId,
+        [FromQuery] Guid? initiatingUserId,
+        [FromQuery] Guid? initiatingUser,
+        [FromQuery] string? result,
+        [FromQuery] string? status,
+        ITenantContext tenant,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        var effectiveResult = result ?? status;
+        if (!IsValidResultFilter(effectiveResult))
+        {
+            return Results.BadRequest(new { error = "invalid_result", message = $"Invalid result filter: {effectiveResult}." });
+        }
+
+        var filter = new DownloadAttemptFilter(
+            ShareId: shareId,
+            TenantId: tenant.TenantId!,
+            ArtifactId: artifactId,
+            InitiatingUserId: userId ?? initiatingUserId ?? initiatingUser,
+            Result: effectiveResult);
+
+        var attempts = await service.ListTenantDownloadAttemptsAsync(tenant.TenantId!, filter, cancellationToken);
+        return Results.Ok(attempts);
+    }
+
+    private static async Task<IResult> ListPlatformDownloadAttemptsAsync(
+        [FromQuery] Guid? shareId,
+        [FromQuery] Guid? tenantId,
+        [FromQuery] Guid? artifactId,
+        [FromQuery] Guid? userId,
+        [FromQuery] Guid? initiatingUserId,
+        [FromQuery] Guid? initiatingUser,
+        [FromQuery] string? result,
+        [FromQuery] string? status,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        var effectiveResult = result ?? status;
+        if (!IsValidResultFilter(effectiveResult))
+        {
+            return Results.BadRequest(new { error = "invalid_result", message = $"Invalid result filter: {effectiveResult}." });
+        }
+
+        var filter = new DownloadAttemptFilter(
+            ShareId: shareId,
+            TenantId: tenantId.HasValue ? new TenantId(tenantId.Value) : null,
+            ArtifactId: artifactId,
+            InitiatingUserId: userId ?? initiatingUserId ?? initiatingUser,
+            Result: effectiveResult);
+
+        var attempts = await service.ListPlatformDownloadAttemptsAsync(filter, cancellationToken);
+        return Results.Ok(attempts);
+    }
+
+    private static async Task<IResult> ListPlatformShareDownloadAttemptsAsync(
+        Guid shareId,
+        [FromQuery] Guid? tenantId,
+        [FromQuery] Guid? artifactId,
+        [FromQuery] Guid? userId,
+        [FromQuery] Guid? initiatingUserId,
+        [FromQuery] Guid? initiatingUser,
+        [FromQuery] string? result,
+        [FromQuery] string? status,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        var effectiveResult = result ?? status;
+        if (!IsValidResultFilter(effectiveResult))
+        {
+            return Results.BadRequest(new { error = "invalid_result", message = $"Invalid result filter: {effectiveResult}." });
+        }
+
+        var filter = new DownloadAttemptFilter(
+            ShareId: shareId,
+            TenantId: tenantId.HasValue ? new TenantId(tenantId.Value) : null,
+            ArtifactId: artifactId,
+            InitiatingUserId: userId ?? initiatingUserId ?? initiatingUser,
+            Result: effectiveResult);
+
+        var attempts = await service.ListPlatformDownloadAttemptsAsync(filter, cancellationToken);
+        return Results.Ok(attempts);
+    }
+
+    private static async Task<IResult> GetAuditRetentionAsync(
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        var retention = await service.GetAuditRetentionAsync(cancellationToken);
+        return Results.Ok(retention);
+    }
+
+    private static async Task<IResult> UpdateAuditRetentionAsync(
+        UpdateAuditRetentionRequest? request,
+        ICurrentUser user,
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        if (user.UserId is not { } actor)
+        {
+            return Results.Unauthorized();
+        }
+
+        var days = request?.RetentionDays ?? request?.Days;
+        if (days is null)
+        {
+            return Results.BadRequest(new { error = "invalid_retention_days", message = "RetentionDays is required." });
+        }
+
+        var result = await service.UpdateAuditRetentionAsync(actor, days.Value, cancellationToken);
+        return result.Outcome switch
+        {
+            SaveAuditRetentionOutcome.Success => Results.Ok(result.Settings),
+            SaveAuditRetentionOutcome.Forbidden => Results.Forbid(),
+            _ => Results.BadRequest(new { error = result.ErrorCode ?? "invalid_retention_days", message = result.ErrorMessage ?? "Invalid retention days." })
+        };
+    }
+
+    private static async Task<IResult> PruneAuditHistoryAsync(
+        BackupShareService service,
+        CancellationToken cancellationToken)
+    {
+        var result = await service.PruneHistoryAsync(cancellationToken);
+        return Results.Ok(result);
+    }
+
+    private static bool IsValidResultFilter(string? result)
+    {
+        if (string.IsNullOrWhiteSpace(result))
+        {
+            return true;
+        }
+
+        var trimmed = result.Trim();
+        if (string.Equals(trimmed, "Refused", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "Succeeded", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return Enum.TryParse<DownloadState>(trimmed, ignoreCase: true, out var parsed)
+            && Enum.IsDefined(parsed)
+            && !trimmed.All(char.IsDigit);
     }
 }

@@ -1,6 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createPlatformShare, createShare, extendShare, getPlatformShare, getShare, listPlatformShares, listShares, revokeShare } from './api'
-import type { CreatePlatformShareRequest, CreateShareRequest, ExtendShareRequest, RevokeShareRequest } from './types'
+import {
+  createPlatformShare,
+  createShare,
+  extendShare,
+  getAuditRetention,
+  getPlatformShare,
+  getShare,
+  listPlatformDownloadAttempts,
+  listPlatformShares,
+  listShares,
+  listTenantDownloadAttempts,
+  revokeShare,
+  updateAuditRetention,
+} from './api'
+import type {
+  CreatePlatformShareRequest,
+  CreateShareRequest,
+  DownloadAttemptFilters,
+  ExtendShareRequest,
+  RevokeShareRequest,
+} from './types'
 
 export function useShares(tenantId: string, artifactId?: string) {
   return useQuery({
@@ -76,6 +95,52 @@ export function useRevokeShare(tenantId: string) {
       void queryClient.invalidateQueries({ queryKey: ['shares', tenantId] })
       void queryClient.invalidateQueries({ queryKey: ['share', tenantId] })
       void queryClient.invalidateQueries({ queryKey: ['platform-shares'] })
+    },
+  })
+}
+
+export function useTenantDownloadAttempts(tenantId: string, filters?: DownloadAttemptFilters) {
+  return useQuery({
+    queryKey: [
+      'tenant-download-attempts',
+      tenantId,
+      filters?.shareId ?? '',
+      filters?.artifactId ?? '',
+      filters?.userId ?? '',
+      filters?.result ?? '',
+    ],
+    queryFn: ({ signal }) => listTenantDownloadAttempts(tenantId, filters, signal),
+    enabled: Boolean(tenantId),
+  })
+}
+
+export function usePlatformDownloadAttempts(filters?: DownloadAttemptFilters) {
+  return useQuery({
+    queryKey: [
+      'platform-download-attempts',
+      filters?.shareId ?? '',
+      filters?.tenantId ?? '',
+      filters?.artifactId ?? '',
+      filters?.userId ?? '',
+      filters?.result ?? '',
+    ],
+    queryFn: ({ signal }) => listPlatformDownloadAttempts(filters, signal),
+  })
+}
+
+export function useAuditRetention() {
+  return useQuery({
+    queryKey: ['audit-retention'],
+    queryFn: ({ signal }) => getAuditRetention(signal),
+  })
+}
+
+export function useUpdateAuditRetention() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (retentionDays: number) => updateAuditRetention(retentionDays),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['audit-retention'] })
     },
   })
 }

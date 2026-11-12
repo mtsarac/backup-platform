@@ -9,10 +9,10 @@ import { linkClass, rowLinkClass } from '@/components/ui/form-styles'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from '@/features/tenancy/tenant-context'
-import { formatDateTime } from '@/lib/format'
+import { formatBytes, formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
 import { ShareActionDialogs } from './share-dialogs'
-import { canManageShare, type BackupShareView } from './types'
+import { canManageShare, type BackupShareView, type DownloadAttemptView } from './types'
 import { prepareDownload } from '@/features/artifacts/api'
 
 export interface SharesTableProps {
@@ -214,5 +214,92 @@ export function SharesTable({
         onSuccess={(msg) => setNotice(msg)}
       />
     </div>
+  )
+}
+
+export interface DownloadAttemptsTableProps {
+  attempts: DownloadAttemptView[]
+  showTenant?: boolean
+  emptyMessage?: string
+}
+
+export function DownloadAttemptsTable({
+  attempts,
+  showTenant = false,
+  emptyMessage,
+}: DownloadAttemptsTableProps) {
+  useLanguage()
+
+  const columns: Column<DownloadAttemptView>[] = [
+    ...(showTenant
+      ? [
+          {
+            key: 'tenant',
+            header: tx('Tenant'),
+            render: (attempt: DownloadAttemptView) => attempt.tenantName || attempt.tenantId,
+          },
+        ]
+      : []),
+    {
+      key: 'artifact',
+      header: tx('Yedek dosyası'),
+      card: 'title' as const,
+      render: (attempt: DownloadAttemptView) => attempt.artifactName || attempt.artifactId,
+    },
+    {
+      key: 'share',
+      header: tx('Paylaşım'),
+      render: (attempt: DownloadAttemptView) => attempt.shareId || '—',
+    },
+    {
+      key: 'user',
+      header: tx('Kullanıcı'),
+      render: (attempt: DownloadAttemptView) => attempt.initiatingUserDisplayName || attempt.initiatingUserId,
+    },
+    {
+      key: 'startedAt',
+      header: tx('Başlangıç'),
+      render: (attempt: DownloadAttemptView) => formatDateTime(attempt.startedAtUtc),
+    },
+    {
+      key: 'endedAt',
+      header: tx('Bitiş'),
+      render: (attempt: DownloadAttemptView) => (attempt.endedAtUtc ? formatDateTime(attempt.endedAtUtc) : '—'),
+    },
+    {
+      key: 'result',
+      header: tx('Sonuç'),
+      card: 'status' as const,
+      render: (attempt: DownloadAttemptView) => <StatusPill domain="downloadAttempt" status={attempt.result} />,
+    },
+    {
+      key: 'bytes',
+      header: tx('Aktarılan veri'),
+      render: (attempt: DownloadAttemptView) => formatBytes(attempt.bytesTransferred),
+    },
+    {
+      key: 'failureReason',
+      header: tx('Hata / Red gerekçesi'),
+      wrap: true,
+      render: (attempt: DownloadAttemptView) => attempt.failureReason || '—',
+    },
+  ]
+
+  if (attempts.length === 0) {
+    return (
+      <EmptyState
+        icon={Share2}
+        message={emptyMessage || tx('Henüz indirme girişimi kaydı yok.')}
+      />
+    )
+  }
+
+  return (
+    <DataList
+      rows={attempts}
+      columns={columns}
+      keyExtractor={(attempt) => attempt.id}
+      caption={tx('İndirme girişimleri')}
+    />
   )
 }

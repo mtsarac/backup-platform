@@ -93,6 +93,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<DownloadSession> DownloadSessions => Set<DownloadSession>();
     public DbSet<BackupShare> BackupShares => Set<BackupShare>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<PlatformAuditRetentionSettings> PlatformAuditRetentionSettings => Set<PlatformAuditRetentionSettings>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
     public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
@@ -256,7 +257,7 @@ public sealed class PlatformDbContext : DbContext
             {
                 throw new InvalidOperationException("Discovery inventory writes require explicit platform operations.");
             }
-            if (!IsPlatformOperations && entry.Entity is AuditEvent)
+            if (!IsPlatformOperations && (entry.Entity is AuditEvent || entry.Entity is BackupPlatform.Domain.Audit.PlatformAuditRetentionSettings))
             {
                 throw new InvalidOperationException("Audit events require explicit platform operations.");
             }

@@ -39,6 +39,42 @@ export interface RevokeShareRequest {
   reason?: string
 }
 
+export type DownloadAttemptResult = 'Completed' | 'Failed' | 'Cancelled' | 'Refused' | 'Streaming' | 'Ready' | 'Preparing'
+
+export interface DownloadAttemptView {
+  id: string
+  shareId: string | null
+  tenantId: string
+  tenantName?: string | null
+  artifactId: string
+  artifactName?: string | null
+  initiatingUserId: string
+  initiatingUserDisplayName?: string | null
+  startedAtUtc: string
+  endedAtUtc: string | null
+  result: DownloadAttemptResult
+  bytesTransferred: number
+  failureReason: string | null
+  decrypted: boolean
+}
+
+export interface DownloadAttemptFilters {
+  shareId?: string
+  tenantId?: string
+  artifactId?: string
+  userId?: string
+  result?: string
+}
+
+export interface AuditRetentionSettings {
+  retentionDays: number
+  defaultRetentionDays: number
+  minRetentionDays: number
+  maxRetentionDays: number
+  updatedAtUtc?: string | null
+  updatedByUserId?: string | null
+}
+
 export function canManageShare(share: BackupShareView, role?: string, canAdmin?: boolean): boolean {
   if (share.status !== 'Active') return false
   if (role === 'PlatformAdmin') return true

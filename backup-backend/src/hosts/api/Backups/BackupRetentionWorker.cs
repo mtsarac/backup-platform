@@ -74,3 +74,42 @@ public sealed class BackupRetentionWorker(IServiceScopeFactory scopes, BackupRet
         return pruned;
     }
 }
+
+public sealed class AuditAndShareHistoryPruningWorker(
+    IServiceScopeFactory scopes,
+    BackupRetentionOptions options,
+    TimeProvider time,
+    ILogger<AuditAndShareHistoryPruningWorker> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (!options.Enabled) return;
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(1), time);
+        try
+        {
+            do
+            {
+                try { await RunOnceAsync(stoppingToken); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+                catch (Exception exception) { logger.LogError(exception, "Audit and share history pruning failed; it will run again on its next tick."); }
+            }
+            while (await timer.WaitForNextTickAsync(stoppingToken));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+    }
+
+    public async Task<AuditHistoryPruneResult> RunOnceAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var result = await scope.ServiceProvider.GetRequiredService<AuditAndShareHistoryPruningService>().PruneAsync(cancellationToken);
+        if (result.TotalRemoved > 0)
+        {
+            logger.LogInformation(
+                "Pruned {AuditEvents} audit events, {DownloadSessions} download sessions, and {Shares} backup shares past retention.",
+                result.AuditEventsRemoved,
+                result.DownloadSessionsRemoved,
+                result.SharesRemoved);
+        }
+        return result;
+    }
+}

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Downloads;
 using BackupPlatform.Domain.Audit;
@@ -571,6 +573,435 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             artifactNames.GetValueOrDefault(share.ArtifactId),
             userNames.GetValueOrDefault(share.CreatedByUserId),
             tenantNames.GetValueOrDefault(share.TenantId));
+    }
+
+    public async Task<IReadOnlyList<DownloadAttemptView>> ListDownloadAttemptsAsync(
+        DownloadAttemptFilter filter,
+        bool tenantScoped,
+        CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+
+        HashSet<Guid>? tenantShareIds = null;
+        if (tenantScoped)
+        {
+            if (filter.TenantId is null)
+            {
+                return [];
+            }
+
+            var shareIdsList = await context.BackupShares
+                .AsNoTracking()
+                .Where(s => s.TenantId == filter.TenantId)
+                .Select(s => s.Id)
+                .ToListAsync(cancellationToken);
+            tenantShareIds = [.. shareIdsList];
+
+            if (filter.ShareId.HasValue && !tenantShareIds.Contains(filter.ShareId.Value))
+            {
+                return [];
+            }
+
+            if (filter.ArtifactId.HasValue)
+            {
+                var artifactExists = await context.BackupArtifacts
+                    .AsNoTracking()
+                    .AnyAsync(a => a.TenantId == filter.TenantId && a.Id == filter.ArtifactId.Value, cancellationToken);
+                if (!artifactExists)
+                {
+                    return [];
+                }
+            }
+        }
+
+        var normalizedResult = NormalizeResultFilter(filter.Result);
+        var includeSessions = normalizedResult is null || !string.Equals(normalizedResult, "Refused", StringComparison.OrdinalIgnoreCase);
+        var includeRefusals = normalizedResult is null || string.Equals(normalizedResult, "Refused", StringComparison.OrdinalIgnoreCase);
+
+        var sessions = new List<DownloadSession>();
+        if (includeSessions)
+        {
+            var sessionQuery = context.DownloadSessions.AsNoTracking();
+            if (filter.TenantId is not null)
+            {
+                sessionQuery = sessionQuery.Where(s => s.TenantId == filter.TenantId);
+            }
+            if (filter.ShareId.HasValue)
+            {
+                sessionQuery = sessionQuery.Where(s => s.ShareId == filter.ShareId.Value);
+            }
+            if (filter.ArtifactId.HasValue)
+            {
+                sessionQuery = sessionQuery.Where(s => s.ArtifactId == filter.ArtifactId.Value);
+            }
+            if (filter.InitiatingUserId.HasValue)
+            {
+                sessionQuery = sessionQuery.Where(s => s.UserId == filter.InitiatingUserId.Value);
+            }
+            if (normalizedResult is not null && Enum.TryParse<DownloadState>(normalizedResult, ignoreCase: true, out var stateFilter))
+            {
+                sessionQuery = sessionQuery.Where(s => s.State == stateFilter);
+            }
+            sessions = await sessionQuery.ToListAsync(cancellationToken);
+        }
+
+        var refusalAuditQuery = context.AuditEvents
+            .AsNoTracking()
+            .Where(e => e.Action == "download.refused");
+        if (filter.TenantId is not null)
+        {
+            refusalAuditQuery = refusalAuditQuery.Where(e => e.TenantId == filter.TenantId);
+        }
+        if (filter.InitiatingUserId.HasValue)
+        {
+            var actorUserId = new UserId(filter.InitiatingUserId.Value);
+            refusalAuditQuery = refusalAuditQuery.Where(e => e.ActorUserId == actorUserId);
+        }
+
+        var refusalEvents = (includeRefusals || sessions.Any(s => s.State == DownloadState.Ready && s.ReleasedAt == null))
+            ? await refusalAuditQuery.ToListAsync(cancellationToken)
+            : [];
+
+        var parsedRefusals = new List<ParsedRefusal>(refusalEvents.Count);
+        foreach (var audit in refusalEvents)
+        {
+            var parsed = ParseRefusal(audit, tenantShareIds);
+            if (parsed is null) continue;
+            parsedRefusals.Add(parsed);
+        }
+
+        // If a Ready session was later refused when attempting to start streaming, suppress the unstarted Ready row so the attempt is represented once by its Refused outcome.
+        if (sessions.Count > 0 && parsedRefusals.Count > 0)
+        {
+            sessions.RemoveAll(s =>
+                s.State == DownloadState.Ready &&
+                s.ReleasedAt == null &&
+                s.TransferredBytes == 0 &&
+                parsedRefusals.Any(r =>
+                    r.TenantId == s.TenantId &&
+                    r.ArtifactId == s.ArtifactId &&
+                    r.ShareId == s.ShareId &&
+                    r.InitiatingUserId == s.UserId &&
+                    r.StartedAtUtc >= s.CreatedAt));
+        }
+
+        var filteredRefusals = includeRefusals
+            ? parsedRefusals
+                .Where(r =>
+                    (filter.TenantId is null || r.TenantId == filter.TenantId) &&
+                    (!filter.ShareId.HasValue || r.ShareId == filter.ShareId.Value) &&
+                    (!filter.ArtifactId.HasValue || r.ArtifactId == filter.ArtifactId.Value) &&
+                    (!filter.InitiatingUserId.HasValue || r.InitiatingUserId == filter.InitiatingUserId.Value))
+                .ToList()
+            : [];
+
+        if (sessions.Count == 0 && filteredRefusals.Count == 0)
+        {
+            return [];
+        }
+
+        var allUserIds = sessions.Select(s => new UserId(s.UserId))
+            .Concat(filteredRefusals.Select(r => new UserId(r.InitiatingUserId)))
+            .Distinct()
+            .ToArray();
+        var allTenantIds = sessions.Select(s => s.TenantId)
+            .Concat(filteredRefusals.Select(r => r.TenantId))
+            .Distinct()
+            .ToArray();
+        var allArtifactIds = sessions.Select(s => s.ArtifactId)
+            .Concat(filteredRefusals.Select(r => r.ArtifactId))
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+
+        var userNames = await ResolveUserNamesAsync(context, allUserIds, cancellationToken);
+        var tenantNames = await ResolveTenantNamesAsync(context, allTenantIds, cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, allArtifactIds, cancellationToken, filter.TenantId);
+
+        var results = new List<DownloadAttemptView>(sessions.Count + filteredRefusals.Count);
+        foreach (var s in sessions)
+        {
+            var userId = new UserId(s.UserId);
+            results.Add(new DownloadAttemptView(
+                s.Id,
+                s.ShareId,
+                s.TenantId.Value,
+                tenantNames.GetValueOrDefault(s.TenantId),
+                s.ArtifactId,
+                artifactNames.GetValueOrDefault(s.ArtifactId),
+                s.UserId,
+                userNames.GetValueOrDefault(userId),
+                s.CreatedAt,
+                s.ReleasedAt,
+                s.State.ToString(),
+                s.TransferredBytes,
+                s.FailureCode,
+                s.Decrypted));
+        }
+
+        foreach (var r in filteredRefusals)
+        {
+            var userId = new UserId(r.InitiatingUserId);
+            results.Add(new DownloadAttemptView(
+                r.Id,
+                r.ShareId,
+                r.TenantId.Value,
+                tenantNames.GetValueOrDefault(r.TenantId),
+                r.ArtifactId,
+                artifactNames.GetValueOrDefault(r.ArtifactId),
+                r.InitiatingUserId,
+                userNames.GetValueOrDefault(userId),
+                r.StartedAtUtc,
+                r.EndedAtUtc,
+                "Refused",
+                r.BytesTransferred,
+                r.FailureReason,
+                Decrypted: false));
+        }
+
+        return results
+            .OrderByDescending(a => a.StartedAtUtc)
+            .ThenByDescending(a => a.Id)
+            .ToList();
+    }
+
+    public async Task<AuditRetentionSettingsView> GetAuditRetentionAsync(CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var row = await context.PlatformAuditRetentionSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(s => s.Id == PlatformAuditRetentionSettings.SingletonId, cancellationToken);
+
+        return new AuditRetentionSettingsView(
+            row?.RetentionDays ?? PlatformAuditRetentionSettings.DefaultRetentionDays,
+            PlatformAuditRetentionSettings.DefaultRetentionDays,
+            PlatformAuditRetentionSettings.MinimumRetentionDays,
+            PlatformAuditRetentionSettings.MaximumRetentionDays,
+            row?.UpdatedAt,
+            row?.UpdatedBy.Value);
+    }
+
+    public async Task<AuditRetentionSettingsView> SaveAuditRetentionAsync(
+        int retentionDays,
+        UserId actor,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var utcNow = now.ToUniversalTime();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        var row = await context.PlatformAuditRetentionSettings
+            .SingleOrDefaultAsync(s => s.Id == PlatformAuditRetentionSettings.SingletonId, cancellationToken);
+
+        var previousRetentionDays = row?.RetentionDays ?? PlatformAuditRetentionSettings.DefaultRetentionDays;
+        if (row is null)
+        {
+            row = new PlatformAuditRetentionSettings(retentionDays, actor, utcNow);
+            context.PlatformAuditRetentionSettings.Add(row);
+        }
+        else
+        {
+            row.Set(retentionDays, actor, utcNow);
+        }
+
+        context.AuditEvents.Add(AuditEvent.Record(
+            utcNow,
+            actor,
+            AuditActorKind.PlatformAdmin,
+            AuditActions.AuditRetentionUpdated,
+            tenantId: null,
+            "audit_retention",
+            "singleton",
+            new Dictionary<string, object?>
+            {
+                ["actor"] = actor.Value.ToString("D"),
+                ["previousRetentionDays"] = previousRetentionDays,
+                ["oldRetentionDays"] = previousRetentionDays,
+                ["retentionDays"] = retentionDays,
+                ["newRetentionDays"] = retentionDays
+            }));
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new AuditRetentionSettingsView(
+            row.RetentionDays,
+            PlatformAuditRetentionSettings.DefaultRetentionDays,
+            PlatformAuditRetentionSettings.MinimumRetentionDays,
+            PlatformAuditRetentionSettings.MaximumRetentionDays,
+            row.UpdatedAt,
+            row.UpdatedBy.Value);
+    }
+
+    public async Task<AuditHistoryPruneResult> PruneHistoryAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken,
+        int? retentionDaysOverride = null)
+    {
+        var utcNow = now.ToUniversalTime();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        var retentionDays = retentionDaysOverride
+            ?? (await context.PlatformAuditRetentionSettings
+                .AsNoTracking()
+                .SingleOrDefaultAsync(s => s.Id == PlatformAuditRetentionSettings.SingletonId, cancellationToken))?.RetentionDays
+            ?? PlatformAuditRetentionSettings.DefaultRetentionDays;
+
+        if (retentionDays < PlatformAuditRetentionSettings.MinimumRetentionDays)
+        {
+            retentionDays = PlatformAuditRetentionSettings.MinimumRetentionDays;
+        }
+
+        var cutoff = utcNow - TimeSpan.FromDays(retentionDays);
+
+        var activeShareIdsQuery = context.BackupShares
+            .Where(s => s.RevokedAtUtc == null && s.ExpiresAtUtc > utcNow)
+            .Select(s => s.Id);
+
+        var downloadSessionsRemoved = await context.DownloadSessions
+            .Where(s => s.ReleasedAt != null
+                && s.ReleasedAt < cutoff
+                && (s.ShareId == null || !activeShareIdsQuery.Contains(s.ShareId.Value)))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var sharesRemoved = await context.BackupShares
+            .Where(s =>
+                ((s.RevokedAtUtc != null && s.RevokedAtUtc < cutoff) || (s.RevokedAtUtc == null && s.ExpiresAtUtc <= utcNow && s.ExpiresAtUtc < cutoff))
+                && !context.DownloadSessions.Any(d => d.ShareId == s.Id))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var activeDownloadIds = await context.DownloadSessions
+            .AsNoTracking()
+            .Where(d => d.ReleasedAt == null)
+            .Select(d => d.Id)
+            .ToListAsync(cancellationToken);
+        var activeDownloadTargetIds = activeDownloadIds.Select(id => id.ToString("D")).ToArray();
+
+        var activeShareIds = await context.BackupShares
+            .AsNoTracking()
+            .Where(s => s.RevokedAtUtc == null && s.ExpiresAtUtc > utcNow)
+            .Select(s => s.Id)
+            .ToListAsync(cancellationToken);
+        var activeShareTargetIds = activeShareIds.Select(id => id.ToString("D")).ToArray();
+
+        var auditEventsRemoved = await context.AuditEvents
+            .Where(e => e.At < cutoff
+                && !(e.TargetType == "download" && activeDownloadTargetIds.Contains(e.TargetId))
+                && !(e.TargetType == "backup_share" && activeShareTargetIds.Contains(e.TargetId)))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return new AuditHistoryPruneResult(auditEventsRemoved, downloadSessionsRemoved, sharesRemoved);
+    }
+
+    private static string? NormalizeResultFilter(string? result)
+    {
+        if (string.IsNullOrWhiteSpace(result))
+        {
+            return null;
+        }
+
+        var trimmed = result.Trim();
+        if (string.Equals(trimmed, "Succeeded", StringComparison.OrdinalIgnoreCase))
+        {
+            return nameof(DownloadState.Completed);
+        }
+        if (string.Equals(trimmed, "Refused", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Refused";
+        }
+        if (Enum.TryParse<DownloadState>(trimmed, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed))
+        {
+            return parsed.ToString();
+        }
+        return trimmed;
+    }
+
+    private sealed record ParsedRefusal(
+        Guid Id,
+        Guid? ShareId,
+        TenantId TenantId,
+        Guid ArtifactId,
+        Guid InitiatingUserId,
+        DateTimeOffset StartedAtUtc,
+        DateTimeOffset EndedAtUtc,
+        long BytesTransferred,
+        string FailureReason);
+
+    private static ParsedRefusal? ParseRefusal(AuditEvent audit, HashSet<Guid>? tenantShareIds)
+    {
+        using var doc = JsonDocument.Parse(audit.DetailsJson);
+        var root = doc.RootElement;
+
+        var tenantGuid = audit.TenantId?.Value ?? TryGetGuid(root, "tenantId");
+        if (tenantGuid is null || tenantGuid == Guid.Empty)
+        {
+            return null;
+        }
+
+        var shareId = TryGetGuid(root, "shareId");
+        if (tenantShareIds is not null && shareId.HasValue && !tenantShareIds.Contains(shareId.Value))
+        {
+            shareId = null;
+        }
+
+        var artifactId = TryGetGuid(root, "artifactId")
+            ?? (Guid.TryParse(audit.TargetId, out var targetGuid) && targetGuid != shareId ? targetGuid : Guid.Empty);
+        var userId = TryGetGuid(root, "initiatingUser") ?? audit.ActorUserId.Value;
+        var startedAt = TryGetDateTimeOffset(root, "startTime") ?? TryGetDateTimeOffset(root, "startedAt") ?? audit.At;
+        var endedAt = TryGetDateTimeOffset(root, "endTime") ?? TryGetDateTimeOffset(root, "completedAt") ?? audit.At;
+        var bytes = TryGetInt64(root, "bytesTransferred") ?? TryGetInt64(root, "transferredBytes") ?? 0L;
+        var reason = TryGetString(root, "failureReason") ?? TryGetString(root, "failure") ?? "refused";
+
+        return new ParsedRefusal(
+            audit.Id,
+            shareId,
+            new TenantId(tenantGuid.Value),
+            artifactId,
+            userId,
+            startedAt,
+            endedAt,
+            bytes,
+            reason);
+    }
+
+    private static Guid? TryGetGuid(JsonElement root, string property)
+    {
+        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.String && Guid.TryParse(elem.GetString(), out var g))
+        {
+            return g;
+        }
+        return null;
+    }
+
+    private static DateTimeOffset? TryGetDateTimeOffset(JsonElement root, string property)
+    {
+        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(elem.GetString(), out var dt))
+        {
+            return dt.ToUniversalTime();
+        }
+        return null;
+    }
+
+    private static long? TryGetInt64(JsonElement root, string property)
+    {
+        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.Number && elem.TryGetInt64(out var val))
+        {
+            return val;
+        }
+        return null;
+    }
+
+    private static string? TryGetString(JsonElement root, string property)
+    {
+        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.String)
+        {
+            return elem.GetString();
+        }
+        return null;
     }
 
     private static BackupShareView ToView(

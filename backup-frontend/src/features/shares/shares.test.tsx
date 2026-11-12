@@ -9,7 +9,7 @@ import { PlatformSharesPage } from '@/pages/platform/platform-shares-page'
 import { ApiError, apiRequest } from '@/lib/api/client'
 import type * as ApiClient from '@/lib/api/client'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import type { BackupShareView } from './types'
+import type { BackupShareView, DownloadAttemptView } from './types'
 
 vi.mock('@/lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiClient>()
@@ -133,6 +133,57 @@ const platformAdminShare: BackupShareView = {
   createdByUserId: 'platform-admin-1',
   createdByRole: 'PlatformAdmin',
   createdByDisplayName: 'Platform Admin Peter',
+}
+
+const completedAttempt: DownloadAttemptView = {
+  id: 'attempt-completed-1',
+  shareId: 'share-1',
+  tenantId: 'tenant-a',
+  tenantName: 'Tenant A',
+  artifactId: 'artifact-1',
+  artifactName: 'ProductionDb',
+  initiatingUserId: 'platform-user-1',
+  initiatingUserDisplayName: 'Super Admin',
+  startedAtUtc: '2026-11-11T14:00:00Z',
+  endedAtUtc: '2026-11-11T14:01:00Z',
+  result: 'Completed',
+  bytesTransferred: 2048,
+  failureReason: null,
+  decrypted: true,
+}
+
+const refusedAttempt: DownloadAttemptView = {
+  id: 'attempt-refused-1',
+  shareId: 'share-3',
+  tenantId: 'tenant-a',
+  tenantName: 'Tenant A',
+  artifactId: 'artifact-1',
+  artifactName: 'ProductionDb',
+  initiatingUserId: 'platform-user-1',
+  initiatingUserDisplayName: 'Super Admin',
+  startedAtUtc: '2026-11-11T15:00:00Z',
+  endedAtUtc: '2026-11-11T15:00:00Z',
+  result: 'Refused',
+  bytesTransferred: 0,
+  failureReason: 'share_revoked',
+  decrypted: false,
+}
+
+const failedAttempt: DownloadAttemptView = {
+  id: 'attempt-failed-1',
+  shareId: 'share-platform-1',
+  tenantId: 'tenant-b',
+  tenantName: 'Acme Corp',
+  artifactId: 'artifact-2',
+  artifactName: 'AnalyticsDb',
+  initiatingUserId: 'platform-user-1',
+  initiatingUserDisplayName: 'Super Admin',
+  startedAtUtc: '2026-11-11T16:00:00Z',
+  endedAtUtc: '2026-11-11T16:00:30Z',
+  result: 'Failed',
+  bytesTransferred: 512,
+  failureReason: 'integrity_mismatch',
+  decrypted: false,
 }
 const request = vi.mocked(apiRequest)
 
@@ -675,6 +726,94 @@ describe('BackupShare frontend', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Kopya şu anda indirme için kullanılamıyor.')
+    })
+  })
+
+  it('renders tenant download attempt history in Paylaşımlarım for UserAdmin without platform retention controls', async () => {
+    permissions.role = 'UserAdmin'
+    permissions.canAdmin = true
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('download-attempts')) return [completedAttempt, refusedAttempt]
+      if (path.includes('backup-shares')) return [testShare, revokedShare]
+      return []
+    })
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Paylaşımlarım' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
+      expect(screen.getByText('Tamamlandı')).toBeInTheDocument()
+      expect(screen.getByText('Reddedildi')).toBeInTheDocument()
+      expect(screen.getByText('share_revoked')).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Denetim ve paylaşım geçmişi saklama süresi' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders download attempt history with filters and configurable 365-day retention in Paylaşılan Yedekler for PlatformAdmin', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string, options?: { method?: string; json?: unknown }) => {
+      if (path.includes('platform/settings/audit-retention')) {
+        if (options?.method === 'PUT') {
+          return {
+            retentionDays: 180,
+            defaultRetentionDays: 365,
+            minRetentionDays: 1,
+            maxRetentionDays: 36500,
+            updatedAtUtc: '2026-11-12T10:00:00Z',
+          }
+        }
+        return {
+          retentionDays: 365,
+          defaultRetentionDays: 365,
+          minRetentionDays: 1,
+          maxRetentionDays: 36500,
+          updatedAtUtc: null,
+        }
+      }
+      if (path.includes('platform/download-attempts')) {
+        if (path.includes('result=Failed')) return [failedAttempt]
+        return [completedAttempt, refusedAttempt, failedAttempt]
+      }
+      if (path.includes('platform/backup-shares')) return [platformShare]
+      if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
+      return []
+    })
+
+    renderPlatformSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
+      expect(screen.getByText('share_revoked')).toBeInTheDocument()
+      expect(screen.getByText('integrity_mismatch')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('365')).toBeInTheDocument()
+    })
+
+    // Filter by result = Failed
+    const resultSelect = screen.getByRole('combobox', { name: 'Sonuç' })
+    fireEvent.change(resultSelect, { target: { value: 'Failed' } })
+
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(
+        expect.stringContaining('platform/download-attempts?result=Failed'),
+        expect.anything()
+      )
+    })
+
+    // Update retention period to 180 days
+    const retentionInput = screen.getByLabelText('Saklama süresi (gün)')
+    fireEvent.change(retentionInput, { target: { value: '180' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Saklama süresini kaydet' }))
+
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(
+        'platform/settings/audit-retention',
+        expect.objectContaining({
+          method: 'PUT',
+          json: { retentionDays: 180 },
+        })
+      )
+      expect(screen.getByText('Saklama süresi güncellendi.')).toBeInTheDocument()
     })
   })
 })

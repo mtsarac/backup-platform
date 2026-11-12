@@ -104,6 +104,8 @@ public static class AuditActions
     public const string BackupShareCreated = "backup_share.created";
     public const string BackupShareExtended = "backup_share.extended";
     public const string BackupShareRevoked = "backup_share.revoked";
+    public const string AuditRetentionUpdated = "audit_retention.updated";
+    public const string AuditRetentionChanged = AuditRetentionUpdated;
 
 }
 
@@ -173,5 +175,50 @@ public sealed class AuditEvent
         }
         if (legacyAccessId == Guid.Empty) throw new ArgumentException("A legacy access id must not be empty.", nameof(legacyAccessId));
         return new AuditEvent(Guid.NewGuid(), at, actor, actorKind, action, tenantId, targetType, targetId, json, legacyAccessId);
+    }
+}
+
+public sealed class PlatformAuditRetentionSettings
+{
+    public const int SingletonId = 1;
+    public const int DefaultRetentionDays = 365;
+    public const int MinimumRetentionDays = 1;
+    public const int MaximumRetentionDays = 36500;
+
+    private PlatformAuditRetentionSettings()
+    {
+        UpdatedBy = null!;
+    }
+
+    public PlatformAuditRetentionSettings(int retentionDays, UserId updatedBy, DateTimeOffset updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(updatedBy);
+        if (retentionDays is < MinimumRetentionDays or > MaximumRetentionDays)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retentionDays));
+        }
+
+        Id = SingletonId;
+        RetentionDays = retentionDays;
+        UpdatedBy = updatedBy;
+        UpdatedAt = updatedAt.ToUniversalTime();
+    }
+
+    public int Id { get; private set; } = SingletonId;
+    public int RetentionDays { get; private set; }
+    public UserId UpdatedBy { get; private set; }
+    public DateTimeOffset UpdatedAt { get; private set; }
+
+    public void Set(int retentionDays, UserId updatedBy, DateTimeOffset updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(updatedBy);
+        if (retentionDays is < MinimumRetentionDays or > MaximumRetentionDays)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retentionDays));
+        }
+
+        RetentionDays = retentionDays;
+        UpdatedBy = updatedBy;
+        UpdatedAt = updatedAt.ToUniversalTime();
     }
 }
