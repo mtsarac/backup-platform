@@ -3376,8 +3376,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Kullanıcı ID": {"tr":"Kullanıcı ID","en":"User ID"},
   "Denetim ve paylaşım geçmişi saklama süresi": {"tr":"Denetim ve paylaşım geçmişi saklama süresi","en":"Audit and share history retention period"},
   "Paylaşım geçmişi ve denetim kayıtlarının sistem genelinde saklanma süresi (varsayılan 365 gün).": {"tr":"Paylaşım geçmişi ve denetim kayıtlarının sistem genelinde saklanma süresi (varsayılan 365 gün).","en":"System-wide retention period for share history and audit records (default 365 days)."},
-  "Saklama süresi (gün)": {"tr":"Saklama süresi (gün)","en":"Retention period (days)"},
   "Saklama süresi en az 1 gün olmalıdır.": {"tr":"Saklama süresi en az 1 gün olmalıdır.","en":"Retention period must be at least 1 day."},
   "Saklama süresi güncellendi.": {"tr":"Saklama süresi güncellendi.","en":"Retention period updated."},
-  "Saklama süresini kaydet": {"tr":"Saklama süresini kaydet","en":"Save retention period"},
 }

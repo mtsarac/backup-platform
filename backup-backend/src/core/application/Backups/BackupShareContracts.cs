@@ -94,16 +94,7 @@ public sealed record DownloadAttemptView(
     string Result,
     long BytesTransferred,
     string? FailureReason,
-    bool Decrypted)
-{
-    public Guid UserId => InitiatingUserId;
-    public Guid InitiatingUser => InitiatingUserId;
-    public string? UserDisplayName => InitiatingUserDisplayName;
-    public DateTimeOffset StartTime => StartedAtUtc;
-    public DateTimeOffset? EndTime => EndedAtUtc;
-    public string Status => Result;
-    public long TransferredBytes => BytesTransferred;
-}
+    bool Decrypted);
 
 public sealed record AuditRetentionSettingsView(
     int RetentionDays,
@@ -111,35 +102,11 @@ public sealed record AuditRetentionSettingsView(
     int MinRetentionDays = PlatformAuditRetentionSettings.MinimumRetentionDays,
     int MaxRetentionDays = PlatformAuditRetentionSettings.MaximumRetentionDays,
     DateTimeOffset? UpdatedAtUtc = null,
-    Guid? UpdatedByUserId = null)
-{
-    public DateTimeOffset? UpdatedAt => UpdatedAtUtc;
-}
+    Guid? UpdatedByUserId = null);
 
-public sealed record UpdateAuditRetentionRequest(
-    int? RetentionDays = null,
-    int? Days = null);
+public sealed record UpdateAuditRetentionRequest(int? RetentionDays);
 
-public enum SaveAuditRetentionOutcome
-{
-    Success = 1,
-    Forbidden,
-    InvalidRetentionDays
-}
-
-public sealed record SaveAuditRetentionResult(
-    SaveAuditRetentionOutcome Outcome,
-    AuditRetentionSettingsView? Settings = null,
-    string? ErrorCode = null,
-    string? ErrorMessage = null);
-
-public sealed record AuditHistoryPruneResult(
-    int AuditEventsRemoved,
-    int DownloadSessionsRemoved,
-    int SharesRemoved)
-{
-    public int TotalRemoved => AuditEventsRemoved + DownloadSessionsRemoved + SharesRemoved;
-}
+public sealed record AuditHistoryPruneResult(int AuditEventsRemoved, int DownloadSessionsRemoved, int SharesRemoved);
 
 public interface IBackupShareStore
 {
@@ -210,6 +177,5 @@ public interface IBackupShareStore
 
     Task<AuditHistoryPruneResult> PruneHistoryAsync(
         DateTimeOffset now,
-        CancellationToken cancellationToken,
-        int? retentionDaysOverride = null);
+        CancellationToken cancellationToken);
 }

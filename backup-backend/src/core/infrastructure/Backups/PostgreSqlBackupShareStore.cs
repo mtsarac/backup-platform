@@ -575,6 +575,9 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             tenantNames.GetValueOrDefault(share.TenantId));
     }
 
+    /// <summary>The history view shows the most recent attempts; older ones are reached by narrowing the filters.</summary>
+    private const int MaximumAttempts = 500;
+
     public async Task<IReadOnlyList<DownloadAttemptView>> ListDownloadAttemptsAsync(
         DownloadAttemptFilter filter,
         bool tenantScoped,
@@ -642,7 +645,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             {
                 sessionQuery = sessionQuery.Where(s => s.State == stateFilter);
             }
-            sessions = await sessionQuery.ToListAsync(cancellationToken);
+            sessions = await sessionQuery.OrderByDescending(s => s.CreatedAt).Take(MaximumAttempts).ToListAsync(cancellationToken);
         }
 
         var refusalAuditQuery = context.AuditEvents
@@ -659,7 +662,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         }
 
         var refusalEvents = (includeRefusals || sessions.Any(s => s.State == DownloadState.Ready && s.ReleasedAt == null))
-            ? await refusalAuditQuery.ToListAsync(cancellationToken)
+            ? await refusalAuditQuery.OrderByDescending(e => e.At).Take(MaximumAttempts).ToListAsync(cancellationToken)
             : [];
 
         var parsedRefusals = new List<ParsedRefusal>(refusalEvents.Count);
@@ -762,6 +765,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         return results
             .OrderByDescending(a => a.StartedAtUtc)
             .ThenByDescending(a => a.Id)
+            .Take(MaximumAttempts)
             .ToList();
     }
 
@@ -815,11 +819,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             "singleton",
             new Dictionary<string, object?>
             {
-                ["actor"] = actor.Value.ToString("D"),
                 ["previousRetentionDays"] = previousRetentionDays,
-                ["oldRetentionDays"] = previousRetentionDays,
-                ["retentionDays"] = retentionDays,
-                ["newRetentionDays"] = retentionDays
+                ["retentionDays"] = retentionDays
             }));
 
         await context.SaveChangesAsync(cancellationToken);
@@ -836,24 +837,16 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
 
     public async Task<AuditHistoryPruneResult> PruneHistoryAsync(
         DateTimeOffset now,
-        CancellationToken cancellationToken,
-        int? retentionDaysOverride = null)
+        CancellationToken cancellationToken)
     {
         var utcNow = now.ToUniversalTime();
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
-        var retentionDays = retentionDaysOverride
-            ?? (await context.PlatformAuditRetentionSettings
+        var retentionDays = (await context.PlatformAuditRetentionSettings
                 .AsNoTracking()
                 .SingleOrDefaultAsync(s => s.Id == PlatformAuditRetentionSettings.SingletonId, cancellationToken))?.RetentionDays
             ?? PlatformAuditRetentionSettings.DefaultRetentionDays;
-
-        if (retentionDays < PlatformAuditRetentionSettings.MinimumRetentionDays)
-        {
-            retentionDays = PlatformAuditRetentionSettings.MinimumRetentionDays;
-        }
-
         var cutoff = utcNow - TimeSpan.FromDays(retentionDays);
 
         var activeShareIdsQuery = context.BackupShares
@@ -905,10 +898,6 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         }
 
         var trimmed = result.Trim();
-        if (string.Equals(trimmed, "Succeeded", StringComparison.OrdinalIgnoreCase))
-        {
-            return nameof(DownloadState.Completed);
-        }
         if (string.Equals(trimmed, "Refused", StringComparison.OrdinalIgnoreCase))
         {
             return "Refused";

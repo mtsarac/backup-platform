@@ -75,11 +75,6 @@ export async function revokeShare(
   )
 }
 
-function normalizeDownloadAttempts(data: unknown): DownloadAttemptView[] {
-  if (!Array.isArray(data)) return []
-  return data.filter((item): item is DownloadAttemptView => Boolean(item && typeof item === 'object' && 'startedAtUtc' in item))
-}
-
 function buildAttemptQuery(filters?: DownloadAttemptFilters): string {
   const search = new URLSearchParams()
   if (filters?.shareId) search.set('shareId', filters.shareId)
@@ -97,11 +92,7 @@ export async function listTenantDownloadAttempts(
   signal?: AbortSignal
 ): Promise<DownloadAttemptView[]> {
   const query = buildAttemptQuery(filters)
-  const res = await apiRequest<unknown>(
-    `tenants/${encodeURIComponent(tenantId)}/backup-shares/download-attempts${query}`,
-    { signal }
-  )
-  return normalizeDownloadAttempts(res)
+  return apiRequest<DownloadAttemptView[]>(`tenants/${encodeURIComponent(tenantId)}/backup-shares/download-attempts${query}`, { signal })
 }
 
 export async function listPlatformDownloadAttempts(
@@ -109,23 +100,11 @@ export async function listPlatformDownloadAttempts(
   signal?: AbortSignal
 ): Promise<DownloadAttemptView[]> {
   const query = buildAttemptQuery(filters)
-  const res = await apiRequest<unknown>(`platform/download-attempts${query}`, { signal })
-  return normalizeDownloadAttempts(res)
+  return apiRequest<DownloadAttemptView[]>(`platform/download-attempts${query}`, { signal })
 }
 
-export async function getAuditRetention(signal?: AbortSignal): Promise<AuditRetentionSettings> {
-  const res = await apiRequest<unknown>('platform/settings/audit-retention', { signal })
-  if (res && typeof res === 'object' && 'retentionDays' in res && typeof (res as AuditRetentionSettings).retentionDays === 'number') {
-    return res as AuditRetentionSettings
-  }
-  return {
-    retentionDays: 365,
-    defaultRetentionDays: 365,
-    minRetentionDays: 1,
-    maxRetentionDays: 36500,
-    updatedAtUtc: null,
-    updatedByUserId: null,
-  }
+export function getAuditRetention(signal?: AbortSignal): Promise<AuditRetentionSettings> {
+  return apiRequest<AuditRetentionSettings>('platform/settings/audit-retention', { signal })
 }
 
 export async function updateAuditRetention(retentionDays: number): Promise<AuditRetentionSettings> {

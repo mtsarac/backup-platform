@@ -101,8 +101,8 @@ public sealed class AuditAndShareHistoryPruningWorker(
     public async Task<AuditHistoryPruneResult> RunOnceAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var result = await scope.ServiceProvider.GetRequiredService<AuditAndShareHistoryPruningService>().PruneAsync(cancellationToken);
-        if (result.TotalRemoved > 0)
+        var result = await scope.ServiceProvider.GetRequiredService<IBackupShareStore>().PruneHistoryAsync(time.GetUtcNow(), cancellationToken);
+        if (result.AuditEventsRemoved + result.DownloadSessionsRemoved + result.SharesRemoved > 0)
         {
             logger.LogInformation(
                 "Pruned {AuditEvents} audit events, {DownloadSessions} download sessions, and {Shares} backup shares past retention.",

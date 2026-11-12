@@ -439,6 +439,30 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Audit.PlatformAuditRetentionSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("platform_audit_retention_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_platform_audit_retention_settings_days", "\"RetentionDays\" >= 1");
+
+                            t.HasCheckConstraint("ck_platform_audit_retention_settings_singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupArtifact", b =>
                 {
                     b.Property<Guid>("Id")

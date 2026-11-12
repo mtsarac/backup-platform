@@ -105,7 +105,6 @@ public static class AuditActions
     public const string BackupShareExtended = "backup_share.extended";
     public const string BackupShareRevoked = "backup_share.revoked";
     public const string AuditRetentionUpdated = "audit_retention.updated";
-    public const string AuditRetentionChanged = AuditRetentionUpdated;
 
 }
 

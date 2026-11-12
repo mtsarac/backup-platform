@@ -362,7 +362,7 @@ describe('BackupShare frontend', () => {
   })
 
   it('renders Paylaşımlarım page with active, expired, and revoked shares', async () => {
-    request.mockImplementation(async () => [testShare, expiredShare, revokedShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? [] : [testShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
@@ -389,7 +389,7 @@ describe('BackupShare frontend', () => {
   })
 
   it('shows PlatformAdmin-created shares in Paylaşımlarım as read-only with PlatformAdmin role', async () => {
-    request.mockImplementation(async () => [platformShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? [] : [platformShare]))
 
     renderSharesPage()
 
@@ -594,7 +594,7 @@ describe('BackupShare frontend', () => {
   it('UserAdmin cannot see extend/revoke actions on PlatformAdmin-created share, expired share, or revoked share', async () => {
     permissions.role = 'UserAdmin'
     permissions.canAdmin = true
-    request.mockImplementation(async () => [testShare, platformAdminShare, expiredShare, revokedShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? [] : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
@@ -608,7 +608,7 @@ describe('BackupShare frontend', () => {
   it('PlatformAdmin can see extend/revoke actions on both PlatformAdmin-created and UserAdmin-created shares', async () => {
     permissions.role = 'PlatformAdmin'
     permissions.canAdmin = false
-    request.mockImplementation(async () => [testShare, platformAdminShare, expiredShare, revokedShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? [] : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
