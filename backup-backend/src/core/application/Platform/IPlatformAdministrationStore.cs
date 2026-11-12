@@ -11,8 +11,9 @@ public sealed record PlatformTenantItem(TenantId TenantId, string Name, int Memb
 public sealed record PlatformTenantDetail(
     TenantId TenantId, string Name, int MemberCount, int EnabledBackupJobs, bool EnrollmentEnabled, DateTimeOffset? EnrollmentChangedAt);
 
-public sealed record PlatformUserItem(UserId UserId, string DisplayName, string? Username, string? Email, UserRole Role, int MembershipCount);
-
+public sealed record PlatformUserItem(
+    UserId UserId, string DisplayName, string? Username, string? Email, UserRole Role, int MembershipCount,
+    bool IsDisabled, bool IsManuallyDisabled, bool IsSecurityDisabled, bool IsNoMembershipDisabled, string? ManualDisableReason);
 public sealed record PlatformMembershipItem(UserId UserId, string DisplayName, string? LoginIdentifier);
 
 public sealed record PlatformAuditItem(
@@ -33,9 +34,9 @@ public enum PlatformChangeOutcome
     AlreadyMember = 6,
     LoginTaken = 7,
     PlatformAdminCannotBeMember = 8,
-    UserAdminMembershipRequired = 9
+    UserAdminMembershipRequired = 9,
+    LastPlatformAdmin = 10
 }
-
 public sealed record PlatformChange<T>(PlatformChangeOutcome Outcome, T? Value = default) where T : class;
 
 /// <summary>
@@ -57,7 +58,10 @@ public interface IPlatformAdministrationStore
         UserId userId, string displayName, string username, string email, string passwordHash, UserRole role, IReadOnlyList<TenantId> tenantIds, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformUserItem>> UpdateUserAsync(
         UserId userId, string displayName, string username, string email, UserRole role, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
-
+    Task<PlatformChange<PlatformUserItem>> DisableUserAsync(
+        UserId userId, string? reason, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<PlatformChange<PlatformUserItem>> EnableUserAsync(
+        UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     /// <summary>Null when the tenant does not exist.</summary>
     Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(

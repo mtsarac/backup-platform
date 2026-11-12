@@ -18,11 +18,34 @@ public sealed class User
     public UserId Id { get; }
     public string DisplayName { get; private set; }
     public UserRole Role { get; private set; }
-    public bool IsDisabled { get; private set; }
+    public bool IsDisabled => IsManuallyDisabled || IsSecurityDisabled || IsNoMembershipDisabled;
+    public bool IsManuallyDisabled { get; private set; }
+    public bool IsSecurityDisabled { get; private set; }
+    public bool IsNoMembershipDisabled { get; private set; }
+    public string? ManualDisableReason { get; private set; }
 
-    public void Disable() => IsDisabled = true;
-    public void Enable() => IsDisabled = false;
+    public void DisableManual(string? reason = null)
+    {
+        IsManuallyDisabled = true;
+        ManualDisableReason = reason?.Trim();
+    }
 
+    public void EnableManual()
+    {
+        IsManuallyDisabled = false;
+        ManualDisableReason = null;
+    }
+
+    public void SetSecurityDisabled(bool disabled) => IsSecurityDisabled = disabled;
+    public void SetNoMembershipDisabled(bool disabled) => IsNoMembershipDisabled = disabled;
+
+    public void Disable() => DisableManual(null);
+    public void Enable()
+    {
+        EnableManual();
+        IsSecurityDisabled = false;
+        IsNoMembershipDisabled = false;
+    }
     public void Rename(string displayName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);

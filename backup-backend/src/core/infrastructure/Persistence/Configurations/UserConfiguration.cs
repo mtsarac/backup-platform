@@ -23,7 +23,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired();
         builder.Property(user => user.DisplayName).IsRequired();
         builder.Property(user => user.Role).HasConversion<int>().HasDefaultValue(UserRole.UserAdmin).IsRequired();
-        builder.Property(user => user.IsDisabled).HasDefaultValue(false).IsRequired();
+        builder.Property(user => user.IsManuallyDisabled).HasDefaultValue(false).IsRequired();
+        builder.Property(user => user.IsSecurityDisabled).HasDefaultValue(false).IsRequired();
+        builder.Property(user => user.IsNoMembershipDisabled).HasDefaultValue(false).IsRequired();
+        builder.Property(user => user.ManualDisableReason).HasMaxLength(500);
         builder.Property<uint>("xmin").IsRowVersion();
+        builder.Ignore(user => user.IsDisabled);
     }
 }

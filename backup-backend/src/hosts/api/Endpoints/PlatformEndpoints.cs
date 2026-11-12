@@ -56,7 +56,8 @@ public static class PlatformEndpoints
         platform.MapGet("/users", ListUsersAsync);
         platform.MapPost("/users", CreateUserAsync);
         platform.MapPut("/users/{userId:guid}", UpdateUserAsync);
-        platform.MapGet("/agents", ListAgentsAsync);
+        platform.MapPost("/users/{userId:guid}/disable", DisableUserAsync);
+        platform.MapPost("/users/{userId:guid}/enable", EnableUserAsync);
         platform.MapGet("/audit", ListAuditAsync);
         return endpoints;
     }
@@ -212,6 +213,37 @@ public static class PlatformEndpoints
         }
     }
 
+    private static async Task<IResult> DisableUserAsync(
+        Guid userId, DisableUserRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
+    {
+        if (userId == Guid.Empty) return Results.NotFound(new { error = "user_not_found" });
+        try
+        {
+            var change = await service.DisableUserAsync(new UserId(userId), request?.Reason, currentUser.UserId!, cancellationToken);
+            return UserChange(change, false);
+        }
+        catch (InvalidPlatformRequestException exception)
+        {
+            return Invalid(exception);
+        }
+    }
+
+    private static async Task<IResult> EnableUserAsync(
+        Guid userId, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
+    {
+        if (userId == Guid.Empty) return Results.NotFound(new { error = "user_not_found" });
+        try
+        {
+            var change = await service.EnableUserAsync(new UserId(userId), currentUser.UserId!, cancellationToken);
+            return UserChange(change, false);
+        }
+        catch (InvalidPlatformRequestException exception)
+        {
+            return Invalid(exception);
+        }
+    }
+
+    public sealed record DisableUserRequest(string? Reason);
     private static IResult UserChange(PlatformChange<PlatformUserItem> change, bool created) => change.Outcome switch
     {
         PlatformChangeOutcome.LoginTaken => Results.Conflict(new { error = "identity_taken" }),
@@ -219,6 +251,7 @@ public static class PlatformEndpoints
         PlatformChangeOutcome.UserNotFound => Results.NotFound(new { error = "user_not_found" }),
         PlatformChangeOutcome.PlatformAdminCannotBeMember => Results.BadRequest(new { error = "platform_admin_membership_not_allowed" }),
         PlatformChangeOutcome.UserAdminMembershipRequired => Results.BadRequest(new { error = "user_admin_membership_required" }),
+        PlatformChangeOutcome.LastPlatformAdmin => Results.Conflict(new { error = "last_platform_admin", message = "Cannot disable the last active PlatformAdmin." }),
         _ => Results.Json(ToResponse(change.Value!), statusCode: created ? StatusCodes.Status201Created : StatusCodes.Status200OK)
     };
 
@@ -347,7 +380,12 @@ public static class PlatformEndpoints
         username = user.Username,
         email = user.Email,
         role = user.Role.ToString(),
-        membershipCount = user.MembershipCount
+        membershipCount = user.MembershipCount,
+        isDisabled = user.IsDisabled,
+        isManuallyDisabled = user.IsManuallyDisabled,
+        isSecurityDisabled = user.IsSecurityDisabled,
+        isNoMembershipDisabled = user.IsNoMembershipDisabled,
+        manualDisableReason = user.ManualDisableReason
     };
 
     private static object ToResponse(PlatformMembershipItem membership) => new
