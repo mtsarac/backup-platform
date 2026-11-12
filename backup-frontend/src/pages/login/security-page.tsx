@@ -9,6 +9,7 @@ import { Field } from '@/components/ui/field'
 import { TextInput } from '@/components/ui/text-input'
 import { PageHeader } from '@/components/ui/page-header'
 import { Notice } from '@/components/ui/notice'
+import { EmailVerificationCard } from './email-verification-card'
 import { LanguageSwitcher } from '@/components/layout/language-switcher'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { apiRequest } from '@/lib/api/client'
@@ -18,6 +19,8 @@ type SecurityStatus = {
   hasTotp: boolean
   hasPasskeys: boolean
   remainingRecoveryCodes: number
+  hasEmail: boolean
+  emailVerified: boolean
 }
 
 type SetupData = {
@@ -174,6 +177,7 @@ export function SecurityPage() {
 
       <QueryState isPending={security.isPending} error={security.error} onRetry={() => { void security.refetch() }}>
         <div className="space-y-6">
+          {security.data?.hasEmail && <EmailVerificationCard emailVerified={security.data.emailVerified} />}
           <Card padding="lg" className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>

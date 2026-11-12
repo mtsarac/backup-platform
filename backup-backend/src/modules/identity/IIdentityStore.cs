@@ -39,5 +39,12 @@ public interface IIdentityStore
     Task SaveChallengeAsync(PasskeyChallenge challenge, CancellationToken cancellationToken);
     Task<PasskeyChallenge?> ConsumeChallengeAsync(Guid challengeId, string purpose, DateTimeOffset now, CancellationToken cancellationToken);
     Task<bool> IsUserDisabledAsync(UserId userId, CancellationToken cancellationToken);
+    /// <summary>Replaces any unused token of the same purpose and stores this one, auditing the request.</summary>
+    Task IssueEmailTokenAsync(AccountEmailToken token, CancellationToken cancellationToken);
+    /// <summary>The token's owner when it is unused, unexpired, still bound to the account's current address (and, for a reset, that address is verified).</summary>
+    Task<UserId?> FindUsableEmailTokenAsync(string tokenHash, AccountEmailPurpose purpose, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> ConfirmEmailAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>Consumes a reset token, sets the password, clears a forced change and ends every session of the user, atomically.</summary>
+    Task<bool> CompletePasswordResetAsync(string tokenHash, string newPasswordHash, DateTimeOffset now, CancellationToken cancellationToken);
     Task<string?> GetUserDisplayNameAsync(UserId userId, CancellationToken cancellationToken);
 }
