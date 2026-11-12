@@ -13,6 +13,8 @@ public interface IAccountMailer
 {
     Task<bool> IsAvailableAsync(CancellationToken cancellationToken);
     void Enqueue(AccountMail mail);
+    /// <summary>True when sent, false when it cannot be sent, null when a later attempt may succeed. The text carries no secret.</summary>
+    Task<bool?> SendSecurityNoticeAsync(string to, string eventType, DateTimeOffset occurredAt, CancellationToken cancellationToken);
 }
 
 public enum PasswordResetResult { Completed, InvalidToken, InvalidPassword }

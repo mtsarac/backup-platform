@@ -64,6 +64,21 @@ public static class NotificationEventTypes
     public const string BackupShareExtended = "backup_share_extended";
     public const string BackupShareRevoked = "backup_share_revoked";
 
+    // Mandatory account security category: never selectable, never suppressible. Delivered in-app, and by email to a verified address.
+    public const string SecurityPasswordChanged = "security_password_changed";
+    public const string SecurityTemporaryPassword = "security_temporary_password";
+    public const string SecurityPasswordReset = "security_password_reset";
+    public const string SecurityAccountDisabled = "security_account_disabled";
+    public const string SecurityAccountEnabled = "security_account_enabled";
+    public const string SecurityFactorAdded = "security_factor_added";
+    public const string SecurityFactorRemoved = "security_factor_removed";
+    public const string SecurityRecoveryRegenerated = "security_recovery_regenerated";
+    public const string SecurityRecoveryUsed = "security_recovery_used";
+    public const string SecurityEmailChanged = "security_email_changed";
+    public const string SecuritySuspiciousLogin = "security_suspicious_login";
+
+    public static bool IsSecurity(string? value) => value is not null && value.StartsWith("security_", StringComparison.Ordinal);
+
     public static IReadOnlyList<string> Selectable { get; } = [BackupFailed, BackupStale, AgentOffline, QuotaCritical, ReplicaDegraded, StorageCapacityCritical, BackupSizeAnomaly];
 
     public static bool IsSelectable(string? value) => value is not null && Selectable.Contains(value);

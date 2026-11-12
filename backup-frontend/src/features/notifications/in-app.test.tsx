@@ -44,6 +44,20 @@ function mount() {
 }
 
 describe('in-app notifications', () => {
+  it('shows a security notification as mandatory, with no control to switch it off', async () => {
+    records = [{ ...first, type: 'security_suspicious_login', subjectName: 'Account security' }]
+    const user = userEvent.setup()
+    mount()
+    await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
+    const panel = await screen.findByRole('region', { name: 'Bildirimler' })
+    expect(within(panel).getByText('Hesap güvenliği')).toBeInTheDocument()
+    expect(within(panel).getByText(/Şüpheli giriş etkinliği/)).toBeInTheDocument()
+    expect(within(panel).getByText('Zorunlu güvenlik bildirimi')).toBeInTheDocument()
+    expect(within(panel).queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('switch')).not.toBeInTheDocument()
+    expect(within(panel).getAllByRole('button').map((button) => button.textContent)).toEqual(['Okundu olarak işaretle'])
+  })
+
   it('loads the durable list and marks a notification as read', async () => {
     const user = userEvent.setup()
     mount()

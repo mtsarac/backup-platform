@@ -95,8 +95,9 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
                 inRouter
                   ? <Link className={linkClass} to={href} onClick={() => setOpen(false)}>{item.subjectName}</Link>
                   : <a className={linkClass} href={href} onClick={() => setOpen(false)}>{item.subjectName}</a>
-              ) : item.subjectName}
+              ) : item.type.startsWith('security_') ? tx('Hesap güvenliği') : item.subjectName}
             </p>
+            {item.type.startsWith('security_') && <p className="text-xs text-text-muted">{tx('Zorunlu güvenlik bildirimi')}</p>}
             <p className="text-sm text-text-muted">{eventTypeLabels[item.type as keyof typeof eventTypeLabels] ?? item.type} · {formatDateTime(item.occurredAt)}</p>
             {item.readAt ? <span className="text-sm text-text-muted">{tx('Okundu')}</span> : <Button variant="outline" size="sm" disabled={markRead.isPending} onClick={() => markRead.mutate(item.id)}>{tx('Okundu olarak işaretle')}</Button>}
           </li>

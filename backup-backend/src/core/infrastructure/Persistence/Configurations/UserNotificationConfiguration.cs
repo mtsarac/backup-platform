@@ -15,6 +15,7 @@ internal sealed class UserNotificationConfiguration : IEntityTypeConfiguration<U
         builder.Property(notification => notification.Id).ValueGeneratedNever();
         builder.Property(notification => notification.UserId).HasConversion<UserIdConverter>().IsRequired();
         builder.Property(notification => notification.ReadAt).HasColumnType("timestamp with time zone");
+        builder.Property(notification => notification.EmailHandledAt).HasColumnType("timestamp with time zone");
         builder.HasOne<NotificationEvent>().WithMany().HasForeignKey(notification => notification.EventId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<User>().WithMany().HasForeignKey(notification => notification.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(notification => new { notification.EventId, notification.UserId }).IsUnique();

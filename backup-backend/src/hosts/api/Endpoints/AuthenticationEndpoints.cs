@@ -127,7 +127,7 @@ public static class AuthenticationEndpoints
         return Results.Ok(new { requestToken = tokens.RequestToken, headerName = "X-CSRF-TOKEN" });
     }
 
-    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, IIdentityStore identityStore, LoginThrottle throttle)
+    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, IIdentityStore identityStore, LoginThrottle throttle, TimeProvider clock)
     {
         var ip = context.Connection.RemoteIpAddress?.ToString();
         if (await throttle.RetryAfterAsync("login", null, ip, context.RequestAborted) is { } wait)
@@ -153,6 +153,9 @@ public static class AuthenticationEndpoints
         if (session is null)
         {
             await throttle.FailedAsync("login", account, ip, context.RequestAborted);
+            // The attempt that trips the progressive limiter for a real account is reported to its owner.
+            if (credential is not null && await throttle.RetryAfterAsync("login", account, null, context.RequestAborted) is not null)
+                await identityStore.RecordRepeatedLoginFailuresAsync(credential.UserId, clock.GetUtcNow(), context.RequestAborted);
             return Results.Json(new { error = "Invalid login identifier or password." }, statusCode: StatusCodes.Status401Unauthorized);
         }
         await throttle.SucceededAsync("login", account, ip, context.RequestAborted);

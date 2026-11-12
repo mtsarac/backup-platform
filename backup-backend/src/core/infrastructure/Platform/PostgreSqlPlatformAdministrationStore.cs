@@ -4,6 +4,8 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
+using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -157,10 +159,12 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         if (credential is null) return new(PlatformChangeOutcome.UserNotFound);
         if (user.DisplayName == displayName && user.Role == role && credential.LoginIdentifier == username && credential.Email == email)
             return new(PlatformChangeOutcome.Unchanged, new PlatformUserItem(userId, displayName, username, email, role, count, user.IsDisabled, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason));
+        var emailChanged = credential.NormalizedEmail != LoginIdentifierNormalizer.NormalizeEmail(email);
         user.ChangeRole(role);
         credential.UpdateIdentity(username, email);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.UserUpdated, null,
             "user", Id(userId), new Dictionary<string, object?> { ["displayName"] = displayName, ["username"] = username, ["email"] = email, ["role"] = role.ToString() }));
+        if (emailChanged) await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityEmailChanged, now, cancellationToken);
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         { return new(PlatformChangeOutcome.LoginTaken); }
@@ -206,6 +210,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         await context.UserSessions.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.disabled", null,
             "user", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId), ["reason"] = reason }));
+        await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountDisabled, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(PlatformChangeOutcome.Changed, new PlatformUserItem(userId, user.DisplayName, credential?.LoginIdentifier, credential?.Email, user.Role, count, user.IsDisabled, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason));
@@ -231,6 +236,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         user.EnableManual();
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.enabled", null,
             "user", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
+        await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountEnabled, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(PlatformChangeOutcome.Changed, new PlatformUserItem(userId, user.DisplayName, credential?.LoginIdentifier, credential?.Email, user.Role, count, user.IsDisabled, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason));
@@ -251,6 +257,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         await context.UserSessions.Where(row => row.UserId == targetUserId).ExecuteDeleteAsync(cancellationToken);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.temporary_password_assigned", null,
             "user", Id(targetUserId), new Dictionary<string, object?> { ["targetUserId"] = Id(targetUserId) }));
+        await SecurityNotifications.RecordAsync(context, targetUserId, NotificationEventTypes.SecurityTemporaryPassword, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var count = await context.TenantMemberships.CountAsync(row => row.UserId == targetUserId, cancellationToken);
@@ -300,6 +307,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         if (targetUser.IsNoMembershipDisabled)
         {
             targetUser.SetNoMembershipDisabled(false);
+            await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountEnabled, now, cancellationToken);
         }
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipAdded, tenantId,
             "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
@@ -338,6 +346,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             if (remainingCount == 0)
             {
                 targetUser.SetNoMembershipDisabled(true);
+                await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountDisabled, now, cancellationToken);
                 // End all sessions of the user since no membership remains
                 await context.UserSessions.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
                 context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.disabled", null,

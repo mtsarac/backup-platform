@@ -93,6 +93,8 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<BackupPlatform.Api.Notifications.AccountMailer>();
         services.AddSingleton<IAccountMailer>(provider => provider.GetRequiredService<BackupPlatform.Api.Notifications.AccountMailer>());
         services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Notifications.AccountMailer>());
+        services.AddSingleton<BackupPlatform.Api.Notifications.SecurityNotificationMailWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Notifications.SecurityNotificationMailWorker>());
         services.AddScoped<PasskeyService>();
         services.AddScoped<TenantResolutionService>();
         services.AddScoped<IPlatformAdministrationStore, PostgreSqlPlatformAdministrationStore>();

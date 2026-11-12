@@ -19,6 +19,8 @@ public interface IIdentityStore
     Task<bool> EndSessionAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken);
     Task EndAllSessionsAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken);
     Task SetSessionStateAsync(Guid sessionId, UserId userId, SessionAuthenticationState state, CancellationToken cancellationToken);
+    /// <summary>The failed sign-ins on this account tripped the progressive limiter; reports it to the user (at most once an hour).</summary>
+    Task RecordRepeatedLoginFailuresAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken);
     Task RecordLoginFailureAsync(UserId? targetUserId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PasswordCredential?> FindCredentialByUserIdAsync(UserId userId, CancellationToken cancellationToken);
     Task<bool> HasSecondFactorAsync(UserId userId, CancellationToken cancellationToken);

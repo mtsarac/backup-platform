@@ -16,6 +16,7 @@ public sealed class EmailRecoveryIntegrationTests(PostgreSqlFixture fixture) : I
         public List<AccountMail> Sent { get; } = [];
         public Task<bool> IsAvailableAsync(CancellationToken cancellationToken) => Task.FromResult(Available);
         public void Enqueue(AccountMail mail) { lock (Sent) Sent.Add(mail); }
+        public Task<bool?> SendSecurityNoticeAsync(string to, string eventType, DateTimeOffset occurredAt, CancellationToken cancellationToken) => Task.FromResult<bool?>(false);
     }
 
     private async Task<(AgentWorld World, RecordingMailer Mailer)> CreateWorldAsync(bool available = true)
