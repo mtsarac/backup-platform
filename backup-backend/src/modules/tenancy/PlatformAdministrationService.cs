@@ -68,6 +68,19 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
         return store.UpdateUserAsync(userId, name, login, address, accountRole, actor, timeProvider.GetUtcNow(), cancellationToken);
     }
 
+    public Task<PlatformChange<PlatformUserItem>> DisableUserAsync(UserId userId, string? reason, UserId actor, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userId);
+        ArgumentNullException.ThrowIfNull(actor);
+        return store.DisableUserAsync(userId, reason?.Trim(), actor, timeProvider.GetUtcNow(), cancellationToken);
+    }
+
+    public Task<PlatformChange<PlatformUserItem>> EnableUserAsync(UserId userId, UserId actor, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userId);
+        ArgumentNullException.ThrowIfNull(actor);
+        return store.EnableUserAsync(userId, actor, timeProvider.GetUtcNow(), cancellationToken);
+    }
     private static (string Name, string Username, string Email, UserRole Role) ValidateAccount(string? displayName, string? username, string? email, string? role)
     {
         var name = ValidName(displayName, "displayName");

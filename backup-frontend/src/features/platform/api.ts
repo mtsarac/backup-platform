@@ -69,6 +69,14 @@ export function updateUser(id: string, input: UpdateUserInput) {
   return apiRequest<PlatformUser>(`platform/users/${encodeURIComponent(id)}`, { method: 'PUT', json: input })
 }
 
+export function disableUser(id: string, reason?: string) {
+  return apiRequest<PlatformUser>(`platform/users/${encodeURIComponent(id)}/disable`, { method: 'POST', json: { reason } })
+}
+
+export function enableUser(id: string) {
+  return apiRequest<PlatformUser>(`platform/users/${encodeURIComponent(id)}/enable`, { method: 'POST' })
+}
+
 export function getPlatformAgents(filters: PlatformAgentFilters, signal?: AbortSignal) {
   return apiRequest<PagedResult<PlatformAgent>>(`platform/agents${query(filters)}`, { signal })
 }

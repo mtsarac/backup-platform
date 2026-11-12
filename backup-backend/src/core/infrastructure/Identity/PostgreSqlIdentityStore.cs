@@ -310,7 +310,9 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
     public async Task<bool> IsUserDisabledAsync(UserId userId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return await context.Users.AsNoTracking().Where(row => row.Id == userId).Select(row => row.IsDisabled).SingleOrDefaultAsync(cancellationToken);
+        return await context.Users.AsNoTracking().Where(row => row.Id == userId)
+            .Select(row => row.IsManuallyDisabled || row.IsSecurityDisabled || row.IsNoMembershipDisabled)
+            .SingleOrDefaultAsync(cancellationToken);
     }
 
     public async Task<string?> GetUserDisplayNameAsync(UserId userId, CancellationToken cancellationToken)

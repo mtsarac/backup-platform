@@ -13,7 +13,7 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user is null)
+        if (user is null || user.IsDisabled)
         {
             return null;
         }
@@ -34,7 +34,7 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user is null || user.Role == UserRole.PlatformAdmin)
+        if (user is null || user.IsDisabled || user.Role == UserRole.PlatformAdmin)
         {
             return false;
         }
@@ -48,15 +48,15 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
     public async Task<bool> IsPlatformAdminAsync(UserId userId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return await context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && u.Role == UserRole.PlatformAdmin, cancellationToken);
+        return await context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && !u.IsManuallyDisabled && !u.IsSecurityDisabled && !u.IsNoMembershipDisabled && u.Role == UserRole.PlatformAdmin, cancellationToken);
     }
     public async Task<DownloadAuthorizationResult> EvaluateDownloadAccessAsync(UserId userId, TenantId tenantId, Guid artifactId, Guid? shareId, CancellationToken cancellationToken, bool allowExpiredShare = false)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user is null)
+        if (user is null || user.IsDisabled)
         {
-            return new DownloadAuthorizationResult(false, "user_not_found");
+            return new DownloadAuthorizationResult(false, "user_disabled");
         }
 
         if (user.Role == UserRole.UserAdmin)

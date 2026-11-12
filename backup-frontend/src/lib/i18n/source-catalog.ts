@@ -3289,4 +3289,13 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Paylaşım oluşturuldu": {"tr":"Paylaşım oluşturuldu","en":"Share created"},
   "Paylaşım süresi uzatıldı": {"tr":"Paylaşım süresi uzatıldı","en":"Share extended"},
   "Paylaşım iptal edildi": {"tr":"Paylaşım iptal edildi","en":"Share revoked"},
+  "{0} kullanıcısını etkinleştir": {"tr":"{0} kullanıcısını etkinleştir","en":"Enable user {0}"},
+  "{0} kullanıcısını devre dışı bırak": {"tr":"{0} kullanıcısını devre dışı bırak","en":"Disable user {0}"},
+  "“{0}” kullanıcısı etkinleştirildi.": {"tr":"“{0}” kullanıcısı etkinleştirildi.","en":"User “{0}” enabled."},
+  "“{0}” kullanıcısı devre dışı bırakıldı.": {"tr":"“{0}” kullanıcısı devre dışı bırakıldı.","en":"User “{0}” disabled."},
+  "Son Platform Yöneticisi devre dışı bırakılamaz.": {"tr":"Son Platform Yöneticisi devre dışı bırakılamaz.","en":"The last Platform Administrator cannot be disabled."},
+  "Kullanıcıyı devre dışı bırak": {"tr":"Kullanıcıyı devre dışı bırak","en":"Disable user"},
+  "Hesap devre dışı bırakıldığında tüm aktif oturumları anında sonlandırılır ve giriş yapması engellenir.": {"tr":"Hesap devre dışı bırakıldığında tüm aktif oturumları anında sonlandırılır ve giriş yapması engellenir.","en":"When an account is disabled, all active sessions are immediately terminated and sign-in is prevented."},
+  "Devre dışı bırakma nedeni": {"tr":"Devre dışı bırakma nedeni","en":"Disable reason"},
+  "İsteğe bağlı açıklama": {"tr":"İsteğe bağlı açıklama","en":"Optional reason"},
 }

@@ -68,6 +68,11 @@ export interface PlatformUser {
   email: string | null
   role: AccountRole
   membershipCount: number
+  isDisabled?: boolean
+  isManuallyDisabled?: boolean
+  isSecurityDisabled?: boolean
+  isNoMembershipDisabled?: boolean
+  manualDisableReason?: string | null
 }
 
 export interface UpdateUserInput {

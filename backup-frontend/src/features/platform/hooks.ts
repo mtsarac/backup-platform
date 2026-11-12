@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  addMembership, createTenant, createUser, getAudit, getMemberships, getPlatformAgent,
+  addMembership, createTenant, createUser, disableUser, enableUser, getAudit, getMemberships, getPlatformAgent,
   getPlatformAgents, getSummary, getTenant, getTenants, getUsers, removeMembership, renameTenant, setTenantEnrollment, updateUser,
 } from './api'
 import type { PlanFilters } from './plans/types'
@@ -143,6 +143,28 @@ export function useUpdateUser(id: string) {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (input: UpdateUserInput) => updateUser(id, input),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: platformKeys.users }),
+      client.invalidateQueries({ queryKey: platformKeys.audit }),
+    ]),
+  })
+}
+
+export function useDisableUser(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (reason?: string) => disableUser(id, reason),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: platformKeys.users }),
+      client.invalidateQueries({ queryKey: platformKeys.audit }),
+    ]),
+  })
+}
+
+export function useEnableUser(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => enableUser(id),
     onSuccess: () => Promise.all([
       client.invalidateQueries({ queryKey: platformKeys.users }),
       client.invalidateQueries({ queryKey: platformKeys.audit }),
