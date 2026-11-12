@@ -26,12 +26,15 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [secondFactorPending, setSecondFactorPending] = useState(false)
+  const [passwordChangePending, setPasswordChangePending] = useState(false)
+  const [currentPasswordForChange, setCurrentPasswordForChange] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [factorMode, setFactorMode] = useState<'totp' | 'recovery' | 'passkey'>('totp')
   const [totpCode, setTotpCode] = useState('')
   const [recoveryCode, setRecoveryCode] = useState('')
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [loading, setLoading] = useState(false)
-
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? ROUTES.DASHBOARD
 
   if (isAuthenticated) {
@@ -44,6 +47,12 @@ export function LoginPage() {
     setLoading(true)
     try {
       const result = await login(loginIdentifier, password, rememberMe)
+      if (result && (result.passwordChangeRequired || result.requiresPasswordChange)) {
+        setCurrentPasswordForChange(password)
+        setPasswordChangePending(true)
+        setPassword('')
+        return
+      }
       if (result && (result.secondFactorRequired || result.requiresSecondFactor)) {
         setSecondFactorPending(true)
         if (result.requiresSecondFactor && !result.secondFactorRequired) {
@@ -61,6 +70,63 @@ export function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+  const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (newPassword.length < 12) {
+      setError({ what: tx('Şifre en az 12 karakter olmalıdır.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Daha uzun bir şifre girin.'), technical: [] })
+      return
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setError({ what: tx('Yeni şifreler eşleşmiyor.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Lütfen yeni şifreyi tekrar kontrol edin.'), technical: [] })
+      return
+    }
+    if (newPassword === currentPasswordForChange) {
+      setError({ what: tx('Yeni şifre mevcut şifreyle aynı olamaz.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Farklı bir şifre seçin.'), technical: [] })
+      return
+    }
+    setLoading(true)
+    try {
+      const changeResult = await apiRequest<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean }>('auth/change-password', {
+        method: 'POST',
+        json: { currentPassword: currentPasswordForChange, newPassword }
+      })
+      if (changeResult && (changeResult.secondFactorRequired || changeResult.requiresSecondFactor)) {
+        setPasswordChangePending(false)
+        setSecondFactorPending(true)
+        setFactorMode('totp')
+        return
+      }
+      await completeSecondFactor()
+      navigate(from, { replace: true })
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 400) {
+        const errCode = err.code
+        if (errCode === 'password_same_as_current') {
+          setError({ what: tx('Yeni şifre mevcut şifreyle aynı olamaz.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Farklı bir şifre seçin.'), technical: [] })
+        } else if (errCode === 'password_common_or_breached') {
+          setError({ what: tx('Bu şifre çok yaygın veya sızdırılmış listelerde yer alıyor. Farklı bir şifre seçin.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Daha güvenli ve tahmin edilmesi zor bir şifre belirleyin.'), technical: [] })
+        } else if (errCode === 'password_too_short') {
+          setError({ what: tx('Şifre en az 12 karakter olmalıdır.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Daha uzun bir şifre girin.'), technical: [] })
+        } else {
+          setError(describeError(err))
+        }
+      } else {
+        setError(describeError(err))
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const cancelPasswordChange = async () => {
+    setPasswordChangePending(false)
+    setCurrentPasswordForChange('')
+    setNewPassword('')
+    setNewPasswordConfirm('')
+    setError(null)
+    await logout()
   }
 
   const handleSecondFactorSubmit = async (e: React.FormEvent) => {
@@ -136,11 +202,60 @@ export function LoginPage() {
           <h1 className="text-2xl font-semibold text-text-heading">
             {secondFactorPending ? (factorMode === 'passkey' ? tx('İkinci faktör doğrulaması') : tx('İki faktörlü doğrulama')) : tx('Giriş yapın')}
           </h1>
-          {secondFactorPending ? (
+          {passwordChangePending ? (
+            <Card as="form" padding="lg" onSubmit={handlePasswordChangeSubmit} className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold text-text-heading">{tx('Şifrenizi değiştirin')}</h2>
+                <p className="text-sm text-text-muted">{tx('İlk girişinizde veya geçici şifre atandığında şifrenizi değiştirmeniz zorunludur.')}</p>
+              </div>
+              <Field label={tx('Mevcut şifre')}>
+                {(control) => (
+                  <TextInput
+                    {...control}
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPasswordForChange}
+                    onChange={(e) => setCurrentPasswordForChange(e.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              <Field label={tx('Yeni şifre')} hint={tx('En az 12 karakter olmalıdır. Büyük/küçük harf veya özel karakter zorunluluğu yoktur.')}>
+                {(control) => (
+                  <TextInput
+                    {...control}
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              <Field label={tx('Yeni şifre (tekrar)')}>
+                {(control) => (
+                  <TextInput
+                    {...control}
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPasswordConfirm}
+                    onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              {error && <ErrorNotice {...error} />}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? tx('Şifre değiştiriliyor...') : tx('Şifreyi Değiştir ve Giriş Yap')}
+              </Button>
+              <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelPasswordChange}>
+                {tx('İptal et ve Çıkış Yap')}
+              </Button>
+            </Card>
+          ) : secondFactorPending ? (
             factorMode === 'passkey' ? (
               <Card padding="lg" className="space-y-4">
-                <Notice tone="info">{tx("Girişinizi tamamlamak için kayıtlı geçiş anahtarınızı kullanın.")}</Notice>
-                {error && <ErrorNotice {...error} />}
+                <Notice tone="info">{tx('Girişinizi tamamlamak için kayıtlı geçiş anahtarınızı kullanın.')}</Notice>
                 <Button type="button" className="w-full" disabled={loading} onClick={handleSecondFactor}>
                   {loading ? tx('Doğrulanıyor...') : tx('Geçiş anahtarı ile doğrula')}
                 </Button>

@@ -12,6 +12,7 @@ public interface IIdentityStore
 {
     Task<PasswordCredential?> FindCredentialAsync(string normalizedLoginIdentifier, CancellationToken cancellationToken);
     Task UpdatePasswordHashAsync(UserId userId, string passwordHash, CancellationToken cancellationToken);
+    Task<bool> ChangePasswordAsync(UserId userId, string newPasswordHash, DateTimeOffset now, CancellationToken cancellationToken);
     Task CreateSessionAsync(UserSession session, DateTimeOffset now, CancellationToken cancellationToken);
     Task<SessionAuthenticationState?> ValidateSessionAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<IReadOnlyList<UserSession>> ListSessionsAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken);

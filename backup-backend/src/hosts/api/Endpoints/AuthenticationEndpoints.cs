@@ -113,9 +113,9 @@ public static class AuthenticationEndpoints
         auth.MapPost("/passkeys/login", PasskeyLoginAsync).AllowAnonymous();
         auth.MapPost("/passkeys/second-factor/options", CreateSecondFactorOptionsAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
         auth.MapPost("/passkeys/second-factor", VerifySecondFactorAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
+        auth.MapPost("/change-password", ChangePasswordAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
         return endpoints;
     }
-
     private static IResult GetAntiforgeryToken(HttpContext context, IAntiforgery antiforgery)
     {
         var tokens = antiforgery.GetAndStoreTokens(context);
@@ -161,6 +161,10 @@ public static class AuthenticationEndpoints
             IsPersistent = request.RememberMe,
             AllowRefresh = false
         });
+        if (session.PasswordChangeRequired)
+        {
+            return Results.Ok(new { passwordChangeRequired = true, requiresPasswordChange = true });
+        }
         if (session.SecondFactorRequired)
         {
             return Results.Ok(new { secondFactorRequired = true, requiresSecondFactor = true });
@@ -304,6 +308,41 @@ public static class AuthenticationEndpoints
         return Results.NoContent();
     }
 
+    public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
+
+    private static async Task<IResult> ChangePasswordAsync(
+        ChangePasswordRequest request, HttpContext context, IIdentityStore identityStore, PasswordHashService passwordHasher, TimeProvider clock)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out var sessionId))
+        {
+            return Results.Unauthorized();
+        }
+        if (string.IsNullOrWhiteSpace(request?.CurrentPassword) || string.IsNullOrWhiteSpace(request?.NewPassword))
+        {
+            return Results.BadRequest(new { error = "invalid_request", message = "Both current and new passwords are required." });
+        }
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        if (credential is null) return Results.Unauthorized();
+        if (passwordHasher.Verify(userId!, credential.PasswordHash, request.CurrentPassword) != Microsoft.AspNetCore.Identity.PasswordVerificationResult.Success)
+        {
+            return Results.BadRequest(new { error = "invalid_password", message = "Current password is incorrect." });
+        }
+        if (string.Equals(request.CurrentPassword.Trim(), request.NewPassword.Trim(), StringComparison.Ordinal))
+        {
+            return Results.BadRequest(new { error = "password_same_as_current", message = "The new password cannot equal the current password." });
+        }
+        if (!PasswordPolicy.Validate(request.NewPassword, out var failureReason))
+        {
+            return Results.BadRequest(new { error = failureReason, message = "The new password does not meet the password policy." });
+        }
+        var newHash = passwordHasher.Hash(userId!, request.NewPassword);
+        var now = clock.GetUtcNow();
+        await identityStore.ChangePasswordAsync(userId!, newHash, now, context.RequestAborted);
+        var hasSecondFactor = await identityStore.HasSecondFactorAsync(userId!, context.RequestAborted);
+        var nextState = hasSecondFactor ? SessionAuthenticationState.SecondFactorPending : SessionAuthenticationState.FullyAuthenticated;
+        await identityStore.SetSessionStateAsync(sessionId, userId!, nextState, context.RequestAborted);
+        return Results.Ok(new { requiresSecondFactor = hasSecondFactor, secondFactorRequired = hasSecondFactor });
+    }
     private static async Task<IResult> GetSecurityStatusAsync(
         HttpContext context,
         IIdentityStore identityStore)

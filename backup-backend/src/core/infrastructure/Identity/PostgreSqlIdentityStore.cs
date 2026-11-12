@@ -24,6 +24,17 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> ChangePasswordAsync(UserId userId, string newPasswordHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var credential = await context.PasswordCredentials.SingleOrDefaultAsync(row => row.UserId == userId, cancellationToken);
+        if (credential is null) return false;
+        credential.MarkPasswordChanged(newPasswordHash);
+        context.AuditEvents.Add(AuditEvent.Record(now, userId, AuditActorKind.User, "user.password_changed", null,
+            "user", userId.Value.ToString("D"), new Dictionary<string, object?> { ["userId"] = userId.Value.ToString("D") }));
+        await context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
     public async Task CreateSessionAsync(UserSession session, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);

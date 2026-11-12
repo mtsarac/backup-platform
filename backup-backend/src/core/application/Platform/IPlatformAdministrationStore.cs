@@ -62,6 +62,8 @@ public interface IPlatformAdministrationStore
         UserId userId, string? reason, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformUserItem>> EnableUserAsync(
         UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<PlatformChange<PlatformUserItem>> AssignTemporaryPasswordAsync(
+        UserId targetUserId, string passwordHash, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     /// <summary>Null when the tenant does not exist.</summary>
     Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(

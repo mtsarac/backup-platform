@@ -25,6 +25,7 @@ internal sealed class PasswordCredentialConfiguration : IEntityTypeConfiguration
         builder.Property(credential => credential.Email).HasMaxLength(254);
         builder.Property(credential => credential.NormalizedEmail).HasMaxLength(254);
         builder.Property(credential => credential.PasswordHash).IsRequired();
+        builder.Property(credential => credential.MustChangePassword).HasDefaultValue(false).IsRequired();
         builder.HasIndex(credential => credential.NormalizedLoginIdentifier).IsUnique();
         builder.HasIndex(credential => credential.NormalizedEmail).IsUnique();
         builder.HasOne<User>().WithMany().HasForeignKey(credential => credential.UserId).OnDelete(DeleteBehavior.Restrict);

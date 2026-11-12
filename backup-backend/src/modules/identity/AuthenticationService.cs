@@ -53,7 +53,9 @@ public sealed class AuthenticationService(IIdentityStore identityStore, Password
             await identityStore.UpdatePasswordHashAsync(credential.UserId, replacement, cancellationToken).ConfigureAwait(false);
         }
         var hasSecondFactor = await identityStore.HasSecondFactorAsync(credential.UserId, cancellationToken).ConfigureAwait(false);
-        var state = hasSecondFactor ? SessionAuthenticationState.SecondFactorPending : SessionAuthenticationState.FullyAuthenticated;
+        var state = credential.MustChangePassword
+            ? SessionAuthenticationState.PasswordChangeRequired
+            : (hasSecondFactor ? SessionAuthenticationState.SecondFactorPending : SessionAuthenticationState.FullyAuthenticated);
         var session = new UserSession(Guid.NewGuid(), credential.UserId, now, rememberMe, device, ipAddress, state);
         await identityStore.CreateSessionAsync(session, now, cancellationToken).ConfigureAwait(false);
         return new LoginSession(session.UserId, session.Id, state);
@@ -63,4 +65,5 @@ public sealed class AuthenticationService(IIdentityStore identityStore, Password
 public sealed record LoginSession(UserId UserId, Guid SessionId, SessionAuthenticationState AuthenticationState = SessionAuthenticationState.FullyAuthenticated)
 {
     public bool SecondFactorRequired => AuthenticationState == SessionAuthenticationState.SecondFactorPending;
+    public bool PasswordChangeRequired => AuthenticationState == SessionAuthenticationState.PasswordChangeRequired;
 }

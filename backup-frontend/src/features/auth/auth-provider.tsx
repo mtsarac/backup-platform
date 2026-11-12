@@ -40,7 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   const establishSession = completeSecondFactor
   async function login(loginIdentifier: string, password: string, rememberMe: boolean) {
-    const result = await apiRequest<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean } | void>('auth/login', { method: 'POST', json: { loginIdentifier, password, rememberMe } })
+    const result = await apiRequest<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean; passwordChangeRequired?: boolean; requiresPasswordChange?: boolean } | void>('auth/login', { method: 'POST', json: { loginIdentifier, password, rememberMe } })
+    if (result && typeof result === 'object' && (result.passwordChangeRequired || result.requiresPasswordChange)) {
+      return { passwordChangeRequired: true, requiresPasswordChange: true }
+    }
     if (result && typeof result === 'object' && (result.secondFactorRequired || result.requiresSecondFactor)) {
       return { secondFactorRequired: true, requiresSecondFactor: true }
     }
