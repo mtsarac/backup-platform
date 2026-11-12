@@ -15,7 +15,7 @@ Deploy
   3. Provide the connection string through the environment, never a file in this archive:
        BACKUP_PLATFORM_CONNECTION_STRING='Host=...;Database=...;Username=...;Password=...'
   4. Create the first administrator once: ./bin/BackupPlatform.Api --bootstrap-user
-       (reads BACKUP_PLATFORM_BOOTSTRAP_LOGIN / _PASSWORD / _DISPLAY_NAME; see config/backend.env.example)
+       (reads BACKUP_PLATFORM_BOOTSTRAP_LOGIN / _EMAIL / _PASSWORD / _DISPLAY_NAME; see config/backend.env.example)
   5. Run ./bin/BackupPlatform.Api with standard ASP.NET Core settings (ASPNETCORE_URLS, HTTPS certificate).
      Persist and protect ASP.NET Data Protection keys in production.
 

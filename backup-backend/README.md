@@ -193,7 +193,7 @@ dotnet run --project src/hosts/api
 dotnet run --project src/hosts/agent
 ```
 
-`--bootstrap-user` reads `BACKUP_PLATFORM_BOOTSTRAP_LOGIN`, `BACKUP_PLATFORM_BOOTSTRAP_PASSWORD`, and `BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME`. Other settings are listed in `.env.example`. The .NET tools do not load dotenv files, so export variables or use a secret store.
+`--bootstrap-user` reads `BACKUP_PLATFORM_BOOTSTRAP_LOGIN`, `BACKUP_PLATFORM_BOOTSTRAP_EMAIL`, `BACKUP_PLATFORM_BOOTSTRAP_PASSWORD`, and `BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME`. It creates a platform administrator without tenant membership and refuses if one already exists. The password is the real sign-in password, must contain 12–1024 characters, and is never printed. Supply it through a protected environment or secret store, not command-line arguments. Other settings are listed in `.env.example`. The .NET tools do not load dotenv files, so export variables or use a secret store.
 
 Platform administrators manage accounts through `/api/platform/users`. Creation requires a username,
 email, initial password and role; `UserAdmin` accounts also require at least one tenant ID, while
