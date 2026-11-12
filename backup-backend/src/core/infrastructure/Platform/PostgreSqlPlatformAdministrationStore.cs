@@ -125,7 +125,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         if (await context.Tenants.CountAsync(tenant => tenantIds.Contains(tenant.Id), cancellationToken) != tenantIds.Count)
             return new(PlatformChangeOutcome.TenantNotFound);
         var user = new User(userId, displayName, role);
-        var credential = new PasswordCredential(userId, username, passwordHash, email);
+        var credential = new PasswordCredential(userId, username, passwordHash, email, mustChangePassword: true);
         context.Users.Add(user);
         context.PasswordCredentials.Add(credential);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.UserCreated, null,
@@ -236,6 +236,26 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         return new(PlatformChangeOutcome.Changed, new PlatformUserItem(userId, user.DisplayName, credential?.LoginIdentifier, credential?.Email, user.Role, count, user.IsDisabled, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason));
     }
 
+    public async Task<PlatformChange<PlatformUserItem>> AssignTemporaryPasswordAsync(
+        UserId targetUserId, string passwordHash, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM users WHERE \"Id\" = {targetUserId.Value} FOR UPDATE", cancellationToken);
+        var user = await context.Users.SingleOrDefaultAsync(row => row.Id == targetUserId, cancellationToken);
+        if (user is null) return new(PlatformChangeOutcome.UserNotFound);
+        var credential = await context.PasswordCredentials.SingleOrDefaultAsync(row => row.UserId == targetUserId, cancellationToken);
+        if (credential is null) return new(PlatformChangeOutcome.UserNotFound);
+        credential.ReplacePasswordHash(passwordHash, mustChangePassword: true);
+        // End all active sessions of the target user in the same transaction
+        await context.UserSessions.Where(row => row.UserId == targetUserId).ExecuteDeleteAsync(cancellationToken);
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.temporary_password_assigned", null,
+            "user", Id(targetUserId), new Dictionary<string, object?> { ["targetUserId"] = Id(targetUserId) }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        var count = await context.TenantMemberships.CountAsync(row => row.UserId == targetUserId, cancellationToken);
+        return new(PlatformChangeOutcome.Changed, new PlatformUserItem(targetUserId, user.DisplayName, credential.LoginIdentifier, credential.Email, user.Role, count));
+    }
     public async Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(
         TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken)
     {

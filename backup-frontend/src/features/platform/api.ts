@@ -77,6 +77,10 @@ export function enableUser(id: string) {
   return apiRequest<PlatformUser>(`platform/users/${encodeURIComponent(id)}/enable`, { method: 'POST' })
 }
 
+export function assignTemporaryPassword(userId: string, temporaryPassword: string) {
+  return apiRequest<PlatformUser>(`platform/users/${encodeURIComponent(userId)}/temporary-password`, { method: 'POST', json: { temporaryPassword } })
+}
+
 export function getPlatformAgents(filters: PlatformAgentFilters, signal?: AbortSignal) {
   return apiRequest<PagedResult<PlatformAgent>>(`platform/agents${query(filters)}`, { signal })
 }

@@ -40,9 +40,9 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
         string? username, string? email, string? displayName, string? password, string? role, Guid[]? tenantIds, UserId actor, CancellationToken cancellationToken)
     {
         var (name, login, address, accountRole) = ValidateAccount(displayName, username, email, role);
-        if (string.IsNullOrWhiteSpace(password) || password.Length is < MinimumPasswordLength or > MaximumPasswordLength)
+        if (!PasswordPolicy.Validate(password, out var failureReason))
         {
-            throw new InvalidPlatformRequestException("password", "invalid_length");
+            throw new InvalidPlatformRequestException("password", failureReason ?? "invalid_value");
         }
         if (tenantIds is null || tenantIds.Any(id => id == Guid.Empty) || tenantIds.Distinct().Count() != tenantIds.Length)
         {
@@ -81,6 +81,19 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
         ArgumentNullException.ThrowIfNull(actor);
         return store.EnableUserAsync(userId, actor, timeProvider.GetUtcNow(), cancellationToken);
     }
+
+    public Task<PlatformChange<PlatformUserItem>> AssignTemporaryPasswordAsync(
+        UserId targetUserId, string? temporaryPassword, UserId actor, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(targetUserId);
+        ArgumentNullException.ThrowIfNull(actor);
+        if (!PasswordPolicy.Validate(temporaryPassword, out var failureReason))
+        {
+            throw new InvalidPlatformRequestException("temporaryPassword", failureReason ?? "invalid_value");
+        }
+        return store.AssignTemporaryPasswordAsync(targetUserId, passwordHasher.Hash(targetUserId, temporaryPassword!), actor, timeProvider.GetUtcNow(), cancellationToken);
+    }
+
     private static (string Name, string Username, string Email, UserRole Role) ValidateAccount(string? displayName, string? username, string? email, string? role)
     {
         var name = ValidName(displayName, "displayName");

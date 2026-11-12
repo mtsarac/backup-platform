@@ -58,6 +58,7 @@ public static class PlatformEndpoints
         platform.MapPut("/users/{userId:guid}", UpdateUserAsync);
         platform.MapPost("/users/{userId:guid}/disable", DisableUserAsync);
         platform.MapPost("/users/{userId:guid}/enable", EnableUserAsync);
+        platform.MapPost("/users/{userId:guid}/temporary-password", AssignTemporaryPasswordAsync);
         platform.MapGet("/audit", ListAuditAsync);
         return endpoints;
     }
@@ -243,7 +244,23 @@ public static class PlatformEndpoints
         }
     }
 
+    private static async Task<IResult> AssignTemporaryPasswordAsync(
+        Guid userId, TemporaryPasswordRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
+    {
+        if (userId == Guid.Empty) return Results.NotFound(new { error = "user_not_found" });
+        try
+        {
+            var change = await service.AssignTemporaryPasswordAsync(new UserId(userId), request?.TemporaryPassword, currentUser.UserId!, cancellationToken);
+            return UserChange(change, false);
+        }
+        catch (InvalidPlatformRequestException exception)
+        {
+            return Invalid(exception);
+        }
+    }
+
     public sealed record DisableUserRequest(string? Reason);
+    public sealed record TemporaryPasswordRequest(string? TemporaryPassword);
     private static IResult UserChange(PlatformChange<PlatformUserItem> change, bool created) => change.Outcome switch
     {
         PlatformChangeOutcome.LoginTaken => Results.Conflict(new { error = "identity_taken" }),

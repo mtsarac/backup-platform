@@ -8,7 +8,7 @@ export interface AuthContextValue {
   isLoading: boolean
   error: unknown
   sessionExpired: boolean
-  login: (identifier: string, password: string, rememberMe: boolean) => Promise<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean } | void>
+  login: (identifier: string, password: string, rememberMe: boolean) => Promise<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean; passwordChangeRequired?: boolean; requiresPasswordChange?: boolean } | void>
   completeSecondFactor: () => Promise<void>
   establishSession?: () => Promise<void>
   loginWithPasskey?: (rememberMe: boolean, identifier?: string) => Promise<void>

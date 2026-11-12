@@ -214,6 +214,12 @@ public sealed class IdentityTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> ChangePasswordAsync(UserId userId, string newPasswordHash, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            if (userId != Credential.UserId) return Task.FromResult(false);
+            Credential.MarkPasswordChanged(newPasswordHash);
+            return Task.FromResult(true);
+        }
         public Task CreateSessionAsync(UserSession session, DateTimeOffset now, CancellationToken cancellationToken)
         {
             Sessions.Add(session.Id, session);
