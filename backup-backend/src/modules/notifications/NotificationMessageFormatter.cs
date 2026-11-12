@@ -52,6 +52,9 @@ public static class NotificationMessageFormatter
                 $"Storage target \"{name}\" is at {Fact("percent")}% capacity (critical threshold 90% exceeded)."),
             NotificationEventTypes.BackupSizeAnomaly => ($"Backup size anomaly: {name}",
                 $"A backup of job \"{name}\" succeeded with an unusual artifact size: {Fact("sizeBytes")} bytes compared with a recent average of {Fact("baselineBytes")} bytes ({Fact("deviationPercent")}% change). This advisory does not invalidate the backup."),
+            NotificationEventTypes.BackupShareCreated => ($"Backup share created: {name}", $"A backup share was created for \"{name}\"."),
+            NotificationEventTypes.BackupShareExtended => ($"Backup share extended: {name}", $"A backup share for \"{name}\" was extended."),
+            NotificationEventTypes.BackupShareRevoked => ($"Backup share revoked: {name}", $"A backup share for \"{name}\" was revoked."),
             _ => ($"Notification: {name}", $"An event of type {e.Type} occurred for \"{name}\".")
         };
     }

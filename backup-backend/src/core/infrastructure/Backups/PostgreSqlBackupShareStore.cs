@@ -5,6 +5,8 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Downloads;
+using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -89,11 +91,24 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
                 ["result"] = "created"
             }));
 
+        var artifactNames = await ResolveArtifactNamesAsync(context, [artifactId], cancellationToken, tenantId);
+        await RecordShareNotificationAsync(
+            context,
+            share,
+            NotificationEventTypes.BackupShareCreated,
+            $"{NotificationEventTypes.BackupShareCreated}:{share.Id:N}",
+            artifactNames.GetValueOrDefault(artifactId),
+            createdByUserId,
+            createdByRole,
+            platformAdmins: createdByRole == UserRole.UserAdmin,
+            tenantAdmins: createdByRole == UserRole.PlatformAdmin,
+            createdAtUtc,
+            cancellationToken);
+
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         var userNames = await ResolveUserNamesAsync(context, [createdByUserId], cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, [artifactId], cancellationToken, tenantId);
         var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
 
         return new BackupShareCreateResult(
@@ -254,11 +269,25 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
                 ["result"] = "extended"
             }));
 
+        var occurredAtUtc = now.ToUniversalTime();
+        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
+        await RecordShareNotificationAsync(
+            context,
+            share,
+            NotificationEventTypes.BackupShareExtended,
+            $"{NotificationEventTypes.BackupShareExtended}:{share.Id:N}:{share.ExpiresAtUtc.UtcTicks}",
+            artifactNames.GetValueOrDefault(share.ArtifactId),
+            actor,
+            actorRole,
+            platformAdmins: true,
+            tenantAdmins: true,
+            occurredAtUtc,
+            cancellationToken);
+
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         var userNames = await ResolveUserNamesAsync(context, [share.CreatedByUserId], cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
         var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
 
         return new BackupShareModifyResult(
@@ -373,12 +402,26 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             $"SELECT pg_notify('backup_share_revoked', {share.Id.ToString("D")})",
             cancellationToken);
 
+        var occurredAtUtc = now.ToUniversalTime();
+        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
+        await RecordShareNotificationAsync(
+            context,
+            share,
+            NotificationEventTypes.BackupShareRevoked,
+            $"{NotificationEventTypes.BackupShareRevoked}:{share.Id:N}",
+            artifactNames.GetValueOrDefault(share.ArtifactId),
+            actor,
+            actorRole,
+            platformAdmins: true,
+            tenantAdmins: true,
+            occurredAtUtc,
+            cancellationToken);
+
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         activeDownloads?.CancelShare(share.Id);
         var userNames = await ResolveUserNamesAsync(context, [share.CreatedByUserId], cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, [share.ArtifactId], cancellationToken, tenantId);
         var tenantNames = await ResolveTenantNamesAsync(context, [tenantId], cancellationToken);
 
         return new BackupShareModifyResult(
@@ -552,6 +595,48 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             artifactName,
             createdByDisplayName,
             tenantName);
+    }
+
+    private static async Task RecordShareNotificationAsync(
+        PlatformDbContext context,
+        BackupShare share,
+        string eventType,
+        string dedupKey,
+        string? artifactName,
+        UserId actor,
+        UserRole actorRole,
+        bool platformAdmins,
+        bool tenantAdmins,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        var subjectName = !string.IsNullOrWhiteSpace(artifactName) ? artifactName : "Backup share";
+        var notificationEvent = new NotificationEvent(
+            Guid.NewGuid(),
+            share.TenantId,
+            eventType,
+            NotificationPhase.Raised,
+            NotificationSeverity.Info,
+            new NotificationSubject("backup_share", share.Id, subjectName),
+            new Dictionary<string, string>
+            {
+                ["shareId"] = share.Id.ToString("D"),
+                ["artifactId"] = share.ArtifactId.ToString("D"),
+                ["actorRole"] = actorRole.ToString(),
+                ["expiresAtUtc"] = share.ExpiresAtUtc.ToString("o")
+            },
+            dedupKey,
+            occurredAt,
+            occurredAt);
+
+        await UserNotificationWriter.RecordAsync(
+            context,
+            notificationEvent,
+            [],
+            platformAdmins: platformAdmins,
+            tenantAdmins: tenantAdmins,
+            except: actor,
+            cancellationToken);
     }
 
     private static async Task<Dictionary<UserId, string>> ResolveUserNamesAsync(

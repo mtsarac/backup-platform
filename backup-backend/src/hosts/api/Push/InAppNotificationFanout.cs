@@ -9,7 +9,16 @@ using Npgsql;
 
 namespace BackupPlatform.Api.Push;
 
-public sealed record InAppNotificationMessage(Guid Id, Guid EventId, string Type, string SubjectName, DateTimeOffset OccurredAt, DateTimeOffset? ReadAt);
+public sealed record InAppNotificationMessage(
+    Guid Id,
+    Guid EventId,
+    string Type,
+    string SubjectName,
+    DateTimeOffset OccurredAt,
+    DateTimeOffset? ReadAt,
+    Guid? TenantId = null,
+    string? SubjectKind = null,
+    Guid? SubjectId = null);
 
 public sealed class InAppNotificationFanout(
     DbContextOptions<PlatformDbContext> options,
@@ -121,22 +130,23 @@ public sealed class InAppNotificationFanout(
                 join notificationEvent in context.NotificationEvents.AsNoTracking() on item.EventId equals notificationEvent.Id
                 where item.UserId == connection.UserId
                 orderby item.Id
-                select new { Message = new InAppNotificationMessage(item.Id, item.EventId, notificationEvent.Type, notificationEvent.SubjectName, notificationEvent.OccurredAt, item.ReadAt), notificationEvent.TenantId })
+                select new { item.Id, item.EventId, notificationEvent.Type, notificationEvent.SubjectName, notificationEvent.OccurredAt, item.ReadAt, notificationEvent.TenantId, notificationEvent.SubjectKind, notificationEvent.SubjectId })
                 .Skip(offset).Take(PageSize).ToListAsync(cancellationToken);
             foreach (var item in page)
             {
-                present.Add(item.Message.Id);
-                if (connection.Seen.Contains(item.Message.Id)) continue;
+                present.Add(item.Id);
+                if (connection.Seen.Contains(item.Id)) continue;
                 if (!await IsActiveAsync(connection, cancellationToken))
                 {
                     Unregister(connection.Context.ConnectionId);
                     connection.Context.Abort();
                     return;
                 }
-                if (item.TenantId is not null && !await context.VisibleUserNotifications(connection.UserId).AsNoTracking().AnyAsync(row => row.Id == item.Message.Id, cancellationToken))
+                if (item.TenantId is not null && !await context.VisibleUserNotifications(connection.UserId).AsNoTracking().AnyAsync(row => row.Id == item.Id, cancellationToken))
                     continue;
-                await hub.Clients.Client(connection.Context.ConnectionId).SendAsync("notificationReceived", item.Message, cancellationToken);
-                connection.Seen.Add(item.Message.Id);
+                var message = new InAppNotificationMessage(item.Id, item.EventId, item.Type, item.SubjectName, item.OccurredAt, item.ReadAt, item.TenantId?.Value, item.SubjectKind, item.SubjectId);
+                await hub.Clients.Client(connection.Context.ConnectionId).SendAsync("notificationReceived", message, cancellationToken);
+                connection.Seen.Add(item.Id);
             }
             if (page.Count < PageSize) break;
         }
