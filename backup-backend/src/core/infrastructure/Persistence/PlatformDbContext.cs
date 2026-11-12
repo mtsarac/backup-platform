@@ -72,6 +72,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<LoginThrottleEntry> LoginThrottleEntries => Set<LoginThrottleEntry>();
     public DbSet<TotpCredential> TotpCredentials => Set<TotpCredential>();
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
+    public DbSet<PasskeyCredential> PasskeyCredentials => Set<PasskeyCredential>();
+    public DbSet<PasskeyChallenge> PasskeyChallenges => Set<PasskeyChallenge>();
     public DbSet<BackupJob> BackupJobs => Set<BackupJob>();
     public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
     public DbSet<BackupRunAttempt> BackupRunAttempts => Set<BackupRunAttempt>();

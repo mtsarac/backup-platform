@@ -27,6 +27,7 @@ public sealed class AgentRateLimitOptions
     public int DiscoveryPerAgent { get; init; } = 8;
     /// <summary>Push channel connection attempts (negotiate and upgrade count separately) per agent per window.</summary>
     public int ConnectPerAgent { get; init; } = 20;
+    public int PasskeyLoginOptionsPerClient { get; init; } = 30;
 
     public static class Policies
     {
@@ -35,6 +36,7 @@ public sealed class AgentRateLimitOptions
         public const string Poll = "agent-poll";
         public const string Discovery = "agent-discovery";
         public const string Connect = "agent-connect";
+        public const string PasskeyLoginOptions = "passkey-login-options";
     }
 }
 
@@ -147,6 +149,12 @@ public static class AgentRateLimiting
             AddPerAgentPolicy(options, AgentRateLimitOptions.Policies.Poll, limits => limits.PollPerAgent);
             AddPerAgentPolicy(options, AgentRateLimitOptions.Policies.Discovery, limits => limits.DiscoveryPerAgent);
             AddPerAgentPolicy(options, AgentRateLimitOptions.Policies.Connect, limits => limits.ConnectPerAgent);
+            options.AddPolicy(AgentRateLimitOptions.Policies.PasskeyLoginOptions, context =>
+            {
+                var limits = context.RequestServices.GetRequiredService<AgentRateLimitOptions>();
+                return RateLimitPartition.GetSlidingWindowLimiter(AgentClientKey.From(context.Connection.RemoteIpAddress),
+                    _ => Window(limits, limits.PasskeyLoginOptionsPerClient));
+            });
             options.OnRejected = async (context, cancellationToken) =>
             {
                 var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var value) ? value : TimeSpan.FromSeconds(1);

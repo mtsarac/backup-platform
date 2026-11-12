@@ -42,6 +42,13 @@ describe('SecurityPage', () => {
     expect(screen.queryByText(/Kalan kullanılabilir kurtarma kodu/)).not.toBeInTheDocument()
   })
 
+  it('offers recovery code management for a passkey without TOTP', async () => {
+    apiMock.mockResolvedValue({ hasTotp: false, hasPasskeys: true, remainingRecoveryCodes: 9 })
+    mount()
+    expect(await screen.findByText(/Kalan kullanılabilir kurtarma kodu: 9/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kurtarma kodlarını yeniden oluştur' })).toBeInTheDocument()
+  })
+
   it('completes TOTP enrolment and shows single-use recovery codes', async () => {
     apiMock.mockImplementation(async (path, options) => {
       if (path === 'auth/security') return { hasTotp: false, remainingRecoveryCodes: 0 }
@@ -68,8 +75,10 @@ describe('SecurityPage', () => {
     expect(screen.getByText('JBSWY3DPEHPK3PXP')).toBeInTheDocument()
 
     const dialog = screen.getByRole('dialog')
-    await userEvent.type(within(dialog).getByLabelText('Mevcut şifreniz'), 'my-password')
-    await userEvent.type(within(dialog).getByLabelText('Doğrulama kodu'), '654321')
+    await userEvent.click(within(dialog).getByLabelText('Mevcut şifreniz'))
+    await userEvent.paste('my-password')
+    await userEvent.click(within(dialog).getByLabelText('Doğrulama kodu'))
+    await userEvent.paste('654321')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Doğrula ve Etkinleştir' }))
 
     expect(apiMock).toHaveBeenCalledWith('auth/security/totp/enroll', {

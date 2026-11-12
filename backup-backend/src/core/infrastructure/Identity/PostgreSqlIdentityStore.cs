@@ -100,6 +100,18 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    private static Task LockFactorChangesAsync(PlatformDbContext context, UserId userId, CancellationToken cancellationToken) =>
+        context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({userId.Value.ToString()}, 0))", cancellationToken);
+
+    private static async Task ReplaceRecoveryCodesAsync(PlatformDbContext context, UserId userId, IReadOnlyList<string> hashes, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await context.RecoveryCodes.Where(row => row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        foreach (var hash in hashes)
+            context.RecoveryCodes.Add(new RecoveryCode(Guid.NewGuid(), userId, hash, now));
+        context.AuditEvents.Add(AuditEvent.Record(now, userId, AuditActorKind.User, AuditActions.RecoveryCodesRegenerated, null,
+            "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "regenerated", ["count"] = hashes.Count }));
+    }
+
     public async Task<PasswordCredential?> FindCredentialByUserIdAsync(UserId userId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
@@ -110,7 +122,8 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
     public async Task<bool> HasSecondFactorAsync(UserId userId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return await context.TotpCredentials.AsNoTracking().AnyAsync(row => row.UserId == userId, cancellationToken);
+        return await context.TotpCredentials.AsNoTracking().AnyAsync(row => row.UserId == userId, cancellationToken)
+            || await context.PasskeyCredentials.AsNoTracking().AnyAsync(row => row.UserId == userId, cancellationToken);
     }
 
     public async Task<TotpCredential?> FindTotpCredentialAsync(UserId userId, CancellationToken cancellationToken)
@@ -119,28 +132,33 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         return await context.TotpCredentials.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == userId, cancellationToken);
     }
 
-    public async Task SaveTotpCredentialAsync(TotpCredential credential, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<TotpEnrollmentOutcome> SaveTotpCredentialAsync(TotpCredential credential, IReadOnlyList<string> recoveryCodeHashes, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockFactorChangesAsync(context, credential.UserId, cancellationToken);
         var existing = await context.TotpCredentials.SingleOrDefaultAsync(row => row.UserId == credential.UserId, cancellationToken);
         if (existing is not null)
         {
-            context.TotpCredentials.Remove(existing);
-            await context.SaveChangesAsync(cancellationToken);
+            return TotpEnrollmentOutcome.Conflict;
         }
+        var issueCodes = !await context.PasskeyCredentials.AnyAsync(row => row.UserId == credential.UserId, cancellationToken);
+        if (issueCodes)
+            await ReplaceRecoveryCodesAsync(context, credential.UserId, recoveryCodeHashes, now, cancellationToken);
         context.TotpCredentials.Add(credential);
         context.AuditEvents.Add(AuditEvent.Record(
             now, credential.UserId, AuditActorKind.User, AuditActions.TotpEnrolled, null,
             "user", credential.UserId.ToString(), new Dictionary<string, object?> { ["result"] = "enrolled" }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return issueCodes ? TotpEnrollmentOutcome.EnrolledWithRecoveryCodes : TotpEnrollmentOutcome.EnrolledWithoutRecoveryCodes;
     }
 
     public async Task<bool> RemoveTotpCredentialAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockFactorChangesAsync(context, userId, cancellationToken);
         var deleted = await context.TotpCredentials.Where(row => row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         if (deleted > 0)
         {
@@ -167,6 +185,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         var hashList = codeHashes.ToList();
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockFactorChangesAsync(context, userId, cancellationToken);
         await context.RecoveryCodes.Where(row => row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         foreach (var hash in hashList)
         {
@@ -196,9 +215,107 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         await transaction.CommitAsync(cancellationToken);
         return updated > 0;
     }
+
     public async Task<int> GetRemainingRecoveryCodesCountAsync(UserId userId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         return await context.RecoveryCodes.AsNoTracking().CountAsync(row => row.UserId == userId && row.RedeemedAt == null, cancellationToken);
+    }
+
+    public async Task<bool> HasPasskeysAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.PasskeyCredentials.AnyAsync(row => row.UserId == userId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PasskeyCredential>> ListPasskeysAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.PasskeyCredentials.AsNoTracking().Where(row => row.UserId == userId).OrderByDescending(row => row.CreatedAt).ToListAsync(cancellationToken);
+    }
+
+    public async Task<PasskeyCredential?> FindPasskeyByCredentialIdAsync(byte[] credentialId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.PasskeyCredentials.SingleOrDefaultAsync(row => row.CredentialId == credentialId, cancellationToken);
+    }
+
+    public async Task<PasskeyCredential?> FindPasskeyByIdAsync(Guid id, UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.PasskeyCredentials.SingleOrDefaultAsync(row => row.Id == id && row.UserId == userId, cancellationToken);
+    }
+
+    public async Task<bool> AddPasskeyAsync(PasskeyCredential passkey, IReadOnlyList<string> recoveryCodeHashes, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockFactorChangesAsync(context, passkey.UserId, cancellationToken);
+        var issueCodes = !await context.TotpCredentials.AnyAsync(row => row.UserId == passkey.UserId, cancellationToken)
+            && !await context.PasskeyCredentials.AnyAsync(row => row.UserId == passkey.UserId, cancellationToken);
+        if (issueCodes)
+            await ReplaceRecoveryCodesAsync(context, passkey.UserId, recoveryCodeHashes, now, cancellationToken);
+        context.PasskeyCredentials.Add(passkey);
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, passkey.UserId, AuditActorKind.User, AuditActions.PasskeyRegistered, null,
+            "passkey", passkey.Id.ToString("D"), new Dictionary<string, object?> { ["name"] = passkey.Name }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return issueCodes;
+    }
+
+    public async Task<bool> RemovePasskeyAsync(Guid id, UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await LockFactorChangesAsync(context, userId, cancellationToken);
+        var cred = await context.PasskeyCredentials.SingleOrDefaultAsync(row => row.Id == id && row.UserId == userId, cancellationToken);
+        if (cred is null) return false;
+        context.PasskeyCredentials.Remove(cred);
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, userId, AuditActorKind.User, AuditActions.PasskeyRemoved, null,
+            "passkey", id.ToString("D"), new Dictionary<string, object?> { ["name"] = cred.Name }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> UpdatePasskeyUsageAsync(Guid id, uint newCounter, DateTimeOffset usedAt, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var updated = await context.PasskeyCredentials
+            .Where(row => row.Id == id && ((row.SignatureCounter == 0 && newCounter == 0) || row.SignatureCounter < newCounter))
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.SignatureCounter, newCounter)
+                .SetProperty(row => row.LastUsedAt, usedAt.ToUniversalTime()), cancellationToken);
+        return updated == 1;
+    }
+
+    public async Task SaveChallengeAsync(PasskeyChallenge challenge, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await context.PasskeyChallenges.Where(c => c.ExpiresAt <= challenge.CreatedAt).ExecuteDeleteAsync(cancellationToken);
+        context.PasskeyChallenges.Add(challenge);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<PasskeyChallenge?> ConsumeChallengeAsync(Guid challengeId, string purpose, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var challenges = context.PasskeyChallenges.Where(c => c.Id == challengeId && c.Purpose == purpose && c.ExpiresAt > now);
+        var challenge = await challenges.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+        if (challenge is null) return null;
+        return await challenges.ExecuteDeleteAsync(cancellationToken) == 1 ? challenge : null;
+    }
+
+    public async Task<bool> IsUserDisabledAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.Users.AsNoTracking().Where(row => row.Id == userId).Select(row => row.IsDisabled).SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<string?> GetUserDisplayNameAsync(UserId userId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.Users.AsNoTracking().Where(row => row.Id == userId).Select(row => row.DisplayName).SingleOrDefaultAsync(cancellationToken);
     }
 }

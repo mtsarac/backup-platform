@@ -2,6 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { Key } from 'lucide-react'
 import { BrandMark } from '@/components/ui/brand-mark'
 import { Card } from '@/components/ui/card'
 import { CheckField } from '@/components/ui/check-field'
@@ -18,14 +19,14 @@ import { usePageTitle } from '@/hooks/use-page-title'
 export function LoginPage() {
   useLanguage()
   usePageTitle(tx('Giriş yapın'))
-  const { login, completeSecondFactor, logout, isAuthenticated, sessionExpired } = useAuth()
+  const { login, completeSecondFactor, loginWithPasskey, verifySecondFactor, logout, isAuthenticated, sessionExpired } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [loginIdentifier, setLoginIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [secondFactorPending, setSecondFactorPending] = useState(false)
-  const [factorMode, setFactorMode] = useState<'totp' | 'recovery'>('totp')
+  const [factorMode, setFactorMode] = useState<'totp' | 'recovery' | 'passkey'>('totp')
   const [totpCode, setTotpCode] = useState('')
   const [recoveryCode, setRecoveryCode] = useState('')
   const [error, setError] = useState<ErrorDescription | null>(null)
@@ -43,8 +44,13 @@ export function LoginPage() {
     setLoading(true)
     try {
       const result = await login(loginIdentifier, password, rememberMe)
-      if (result && result.secondFactorRequired) {
+      if (result && (result.secondFactorRequired || result.requiresSecondFactor)) {
         setSecondFactorPending(true)
+        if (result.requiresSecondFactor && !result.secondFactorRequired) {
+          setFactorMode('passkey')
+        } else {
+          setFactorMode('totp')
+        }
         setPassword('')
         return
       }
@@ -82,6 +88,33 @@ export function LoginPage() {
     }
   }
 
+  const handlePasskeyLogin = async () => {
+    setError(null)
+    setLoading(true)
+    try {
+      await loginWithPasskey?.(rememberMe, loginIdentifier.trim() || undefined)
+      navigate(from, { replace: true })
+    } catch (error) {
+      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Geçiş anahtarı doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describeError(error))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSecondFactor = async () => {
+    setError(null)
+    setLoading(true)
+    try {
+      await verifySecondFactor?.()
+      setPassword('')
+      navigate(from, { replace: true })
+    } catch (error) {
+      setError(error instanceof ApiError && error.status === 401 ? { what: tx('İkinci faktör doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describeError(error))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const cancelSecondFactor = async () => {
     setError(null)
     setLoading(true)
@@ -101,72 +134,115 @@ export function LoginPage() {
         <div className="w-full max-w-sm space-y-6">
           <BrandMark size="sm" />
           <h1 className="text-2xl font-semibold text-text-heading">
-            {secondFactorPending ? tx('İki faktörlü doğrulama') : tx('Giriş yapın')}
+            {secondFactorPending ? (factorMode === 'passkey' ? tx('İkinci faktör doğrulaması') : tx('İki faktörlü doğrulama')) : tx('Giriş yapın')}
           </h1>
           {secondFactorPending ? (
-            <Card as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
-              {factorMode === 'totp' ? (
-                <>
-                  <Field label={tx('Doğrulama kodu')}>
-                    {(control) => (
-                      <TextInput
-                        {...control}
-                        autoFocus
-                        autoComplete="one-time-code"
-                        inputMode="numeric"
-                        placeholder="000000"
-                        value={totpCode}
-                        onChange={(e) => setTotpCode(e.target.value)}
-                        required
-                      />
-                    )}
-                  </Field>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? tx('Doğrulanıyor...') : tx('Doğrula')}
-                  </Button>
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      className="text-sm text-primary underline-offset-4 hover:underline"
-                      onClick={() => { setError(null); setFactorMode('recovery') }}
-                    >
-                      {tx('Kurtarma kodu kullan')}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Field label={tx('Kurtarma kodu')}>
-                    {(control) => (
-                      <TextInput
-                        {...control}
-                        autoFocus
-                        placeholder="0000-0000-0000"
-                        value={recoveryCode}
-                        onChange={(e) => setRecoveryCode(e.target.value)}
-                        required
-                      />
-                    )}
-                  </Field>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? tx('Doğrulanıyor...') : tx('Kurtarma koduyla giriş yap')}
-                  </Button>
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      className="text-sm text-primary underline-offset-4 hover:underline"
-                      onClick={() => { setError(null); setFactorMode('totp') }}
-                    >
-                      {tx('Doğrulama kodu kullan (TOTP)')}
-                    </button>
-                  </div>
-                </>
-              )}
-              {error && <ErrorNotice {...error} />}
-              <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
-                {tx('Girişe dön')}
-              </Button>
-            </Card>
+            factorMode === 'passkey' ? (
+              <Card padding="lg" className="space-y-4">
+                <Notice tone="info">{tx("Girişinizi tamamlamak için kayıtlı geçiş anahtarınızı kullanın.")}</Notice>
+                {error && <ErrorNotice {...error} />}
+                <Button type="button" className="w-full" disabled={loading} onClick={handleSecondFactor}>
+                  {loading ? tx('Doğrulanıyor...') : tx('Geçiş anahtarı ile doğrula')}
+                </Button>
+                <div className="flex flex-col gap-2 text-center">
+                  <button
+                    type="button"
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    onClick={() => { setError(null); setFactorMode('totp') }}
+                  >
+                    {tx('Doğrulama kodu kullan (TOTP)')}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    onClick={() => { setError(null); setFactorMode('recovery') }}
+                  >
+                    {tx('Kurtarma kodu kullan')}
+                  </button>
+                </div>
+                <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
+                  {tx('Geri dön')}
+                </Button>
+              </Card>
+            ) : factorMode === 'totp' ? (
+              <Card as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
+                <Field label={tx('Doğrulama kodu')}>
+                  {(control) => (
+                    <TextInput
+                      {...control}
+                      autoFocus
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      placeholder="000000"
+                      value={totpCode}
+                      onChange={(e) => setTotpCode(e.target.value)}
+                      required
+                    />
+                  )}
+                </Field>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? tx('Doğrulanıyor...') : tx('Doğrula')}
+                </Button>
+                <div className="flex flex-col gap-2 text-center">
+                  <button
+                    type="button"
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    onClick={() => { setError(null); setFactorMode('recovery') }}
+                  >
+                    {tx('Kurtarma kodu kullan')}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    onClick={() => { setError(null); setFactorMode('passkey') }}
+                  >
+                    {tx('Geçiş anahtarı ile doğrula')}
+                  </button>
+                </div>
+                {error && <ErrorNotice {...error} />}
+                <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
+                  {tx('Girişe dön')}
+                </Button>
+              </Card>
+            ) : (
+              <Card as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
+                <Field label={tx('Kurtarma kodu')}>
+                  {(control) => (
+                    <TextInput
+                      {...control}
+                      autoFocus
+                      placeholder="0000-0000-0000"
+                      value={recoveryCode}
+                      onChange={(e) => setRecoveryCode(e.target.value)}
+                      required
+                    />
+                  )}
+                </Field>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? tx('Doğrulanıyor...') : tx('Kurtarma koduyla giriş yap')}
+                </Button>
+                <div className="flex flex-col gap-2 text-center">
+                  <button
+                    type="button"
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    onClick={() => { setError(null); setFactorMode('totp') }}
+                  >
+                    {tx('Doğrulama kodu kullan (TOTP)')}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    onClick={() => { setError(null); setFactorMode('passkey') }}
+                  >
+                    {tx('Geçiş anahtarı ile doğrula')}
+                  </button>
+                </div>
+                {error && <ErrorNotice {...error} />}
+                <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
+                  {tx('Girişe dön')}
+                </Button>
+              </Card>
+            )
           ) : (
             <Card as="form" padding="lg" onSubmit={handlePasswordSubmit} className="space-y-4">
               <Field label={tx('Kullanıcı adı')} hint={tx('E-posta adresinizle de giriş yapabilirsiniz.')}>
@@ -180,6 +256,13 @@ export function LoginPage() {
               {error && <ErrorNotice {...error} />}
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? tx('Giriş yapılıyor...') : tx('Giriş Yap')}
+              </Button>
+              <div className="relative my-2 text-center text-xs text-text-muted after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
+                <span className="relative z-10 bg-surface px-2 text-text-muted">{tx('veya')}</span>
+              </div>
+              <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handlePasskeyLogin}>
+                <Key aria-hidden="true" className="size-4" />
+                {tx('Geçiş anahtarı ile giriş yap')}
               </Button>
             </Card>
           )}

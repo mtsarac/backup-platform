@@ -35,6 +35,12 @@ public sealed class AuthenticationService(IIdentityStore identityStore, Password
             await identityStore.RecordLoginFailureAsync(null, now, cancellationToken).ConfigureAwait(false);
             return null;
         }
+        if (await identityStore.IsUserDisabledAsync(credential.UserId, cancellationToken).ConfigureAwait(false))
+        {
+            passwordHashService.VerifyDummy(password);
+            await identityStore.RecordLoginFailureAsync(credential.UserId, now, cancellationToken).ConfigureAwait(false);
+            return null;
+        }
         var result = passwordHashService.Verify(credential.UserId, credential.PasswordHash, password);
         if (result == PasswordVerificationResult.Failed)
         {
@@ -47,11 +53,14 @@ public sealed class AuthenticationService(IIdentityStore identityStore, Password
             await identityStore.UpdatePasswordHashAsync(credential.UserId, replacement, cancellationToken).ConfigureAwait(false);
         }
         var hasSecondFactor = await identityStore.HasSecondFactorAsync(credential.UserId, cancellationToken).ConfigureAwait(false);
-        var initialState = hasSecondFactor ? SessionAuthenticationState.SecondFactorPending : SessionAuthenticationState.FullyAuthenticated;
-        var session = new UserSession(Guid.NewGuid(), credential.UserId, now, rememberMe, device, ipAddress, initialState);
+        var state = hasSecondFactor ? SessionAuthenticationState.SecondFactorPending : SessionAuthenticationState.FullyAuthenticated;
+        var session = new UserSession(Guid.NewGuid(), credential.UserId, now, rememberMe, device, ipAddress, state);
         await identityStore.CreateSessionAsync(session, now, cancellationToken).ConfigureAwait(false);
-        return new LoginSession(session.UserId, session.Id, hasSecondFactor);
+        return new LoginSession(session.UserId, session.Id, state);
     }
 }
 
-public sealed record LoginSession(UserId UserId, Guid SessionId, bool SecondFactorRequired = false);
+public sealed record LoginSession(UserId UserId, Guid SessionId, SessionAuthenticationState AuthenticationState = SessionAuthenticationState.FullyAuthenticated)
+{
+    public bool SecondFactorRequired => AuthenticationState == SessionAuthenticationState.SecondFactorPending;
+}

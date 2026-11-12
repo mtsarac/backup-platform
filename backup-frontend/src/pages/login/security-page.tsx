@@ -16,6 +16,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 
 type SecurityStatus = {
   hasTotp: boolean
+  hasPasskeys: boolean
   remainingRecoveryCodes: number
 }
 
@@ -94,8 +95,10 @@ export function SecurityPage() {
       setSetupOpen(false)
       setSetupData(null)
       await cache.invalidateQueries({ queryKey: ['auth', 'security'] })
-      setIssuedCodes(res.recoveryCodes)
-      setCodesModalOpen(true)
+      if (res.recoveryCodes.length) {
+        setIssuedCodes(res.recoveryCodes)
+        setCodesModalOpen(true)
+      }
     } catch (err) {
       setSetupError(err)
     } finally {
@@ -195,7 +198,7 @@ export function SecurityPage() {
             </div>
           </Card>
 
-          {security.data?.hasTotp && (
+          {(security.data?.hasTotp || security.data?.hasPasskeys) && (
             <Card padding="lg" className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
