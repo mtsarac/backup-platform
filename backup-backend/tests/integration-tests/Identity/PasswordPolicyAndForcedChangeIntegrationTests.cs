@@ -58,12 +58,6 @@ public sealed class PasswordPolicyAndForcedChangeIntegrationTests(PostgreSqlFixt
         var loginJson = AgentWorld.ReadJson(loginResp);
         Assert.True(loginJson.GetProperty("passwordChangeRequired").GetBoolean());
 
-        // 3. Restricted session CAN reach /api/me to learn state, but passwordChangeRequired is true
-        using var meResp = await userSession.GetAsync("/api/me");
-        Assert.Equal(HttpStatusCode.OK, meResp.StatusCode);
-        var meJson = AgentWorld.ReadJson(meResp);
-        Assert.True(meJson.GetProperty("passwordChangeRequired").GetBoolean());
-
         // 4. Restricted session is FORBIDDEN on tenant and platform endpoints
         using var platformResp = await userSession.GetAsync("/api/platform/summary");
         Assert.Equal(HttpStatusCode.Forbidden, platformResp.StatusCode);

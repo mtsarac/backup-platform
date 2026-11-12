@@ -57,7 +57,7 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
             throw new InvalidPlatformRequestException("tenantIds", "membership_not_allowed");
         }
         var userId = UserId.New();
-        return store.CreateUserAsync(userId, name, login, address, passwordHasher.Hash(userId, password), accountRole,
+        return store.CreateUserAsync(userId, name, login, address, passwordHasher.Hash(userId, password!), accountRole,
             tenantIds.Select(id => new TenantId(id)).ToArray(), actor, timeProvider.GetUtcNow(), cancellationToken);
     }
 

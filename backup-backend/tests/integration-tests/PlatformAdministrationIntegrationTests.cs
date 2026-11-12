@@ -171,6 +171,8 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { username = login.ToUpperInvariant(), email = $"other-{email}", create.displayName, create.password, create.role, create.tenantIds })).Status);
         Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(admin, HttpMethod.Post, "/api/platform/users", new { username = "other-" + login, email = email.ToUpperInvariant(), create.displayName, create.password, create.role, create.tenantIds })).Status);
 
+        await using (var forcedChange = fixture.CreatePlatformContext())
+            Assert.Equal(1, await forcedChange.PasswordCredentials.Where(row => row.UserId == new UserId(userId)).ExecuteUpdateAsync(set => set.SetProperty(row => row.MustChangePassword, false)));
         var member = await world.SignInAsync(new Account(new UserId(userId), login.ToUpperInvariant(), password));
         var emailSession = await world.SignInAsync(new Account(new UserId(userId), email.ToUpperInvariant(), password));
         Assert.Equal(HttpStatusCode.OK, (await CallAsync(member, HttpMethod.Get, $"/api/tenants/{first.Id.Value}/context")).Status);
@@ -265,7 +267,8 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         world.Clock.Advance(TimeSpan.FromSeconds(1));
         Assert.Equal(HttpStatusCode.NoContent, (await CallAsync(admin, HttpMethod.Delete, $"{memberships}/{member.UserId.Value}")).Status);
         Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Delete, $"{memberships}/{member.UserId.Value}")).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(memberSession, HttpMethod.Get, tenantPolicy)).Status);
+        // Losing the last membership disables the account and ends its sessions.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await CallAsync(memberSession, HttpMethod.Get, tenantPolicy)).Status);
 
         var audit = await AuditOfAsync(tenant.Id);
         Assert.Equal(

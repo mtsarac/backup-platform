@@ -52,6 +52,7 @@ public static class PlatformEndpoints
         platform.MapGet("/tenants/{tenantId:guid}/memberships", ListMembershipsAsync);
         platform.MapPost("/tenants/{tenantId:guid}/memberships", AddMembershipAsync);
         platform.MapDelete("/tenants/{tenantId:guid}/memberships/{userId:guid}", RemoveMembershipAsync);
+        platform.MapGet("/agents", ListAgentsAsync);
         platform.MapGet("/tenants/{tenantId:guid}/agents/{agentId:guid}", GetAgentAsync);
         platform.MapGet("/users", ListUsersAsync);
         platform.MapPost("/users", CreateUserAsync);

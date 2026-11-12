@@ -254,8 +254,9 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var count = await context.TenantMemberships.CountAsync(row => row.UserId == targetUserId, cancellationToken);
-        return new(PlatformChangeOutcome.Changed, new PlatformUserItem(targetUserId, user.DisplayName, credential.LoginIdentifier, credential.Email, user.Role, count));
+        return new(PlatformChangeOutcome.Changed, new PlatformUserItem(targetUserId, user.DisplayName, credential.LoginIdentifier, credential.Email, user.Role, count, user.IsDisabled, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason));
     }
+
     public async Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(
         TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken)
     {

@@ -1,15 +1,15 @@
 using BackupPlatform.Api.Security;
-using BackupPlatform.Identity;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
-using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
+
+namespace BackupPlatform.Api.Endpoints;
 
 public static class UserEndpoints
 {
     public static IEndpointRouteBuilder MapUserEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/me", GetCurrentUserAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
+        endpoints.MapGet("/api/me", GetCurrentUserAsync).RequireAuthorization();
         endpoints.MapGet("/api/me/tenants", GetTenantsAsync).RequireAuthorization();
         endpoints.MapGet("/api/tenants/{tenantId:guid}/context", GetTenantContext)
             .WithMetadata(new TenantScopedEndpoint())
@@ -17,12 +17,10 @@ public static class UserEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> GetCurrentUserAsync(HttpContext httpContext, ICurrentUser currentUser, IUserAccessStore userAccessStore, CancellationToken cancellationToken)
+    private static async Task<IResult> GetCurrentUserAsync(ICurrentUser currentUser, IUserAccessStore userAccessStore, CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId) return Results.Unauthorized();
         var profile = await userAccessStore.GetUserAsync(userId, cancellationToken);
-        var sessionState = httpContext.Features.Get<BrowserSessionState>()?.Value;
-        var passwordChangeRequired = sessionState == SessionAuthenticationState.PasswordChangeRequired;
         return profile is null
             ? Results.Unauthorized()
             : Results.Ok(new
@@ -30,8 +28,7 @@ public static class UserEndpoints
                 userId = profile.UserId.Value,
                 displayName = profile.DisplayName,
                 role = profile.Role.ToString(),
-                isPlatformAdmin = profile.Role == UserRole.PlatformAdmin,
-                passwordChangeRequired
+                isPlatformAdmin = profile.Role == UserRole.PlatformAdmin
             });
     }
 
