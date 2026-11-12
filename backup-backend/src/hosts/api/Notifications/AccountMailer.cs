@@ -49,6 +49,36 @@ public sealed class AccountMailer(IServiceScopeFactory scopes, NotificationOptio
     private async Task<SendOutcome> SendAsync(AccountMail mail, CancellationToken cancellationToken)
     {
         if (options.PublicBaseUrl is null) return SendOutcome.Permanent("public_url_not_configured");
+        var (page, subject, text) = mail.Kind == AccountMailKind.PasswordReset
+            ? ("reset-password", "Şifre sıfırlama", "Şifrenizi sıfırlamak için aşağıdaki bağlantıyı açın. Bağlantı 30 dakika geçerlidir ve yalnızca bir kez kullanılabilir. Bu isteği siz yapmadıysanız bu iletiyi yok sayın.")
+            : ("verify-email", "E-posta adresini doğrulama", "E-posta adresinizi doğrulamak için aşağıdaki bağlantıyı açın. Bağlantı 24 saat geçerlidir ve yalnızca bir kez kullanılabilir.");
+        return await SubmitAsync(mail.To, subject, $"{text}\n\n{options.PublicBaseUrl.TrimEnd('/')}/{page}?token={mail.Token}", cancellationToken);
+    }
+
+    public async Task<bool?> SendSecurityNoticeAsync(string to, string eventType, DateTimeOffset occurredAt, CancellationToken cancellationToken)
+    {
+        var outcome = await SubmitAsync(to, "Hesap güvenliği bildirimi",
+            $"{SecurityNoticeText(eventType)}\n\nZaman (UTC): {occurredAt.UtcDateTime:yyyy-MM-dd HH:mm}\n\nBu işlemi siz yapmadıysanız şifrenizi değiştirin ve bir Platform Yöneticisine haber verin.", cancellationToken);
+        return outcome.Status switch { SendStatus.Sent => true, SendStatus.Retry => null, _ => false };
+    }
+
+    private static string SecurityNoticeText(string eventType) => eventType switch
+    {
+        NotificationEventTypes.SecurityPasswordChanged => "Hesabınızın şifresi değiştirildi.",
+        NotificationEventTypes.SecurityTemporaryPassword => "Hesabınıza bir yönetici tarafından geçici şifre atandı.",
+        NotificationEventTypes.SecurityPasswordReset => "Hesabınızın şifresi e-posta ile sıfırlandı.",
+        NotificationEventTypes.SecurityAccountDisabled => "Hesabınız devre dışı bırakıldı.",
+        NotificationEventTypes.SecurityAccountEnabled => "Hesabınız yeniden etkinleştirildi.",
+        NotificationEventTypes.SecurityFactorAdded => "Hesabınıza yeni bir ikinci faktör veya geçiş anahtarı eklendi.",
+        NotificationEventTypes.SecurityFactorRemoved => "Hesabınızdan bir ikinci faktör veya geçiş anahtarı kaldırıldı.",
+        NotificationEventTypes.SecurityRecoveryRegenerated => "Hesabınızın kurtarma kodları yeniden oluşturuldu.",
+        NotificationEventTypes.SecurityRecoveryUsed => "Hesabınıza giriş için bir kurtarma kodu kullanıldı.",
+        NotificationEventTypes.SecurityEmailChanged => "Hesabınızın e-posta adresi değiştirildi.",
+        _ => "Hesabınızda şüpheli bir giriş etkinliği algılandı."
+    };
+
+    private async Task<SendOutcome> SubmitAsync(string to, string subject, string body, CancellationToken cancellationToken)
+    {
         await using var scope = scopes.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<INotificationStore>();
         var transport = await store.GetTransportAsync(NotificationTransports.Email, cancellationToken);
@@ -59,15 +89,12 @@ public sealed class AccountMailer(IServiceScopeFactory scopes, NotificationOptio
             try { password = (await scope.ServiceProvider.GetRequiredService<ISecretProvider>().ResolveAsync(new SecretReference(transport!.SecretReference!), cancellationToken)).Reveal(); }
             catch (SecretUnavailableException) { return SendOutcome.Permanent("secret_unavailable"); }
         }
-        var (page, subject, text) = mail.Kind == AccountMailKind.PasswordReset
-            ? ("reset-password", "Şifre sıfırlama", "Şifrenizi sıfırlamak için aşağıdaki bağlantıyı açın. Bağlantı 30 dakika geçerlidir ve yalnızca bir kez kullanılabilir. Bu isteği siz yapmadıysanız bu iletiyi yok sayın.")
-            : ("verify-email", "E-posta adresini doğrulama", "E-posta adresinizi doğrulamak için aşağıdaki bağlantıyı açın. Bağlantı 24 saat geçerlidir ve yalnızca bir kez kullanılabilir.");
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(settings.FromName ?? NotificationMessageFormatter.Product, settings.FromAddress));
-        message.To.Add(MailboxAddress.Parse(mail.To));
+        message.To.Add(MailboxAddress.Parse(to));
         message.Subject = $"{NotificationMessageFormatter.Product}: {subject}";
         message.Headers.Add("Auto-Submitted", "auto-generated");
-        message.Body = new TextPart("plain") { Text = $"{text}\n\n{options.PublicBaseUrl.TrimEnd('/')}/{page}?token={mail.Token}" };
+        message.Body = new TextPart("plain") { Text = body };
         return await relay.SendAsync(settings, password, message, cancellationToken);
     }
 }

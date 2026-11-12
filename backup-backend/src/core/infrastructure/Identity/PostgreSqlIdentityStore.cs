@@ -1,6 +1,8 @@
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Identity;
+using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,22 +29,58 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
     public async Task<bool> ChangePasswordAsync(UserId userId, string newPasswordHash, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var credential = await context.PasswordCredentials.SingleOrDefaultAsync(row => row.UserId == userId, cancellationToken);
         if (credential is null) return false;
         credential.MarkPasswordChanged(newPasswordHash);
         context.AuditEvents.Add(AuditEvent.Record(now, userId, AuditActorKind.User, "user.password_changed", null,
             "user", userId.Value.ToString("D"), new Dictionary<string, object?> { ["userId"] = userId.Value.ToString("D") }));
+        await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityPasswordChanged, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return true;
     }
+
     public async Task CreateSessionAsync(UserSession session, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         context.UserSessions.Add(session);
         context.AuditEvents.Add(AuditEvent.Record(
             now, session.UserId, AuditActorKind.User, AuditActions.UserLoginSucceeded, null,
             "session", session.Id.ToString("D"), new Dictionary<string, object?> { ["result"] = "authenticated" }));
+        await NoteSignInAsync(context, session, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>The first sign-in of an account only seeds its known pairs; a later sign-in from an unseen device and IP address is reported.</summary>
+    private static async Task NoteSignInAsync(PlatformDbContext context, UserSession session, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var device = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(session.Device)));
+        var ip = session.IpAddress.Length > 64 ? session.IpAddress[..64] : session.IpAddress;
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"known-sign-in:" + session.UserId.Value.ToString("N")}, 0))", cancellationToken);
+        var known = await context.KnownSignIns.SingleOrDefaultAsync(row => row.UserId == session.UserId && row.DeviceHash == device && row.IpAddress == ip, cancellationToken);
+        if (known is not null)
+        {
+            await context.KnownSignIns.Where(row => row.UserId == session.UserId && row.DeviceHash == device && row.IpAddress == ip)
+                .ExecuteUpdateAsync(set => set.SetProperty(row => row.LastSeenAt, now), cancellationToken);
+            return;
+        }
+        var seenBefore = await context.KnownSignIns.AnyAsync(row => row.UserId == session.UserId, cancellationToken);
+        context.KnownSignIns.Add(new KnownSignIn(session.UserId, device, ip, now));
+        if (seenBefore) await SecurityNotifications.RecordAsync(context, session.UserId, NotificationEventTypes.SecuritySuspiciousLogin, now, cancellationToken);
+    }
+
+    public async Task RecordRepeatedLoginFailuresAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        // One notification per hour however often the limiter trips.
+        await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecuritySuspiciousLogin, now, cancellationToken,
+            $"{NotificationEventTypes.SecuritySuspiciousLogin}:lockout:{userId.Value:N}:{now.UtcDateTime:yyyyMMddHH}");
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<SessionAuthenticationState?> ValidateSessionAsync(Guid sessionId, UserId userId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -160,6 +198,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         context.AuditEvents.Add(AuditEvent.Record(
             now, credential.UserId, AuditActorKind.User, AuditActions.TotpEnrolled, null,
             "user", credential.UserId.ToString(), new Dictionary<string, object?> { ["result"] = "enrolled" }));
+        await SecurityNotifications.RecordAsync(context, credential.UserId, NotificationEventTypes.SecurityFactorAdded, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return issueCodes ? TotpEnrollmentOutcome.EnrolledWithRecoveryCodes : TotpEnrollmentOutcome.EnrolledWithoutRecoveryCodes;
@@ -176,6 +215,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
             context.AuditEvents.Add(AuditEvent.Record(
                 now, userId, AuditActorKind.User, AuditActions.TotpRemoved, null,
                 "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "removed" }));
+            await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityFactorRemoved, now, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
         }
         await transaction.CommitAsync(cancellationToken);
@@ -205,6 +245,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         context.AuditEvents.Add(AuditEvent.Record(
             now, userId, AuditActorKind.User, AuditActions.RecoveryCodesRegenerated, null,
             "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "regenerated", ["count"] = hashList.Count }));
+        await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityRecoveryRegenerated, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -221,6 +262,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
             context.AuditEvents.Add(AuditEvent.Record(
                 now, userId, AuditActorKind.User, AuditActions.RecoveryCodeConsumed, null,
                 "user", userId.ToString(), new Dictionary<string, object?> { ["result"] = "consumed" }));
+            await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityRecoveryUsed, now, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
         }
         await transaction.CommitAsync(cancellationToken);
@@ -270,6 +312,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         context.AuditEvents.Add(AuditEvent.Record(
             now, passkey.UserId, AuditActorKind.User, AuditActions.PasskeyRegistered, null,
             "passkey", passkey.Id.ToString("D"), new Dictionary<string, object?> { ["name"] = passkey.Name }));
+        await SecurityNotifications.RecordAsync(context, passkey.UserId, NotificationEventTypes.SecurityFactorAdded, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return issueCodes;
@@ -286,6 +329,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         context.AuditEvents.Add(AuditEvent.Record(
             now, userId, AuditActorKind.User, AuditActions.PasskeyRemoved, null,
             "passkey", id.ToString("D"), new Dictionary<string, object?> { ["name"] = cred.Name }));
+        await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityFactorRemoved, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
@@ -383,6 +427,7 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         await context.UserSessions.Where(row => row.UserId == token.UserId).ExecuteDeleteAsync(cancellationToken);
         context.AuditEvents.Add(AuditEvent.Record(now, token.UserId, AuditActorKind.User, AuditActions.PasswordResetCompleted, null,
             "user", token.UserId.Value.ToString("D"), new Dictionary<string, object?> { ["userId"] = token.UserId.Value.ToString("D") }));
+        await SecurityNotifications.RecordAsync(context, token.UserId, NotificationEventTypes.SecurityPasswordReset, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;

@@ -340,6 +340,7 @@ public sealed class IdentityTests
         }
         public Task<bool> IsUserDisabledAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<string?> GetUserDisplayNameAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult<string?>("Test User");
+        public Task RecordRepeatedLoginFailuresAsync(UserId userId, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task IssueEmailTokenAsync(AccountEmailToken token, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<UserId?> FindUsableEmailTokenAsync(string tokenHash, AccountEmailPurpose purpose, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> ConfirmEmailAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();

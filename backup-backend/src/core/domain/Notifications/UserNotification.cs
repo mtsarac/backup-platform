@@ -19,4 +19,6 @@ public sealed class UserNotification
     public Guid EventId { get; private set; }
     public UserId UserId { get; private set; }
     public DateTimeOffset? ReadAt { get; private set; }
+    /// <summary>Set once the email for a security notification has been handled (sent, or skipped because the user has no verified address or no SMTP).</summary>
+    public DateTimeOffset? EmailHandledAt { get; private set; }
 }

@@ -3010,6 +3010,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("EmailHandledAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
 
@@ -4036,6 +4039,30 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "Purpose");
 
                     b.ToTable("account_email_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Identity.KnownSignIn", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DeviceHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "DeviceHash", "IpAddress");
+
+                    b.ToTable("known_sign_ins", (string)null);
                 });
 
             modelBuilder.Entity("BackupPlatform.Identity.LoginThrottleEntry", b =>
@@ -5340,6 +5367,15 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("BackupPlatform.Identity.AccountEmailToken", b =>
                 {
                     b.HasOne("BackupPlatform.Identity.PasswordCredential", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Identity.KnownSignIn", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)

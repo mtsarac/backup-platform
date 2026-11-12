@@ -69,6 +69,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<AgentCapabilityRecord> AgentCapabilities => Set<AgentCapabilityRecord>();
     public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<KnownSignIn> KnownSignIns => Set<KnownSignIn>();
     public DbSet<AccountEmailToken> AccountEmailTokens => Set<AccountEmailToken>();
     public DbSet<LoginThrottleEntry> LoginThrottleEntries => Set<LoginThrottleEntry>();
     public DbSet<TotpCredential> TotpCredentials => Set<TotpCredential>();
