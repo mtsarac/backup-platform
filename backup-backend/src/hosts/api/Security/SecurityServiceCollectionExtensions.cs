@@ -89,6 +89,10 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<ICentralAuthorizationService, PostgreSqlCentralAuthorizationService>();
         services.AddSingleton<PasswordHashService>();
         services.AddScoped<AuthenticationService>();
+        services.AddScoped<AccountEmailService>();
+        services.AddSingleton<BackupPlatform.Api.Notifications.AccountMailer>();
+        services.AddSingleton<IAccountMailer>(provider => provider.GetRequiredService<BackupPlatform.Api.Notifications.AccountMailer>());
+        services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Notifications.AccountMailer>());
         services.AddScoped<PasskeyService>();
         services.AddScoped<TenantResolutionService>();
         services.AddScoped<IPlatformAdministrationStore, PostgreSqlPlatformAdministrationStore>();

@@ -217,14 +217,16 @@ internal sealed class AgentWorld : IAsyncDisposable
         return (password, new PasswordHashService().Hash(UserId.New(), password));
     }
 
-    public async Task<Account> SeedUserAsync(bool platformAdmin = false)
+    public async Task<Account> SeedUserAsync(bool platformAdmin = false, string? email = null, bool emailVerified = false)
     {
         var role = platformAdmin ? UserRole.PlatformAdmin : UserRole.UserAdmin;
         var user = new User(UserId.New(), "Agent test user", role);
         var identifier = $"user-{Guid.NewGuid():N}";
         await using var context = Database.CreatePlatformContext();
         context.Users.Add(user);
-        context.PasswordCredentials.Add(new PasswordCredential(user.Id, identifier, SharedCredential.Hash));
+        var credential = new PasswordCredential(user.Id, identifier, SharedCredential.Hash, email);
+        if (emailVerified) credential.MarkEmailVerified(Clock.GetUtcNow());
+        context.PasswordCredentials.Add(credential);
         await context.SaveChangesAsync();
         return new Account(user.Id, identifier, SharedCredential.Password);
     }

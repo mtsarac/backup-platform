@@ -331,4 +331,64 @@ public sealed class PostgreSqlIdentityStore(DbContextOptions<PlatformDbContext> 
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         return await context.Users.AsNoTracking().Where(row => row.Id == userId).Select(row => row.DisplayName).SingleOrDefaultAsync(cancellationToken);
     }
+
+    public async Task IssueEmailTokenAsync(AccountEmailToken token, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.AccountEmailTokens.Where(row => row.UserId == token.UserId && row.Purpose == token.Purpose && row.ConsumedAt == null).ExecuteDeleteAsync(cancellationToken);
+        context.AccountEmailTokens.Add(token);
+        context.AuditEvents.Add(AuditEvent.Record(token.CreatedAt, token.UserId, AuditActorKind.User,
+            token.Purpose == AccountEmailPurpose.PasswordReset ? AuditActions.PasswordResetRequested : AuditActions.EmailVerificationRequested, null,
+            "user", token.UserId.Value.ToString("D"), new Dictionary<string, object?> { ["userId"] = token.UserId.Value.ToString("D") }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<UserId?> FindUsableEmailTokenAsync(string tokenHash, AccountEmailPurpose purpose, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await (from token in context.AccountEmailTokens.AsNoTracking()
+                      join credential in context.PasswordCredentials.AsNoTracking() on token.UserId equals credential.UserId
+                      where token.TokenHash == tokenHash && token.Purpose == purpose && token.ConsumedAt == null && token.ExpiresAt > now
+                          && credential.NormalizedEmail == token.NormalizedEmail && (purpose != AccountEmailPurpose.PasswordReset || credential.EmailVerifiedAt != null)
+                      select token.UserId).SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<bool> ConfirmEmailAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var token = await context.AccountEmailTokens.SingleOrDefaultAsync(row => row.TokenHash == tokenHash && row.Purpose == AccountEmailPurpose.Verification, cancellationToken);
+        if (token is null || !await ConsumeAsync(context, token.Id, now, cancellationToken)) return false;
+        var credential = await context.PasswordCredentials.SingleOrDefaultAsync(row => row.UserId == token.UserId, cancellationToken);
+        if (credential is null || credential.NormalizedEmail != token.NormalizedEmail) return false;
+        credential.MarkEmailVerified(now);
+        context.AuditEvents.Add(AuditEvent.Record(now, token.UserId, AuditActorKind.User, AuditActions.EmailVerified, null,
+            "user", token.UserId.Value.ToString("D"), new Dictionary<string, object?> { ["userId"] = token.UserId.Value.ToString("D") }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> CompletePasswordResetAsync(string tokenHash, string newPasswordHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var token = await context.AccountEmailTokens.SingleOrDefaultAsync(row => row.TokenHash == tokenHash && row.Purpose == AccountEmailPurpose.PasswordReset, cancellationToken);
+        if (token is null || !await ConsumeAsync(context, token.Id, now, cancellationToken)) return false;
+        var credential = await context.PasswordCredentials.SingleOrDefaultAsync(row => row.UserId == token.UserId, cancellationToken);
+        if (credential is null || credential.EmailVerifiedAt is null || credential.NormalizedEmail != token.NormalizedEmail) return false;
+        credential.MarkPasswordChanged(newPasswordHash);
+        await context.UserSessions.Where(row => row.UserId == token.UserId).ExecuteDeleteAsync(cancellationToken);
+        context.AuditEvents.Add(AuditEvent.Record(now, token.UserId, AuditActorKind.User, AuditActions.PasswordResetCompleted, null,
+            "user", token.UserId.Value.ToString("D"), new Dictionary<string, object?> { ["userId"] = token.UserId.Value.ToString("D") }));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private static async Task<bool> ConsumeAsync(PlatformDbContext context, Guid tokenId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        await context.AccountEmailTokens.Where(row => row.Id == tokenId && row.ConsumedAt == null && row.ExpiresAt > now)
+            .ExecuteUpdateAsync(set => set.SetProperty(row => row.ConsumedAt, now), cancellationToken) == 1;
 }

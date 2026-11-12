@@ -19,6 +19,9 @@ namespace BackupPlatform.Notifications.Senders;
 public sealed class EmailNotificationSender(
     INotificationStore store, ISecretProvider secrets, NotificationNetworkGuard guard, IRecipientTokens tokens, NotificationOptions options, Action<SmtpClient>? configureClient = null) : INotificationSender
 {
+    private readonly SmtpRelay relay = new(guard, configureClient);
+
+
     public NotificationChannelKind Kind => NotificationChannelKind.Email;
 
     public async Task<SendOutcome> SendAsync(DeliveryWork work, CancellationToken cancellationToken)
@@ -52,53 +55,6 @@ public sealed class EmailNotificationSender(
         message.Headers.Add("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
         message.Body = new TextPart("plain") { Text = $"{text}\n\nTo stop receiving these emails, open:\n{unsubscribe}" };
 
-        Socket? socket = null;
-        try
-        {
-            socket = await guard.ConnectAsync(settings.Host, settings.Port, cancellationToken);
-            using var client = new SmtpClient();
-            configureClient?.Invoke(client);
-            var security = settings.Security switch
-            {
-                SmtpSecurity.Implicit => SecureSocketOptions.SslOnConnect,
-                SmtpSecurity.None => SecureSocketOptions.None,
-                _ => SecureSocketOptions.StartTls
-            };
-            await client.ConnectAsync(socket, settings.Host, settings.Port, security, cancellationToken);
-            socket = null; // owned by the client from here on
-            if (password is not null) await client.AuthenticateAsync(settings.Username!, password, cancellationToken);
-            await client.SendAsync(message, cancellationToken);
-            await client.DisconnectAsync(quit: true, cancellationToken);
-            return SendOutcome.Sent;
-        }
-        catch (NotificationNetworkException exception)
-        {
-            return exception.Code == NotificationNetworkException.Denied ? SendOutcome.Permanent(exception.Code) : SendOutcome.Transient(exception.Code);
-        }
-        catch (AuthenticationException)
-        {
-            return SendOutcome.Permanent("smtp_auth_failed");
-        }
-        catch (SmtpCommandException exception)
-        {
-            return (int)exception.StatusCode >= 500 ? SendOutcome.Permanent("smtp_rejected") : SendOutcome.Transient("smtp_temporary");
-        }
-        catch (SslHandshakeException)
-        {
-            return SendOutcome.Transient("smtp_tls_failed");
-        }
-        catch (NotSupportedException)
-        {
-            // MailKit's report that a required STARTTLS (or an authentication mechanism) is not offered: refused, never downgraded.
-            return SendOutcome.Transient("smtp_tls_unavailable");
-        }
-        catch (Exception exception) when (exception is ServiceNotConnectedException or ServiceNotAuthenticatedException or ProtocolException or IOException or SocketException or SmtpProtocolException)
-        {
-            return SendOutcome.Transient("smtp_unavailable");
-        }
-        finally
-        {
-            socket?.Dispose();
-        }
+        return await relay.SendAsync(settings, password, message, cancellationToken);
     }
 }

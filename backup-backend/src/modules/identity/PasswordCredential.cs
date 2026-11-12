@@ -20,12 +20,15 @@ public sealed class PasswordCredential
     public string? NormalizedEmail { get; private set; }
     public string PasswordHash { get; private set; }
     public bool MustChangePassword { get; private set; }
+    public DateTimeOffset? EmailVerifiedAt { get; private set; }
     public void UpdateIdentity(string loginIdentifier, string? email)
     {
         NormalizedLoginIdentifier = LoginIdentifierNormalizer.Normalize(loginIdentifier);
         LoginIdentifier = loginIdentifier.Trim();
+        var normalizedEmail = email is null ? null : LoginIdentifierNormalizer.NormalizeEmail(email);
+        if (normalizedEmail != NormalizedEmail) EmailVerifiedAt = null;
         Email = email?.Trim();
-        NormalizedEmail = email is null ? null : LoginIdentifierNormalizer.NormalizeEmail(email);
+        NormalizedEmail = normalizedEmail;
     }
 
     public void ReplacePasswordHash(string passwordHash, bool mustChangePassword = false)
@@ -34,6 +37,8 @@ public sealed class PasswordCredential
         PasswordHash = passwordHash;
         MustChangePassword = mustChangePassword;
     }
+
+    public void MarkEmailVerified(DateTimeOffset now) => EmailVerifiedAt = now.ToUniversalTime();
 
     public void MarkPasswordChanged(string passwordHash)
     {

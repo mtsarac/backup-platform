@@ -31,6 +31,10 @@ public static class AuditActions
     public const string UserLoginSucceeded = "auth.login_succeeded";
     public const string UserLoginFailed = "auth.login_failed";
     public const string UserLogout = "auth.logout";
+    public const string EmailVerificationRequested = "auth.email_verification_requested";
+    public const string EmailVerified = "auth.email_verified";
+    public const string PasswordResetRequested = "auth.password_reset_requested";
+    public const string PasswordResetCompleted = "auth.password_reset_completed";
     public const string TotpEnrolled = "auth.totp_enrolled";
     public const string TotpRemoved = "auth.totp_removed";
     public const string RecoveryCodesRegenerated = "auth.recovery_codes_regenerated";

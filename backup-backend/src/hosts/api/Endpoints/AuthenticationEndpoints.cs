@@ -114,6 +114,11 @@ public static class AuthenticationEndpoints
         auth.MapPost("/passkeys/second-factor/options", CreateSecondFactorOptionsAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
         auth.MapPost("/passkeys/second-factor", VerifySecondFactorAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
         auth.MapPost("/change-password", ChangePasswordAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
+        auth.MapGet("/email-recovery", GetEmailRecoveryAsync).AllowAnonymous();
+        auth.MapPost("/password-reset/request", RequestPasswordResetAsync).AllowAnonymous();
+        auth.MapPost("/password-reset/complete", CompletePasswordResetAsync).AllowAnonymous();
+        auth.MapPost("/email-verification/request", RequestEmailVerificationAsync).RequireAuthorization();
+        auth.MapPost("/email-verification/confirm", ConfirmEmailVerificationAsync).AllowAnonymous();
         return endpoints;
     }
     private static IResult GetAntiforgeryToken(HttpContext context, IAntiforgery antiforgery)
@@ -308,6 +313,56 @@ public static class AuthenticationEndpoints
         return Results.NoContent();
     }
 
+    public sealed record PasswordResetRequest(string? LoginIdentifier);
+    public sealed record PasswordResetCompletionRequest(string? Token, string? NewPassword);
+    public sealed record EmailVerificationConfirmationRequest(string? Token);
+
+    private static readonly IResult EmailRecoveryUnavailable = Results.Json(new { error = "email_recovery_unavailable" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    private static async Task<IResult> GetEmailRecoveryAsync(AccountEmailService service, CancellationToken cancellationToken) =>
+        Results.Ok(new { available = await service.IsAvailableAsync(cancellationToken) });
+
+    /// <summary>Answers the same way for known, unverified and unknown accounts; every request counts against the account and IP limits.</summary>
+    private static async Task<IResult> RequestPasswordResetAsync(PasswordResetRequest? request, HttpContext context, AccountEmailService service, LoginThrottle throttle)
+    {
+        if (!await service.IsAvailableAsync(context.RequestAborted)) return EmailRecoveryUnavailable;
+        var ip = context.Connection.RemoteIpAddress?.ToString();
+        var identifier = request?.LoginIdentifier;
+        if (await throttle.RetryAfterAsync("password-reset", identifier, ip, context.RequestAborted) is { } wait)
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            return Results.Json(new { error = "Too many requests. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        await throttle.FailedAsync("password-reset", identifier, ip, context.RequestAborted);
+        await service.RequestPasswordResetAsync(identifier, context.RequestAborted);
+        return Results.Accepted(null, new { accepted = true });
+    }
+
+    private static async Task<IResult> CompletePasswordResetAsync(PasswordResetCompletionRequest? request, AccountEmailService service, CancellationToken cancellationToken)
+    {
+        var (result, failureReason) = await service.CompletePasswordResetAsync(request?.Token, request?.NewPassword, cancellationToken);
+        return result switch
+        {
+            PasswordResetResult.Completed => Results.NoContent(),
+            PasswordResetResult.InvalidPassword => Results.BadRequest(new { error = failureReason, message = "The new password does not meet the password policy." }),
+            _ => Results.BadRequest(new { error = "invalid_token", message = "The reset link is invalid or has expired." })
+        };
+    }
+
+    private static async Task<IResult> RequestEmailVerificationAsync(HttpContext context, AccountEmailService service)
+    {
+        if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
+        if (!await service.IsAvailableAsync(context.RequestAborted)) return EmailRecoveryUnavailable;
+        return await service.SendVerificationAsync(userId!, context.RequestAborted)
+            ? Results.Accepted(null, new { accepted = true })
+            : Results.Conflict(new { error = "email_not_verifiable" });
+    }
+
+    private static async Task<IResult> ConfirmEmailVerificationAsync(EmailVerificationConfirmationRequest? request, AccountEmailService service, CancellationToken cancellationToken) =>
+        await service.ConfirmEmailAsync(request?.Token, cancellationToken)
+            ? Results.NoContent()
+            : Results.BadRequest(new { error = "invalid_token", message = "The verification link is invalid or has expired." });
+
     public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 
     private static async Task<IResult> ChangePasswordAsync(
@@ -353,7 +408,8 @@ public static class AuthenticationEndpoints
         var hasTotp = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted) is not null;
         var hasPasskeys = await identityStore.HasPasskeysAsync(userId!, context.RequestAborted);
         var recoveryCodesCount = await identityStore.GetRemainingRecoveryCodesCountAsync(userId!, context.RequestAborted);
-        return Results.Ok(new { hasTotp, hasPasskeys, remainingRecoveryCodes = recoveryCodesCount });
+        var credential = await identityStore.FindCredentialByUserIdAsync(userId!, context.RequestAborted);
+        return Results.Ok(new { hasTotp, hasPasskeys, remainingRecoveryCodes = recoveryCodesCount, hasEmail = credential?.Email is not null, emailVerified = credential?.EmailVerifiedAt is not null });
     }
 
     private static async Task<IResult> SetupTotpAsync(

@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Key } from 'lucide-react'
 import { BrandMark } from '@/components/ui/brand-mark'
@@ -379,6 +379,7 @@ export function LoginPage() {
                 <Key aria-hidden="true" className="size-4" />
                 {tx('Geçiş anahtarı ile giriş yap')}
               </Button>
+              <Link className="block text-center text-sm text-primary underline-offset-4 hover:underline" to="/forgot-password">{tx('Şifremi unuttum')}</Link>
             </Card>
           )}
           <LanguageSwitcher />

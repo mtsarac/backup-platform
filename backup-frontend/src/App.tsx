@@ -9,6 +9,9 @@ import { useAuth } from './features/auth/use-auth'
 import { TenantProvider } from './features/tenancy/tenant-provider'
 import { LoginPage } from './pages/login/login-page'
 import { TenantSelectPage } from './pages/tenancy/tenant-select-page'
+import { ForgotPasswordPage } from './pages/login/forgot-password-page'
+import { ResetPasswordPage } from './pages/login/reset-password-page'
+import { VerifyEmailPage } from './pages/login/verify-email-page'
 import { SessionsPage } from './pages/login/sessions-page'
 import { SecurityPage } from './pages/login/security-page'
 import { PasskeysPage } from './pages/login/passkeys-page'
@@ -22,6 +25,9 @@ function AppRoutes() {
   if (error) return <div className="mx-auto max-w-lg space-y-4 p-6"><QueryState isPending={false} error={error} /><Button onClick={refresh}>{tx("Tekrar dene")}</Button></div>
   return <Routes>
     <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <Route path="/verify-email" element={<VerifyEmailPage />} />
     <Route element={<ProtectedRoute isAuthenticated={isAuthenticated} />}>
       <Route path="/" element={<TenantSelectPage />} />
       <Route path="/sessions" element={<SessionsPage />} />
