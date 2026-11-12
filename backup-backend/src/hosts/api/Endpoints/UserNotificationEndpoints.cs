@@ -1,3 +1,4 @@
+using BackupPlatform.Api.Push;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
@@ -20,13 +21,13 @@ public static class UserNotificationEndpoints
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var userId = currentUser.UserId!;
-        var notifications = await (from item in context.VisibleUserNotifications(userId).AsNoTracking()
+        var rows = await (from item in context.VisibleUserNotifications(userId).AsNoTracking()
             join notificationEvent in context.NotificationEvents.AsNoTracking() on item.EventId equals notificationEvent.Id
             where item.UserId == userId
             orderby notificationEvent.OccurredAt descending, item.Id
-            select new { item.Id, item.EventId, notificationEvent.Type, notificationEvent.SubjectName, notificationEvent.OccurredAt, item.ReadAt })
+            select new { item.Id, item.EventId, notificationEvent.Type, notificationEvent.SubjectName, notificationEvent.OccurredAt, item.ReadAt, notificationEvent.TenantId, notificationEvent.SubjectKind, notificationEvent.SubjectId })
             .ToListAsync(cancellationToken);
-        return Results.Ok(notifications);
+        return Results.Ok(rows.Select(row => new InAppNotificationMessage(row.Id, row.EventId, row.Type, row.SubjectName, row.OccurredAt, row.ReadAt, row.TenantId?.Value, row.SubjectKind, row.SubjectId)));
     }
 
     private static async Task<IResult> ReadAsync(Guid id, ICurrentUser currentUser, DbContextOptions<PlatformDbContext> options, TimeProvider time, CancellationToken cancellationToken)

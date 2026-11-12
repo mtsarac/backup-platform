@@ -1,3 +1,4 @@
+import { AuthContext, type AuthContextValue } from '@/features/auth/auth-context'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -80,5 +81,35 @@ describe('in-app notifications', () => {
     await user.click(screen.getByRole('button', { name: 'Okundu olarak işaretle' }))
     expect(await within(screen.getByRole('region', { name: 'Bildirimler' })).findByRole('alert')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Okundu olarak işaretle' })).toBeInTheDocument()
+  })
+
+  it('displays share notification labels and links to the related share screen for UserAdmin and PlatformAdmin', async () => {
+    const user = userEvent.setup()
+    records = [
+      { id: 'share-n1', eventId: 'ev-1', type: 'backup_share_created', subjectName: 'ProductionDb', occurredAt: '2026-01-01T12:00:00Z', readAt: null, tenantId: 'tenant-a', subjectKind: 'backup_share', subjectId: 'share-1' },
+      { id: 'share-n2', eventId: 'ev-2', type: 'backup_share_extended', subjectName: 'AnalyticsDb', occurredAt: '2026-01-01T13:00:00Z', readAt: null, tenantId: 'tenant-a', subjectKind: 'backup_share', subjectId: 'share-2' },
+      { id: 'share-n3', eventId: 'ev-3', type: 'backup_share_revoked', subjectName: 'ArchiveDb', occurredAt: '2026-01-01T14:00:00Z', readAt: null, tenantId: 'tenant-a', subjectKind: 'backup_share', subjectId: 'share-3' },
+    ]
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const { unmount } = render(
+      <AuthContext.Provider value={{ user: { userId: 'user-a', displayName: 'Alice', role: 'UserAdmin', isPlatformAdmin: false } } as AuthContextValue}>
+        <QueryClientProvider client={client}><InAppNotifications userId="user-a" /></QueryClientProvider>
+      </AuthContext.Provider>
+    )
+    await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
+    expect(await screen.findByText(/Paylaşım oluşturuldu/)).toBeInTheDocument()
+    expect(screen.getByText(/Paylaşım süresi uzatıldı/)).toBeInTheDocument()
+    expect(screen.getByText(/Paylaşım iptal edildi/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'ProductionDb' })).toHaveAttribute('href', '/tenants/tenant-a/shares')
+    unmount()
+
+    const platformClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <AuthContext.Provider value={{ user: { userId: 'pa-1', displayName: 'Peter', role: 'PlatformAdmin', isPlatformAdmin: true } } as AuthContextValue}>
+        <QueryClientProvider client={platformClient}><InAppNotifications userId="pa-1" /></QueryClientProvider>
+      </AuthContext.Provider>
+    )
+    await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
+    expect(await screen.findByRole('link', { name: 'ProductionDb' })).toHaveAttribute('href', '/platform/shares')
   })
 })

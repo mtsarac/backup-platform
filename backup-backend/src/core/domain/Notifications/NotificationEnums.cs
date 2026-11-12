@@ -60,6 +60,9 @@ public static class NotificationEventTypes
     public const string Test = "test";
     /// <summary>Not selectable in a policy; the one message an unconfirmed email recipient may receive (a confirmation request with a link, nothing else).</summary>
     public const string RecipientVerification = "recipient_verification";
+    public const string BackupShareCreated = "backup_share_created";
+    public const string BackupShareExtended = "backup_share_extended";
+    public const string BackupShareRevoked = "backup_share_revoked";
 
     public static IReadOnlyList<string> Selectable { get; } = [BackupFailed, BackupStale, AgentOffline, QuotaCritical, ReplicaDegraded, StorageCapacityCritical, BackupSizeAnomaly];
 

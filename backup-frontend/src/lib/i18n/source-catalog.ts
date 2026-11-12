@@ -3286,4 +3286,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Bu kodları güvenli bir yerde saklayın. Her kod yalnızca bir kez kullanılabilir.": {"tr":"Bu kodları güvenli bir yerde saklayın. Her kod yalnızca bir kez kullanılabilir.","en":"Store these codes in a safe place. Each code can only be used once."},
   "Şifreyle doğrula": {"tr":"Şifreyle doğrula","en":"Verify with password"},
   "Geçiş anahtarıyla doğrula": {"tr":"Geçiş anahtarıyla doğrula","en":"Verify with passkey"},
+  "Paylaşım oluşturuldu": {"tr":"Paylaşım oluşturuldu","en":"Share created"},
+  "Paylaşım süresi uzatıldı": {"tr":"Paylaşım süresi uzatıldı","en":"Share extended"},
+  "Paylaşım iptal edildi": {"tr":"Paylaşım iptal edildi","en":"Share revoked"},
 }
