@@ -165,11 +165,20 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
                 var share = await context.BackupShares.AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == session.TenantId && s.Id == shareId, cancellationToken);
                 if (share is null || share.ArtifactId != session.ArtifactId || share.RevokedAtUtc is not null)
                 {
-                    if (startsStreaming)
+                    if (startsStreaming && session.AgentId is null)
                     {
                         var reason = share?.RevokedAtUtc is not null ? "share_revoked" : "share_not_found";
                         await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, shareId, reason, transition.Now, true), cancellationToken);
                         await transaction.CommitAsync(cancellationToken);
+                    }
+                    else if (share?.RevokedAtUtc is not null && session.AgentId is not null && !session.IsTerminal)
+                    {
+                        if (session.CancelByRevocation(transition.Now))
+                        {
+                            AddAudit(context, session, transition.Now, "download.cancelled");
+                            await context.SaveChangesAsync(cancellationToken);
+                            await transaction.CommitAsync(cancellationToken);
+                        }
                     }
                     return null;
                 }
@@ -211,9 +220,23 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
             ORDER BY "ExpiresAt", "Id" LIMIT {MaxBatch} FOR UPDATE SKIP LOCKED
             """).ToListAsync(cancellationToken);
         var sessions = await context.DownloadSessions.Where(session => ids.Contains(session.Id)).ToListAsync(cancellationToken);
+        var shareIds = sessions.Where(s => s.ShareId is not null).Select(s => s.ShareId!.Value).Distinct().ToList();
+        var revokedShares = shareIds.Count == 0
+            ? []
+            : (await context.BackupShares.AsNoTracking()
+                .Where(s => shareIds.Contains(s.Id) && s.RevokedAtUtc != null)
+                .Select(s => s.Id)
+                .ToListAsync(cancellationToken)).ToHashSet();
         var expired = 0;
         foreach (var session in sessions)
         {
+            if (session.ShareId is { } sid && revokedShares.Contains(sid) && session.State is DownloadState.Streaming or DownloadState.Preparing)
+            {
+                if (!session.CancelByRevocation(now)) continue;
+                AddAudit(context, session, now, "download.cancelled");
+                expired++;
+                continue;
+            }
             if (!session.Expire(now)) continue;
             AddAudit(context, session, now, "download.expired");
             expired++;
@@ -233,7 +256,16 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
             """).ToListAsync(cancellationToken);
         if (ids.Count == 0) return null;
         var session = await context.DownloadSessions.SingleAsync(entity => entity.TenantId == tenantId && entity.Id == sessionId, cancellationToken);
-        if (session.Expire(now))
+        if (session.ShareId is { } sid && session.State is DownloadState.Streaming or DownloadState.Preparing
+            && await context.BackupShares.AsNoTracking().AnyAsync(s => s.TenantId == tenantId && s.Id == sid && s.RevokedAtUtc != null, cancellationToken))
+        {
+            if (session.CancelByRevocation(now))
+            {
+                AddAudit(context, session, now, "download.cancelled");
+                await context.SaveChangesAsync(cancellationToken);
+            }
+        }
+        else if (session.Expire(now))
         {
             AddAudit(context, session, now, "download.expired");
             await context.SaveChangesAsync(cancellationToken);
@@ -288,8 +320,22 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
     }
 
 
+    public async Task<bool> IsShareRevokedAsync(TenantId tenantId, Guid shareId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var share = await context.BackupShares.AsNoTracking()
+            .SingleOrDefaultAsync(s => s.TenantId == tenantId && s.Id == shareId, cancellationToken);
+        return share is null || share.RevokedAtUtc is not null;
+    }
+
+    internal static void RecordSessionAudit(PlatformDbContext context, DownloadSession session, DateTimeOffset now, string action) =>
+        AddAudit(context, session, now, action);
+
     private static void AddAudit(PlatformDbContext context, DownloadSession session, DateTimeOffset now, string action)
     {
+        var result = session.State == DownloadState.Cancelled && session.FailureCode == "cancelled_by_revocation"
+            ? "cancelled by revocation"
+            : session.IsTerminal ? session.State.ToString() : (action == "download.streaming" ? "streaming" : "requested");
         var details = new Dictionary<string, object?>
         {
             ["shareId"] = session.ShareId,
@@ -307,7 +353,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
             ["startTime"] = action == "download.streaming" ? now : session.CreatedAt,
             ["completedAt"] = session.ReleasedAt,
             ["endTime"] = session.ReleasedAt,
-            ["result"] = session.IsTerminal ? session.State.ToString() : (action == "download.streaming" ? "streaming" : "requested"),
+            ["result"] = result,
             ["decrypted"] = session.Decrypted
         };
         var actorKind = session.ShareId is not null ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;

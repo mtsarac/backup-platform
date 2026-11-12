@@ -59,7 +59,8 @@ public sealed class DownloadSession : ITenantOwned
     public bool Transition(DownloadState expectedState, string? expectedOwner, DownloadState state, string? owner, DateTimeOffset now,
         TimeSpan? leaseDuration, long bytes, string? failureCode)
     {
-        if (IsTerminal || State != expectedState || LeaseOwner != expectedOwner || ExpiresAt <= now || LeaseExpiresAt <= now) return false;
+        var isRevocationCancel = state == DownloadState.Cancelled && failureCode == "cancelled_by_revocation";
+        if (IsTerminal || State != expectedState || LeaseOwner != expectedOwner || (!isRevocationCancel && (ExpiresAt <= now || LeaseExpiresAt <= now))) return false;
         if (bytes < TransferredBytes || bytes > SizeBytes) throw new ArgumentOutOfRangeException(nameof(bytes));
         var allowed = state is DownloadState.Failed or DownloadState.Cancelled ||
             (State == DownloadState.Preparing && state is DownloadState.Preparing or DownloadState.Ready) ||
@@ -97,6 +98,20 @@ public sealed class DownloadSession : ITenantOwned
         if (IsTerminal || (ExpiresAt > now && (LeaseExpiresAt is null || LeaseExpiresAt > now))) return false;
         State = DownloadState.Failed; FailureCode = LeaseOwner is null ? "download_expired" : "download_interrupted";
         ReleasedAt = now; LeaseOwner = null; LeaseExpiresAt = null;
+        return true;
+    }
+
+    public bool CancelByRevocation(DateTimeOffset now, long? bytes = null)
+    {
+        if (IsTerminal) return false;
+        var finalBytes = bytes ?? TransferredBytes;
+        if (finalBytes < TransferredBytes || finalBytes > SizeBytes) throw new ArgumentOutOfRangeException(nameof(bytes));
+        State = DownloadState.Cancelled;
+        TransferredBytes = finalBytes;
+        FailureCode = "cancelled_by_revocation";
+        ReleasedAt = now.ToUniversalTime();
+        LeaseOwner = null;
+        LeaseExpiresAt = null;
         return true;
     }
 }

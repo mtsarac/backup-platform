@@ -1,4 +1,6 @@
+using BackupPlatform.Application.Downloads;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 
@@ -353,5 +355,60 @@ public sealed class BackupShareDomainTests
         Assert.Equal(BackupShareStatus.Active, share.GetStatus(Now.AddHours(2)));
         Assert.True(share.IsActive(Now.AddHours(47)));
         Assert.False(share.IsActive(Now.AddHours(48)));
+    }
+
+    [Fact]
+    public void ActiveDownloadRegistry_CancelsOnlyTargetShare_AndCleansUpOnDispose()
+    {
+        var registry = new ActiveDownloadRegistry();
+        var shareA = Guid.NewGuid();
+        var shareB = Guid.NewGuid();
+        var sessionA = Guid.NewGuid();
+        var sessionB = Guid.NewGuid();
+        using var ctsA = new CancellationTokenSource();
+        using var ctsB = new CancellationTokenSource();
+
+        using (registry.Register(sessionA, shareA, ctsA))
+        using (registry.Register(sessionB, shareB, ctsB))
+        {
+            Assert.Equal(2, registry.Count);
+            Assert.Contains(shareA, registry.GetActiveShareIds());
+            Assert.Contains(shareB, registry.GetActiveShareIds());
+
+            var cancelled = registry.CancelShare(shareA);
+            Assert.Equal(1, cancelled);
+            Assert.True(ctsA.IsCancellationRequested);
+            Assert.False(ctsB.IsCancellationRequested);
+        }
+
+        Assert.Equal(0, registry.Count);
+        Assert.Empty(registry.GetActiveShareIds());
+    }
+
+    [Fact]
+    public void DownloadSession_CancelByRevocation_TransitionsToCancelledAndReleasesHold()
+    {
+        var (artifact, replica) = CreateArtifact();
+        var shareId = Guid.NewGuid();
+        var session = new DownloadSession(
+            Guid.NewGuid(),
+            artifact,
+            replica,
+            Guid.NewGuid(),
+            "backup.bak",
+            Now,
+            TimeSpan.FromMinutes(15),
+            shareId: shareId);
+
+        Assert.True(session.Transition(DownloadState.Ready, null, DownloadState.Streaming, "owner-1", Now, TimeSpan.FromMinutes(1), 0, null));
+        Assert.True(session.CancelByRevocation(Now.AddSeconds(5), bytes: 512));
+
+        Assert.Equal(DownloadState.Cancelled, session.State);
+        Assert.Equal("cancelled_by_revocation", session.FailureCode);
+        Assert.Equal(512, session.TransferredBytes);
+        Assert.Equal(Now.AddSeconds(5), session.ReleasedAt);
+        Assert.Null(session.LeaseOwner);
+        Assert.Null(session.LeaseExpiresAt);
+        Assert.False(session.IsPinned(Now.AddSeconds(5)));
     }
 }

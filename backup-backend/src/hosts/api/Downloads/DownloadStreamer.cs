@@ -11,7 +11,8 @@ using Microsoft.Net.Http.Headers;
 namespace BackupPlatform.Api.Downloads;
 
 /// <summary>One bounded buffer and awaited writes; a leased hold survives backpressure and is released on every terminal outcome.</summary>
-public sealed class DownloadStreamer(IDownloadStore store, DownloadService service, TimeProvider time, ILogger<DownloadStreamer> logger, AgentDownloadSpool spool, ITenantWrapKeyStore? keys = null)
+public sealed class DownloadStreamer(IDownloadStore store, DownloadService service, TimeProvider time, ILogger<DownloadStreamer> logger, AgentDownloadSpool spool,
+    ITenantWrapKeyStore? keys = null, ActiveDownloadRegistry? registry = null)
 {
     private const int BufferSize = 64 * 1024;
 
@@ -19,6 +20,9 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
     {
         var owner = Guid.NewGuid().ToString("D");
         var releaseSession = session;
+        using var revocationCts = new CancellationTokenSource();
+        using var transfer = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, revocationCts.Token);
+        using var registration = registry?.Register(session.Id, session.ShareId, revocationCts);
         DownloadSession? claimed;
         try
         {
@@ -39,12 +43,12 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
             return;
         }
         long transferred = 0;
-        using var transfer = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         using var renewStop = new CancellationTokenSource();
         var renewal = RenewAsync(session.Id, owner, () => Interlocked.Read(ref transferred), transfer, renewStop.Token);
         var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
         try
         {
+            transfer.Token.ThrowIfCancellationRequested();
             var (source, activeSession) = await service.OpenReadWithFallbackAsync(claimed, transfer.Token);
             await using (source)
             {
@@ -56,7 +60,11 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
                 context.Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment") { FileName = session.Filename, FileNameStar = session.Filename }.ToString();
                 if (session.Decrypted)
                 {
-                    await DecryptToResponseAsync(context, session, source, buffer, transfer.Token);
+                    await DecryptToResponseAsync(context, session, source, buffer, bytesWritten =>
+                    {
+                        var next = Math.Min(session.SizeBytes, Interlocked.Read(ref transferred) + bytesWritten);
+                        Interlocked.Exchange(ref transferred, next);
+                    }, transfer.Token);
                     Interlocked.Exchange(ref transferred, session.SizeBytes);
                 }
                 else
@@ -94,8 +102,10 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
         catch (Exception exception)
         {
             await StopRenewalAsync(renewStop, renewal);
-            var cancelled = context.RequestAborted.IsCancellationRequested;
-            var code = cancelled ? "download_cancelled" : exception switch
+            var revoked = revocationCts.IsCancellationRequested
+                || (session.ShareId is { } sid && await SafeIsShareRevokedAsync(session, sid));
+            var cancelled = revoked || context.RequestAborted.IsCancellationRequested;
+            var code = revoked ? "cancelled_by_revocation" : cancelled ? "download_cancelled" : exception switch
             {
                 DownloadUnavailableException unavailable => unavailable.Code,
                 BpeFormatException => "integrity_mismatch",
@@ -115,7 +125,7 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
             {
                 logger.LogError("Download {SessionId} terminal audit failed with {ExceptionType}; expiring durable hold remains authoritative", session.Id, auditException.GetType().Name);
             }
-            if (context.Response.HasStarted) context.Abort();
+            if (context.Response.HasStarted || transferred > 0) context.Abort();
             else
             {
                 context.Response.Headers.Clear();
@@ -133,7 +143,7 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
     }
 
     /// <summary>Verify the full stored copy before unwrapping, then verify private plaintext staging before exposing any plaintext response byte.</summary>
-    private async Task DecryptToResponseAsync(HttpContext context, DownloadSession session, Stream source, byte[] buffer, CancellationToken cancellationToken)
+    private async Task DecryptToResponseAsync(HttpContext context, DownloadSession session, Stream source, byte[] buffer, Action<int> onBytesWritten, CancellationToken cancellationToken)
     {
         var artifact = await store.GetArtifactAsync(session.TenantId, session.ArtifactId, cancellationToken) ?? throw new DownloadUnavailableException("artifact_not_found");
         if (artifact is not { Format: BackupArtifact.BpeFormat, EncryptionKeyId: { } keyId, EncryptionWrappedDekBase64: { } wrapped }) throw new DownloadUnavailableException("artifact_not_encrypted");
@@ -164,7 +174,24 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
         // Revalidate the hold after staging, before the first plaintext byte; renewal also fences long staging and backpressured responses.
         if (await store.TransitionAsync(session.Id, new DownloadTransition(DownloadState.Streaming, DownloadState.Streaming, session.LeaseOwner, session.LeaseOwner,
             time.GetUtcNow(), DownloadService.LeaseDuration), cancellationToken) is null) throw new DownloadUnavailableException("download_interrupted");
-        await plaintext.CopyToAsync(context.Response.Body, BufferSize, cancellationToken);
+        int plaintextRead;
+        while ((plaintextRead = await plaintext.ReadAsync(buffer.AsMemory(0, BufferSize), cancellationToken)) > 0)
+        {
+            await context.Response.Body.WriteAsync(buffer.AsMemory(0, plaintextRead), cancellationToken);
+            onBytesWritten(plaintextRead);
+        }
+    }
+
+    private async Task<bool> SafeIsShareRevokedAsync(DownloadSession session, Guid shareId)
+    {
+        try
+        {
+            return await store.IsShareRevokedAsync(session.TenantId, shareId, CancellationToken.None);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task RenewAsync(Guid sessionId, string owner, Func<long> transferred, CancellationTokenSource transfer, CancellationToken stop)
