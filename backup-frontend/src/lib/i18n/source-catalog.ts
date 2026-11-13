@@ -3398,4 +3398,5 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Tüm kaynak": {"tr":"Tüm kaynak","en":"Entire source"},
   "Kapsam: {0}": {"tr":"Kapsam: {0}","en":"Scope: {0}"},
   "Dosya filtreleri": {"tr":"Dosya filtreleri","en":"File filters"},
+  "Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.": {"tr":"Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.","en":"Platform administrators cannot download directly. An active share for this backup file is required to download it."},
 }

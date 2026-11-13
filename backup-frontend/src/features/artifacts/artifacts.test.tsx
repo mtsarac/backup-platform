@@ -9,6 +9,7 @@ import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
 import { apiRequest } from '@/lib/api/client'
 import type { BackupArtifact, BackupReplica } from './types'
 import { canCancelDeletion, deletionInProgress } from './format'
+import { getDownloadAvailability } from './api'
 import type * as ArtifactApi from './api'
 
 vi.mock('@/lib/api/client', () => ({
@@ -64,6 +65,8 @@ describe('Backup dosyaları', () => {
     mount()
     await screen.findByText('Kısaca durum')
     expect(screen.queryByRole('button', { name: 'İndir' })).not.toBeInTheDocument()
+    expect(screen.getByText('Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.')).toBeVisible()
+    expect(getDownloadAvailability).not.toHaveBeenCalled()
   })
   it('shows PostgreSQL archive facts without SQL Server physical backup metadata', async () => {
     request.mockResolvedValue(artifact({ backupMetadata: {
