@@ -2,6 +2,7 @@ import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { Select, TextInput } from '@/components/ui/text-input'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Menu } from '@base-ui/react/menu'
 import { Plus, DatabaseBackup } from 'lucide-react'
 import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
@@ -50,17 +51,34 @@ export function BackupJobsPage() {
     </div> : <span className="text-text-muted">{tx("Henüz çalıştırılmadı")}</span> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: job => canOperate ? <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" aria-describedby={runHint} disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx("Şimdi çalıştır")}</Button>
-      <details className="relative">
-        <summary className="flex size-8 cursor-pointer items-center justify-center rounded-md border border-border bg-surface hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label={tx("Diğer işlemler: {0}", { "0": job.name })}>
-          <span className="text-xs">▾</span>
-        </summary>
-        <div className="absolute right-0 z-20 mt-1 min-w-36 rounded-md border border-border bg-surface p-1 shadow-md">
-          <Link to={`${base}/backup-jobs/${job.id}/edit`} className="block w-full rounded px-2.5 py-1.5 text-left text-sm hover:bg-surface-2 text-text">{tx("Düzenle")}</Link>
-          <button type="button" aria-describedby={job.enabled ? disableHint : enableHint} disabled={toggle.isPending} onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }} className="block w-full rounded px-2.5 py-1.5 text-left text-sm hover:bg-surface-2 text-text">
-            {job.enabled ? tx("Devre dışı bırak") : tx("Etkinleştir")}
-          </button>
-        </div>
-      </details>
+      <Menu.Root>
+        <Menu.Trigger
+          aria-label={tx("Diğer işlemler: {0}", { "0": job.name })}
+          className="flex size-8 items-center justify-center rounded-md border border-border bg-surface text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pointer-coarse:size-10"
+        >
+          <span className="text-xs" aria-hidden="true">▾</span>
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
+            <Menu.Popup className="min-w-36 rounded-md border border-border bg-surface p-1 shadow-overlay focus-visible:outline-none">
+              <Menu.Item
+                render={<Link to={`${base}/backup-jobs/${job.id}/edit`} />}
+                className="block w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+              >
+                {tx("Düzenle")}
+              </Menu.Item>
+              <Menu.Item
+                disabled={toggle.isPending}
+                onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}
+                aria-describedby={job.enabled ? disableHint : enableHint}
+                className="block w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none disabled:opacity-50"
+              >
+                {job.enabled ? tx("Devre dışı bırak") : tx("Etkinleştir")}
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     </div> : <span className="text-text-muted">{tx("Yöneticinize danışın")}</span> },
   ]
   const overlap = actionError instanceof ApiError && actionError.status === 409 && actionError.activeRunId
