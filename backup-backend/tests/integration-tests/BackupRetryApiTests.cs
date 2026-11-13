@@ -19,7 +19,7 @@ public sealed class BackupRetryApiTests(PostgreSqlFixture fixture) : IClassFixtu
     // ---- the retry endpoint: who may call it, and what it refuses ----
 
     [Fact]
-    public async Task RetryIsOpenToTenantAdministrators()
+    public async Task RetryIsOpenToUserAdmins()
     {
         await using var scenario = await CreateAsync(fixture);
         var run = await FailedRunAsync(scenario, "PreCheckFailed");

@@ -47,7 +47,7 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
             if (bytesPerSecond is not { } value) context.UploadBandwidthLimits.Remove(existing!);
             else if (existing is null) context.UploadBandwidthLimits.Add(new UploadBandwidthLimit(tenantId, scope, scopeId, value, now));
             else existing.Change(value, now);
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator, AuditActions.UploadBandwidthLimitChanged, tenantId,
+            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.UserAdmin, AuditActions.UploadBandwidthLimitChanged, tenantId,
                 scope switch { UploadBandwidthScope.Tenant => "tenant", UploadBandwidthScope.Agent => "agent", _ => "backup_job" }, scopeId.ToString("D"),
                 new Dictionary<string, object?>
                 {
@@ -218,7 +218,7 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
         var domainWindows = windows.Select(w => new TransferScheduleWindow(Guid.NewGuid(), profile.Id, w.DayOfWeek, w.StartTime, w.EndTime, w.BytesPerSecond)).ToList();
         profile.SetWindows(domainWindows);
 
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator,
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.UserAdmin,
             isNew ? AuditActions.BandwidthProfileCreated : AuditActions.BandwidthProfileUpdated, tenantId,
             "bandwidth_profile", profile.Id.ToString("D"),
             new Dictionary<string, object?> { ["name"] = profile.Name, ["timeZoneId"] = profile.TimeZoneId, ["windowCount"] = domainWindows.Count }));
@@ -238,7 +238,7 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
         await context.BandwidthProfileAssignments.Where(a => a.TenantId == tenantId && a.ProfileId == profileId).ExecuteDeleteAsync(cancellationToken);
         context.BandwidthProfiles.Remove(profile);
 
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator,
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.UserAdmin,
             AuditActions.BandwidthProfileDeleted, tenantId, "bandwidth_profile", profile.Id.ToString("D"),
             new Dictionary<string, object?> { ["name"] = profile.Name }));
 
@@ -277,7 +277,7 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
             existing.ChangeProfile(profileId.Value, now);
         }
 
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator,
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.UserAdmin,
             AuditActions.BandwidthProfileAssigned, tenantId,
             scope switch { UploadBandwidthScope.Tenant => "tenant", UploadBandwidthScope.Agent => "agent", _ => "backup_job" }, scopeId.ToString("D"),
             new Dictionary<string, object?> { ["scope"] = scope.ToString(), ["profileId"] = profileId }));

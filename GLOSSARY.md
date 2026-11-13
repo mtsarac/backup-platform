@@ -54,6 +54,24 @@ _Avoid_: HaltFlag, WaitStatus
 Artifact payload I/O performed by the agent against SFTP, Google Drive, S3 or SMB. The backend brokers authorization, tasks, leases, quota and metadata; it is not an external-storage payload relay.
 _Avoid_: BackendRelay, ProxyUpload
 
+### Accounts & Access
+
+**PlatformAdmin** (shown as "Platform Yöneticisi"):
+The account role that operates the platform: tenants, users, plans, storage, shares shown under `Paylaşılan Yedekler`. It is not a tenant member and reaches tenant backup content only through a BackupShare.
+_Avoid_: Super admin, Operator, Support user
+
+**UserAdmin** (shown as "Kullanıcı Yöneticisi"):
+The account role of a tenant's own administrator. It manages every tenant it is a member of, with the same rights in each; an account with no membership is disabled.
+_Avoid_: Owner, Admin, Operator, Viewer, Tenant role
+
+**BackupShare** (shown as "Paylaşım"; lists `Paylaşımlarım` and `Paylaşılan Yedekler`):
+A time-limited, revocable grant that lets a PlatformAdmin download one artifact of a tenant as plaintext. Created by a UserAdmin or a PlatformAdmin with a reason, audited, notified, checked at session creation and stream start; revoking it cancels downloads in progress on every node. It never covers restore and never exposes a key.
+_Avoid_: Support session, Emergency access, Temporary access
+
+**Restore boundary**:
+Restore is a tenant management operation available to both roles. It never accepts a share and never returns bytes or keys to the caller, but restoring to a controlled target exposes the plaintext there; every restore is audited. See `SECURITY.md`.
+_Avoid_: Restore share, Shared restore
+
 ### User-Facing Names
 
 Plain-language labels shown in the interface in place of technical domain terms. The domain terms stay unchanged in code and APIs; only the displayed label differs.
@@ -74,12 +92,8 @@ _Avoid_: Run, Çalıştırma in user-facing text
 Scanning an agent's machine for databases that can be backed up.
 _Avoid_: Keşif in user-facing text
 
-**Break-glass access** (shown as "Acil destek erişimi"):
-Time-limited access a platform operator is granted to a tenant's data to resolve an urgent support case.
-_Avoid_: Break-glass in user-facing text
-
 **Tenant recovery key** (shown as "Kendi kurtarma anahtarınız"):
-An optional public key added to future encrypted backups. The tenant keeps the private key; removing the public key does not change existing backups or platform emergency support access.
+An optional public key added to future encrypted backups. The tenant keeps the private key; removing the public key does not change existing backups. It has no relation to BackupShare: a share never hands out a key.
 _Avoid_: Tenant anahtarı in user-facing recovery settings
 
 **Wrap key** (shown as "Şifreleme anahtarı"):

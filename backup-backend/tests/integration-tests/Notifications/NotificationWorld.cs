@@ -64,7 +64,7 @@ internal sealed class NotificationWorld(PostgreSqlFixture database)
     public FakeRecipientTokens Tokens { get; } = new();
     public QuotaWorld Quota { get; } = new(database);
     public NotificationOptions Options { get; init; } = Loopback;
-    public NotificationActor Actor { get; } = new(UserId.New(), AuditActorKind.TenantAdministrator);
+    public NotificationActor Actor { get; } = new(UserId.New(), AuditActorKind.UserAdmin);
     public NotificationActor PlatformActor { get; } = new(UserId.New(), AuditActorKind.PlatformAdmin);
 
     public PostgreSqlNotificationStore Store() => new(Quota.Options(), Clock);

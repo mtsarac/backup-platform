@@ -92,7 +92,6 @@ const messages: Record<string, string> = {
   get invalid_grace() { return tx("Missed-run grace süresi geçersiz.") },
   get delete_started() { return tx("Fiziksel silme başladığı için silme iptal edilemez.") },
   get deletion_in_progress() { return tx("Fiziksel silme başladı; artık iptal edilemez.") },
-  get administrator_required() { return tx("Saklama politikasını yalnızca Owner / Admin değiştirebilir.") },
   get conflicting_policy() { return tx("Zamanlama ayarları birbiriyle çakışıyor. Alanları kontrol edin.") },
   get already_member() { return tx("Bu kullanıcı zaten tenant üyesi.") },
   get user_not_found() { return tx("Kullanıcı bulunamadı.") },

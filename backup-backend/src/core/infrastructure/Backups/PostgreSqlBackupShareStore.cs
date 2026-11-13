@@ -71,7 +71,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
 
         var actorKind = createdByRole == UserRole.PlatformAdmin
             ? AuditActorKind.PlatformAdmin
-            : AuditActorKind.TenantAdministrator;
+            : AuditActorKind.UserAdmin;
 
         context.AuditEvents.Add(AuditEvent.Record(
             createdAtUtc,
@@ -251,7 +251,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         var oldExpiry = share.ExpiresAtUtc;
         share.Extend(newExpiresAtUtc, now);
 
-        var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
         context.AuditEvents.Add(AuditEvent.Record(
             now.ToUniversalTime(),
             actor,
@@ -358,7 +358,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         var revokedAtUtc = now.ToUniversalTime();
         share.Revoke(actor, revokedAtUtc);
 
-        var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
         context.AuditEvents.Add(AuditEvent.Record(
             revokedAtUtc,
             actor,

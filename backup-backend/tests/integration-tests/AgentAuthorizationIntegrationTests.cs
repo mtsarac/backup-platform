@@ -70,7 +70,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task TenantAdministratorsCreateListAndRevokeTokensForTheirOwnEnabledTenant()
+    public async Task UserAdminsCreateListAndRevokeTokensForTheirOwnEnabledTenant()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
@@ -149,7 +149,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task CrossTenantAdministratorCannotManageAnotherTenantsAgents()
+    public async Task UserAdminOfAnotherTenantCannotManageAnotherTenantsAgents()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var tenantA = await world.CreateTenantAsync();
@@ -188,7 +188,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task TenantAdministratorSeesOnlyTheirOwnAgentsWithoutSecrets()
+    public async Task UserAdminSeesOnlyTheirOwnAgentsWithoutSecrets()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var tenantA = await world.CreateTenantAsync();

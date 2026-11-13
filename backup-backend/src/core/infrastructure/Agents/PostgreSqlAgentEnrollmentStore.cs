@@ -76,7 +76,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         context.EnrollmentTokens.Add(token);
         context.AuditEvents.Add(AuditEvent.Record(
-            token.CreatedAt, token.CreatedBy, AuditActorKind.TenantAdministrator, AuditActions.AgentEnrollmentTokenCreated, token.TenantId,
+            token.CreatedAt, token.CreatedBy, AuditActorKind.UserAdmin, AuditActions.AgentEnrollmentTokenCreated, token.TenantId,
             "agent_enrollment_token", token.Id.ToString("D"),
             new Dictionary<string, object?> { ["expiresAt"] = token.ExpiresAt, ["result"] = "created" }));
         await context.SaveChangesAsync(cancellationToken);
@@ -104,7 +104,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
             }
             token.Revoke(actor, now);
             context.AuditEvents.Add(AuditEvent.Record(
-                now, actor, AuditActorKind.TenantAdministrator, AuditActions.AgentEnrollmentTokenRevoked, tenantId,
+                now, actor, AuditActorKind.UserAdmin, AuditActions.AgentEnrollmentTokenRevoked, tenantId,
                 "agent_enrollment_token", tokenId.ToString("D"),
                 new Dictionary<string, object?> { ["result"] = "revoked" }));
             try

@@ -73,7 +73,7 @@ public static class AgentAdministrationEndpoints
 
     private static Task<IResult> SetTenantPolicyAsync(
         Guid tenantId, SetAgentEnrollmentRequest request, ICurrentUser currentUser, EnrollmentAdministrationService service, CancellationToken cancellationToken) =>
-        SetPolicyAsync(tenantId, request, currentUser, service, AuditActorKind.TenantAdministrator, cancellationToken);
+        SetPolicyAsync(tenantId, request, currentUser, service, AuditActorKind.UserAdmin, cancellationToken);
 
     private static async Task<IResult> SetPolicyAsync(
         Guid tenantId, SetAgentEnrollmentRequest request, ICurrentUser currentUser, EnrollmentAdministrationService service,

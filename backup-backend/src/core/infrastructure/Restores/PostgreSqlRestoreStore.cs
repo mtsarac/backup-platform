@@ -703,7 +703,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             }
             else
             {
-                actorKind = AuditActorKind.TenantAdministrator;
+                actorKind = AuditActorKind.UserAdmin;
                 actorRole = actorEntity?.Role.ToString() ?? "UserAdmin";
             }
         }

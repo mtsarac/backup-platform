@@ -37,8 +37,8 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
 
         var events = await EventsAsync(backup.ArtifactId);
         Assert.Equal(2, events.Count);
-        AssertEvent(Assert.Single(events, e => e.Action == AuditActions.BackupArtifactDeleteRequested), backup.TenantId, new(requester), AuditActorKind.TenantAdministrator, Now, "delete_pending");
-        AssertEvent(Assert.Single(events, e => e.Action == AuditActions.BackupArtifactDeleteCancelled), backup.TenantId, new(canceller), AuditActorKind.TenantAdministrator, Now.AddMinutes(1), "restored");
+        AssertEvent(Assert.Single(events, e => e.Action == AuditActions.BackupArtifactDeleteRequested), backup.TenantId, new(requester), AuditActorKind.UserAdmin, Now, "delete_pending");
+        AssertEvent(Assert.Single(events, e => e.Action == AuditActions.BackupArtifactDeleteCancelled), backup.TenantId, new(canceller), AuditActorKind.UserAdmin, Now.AddMinutes(1), "restored");
         Assert.All(events, e => Assert.DoesNotContain(backup.Key, e.DetailsJson));
     }
 
@@ -411,7 +411,7 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
         Assert.All(events, audit =>
         {
             Assert.Equal(scenario.Setup.Account.UserId, audit.ActorUserId);
-            Assert.Equal(AuditActorKind.TenantAdministrator, audit.ActorKind);
+            Assert.Equal(AuditActorKind.UserAdmin, audit.ActorKind);
         });
     }
 

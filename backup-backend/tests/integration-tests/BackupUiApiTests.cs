@@ -53,7 +53,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
     }
 
     [Fact]
-    public async Task ViewerReadsAreSafeAndEditsRequireTenantOperatorAndAntiforgery()
+    public async Task NonMemberCannotEditAndEditsRequireAntiforgery()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var job = await scenario.CreateJobAsync();
@@ -238,23 +238,6 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var after = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
         Assert.Equal(original, await after.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task OperatorCannotChangeRetentionThroughTheAtomicEdit()
-    {
-        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
-        var job = await scenario.CreateJobAsync();
-        var operatorSession = await scenario.SessionAsync(member: false);
-        var body = FullEdit(scenario.Agent.AgentId, "Operator edit", retention: new { enabled = true, keepForSeconds = 7200, deleteGracePeriodSeconds = 3600 });
-        using var forbidden = await operatorSession.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
-        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
-        using var read = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
-        Assert.Equal("Nightly full backup", AgentWorld.ReadJson(read).GetProperty("name").GetString());
-
-        using var allowed = await operatorSession.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}",
-            FullEdit(scenario.Agent.AgentId, "Operator edit", new { cronExpression = "0 3 * * *", timeZone = "UTC" }));
-        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
     }
 
     [Fact]

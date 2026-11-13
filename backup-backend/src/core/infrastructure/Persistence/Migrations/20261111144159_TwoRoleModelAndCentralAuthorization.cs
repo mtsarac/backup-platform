@@ -87,7 +87,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                 table: "tenant_memberships",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                // Every membership of the two-role model is a full tenant administrator (the former Admin = 2).
+                defaultValue: 2);
 
             migrationBuilder.CreateTable(
                 name: "platform_admins",

@@ -201,6 +201,23 @@ email, initial password and role; `UserAdmin` accounts also require at least one
 unique, and either can be used to sign in. Existing bootstrap credentials without an email can be
 updated by a platform administrator. Account and membership changes are audited without passwords.
 
+A PlatformAdmin can assign a temporary password (`POST /api/platform/users/{id}/temporary-password`), which ends the
+user's sessions and forces a change at the next sign-in, and can disable or enable an account
+(`POST /api/platform/users/{id}/disable|enable`). The last active PlatformAdmin cannot be disabled.
+
+Email verification and self-service password reset are optional. They are available when the platform email
+transport is saved and enabled and `Notifications:PublicBaseUrl` is set; the links in these messages point to
+`{PublicBaseUrl}/verify-email` and `{PublicBaseUrl}/reset-password`, so that URL must serve the frontend. Without
+them the platform runs normally, `GET /api/auth/email-recovery` answers `{ "available": false }` and recovery goes
+through a temporary password. Security events on an account always create an in-app notification and, for a verified
+address, an email.
+
+Download attempts are listed at `GET /api/platform/download-attempts` (PlatformAdmin) and
+`GET /api/tenants/{tenantId}/backup-shares/download-attempts` (UserAdmin). Audit and share history retention is read
+and changed at `GET`/`PUT /api/platform/settings/audit-retention` (`{ "retentionDays": 365 }`, default 365) and pruned
+hourly; active shares and running downloads are never pruned. The security model is described in
+[SECURITY.md](../SECURITY.md).
+
 To enroll an agent, see "Connecting an agent" in the [root README](../README.md).
 
 The `Dockerfile` builds the API image. `docker-compose.yml` in the repository root starts it with PostgreSQL, SQL Server, and the frontend.

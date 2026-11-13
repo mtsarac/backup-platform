@@ -412,7 +412,7 @@ public sealed class QuotaApiIntegrationTests(PostgreSqlFixture fixture) : IClass
     }
 
     [Fact]
-    public async Task TenantOwnersAndAdminsCannotReachAnyPlatformQuotaRoute()
+    public async Task UserAdminsCannotReachAnyPlatformQuotaRoute()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var platform = await PlatformAdminAsync(world);

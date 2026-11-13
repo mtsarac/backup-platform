@@ -209,9 +209,9 @@ public sealed class StorageConnectionPlatformLockIntegrationTests(PostgreSqlFixt
         var audits = await ToggleAuditsAsync(env, localId);
         Assert.Equal(4, audits.Count);
         AssertAudit(audits, StorageConnectionAuditActions.Disabled, AuditActorKind.PlatformAdmin, "platform", (true, true, false));
-        AssertAudit(audits, StorageConnectionAuditActions.Disabled, AuditActorKind.TenantAdministrator, "owner", (false, true, false));
+        AssertAudit(audits, StorageConnectionAuditActions.Disabled, AuditActorKind.UserAdmin, "owner", (false, true, false));
         AssertAudit(audits, StorageConnectionAuditActions.Enabled, AuditActorKind.PlatformAdmin, "platform", (false, false, false));
-        AssertAudit(audits, StorageConnectionAuditActions.Enabled, AuditActorKind.TenantAdministrator, "owner", (true, false, true));
+        AssertAudit(audits, StorageConnectionAuditActions.Enabled, AuditActorKind.UserAdmin, "owner", (true, false, true));
     }
 
     private static void AssertAudit(List<AuditEvent> audits, string action, AuditActorKind kind, string control, (bool Enabled, bool Locked, bool Effective) state)

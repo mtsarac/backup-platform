@@ -127,7 +127,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
         }
         state.Agent.Revoke();
         context.AuditEvents.Add(AuditEvent.Record(
-            now, actor ?? UserId.System, actor is null ? AuditActorKind.System : AuditActorKind.TenantAdministrator,
+            now, actor ?? UserId.System, actor is null ? AuditActorKind.System : AuditActorKind.UserAdmin,
             AuditActions.AgentRevoked, tenantId, "agent", agentId.ToString(),
             new Dictionary<string, object?> { ["credentialsRevoked"] = state.Credentials.Count, ["result"] = "revoked" }));
         await context.SaveChangesAsync(cancellationToken);
