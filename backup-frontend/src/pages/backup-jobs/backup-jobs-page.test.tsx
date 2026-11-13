@@ -106,8 +106,10 @@ it('lists name, status, database, computer and last result, and keeps schedule a
 it('explains in plain words what running and disabling a job do, tied to the buttons', async () => {
   mount()
   const run = await screen.findByRole('button', { name: 'Şimdi çalıştır' })
-  const disable = screen.getByRole('button', { name: 'Devre dışı bırak' })
   expect(run).toHaveAccessibleDescription(/\S/)
+  // Open contextual menu to check disable button accessibility description
+  fireEvent.click(screen.getByRole('button', { name: /Diğer işlemler/i }))
+  const disable = await screen.findByRole('menuitem', { name: 'Devre dışı bırak' })
   expect(disable).toHaveAccessibleDescription(/\S/)
   expect(disable.getAttribute('aria-describedby')).not.toBe(run.getAttribute('aria-describedby'))
 })
