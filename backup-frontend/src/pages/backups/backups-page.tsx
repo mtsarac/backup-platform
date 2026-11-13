@@ -11,6 +11,7 @@ import { StatusPill } from '@/components/data/status-pill'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Disclosure } from '@/components/ui/disclosure'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useAgents } from '@/features/agents/hooks'
@@ -52,8 +53,7 @@ export function BackupsPage() {
 
   return (
     <div className="space-y-6">
-      <Filters label={tx("Yedekleme filtreleri")} onClear={filtering ? clearFilters : undefined}
-        footer={<span className="text-sm text-text-muted">{tx("Tarihler yerel saat diliminizdeki oluşturulma günlerini kapsar.")}</span>}>
+      <Filters label={tx("Yedekleme filtreleri")} onClear={filtering ? clearFilters : undefined}>
         <FilterField label={tx("Durum")}>
           <Select aria-label={tx("Durum")} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}>
             <option value="">{tx("Tüm durumlar")}</option>
@@ -66,6 +66,9 @@ export function BackupsPage() {
             {jobs.data?.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}
           </Select>
         </FilterField>
+      </Filters>
+      <Disclosure title={tx('Diğer filtreler')} open={Boolean(filters.agentId || trigger || fromDay || toDay)}>
+        <Filters label={tx("Diğer filtreler")} footer={<span className="text-sm text-text-muted">{tx("Tarihler yerel saat diliminizdeki oluşturulma günlerini kapsar.")}</span>}>
         <FilterField label={tx("Yedekleme bilgisayarı")}>
           <Select aria-label={tx("Yedekleme bilgisayarı")} value={filters.agentId ?? ''} onChange={(event) => update({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}>
             <option value="">{tx("Tüm yedekleme bilgisayarları")}</option>
@@ -84,6 +87,7 @@ export function BackupsPage() {
           <TextInput aria-label={tx("Oluşturulma sonu")} type="date" min={fromDay || undefined} value={toDay} onChange={(event) => update({ to: event.target.value })} />
         </FilterField>
       </Filters>
+      </Disclosure>
       {invalidDateRange && <Notice tone="warning">{tx("Başlangıç tarihi bitiş tarihinden sonra olamaz.")}</Notice>}
       {filterError && <ErrorNotice title={tx("Filtre seçenekleri yüklenemedi")} error={filterError} />}
       <QueryState isPending={backups.isPending} error={backups.error}>

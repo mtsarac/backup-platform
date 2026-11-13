@@ -256,12 +256,13 @@ describe('dashboard missing-copy ownership', () => {
 })
 
 describe('dashboard details', () => {
-  it('shows the counters, observability panels and average score as plain sections, not behind a toggle', async () => {
+  it('keeps health risks visible and reveals the secondary counters on request', async () => {
     state.observability = { ...state.observability, averageScore: 70, capacityRisks: [{ connectionId: 'disk-risk', connectionName: 'Dolu disk', status: 'Critical', totalBytes: 1_000_000_000, usedBytes: 920_000_000, freeBytes: 80_000_000, reportedAt: '2026-10-21T12:00:00Z' }] }
     renderDashboard()
-    expect(screen.queryByText('Ayrıntılar')).not.toBeInTheDocument()
     expect(screen.getByText('Dolu disk')).toBeVisible()
     expect(screen.getByText('Ortalama sağlık puanı')).toBeVisible()
+    expect(screen.getByText('Çevrimdışı')).not.toBeVisible()
+    await userEvent.click(screen.getByText('İş ve bilgisayar ayrıntıları'))
     expect(screen.getByText('Çevrimdışı')).toBeVisible()
   })
 
@@ -358,7 +359,7 @@ describe('dashboard sentences and labels', () => {
 })
 
 describe('dashboard recent runs', () => {
-  it('keeps the database and replication inside the run\'s technical details and explains a waiting run in a sentence', async () => {
+  it('explains a waiting run and links to its complete details', async () => {
     setViewport(true)
     state.data.recentRuns = [makeRun({ status: 'RetryPending', replication: { requiredVerifiedReplicas: 2, verifiedReplicas: 1, destinationCount: 2, status: 'InsufficientReplicas', policySatisfied: false, destinations: [] } })]
     renderDashboard()
@@ -367,16 +368,16 @@ describe('dashboard recent runs', () => {
     expect(within(row).queryByText('RetryPending')).not.toBeInTheDocument()
     expect(screen.queryByText('Doğrulanmış kopya sayısı yetersiz')).not.toBeInTheDocument()
     expect(screen.queryByText(makeRun().configuration.database)).not.toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id')
     await userEvent.click(within(row).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const details = within(await screen.findByRole('dialog'))
-    expect(details.getByText('Doğrulanmış kopya sayısı yetersiz')).toBeVisible()
-    expect(details.getByText(makeRun().configuration.database)).toBeVisible()
+    expect(within(await screen.findByRole('dialog')).getByText('Doğrulanmış kopya sayısı yetersiz')).toBeVisible()
   })
 
   it('lists recent runs as cards on a narrow screen and as a table on a large one', () => {
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
     setViewport(false)
     const narrow = renderDashboard()
+    expect(screen.queryByRole('button', { name: 'Teknik ayrıntılar' })).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByRole('listitem')).toHaveTextContent('Günlük SQL yedeği')
     narrow.unmount()

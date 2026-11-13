@@ -12,11 +12,12 @@ import { KpiCard } from '@/components/data/kpi-card'
 import { DataList, type Column } from '@/components/data/data-list'
 import { RelativeTime } from '@/components/data/relative-time'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { Disclosure } from '@/components/ui/disclosure'
 import { ErrorNotice } from '@/components/ui/notice'
-import { TechnicalDetails } from '@/components/ui/technical-details'
-import { ReplicationSummary } from '@/features/backups/replication'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
+import { ReplicationSummary } from '@/features/backups/replication'
 import type { BackupRun } from '@/features/backups/types'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { HealthStatusCard } from './health-status-card'
@@ -56,7 +57,7 @@ export function DashboardPage() {
     { key: 'agent', header: tx('Yedekleme bilgisayarı'), render: run => run.agentName ?? '—' },
     { key: 'date', header: tx('Başlangıç'), render: run => <RelativeTime value={run.startedAt ?? run.createdAt} /> },
     { key: 'status', header: tx('Durum'), card: 'status', render: run => <StatusPill status={run.status} /> },
-    { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => <div className="space-y-1"><p>{runNote(run)}</p><TechnicalDetails items={[{ label: tx('Veritabanı'), value: run.configuration.database }]}>{run.replication && <ReplicationSummary replication={run.replication} />}</TechnicalDetails></div> },
+    { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => <div className="space-y-1"><p>{runNote(run)}</p>{(run.reasonCode || run.status === 'Failed' || run.status === 'AgentLost' || (run.replication && run.replication.status !== 'Healthy')) && <TechnicalDetails items={[{ label: tx('Veritabanı'), value: run.configuration.database }]}>{run.replication && <ReplicationSummary replication={run.replication} />}</TechnicalDetails>}</div> },
   ]
   const replicationShort = data?.runs.replicationInsufficientLast24Hours ?? 0
   const noJobs = useHealthSummary(tenantId).data?.totalJobs === 0
@@ -84,6 +85,7 @@ export function DashboardPage() {
           <DataList rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage={tx("Henüz yedekleme kaydı yok.")} />
         </section>}
             {!noJobs && <ObservabilityPanel tenantId={tenantId} />}
+            <Disclosure title={tx('İş ve bilgisayar ayrıntıları')}>
             <div className="grid gap-x-8 gap-y-6 lg:grid-cols-3">
               <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")}><dl className="divide-y divide-border">
                 <Row label={tx("Toplam")} value={data.agents.total} /><Row label={tx("Çevrimiçi")} value={data.agents.online} /><Row label={tx("Çevrimdışı")} value={data.agents.offline} tone="error" /><Row label={tx("Bağlantı bilinmiyor")} value={data.agents.unknown} />
@@ -97,6 +99,7 @@ export function DashboardPage() {
                 ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? formatDateTime(job.schedule.nextOccurrenceAt) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
                 : <p className="text-sm text-text-muted">{tx("Etkin zamanlama yok.")}</p>}</Section>
             </div>
+            </Disclosure>
       </>}
     </QueryState>
   </>
