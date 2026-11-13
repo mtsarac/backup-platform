@@ -29,6 +29,7 @@ export function PlatformSharesPage() {
   const artifactFilter = get('artifactId')
   const userFilter = get('userId')
   const resultFilter = get('result')
+  const [auditOpen, setAuditOpen] = useState(() => Boolean(shareFilter || artifactFilter || userFilter || resultFilter))
   const [createOpen, setCreateOpen] = useState(false)
   const [retentionOverride, setRetentionOverride] = useState<string | null>(null)
   const [retentionError, setRetentionError] = useState<string | null>(null)
@@ -103,6 +104,8 @@ export function PlatformSharesPage() {
         />
       </QueryState>
 
+      <details open={auditOpen} onToggle={(event) => setAuditOpen(event.currentTarget.open)} className="group">
+        <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('İndirme girişimleri')}</summary>
       <Section
         title={tx('İndirme girişimleri')}
         description={tx('Paylaşımlar ve yedek dosyaları üzerinden yapılan tüm indirme girişimleri.')}
@@ -167,7 +170,10 @@ export function PlatformSharesPage() {
           </QueryState>
         </div>
       </Section>
+      </details>
 
+      <details className="group">
+        <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('Denetim ve paylaşım geçmişi saklama süresi')}</summary>
       <Section
         title={tx('Denetim ve paylaşım geçmişi saklama süresi')}
         description={tx('Paylaşım geçmişi ve denetim kayıtlarının sistem genelinde saklanma süresi (varsayılan 365 gün).')}
@@ -194,6 +200,7 @@ export function PlatformSharesPage() {
           </Button>
         </form>
       </Section>
+      </details>
 
       {createOpen && (
         <CreatePlatformShareDialog

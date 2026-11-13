@@ -54,6 +54,7 @@ describe('platform tenant detail', () => {
     ] })
     vi.mocked(encryptionApi.removeTenantRecoveryKey).mockResolvedValue(undefined)
     mount('security')
+    await userEvent.click(await screen.findByText('Genel anahtarı yükle veya değiştir'))
     const field = await screen.findByRole('textbox', { name: 'Genel anahtar (PEM)' })
     expect(screen.getByRole('button', { name: 'Emekli et' })).toBeDisabled()
     expect(api.getMemberships).not.toHaveBeenCalled()
