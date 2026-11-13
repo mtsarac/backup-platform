@@ -27,7 +27,7 @@ function mount(route = '/tenants/tenant-a/backup-jobs/new') {
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
 async function toSummary() {
   fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'ERP' } })
-  next(4)
+  next(3)
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -121,7 +121,7 @@ describe('discovery-first source step', () => {
     fireEvent.click(await screen.findByLabelText('CRM seç'))
     fireEvent.click(screen.getByRole('button', { name: 'Seçimi uygula (1)' }))
     await screen.findByRole('heading', { name: 'Seçilen kaynak' })
-    next(4)
+    next(3)
     fireEvent.click(await screen.findByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
     expect(vi.mocked(saveBackupJob).mock.calls[0][1]).toMatchObject({ agentId: 'agent-a', configuration: { engine: 'mssql', host: 'localhost', port: 1433, database: 'CRM', databaseCredentialReference: 'sql-main' } })

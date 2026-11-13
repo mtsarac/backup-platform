@@ -9,7 +9,7 @@ import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 const policies = [['Disabled', 'Off — kapalı'], ['Preferred', 'IfSupported — destekleniyorsa'], ['Required', 'Required — zorunlu']] as const
 
 /** Question: whether backups are encrypted. Copy-only, checksum and compression stay under the technical details. */
-export function ProtectionStep({ form }: { form: JobFormState }) {
+export function ProtectionStep({ form, advancedTitle }: { form: JobFormState; advancedTitle?: string }) {
   useLanguage()
   const { errors, setConfiguration: onChange } = form
   const { configuration } = form.values
@@ -21,7 +21,7 @@ export function ProtectionStep({ form }: { form: JobFormState }) {
         <p className="text-sm text-text-muted">{policyDescriptions[configuration.encryptionPolicy]}{' '}{tx("Şifreleme Agent'ta, depolamaya yazılmadan önce yapılır.")}</p>
       </div>
     </Question>
-    <Advanced open={withErrors('configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy')}>
+    <Advanced title={advancedTitle} open={withErrors('configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy')}>
       {configuration.engine === 'mssql' && check(tx('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)'), configuration.copyOnly, copyOnly => onChange({ ...configuration, copyOnly }))}
       {configuration.engine !== 'file-system' && select('configuration.checksumPolicy', configuration.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)'), configuration.checksumPolicy, policies, value => onChange({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
       {select('configuration.compressionPolicy', tx('Sıkıştırma (Compression)'), configuration.compressionPolicy, policies, value => onChange({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
