@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
@@ -91,7 +92,7 @@ function EnrollmentSection({ tenant }: { tenant: PlatformTenantDetail }) {
 
 function RecentAudit({ tenantId }: { tenantId: string }) {
   useLanguage()
-  const query = usePlatformAudit({ tenantId, page: 1, pageSize: 10 })
+  const query = usePlatformAudit({ tenantId, page: 1, pageSize: 3 })
   return <Section title={tx("Son audit kayıtları")} flush className="overflow-hidden" actions={<Link className={`${linkClass} text-sm`} to={platformPaths.audit(tenantId)}>{tx("Tüm audit kayıtları")}</Link>}>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && <AuditTable className={bareListClass} rows={query.data.items} showTenant={false} emptyMessage={tx("Bu tenant için audit kaydı yok.")} />}
@@ -130,7 +131,7 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
     <div role="tabpanel" id={`tenant-panel-${tab}`} aria-labelledby={`tenant-tab-${tab}`} className="space-y-6">
       {tab === 'summary' && <>
         <div className="grid gap-4 sm:grid-cols-3"><KpiCard label={tx("Kişiler")} value={tenant.memberCount} /><KpiCard label={tx("Yedekleme bilgisayarları")} value={tenant.agents.total} /><KpiCard label={tx("Etkin yedekleme işleri")} value={tenant.enabledBackupJobs} /></div>
-        <RenameForm key={tenant.name} tenantId={tenant.tenantId} name={tenant.name} />
+        <Disclosure title={tx('Yeniden adlandır')}><RenameForm key={tenant.name} tenantId={tenant.tenantId} name={tenant.name} /></Disclosure>
         <RecentAudit tenantId={tenant.tenantId} />
         <TechnicalDetails items={[{ label: tx('Tenant kimliği'), value: tenant.tenantId }]} />
       </>}

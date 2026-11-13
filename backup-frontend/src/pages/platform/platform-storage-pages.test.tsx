@@ -77,7 +77,7 @@ describe('Platform Storage Usage Page states and operations', () => {
 
   it('shows usage and standing first with copyable policy information collapsed', async () => {
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
-    await screen.findByText('Acme Corp')
+    await screen.findByRole('link', { name: 'Acme Corp' })
     expect(screen.getByRole('progressbar')).toBeInTheDocument()
     expect(screen.queryByText('policy-1')).not.toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Teknik ayrıntılar' }))
@@ -91,7 +91,7 @@ describe('Platform Storage Usage Page states and operations', () => {
   it('keeps usage, standing and policy disclosure available in mobile cards', async () => {
     setViewport(false)
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
-    await screen.findByText('Acme Corp')
+    await screen.findByRole('link', { name: 'Acme Corp' })
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     const list = screen.getByRole('list', { name: 'Depolama kullanımı' })
     expect(within(list).getByRole('link', { name: 'Acme Corp' })).toBeInTheDocument()
@@ -101,13 +101,14 @@ describe('Platform Storage Usage Page states and operations', () => {
     expect(within(await screen.findByRole('dialog')).getByText('policy-1')).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await userEvent.click(within(list).getByText('İşlemler', { selector: 'summary' }))
     expect(within(list).getByRole('button', { name: 'Baştan hesapla' })).toBeInTheDocument()
   })
 
   it('keeps missing usage neutral and offers clearing filters when no workspaces match', async () => {
     vi.mocked(storageApi.getStorageUsage).mockResolvedValue(paged([{ ...sampleUsageRow, hasUsage: false, usedBytes: null, reservedBytes: null, remainingBytes: null, state: null }]))
     const { unmount } = renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
-    await screen.findByText('Acme Corp')
+    await screen.findByRole('link', { name: 'Acme Corp' })
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.getAllByText('Henüz hesaplanmadı').length).toBeGreaterThan(0)
     unmount()
@@ -122,7 +123,7 @@ describe('Platform Storage Usage Page states and operations', () => {
   it.each([false, true])('clears all storage filters from their owner with rows present: %s', async (hasRows) => {
     vi.mocked(storageApi.getStorageUsage).mockResolvedValue(paged(hasRows ? [sampleUsageRow] : []))
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage?search=missing&quotaState=Warning&subscriptionStatus=Active&page=2', route: '/platform/storage' })
-    if (hasRows) await screen.findByText('Acme Corp')
+    if (hasRows) await screen.findByRole('link', { name: 'Acme Corp' })
     else await screen.findByText('Kriterlere uygun çalışma alanı kullanımı bulunamadı.')
     const clear = screen.getByRole('button', { name: 'Filtreleri temizle' })
     expect(within(screen.getByRole('region', { name: 'Depolama kullanım filtreleri' })).getByRole('button', { name: 'Filtreleri temizle' })).toBe(clear)
@@ -137,7 +138,7 @@ describe('Platform Storage Usage Page states and operations', () => {
 
   it('ignores hand-edited filter values instead of sending them to the API', async () => {
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage?quotaState=bogus&subscriptionStatus=Superseded', route: '/platform/storage' })
-    await screen.findByText('Acme Corp')
+    await screen.findByRole('link', { name: 'Acme Corp' })
     expect(storageApi.getStorageUsage).toHaveBeenCalledWith(expect.objectContaining({ quotaState: undefined, subscriptionStatus: undefined }), expect.any(AbortSignal))
     expect(screen.getByLabelText('Kota durumu')).toHaveValue('')
   })
@@ -158,7 +159,9 @@ describe('Platform Storage Usage Page states and operations', () => {
     vi.mocked(storageApi.reconcileUsage).mockResolvedValue(reconResult)
 
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
-    expect(await screen.findByText('Acme Corp')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Acme Corp' })).toBeInTheDocument()
+    expect(screen.getByText('Kullanımı doğrula', { selector: 'button' })).not.toBeVisible()
+    await userEvent.click(screen.getByText('İşlemler', { selector: 'summary' }))
 
     const reconcileBtn = screen.getByRole('button', { name: "Kullanımı doğrula" })
     fireEvent.click(reconcileBtn)
@@ -190,7 +193,8 @@ describe('Platform Storage Usage Page states and operations', () => {
     vi.mocked(storageApi.rebuildUsage).mockResolvedValue(reconResult)
 
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
-    expect(await screen.findByText('Acme Corp')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Acme Corp' })).toBeInTheDocument()
+    await userEvent.click(screen.getByText('İşlemler', { selector: 'summary' }))
 
     const rebuildBtn = screen.getByRole('button', { name: "Baştan hesapla" })
     fireEvent.click(rebuildBtn)

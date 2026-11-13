@@ -6,6 +6,7 @@ import { Pagination } from '@/components/data/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { SecretField } from '@/components/ui/secret-field'
@@ -98,7 +99,10 @@ export function PlatformUsersPage() {
     { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (user) => user.username },
     { key: 'memberships', header: tx('Çalışma alanı üyelikleri'), render: (user) => user.membershipCount },
     { key: 'email', header: tx('E-posta'), wrap: true, render: (user) => user.email },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="flex gap-2 justify-end">
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="space-y-1">
+      <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını düzenle', { '0': user.displayName })} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
+      <Disclosure title={<>{tx('İşlemler')} <span className="sr-only">{user.displayName} ({user.username})</span></>}>
+      <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısına geçici şifre ata', { '0': user.displayName })} onClick={() => { setSaved(null); setAssigningTemp(user) }}>{tx('Geçici şifre ata')}</Button>
       {user.isManuallyDisabled ? (
         <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını etkinleştir', { '0': user.displayName })} onClick={async () => {
@@ -112,7 +116,8 @@ export function PlatformUsersPage() {
       ) : (
         <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını devre dışı bırak', { '0': user.displayName })} onClick={() => { setSaved(null); setActionError(null); setDisableReason(''); setDisablingUser(user) }}>{tx('Devre dışı bırak')}</Button>
       )}
-      <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını düzenle', { '0': user.displayName })} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
+      </div>
+      </Disclosure>
     </div> },
   ]
   return <div className="space-y-6">

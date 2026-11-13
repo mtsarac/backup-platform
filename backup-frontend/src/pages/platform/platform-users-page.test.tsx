@@ -28,6 +28,15 @@ async function createForm() {
 }
 
 describe('platform users', () => {
+  it('keeps sensitive actions behind the selected account while retaining their warnings', async () => {
+    renderPlatform(<PlatformUsersPage />)
+    await screen.findByText('Ayşe Yılmaz')
+    expect(screen.getByLabelText('Ayşe Yılmaz kullanıcısına geçici şifre ata')).not.toBeVisible()
+    await userEvent.click(screen.getAllByText('İşlemler', { selector: 'summary' }).find((summary) => summary.textContent?.includes('Ayşe Yılmaz (ayse)'))!)
+    await userEvent.click(screen.getByRole('button', { name: 'Ayşe Yılmaz kullanıcısına geçici şifre ata' }))
+    expect(screen.getByText(/tüm açık oturumları sonlandırılır/)).toBeInTheDocument()
+  })
+
   it('lists account details and opens the create action with an empty list', async () => {
     vi.mocked(api.getUsers).mockResolvedValueOnce(paged([]))
     renderPlatform(<PlatformUsersPage />)
