@@ -101,7 +101,7 @@ describe('artifacts list rows', () => {
     mount([artifact(), artifact({ id: 'a2', databaseName: long, backupMetadata: meta('file-system'), agentName: 'FILE-SRV' })])
     const link = await screen.findByRole('link', { name: 'Accounting' })
     const row = link.closest('tr')!
-    for (const header of ['Kaynak', 'Geri yükleme', 'Boyut', 'Oluşturulma', 'Replika']) expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument()
+    for (const header of ['Kaynak', 'Geri yükleme', 'Boyut', 'Oluşturulma', 'Kopya']) expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'İndirme' })).not.toBeInTheDocument()
     for (const text of ['MSSQL · SRV-SQL-01', '5 MB', 'Geri yüklemeye hazır']) expect(within(row).getByText(new RegExp(text))).toBeInTheDocument()
     expect(within(row).getByText(/2026/)).toBeInTheDocument()
