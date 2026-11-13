@@ -1,7 +1,7 @@
 import { cleanup, render as rtlRender, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it } from 'vitest'
-import { artifactAvailability, downloadAvailability } from './availability'
+import { artifactAvailability } from './availability'
 import { ArtifactAvailability } from './artifact-availability'
 import { artifactSourceLabel, artifactSourceScope } from './source'
 import { backupOption } from './backup-option'
@@ -17,7 +17,6 @@ vi.mock('@/lib/api/client', () => ({
 }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }) }))
 vi.mock('@/hooks/use-large-screen', () => ({ useLargeScreen: () => large.value }))
-vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: 'UserAdmin' } }) }))
 const large = vi.hoisted(() => ({ value: true }))
 
 const replica: BackupReplica = {
@@ -71,22 +70,6 @@ describe('artifactAvailability', () => {
   })
 })
 
-describe('downloadAvailability', () => {
-  it('never says ready from a listing: a verified copy still needs the live check', () => {
-    expect(downloadAvailability(artifact(), true).label).toBe('Kontrol gerekli')
-  })
-  it.each([
-    ['delete pending', { state: 'DeletePending' }],
-    ['no verified copy', { replicas: [{ ...replica, verificationState: 'Pending' }] }],
-    ['copy being deleted', { replicas: [{ ...replica, status: 'DeletePending' }] }],
-  ] as [string, Partial<BackupArtifact>][])('is a definite no for %s', (_name, overrides) => {
-    expect(downloadAvailability(artifact(overrides), true).label).toBe('Uygun değil')
-  })
-  it('tells a PlatformAdmin that a share is needed instead of offering a direct download', () => {
-    expect(downloadAvailability(artifact(), false).label).toBe('Paylaşım gerekli')
-  })
-})
-
 describe('source label', () => {
   it('names type, source and computer for each engine', () => {
     expect(artifactSourceLabel(artifact())).toBe('MSSQL · Accounting · SRV-SQL-01')
@@ -118,6 +101,8 @@ describe('artifacts list rows', () => {
     mount([artifact(), artifact({ id: 'a2', databaseName: long, backupMetadata: meta('file-system'), agentName: 'FILE-SRV' })])
     const link = await screen.findByRole('link', { name: 'Accounting' })
     const row = link.closest('tr')!
+    for (const header of ['Kaynak', 'Geri yükleme', 'Boyut', 'Oluşturulma', 'Replika']) expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'İndirme' })).not.toBeInTheDocument()
     for (const text of ['MSSQL · SRV-SQL-01', '5 MB', 'Geri yüklemeye hazır']) expect(within(row).getByText(new RegExp(text))).toBeInTheDocument()
     expect(within(row).getByText(/2026/)).toBeInTheDocument()
     expect(screen.getByText('Dosya yedeği · FILE-SRV')).toBeInTheDocument()
@@ -139,6 +124,7 @@ describe('artifacts list rows', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('Geri yüklemeye hazır')).toBeVisible()
     expect(screen.getByText(/MSSQL · SRV-SQL-01/)).toBeVisible()
+    expect(screen.queryByText('İndirme')).not.toBeInTheDocument()
   })
   it('shows loading, empty and error states', async () => {
     mount('pending')
