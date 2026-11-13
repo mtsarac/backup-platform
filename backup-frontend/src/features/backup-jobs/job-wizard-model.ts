@@ -82,6 +82,7 @@ export function validateStep(step: JobStep, values: JobValues): StepErrors {
   const errors: StepErrors = {}
   if (step === 'source') {
     if (!values.name.trim()) errors.name = tx('İş adını girin.')
+    if (values.sourceMode === 'discovery' && !values.selected.length) { errors.source = tx('Otomatik keşiften bir veritabanı seçin veya kaynağı elle yapılandırın.'); return errors }
     if (!values.agentId) errors.agentId = tx('Bir yedekleme bilgisayarı seçin.')
     const { host, database, port } = values.configuration
     if (values.configuration.engine === 'file-system') {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import * as api from '@/features/platform/api'
 import { makePlatformAgent, renderPlatform } from '@/features/platform/test-utils'
 import type { PlatformAgentDetail } from '@/features/platform/types'
@@ -35,12 +36,11 @@ describe('platform backup computer page', () => {
   it('keeps lifecycle, platform, versions, identifiers and capabilities in collapsed, copyable technical details', async () => {
     renderPlatform(<PlatformAgentDetailPage />, { path, route })
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
-    const technical = screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')!
-    expect(technical).not.toHaveAttribute('open')
-    for (const value of ['agent-a', 'Windows Server 2025', '1.4.0', '.NET 10', 'rev-3', 'vendor.custom-feature']) expect(screen.getByText(value)).not.toBeVisible()
-    fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
-    for (const value of ['agent-a', 'Windows Server 2025', '1.4.0', '.NET 10', 'rev-3', 'vendor.custom-feature']) expect(screen.getByText(value)).toBeVisible()
-    expect(within(technical).getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+    for (const value of ['agent-a', 'Windows Server 2025', '1.4.0', '.NET 10', 'rev-3', 'vendor.custom-feature']) expect(screen.queryByText(value)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const technical = within(await screen.findByRole('dialog'))
+    for (const value of ['agent-a', 'Windows Server 2025', '1.4.0', '.NET 10', 'rev-3', 'vendor.custom-feature']) expect(technical.getByText(value)).toBeVisible()
+    expect(technical.getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
   })
 
   it('shows a revoked lifecycle beside the offline connection instead of folding them together', async () => {
@@ -56,8 +56,8 @@ describe('platform backup computer page', () => {
     vi.mocked(api.getPlatformAgent).mockResolvedValue(detail({ capabilities: [], capabilitiesReportedAt: null }))
     renderPlatform(<PlatformAgentDetailPage />, { path, route })
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
-    fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
-    expect(screen.getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
   })
 
   it('shows the authorization state for 403', async () => {

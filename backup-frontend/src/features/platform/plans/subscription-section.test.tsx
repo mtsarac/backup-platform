@@ -29,7 +29,7 @@ const section = async () => within(await screen.findByRole('region', { name: 'Pl
 async function primaryActions() {
   const region = await section()
   await waitFor(() => expect(region.queryByText(/Yükleniyor/)).not.toBeInTheDocument())
-  return region.queryAllByRole('button').filter((button) => !button.closest('details')).map((button) => button.textContent)
+  return region.queryAllByRole('button').filter((button) => !button.closest('details') && button.textContent !== 'Teknik ayrıntılar').map((button) => button.textContent)
 }
 async function otherActions() {
   const region = await section()
@@ -85,10 +85,9 @@ describe('subscription summary', () => {
     expect(await region.findByText('Etkin')).toBeVisible()
     expect(region.getAllByText('5 GB').length).toBeGreaterThan(0)
     expect(region.getByText('Limit kaynağı').nextElementSibling).toHaveTextContent('Plan')
-    region.getAllByText(/5\.000\.000\.000 bayt/).forEach((value) => expect(value).not.toBeVisible())
-    const details = region.getAllByText('Teknik ayrıntılar')[0].closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    await userEvent.click(within(details).getByText('Teknik ayrıntılar'))
+    expect(region.queryAllByText(/5\.000\.000\.000 bayt/)).toHaveLength(0)
+    await userEvent.click(region.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
+    const details = await screen.findByRole('dialog')
     expect(within(details).getAllByText('5.000.000.000 bayt').length).toBeGreaterThan(0)
     expect(within(details).getByText('Platform Operatörü')).toBeVisible()
     expect(within(details).getByText('sub-1')).toBeVisible()
@@ -101,8 +100,8 @@ describe('subscription summary', () => {
     const region = await section()
     await region.findByText('Etkin')
     expect(region.getByText('Limit kaynağı').nextElementSibling).toHaveTextContent(/(?:Override|Özel limit)/)
-    await userEvent.click(region.getAllByText('Teknik ayrıntılar')[0])
-    expect(region.getAllByText('2.500.000.000 bayt')[0]).toBeVisible()
+    await userEvent.click(region.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
+    expect(within(await screen.findByRole('dialog')).getAllByText('2.500.000.000 bayt')[0]).toBeVisible()
   })
 
   it('shows unlimited and system-assigned migration subscriptions', async () => {
@@ -110,8 +109,8 @@ describe('subscription summary', () => {
     mount()
     const region = await section()
     expect(await region.findByText('Legacy Unlimited')).toBeVisible()
-    await userEvent.click(region.getAllByText('Teknik ayrıntılar')[0])
-    expect(region.getByText('Sistem (geçiş)')).toBeVisible()
+    await userEvent.click(region.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
+    expect(within(await screen.findByRole('dialog')).getByText('Sistem (geçiş)')).toBeVisible()
   })
 
   it.each([
@@ -146,11 +145,13 @@ describe('subscription history', () => {
     expect(within(cards[0]).getByText('Etkin')).toBeVisible()
     expect(within(cards[1]).getByText('Değiştirildi')).toBeVisible()
     expect(within(cards[1]).getByRole('heading', { name: '1 GB' })).toBeVisible()
-    const details = within(cards[1]).getByText('Teknik ayrıntılar').closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    await userEvent.click(within(details).getByText('Teknik ayrıntılar'))
+    expect(within(cards[1]).queryByText('sub-0')).toBeNull()
+    await userEvent.click(within(cards[1]).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const details = await screen.findByRole('dialog')
     expect(within(details).getByText('1.000.000.000 bayt')).toBeVisible()
     expect(within(details).getByText('sub-0')).toBeVisible()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(api.getSubscriptionHistory).toHaveBeenCalledWith('tenant-a', { page: 2, pageSize: 10 }, expect.any(AbortSignal))
     expect(screen.getByText('22 kayıt · Sayfa 2 / 3')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
@@ -179,8 +180,10 @@ describe('assign and change plan', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Plan ata' }))
     await waitFor(() => expect(api.assignSubscriptionPlan).toHaveBeenCalledWith('tenant-a', { planId: 'plan-50' }))
     const region = await section()
-    await userEvent.click(region.getAllByText('Teknik ayrıntılar')[0])
-    expect(region.getAllByText('50.000.000.000 bayt')[0]).toBeVisible()
+    await userEvent.click(region.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
+    expect(within(await screen.findByRole('dialog')).getAllByText('50.000.000.000 bayt')[0]).toBeVisible()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(region.getAllByText('Kurumsal 50').length).toBeGreaterThan(0)
   })
 

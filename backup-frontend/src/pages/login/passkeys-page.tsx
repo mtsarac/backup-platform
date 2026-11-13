@@ -1,15 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { TextInput } from '@/components/ui/text-input'
 import { ErrorNotice } from '@/components/ui/notice'
-import { describeError, type ErrorDescription } from '@/lib/api/failure-messages'
+import { describePasskeyError, type ErrorDescription } from '@/lib/api/failure-messages'
 import { PageHeader } from '@/components/ui/page-header'
-import { LanguageSwitcher } from '@/components/layout/language-switcher'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { apiRequest } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
@@ -83,7 +81,7 @@ export function PasskeysPage() {
       setAddName('')
       setAddPassword('')
     } catch (err) {
-      setAddError(describeError(err))
+      setAddError(describePasskeyError(err))
     } finally {
       setAddPending(false)
     }
@@ -104,27 +102,14 @@ export function PasskeysPage() {
       setDeleteTarget(null)
       setDeletePassword('')
     } catch (err) {
-      setDeleteError(describeError(err))
+      setDeleteError(describePasskeyError(err))
     } finally {
       setDeletePending(false)
     }
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-4 py-10">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4 text-sm">
-          <Link className="text-primary underline-offset-4 hover:underline" to="/">
-            {tx('Çalışma alanlarına dön')}
-          </Link>
-          <span className="text-text-muted">·</span>
-          <Link className="text-text-muted underline-offset-4 hover:underline" to="/sessions">
-            {tx('Oturumlarım')}
-          </Link>
-        </div>
-        <LanguageSwitcher />
-      </div>
-
+    <div className="space-y-6">
       <PageHeader
         title={tx('Geçiş anahtarları')}
         description={tx('Geçiş anahtarlarınızı görüntüleyin ve yönetin.')}
@@ -288,6 +273,6 @@ export function PasskeysPage() {
           </ul>
         </Card>
       </QueryState>
-    </main>
+    </div>
   )
 }

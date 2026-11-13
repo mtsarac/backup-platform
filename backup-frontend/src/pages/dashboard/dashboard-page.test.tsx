@@ -1,5 +1,6 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
@@ -285,7 +286,11 @@ describe('dashboard replication monitoring', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Son 24 saatte 1 yedekleme kullanılabilir yedek oluşturdu, ancak gereken doğrulanmış kopya sayısına ulaşamadı.')
     expect(screen.getByRole('link', { name: "Çoğaltma sonuçlarını inceleyin." })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
-    expect(screen.getByText("Doğrulanmış kopya sayısı yetersiz")).toBeInTheDocument()
+    expect(screen.queryByText("Doğrulanmış kopya sayısı yetersiz")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText("Doğrulanmış kopya sayısı yetersiz")).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(within(screen.getByText("Yedek oluşturuldu · son 24 saat").parentElement!.parentElement!).getByText('1')).toBeInTheDocument()
   })
 
@@ -295,7 +300,7 @@ describe('dashboard replication monitoring', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Son 24 saatte 9 yedekleme')
   })
 
-  it('shows degraded policy-compliant copies without an insufficient-replication alert', () => {
+  it('shows degraded policy-compliant copies without an insufficient-replication alert', async () => {
     state.data.runs.replicationInsufficientLast24Hours = 0
     state.data.recentRuns = [makeRun({ status: 'Succeeded', replication: {
       requiredVerifiedReplicas: 2, verifiedReplicas: 2, destinationCount: 3,
@@ -303,7 +308,9 @@ describe('dashboard replication monitoring', () => {
     } })]
     renderDashboard()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByText("Kısmi çoğaltma · ilke karşılandı")).toBeInTheDocument()
+    expect(screen.queryByText("Kısmi çoğaltma · ilke karşılandı")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText("Kısmi çoğaltma · ilke karşılandı")).toBeInTheDocument()
   })
 
   it('keeps legacy responses without a replication count readable', () => {
@@ -351,16 +358,19 @@ describe('dashboard sentences and labels', () => {
 })
 
 describe('dashboard recent runs', () => {
-  it('keeps the database and replication inside the run\'s technical details and explains a waiting run in a sentence', () => {
+  it('keeps the database and replication inside the run\'s technical details and explains a waiting run in a sentence', async () => {
     setViewport(true)
     state.data.recentRuns = [makeRun({ status: 'RetryPending', replication: { requiredVerifiedReplicas: 2, verifiedReplicas: 1, destinationCount: 2, status: 'InsufficientReplicas', policySatisfied: false, destinations: [] } })]
     renderDashboard()
     const row = screen.getAllByRole('row')[1]
     expect(within(row).getByText('Yeniden deneme bekleniyor.')).toBeVisible()
     expect(within(row).queryByText('RetryPending')).not.toBeInTheDocument()
-    const details = within(row).getByText('Teknik ayrıntılar').closest('details')!
-    expect(within(details).getByText('Doğrulanmış kopya sayısı yetersiz')).not.toBeVisible()
-    expect(within(details).getByText(makeRun().configuration.database)).not.toBeVisible()
+    expect(screen.queryByText('Doğrulanmış kopya sayısı yetersiz')).not.toBeInTheDocument()
+    expect(screen.queryByText(makeRun().configuration.database)).not.toBeInTheDocument()
+    await userEvent.click(within(row).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const details = within(await screen.findByRole('dialog'))
+    expect(details.getByText('Doğrulanmış kopya sayısı yetersiz')).toBeVisible()
+    expect(details.getByText(makeRun().configuration.database)).toBeVisible()
   })
 
   it('lists recent runs as cards on a narrow screen and as a table on a large one', () => {

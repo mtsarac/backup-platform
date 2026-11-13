@@ -35,10 +35,23 @@ export function BackupHealthCard({ jobId }: { jobId: string }) {
         <Facts>
           {(Object.keys(labels) as (keyof typeof labels)[]).map(key => {
             const factor = health.factors[key]
-            return <div key={key} className="border-l-2 border-border pl-3">
+            return <div key={key} className="min-w-0 border-l-2 border-border pl-3"
+              onMouseEnter={event => { const details = event.currentTarget.querySelector('details'); if (details) details.open = true }}
+              onMouseLeave={event => { const details = event.currentTarget.querySelector('details'); if (details && !details.contains(document.activeElement)) details.open = false }}>
               <dt className="text-sm font-medium text-text-heading">{tx(labels[key])}</dt>
-              <dd className="mt-1 space-y-1 text-sm"><p className="tabular-nums">{factor.score} / {factor.maxScore}</p>
-                <p className="text-text-muted">{tx(reasons[factor.reason] ?? 'Bu etken için açıklama bulunamadı.')}</p>
+              <dd className="mt-1 text-sm">
+                <details className="relative"
+                  onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false }}
+                  onKeyDown={event => { if (event.key === 'Escape') event.currentTarget.open = false }}>
+                  <summary onFocus={event => { if (event.currentTarget.matches(':focus-visible')) event.currentTarget.closest('details')!.open = true }}
+                    onClick={event => { if (event.detail > 0) { event.preventDefault(); event.currentTarget.closest('details')!.open = true } }}
+                    className="w-fit cursor-pointer list-none rounded-sm tabular-nums underline decoration-dotted underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+                    {factor.score} / {factor.maxScore}
+                  </summary>
+                  <p className="absolute left-0 top-full z-20 mt-1 w-64 max-w-[min(16rem,calc(100vw-3rem))] rounded-lg border border-border bg-surface p-3 text-sm text-text shadow-overlay">
+                    {tx(reasons[factor.reason] ?? 'Bu etken için açıklama bulunamadı.')}
+                  </p>
+                </details>
               </dd>
             </div>
           })}

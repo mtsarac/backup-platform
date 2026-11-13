@@ -12,7 +12,7 @@ export function StorageStep({ form }: { form: JobFormState }) {
   const { text, withErrors } = fieldKit(errors)
   return <>
     <Question title={tx("Yedek nereye yazılsın?")} why={tx("Yedeğin güvenle saklanacağı yeri seçmeniz gerekir; seçmezseniz varsayılan depolama kullanılır.")}>
-      <FormGrid><MultiDestinationPicker {...picker} configuration={configuration} fieldError={Object.entries(errors).find(([field]) => field.startsWith('configuration.destinations'))?.[1]} replicaError={errors['configuration.requiredVerifiedReplicaCount']} onChange={setConfiguration} /></FormGrid>
+      <FormGrid><MultiDestinationPicker {...picker} configuration={configuration} fieldError={Object.entries(errors).find(([field]) => field.startsWith('configuration.destinations'))?.[1]} replicaError={errors['configuration.requiredVerifiedReplicaCount']} replicationError={errors['configuration.sourceSite'] || errors['configuration.enforceThreeTwoOne']} onChange={setConfiguration} /></FormGrid>
     </Question>
     <Advanced open={withErrors('configuration.storagePrefix', 'configuration.stagingReference')}>
       {text('configuration.storagePrefix', tx('Hedef öneki (göreli anahtar)'), configuration.storagePrefix, storagePrefix => setConfiguration({ ...configuration, storagePrefix }))}

@@ -22,11 +22,16 @@ describe('job steps', () => {
 })
 
 describe('step validation', () => {
-  const values = initialValues()
+  const values = { ...initialValues(), sourceMode: 'manual' as const }
   it('asks for name and computer on the first step only', () => {
     expect(Object.keys(validateStep('source', values))).toEqual(expect.arrayContaining(['name', 'agentId', 'configuration.host', 'configuration.database']))
     expect(validateStep('storage', values)).toEqual({})
     expect(validateStep('protection', values)).toEqual({})
+  })
+  it('asks a new job to pick a discovered source or go manual before anything else of the source', () => {
+    const discovery = initialValues()
+    expect(Object.keys(validateStep('source', discovery))).toEqual(['name', 'source'])
+    expect(validateStep('source', { ...discovery, name: 'n', selected: ['ERP'] })['source']).toBeUndefined()
   })
   it('reports the first invalid step of a whole job', () => {
     expect(validateJob(values).firstInvalid).toBe('source')

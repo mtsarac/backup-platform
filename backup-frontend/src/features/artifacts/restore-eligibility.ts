@@ -7,6 +7,6 @@ export function restoreIneligibility(artifact: BackupArtifact): string | null {
   if (artifact.state === 'DeletePending') return tx('Bu yedek dosyası silme bekleme süresinde olduğu için yeni geri yükleme başlatılamaz.')
   if (artifact.backupType !== 'Full') return tx("Yalnızca tam yedekler geri yüklenebilir (bu dosyanın türü: {0}).", { "0": artifact.backupType })
   if (artifact.replicas.length === 0) return tx('Geri yüklenebilecek bir kopya bulunamadı.')
-  if (!artifact.replicas.some((r) => r.verificationState === 'Verified')) return tx('Hiçbir kopyanın bütünlüğü doğrulanmadığı için geri yüklenemez.')
+  if (!artifact.replicas.some((r) => r.verificationState === 'Verified' && r.usable)) return tx('Hiçbir kopyanın bütünlüğü doğrulanmadığı için geri yüklenemez.')
   return null
 }

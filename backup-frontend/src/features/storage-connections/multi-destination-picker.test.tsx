@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { screen, fireEvent, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { changeLanguage } from '@/lib/i18n/runtime'
 import { MultiDestinationPicker } from './multi-destination-picker'
 import type { BackupConfiguration } from '@/features/backup-jobs/types'
 import type { ConnectionView, ProviderDescriptor } from './types'
@@ -110,7 +111,94 @@ const dummyConnections: ConnectionView[] = [
   }
 ]
 
+  it.each([['tr', 'Çoğaltma Hedefleri', 'Toplam 1 hedef'], ['en', 'Replication Destinations', 'Total 1 destinations']] as const)('translates the collapsed replication summary (%s)', (language, title, count) => {
+    changeLanguage(language)
+    try {
+      const configuration = {
+        destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }],
+        requiredVerifiedReplicaCount: 1,
+      } as BackupConfiguration
+      render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={false} onChange={() => {}} onRefresh={() => {}} />)
+      const summary = screen.getByText(title, { exact: false }).closest('summary')!
+      expect(summary).toHaveTextContent(count)
+      expect(summary.parentElement).not.toHaveAttribute('open')
+    } finally {
+      changeLanguage('tr')
+    }
+  })
+
+  it.each([false, true])('keeps configured destinations while replication is collapsed (existing target: %s)', existingTarget => {
+    const configuration = {
+      destinations: [
+        { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
+        { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: false },
+      ],
+      requiredVerifiedReplicaCount: 2,
+      storagePrefix: 'kept-prefix',
+      stagingReference: 'kept-staging',
+    } as BackupConfiguration
+    const onChange = vi.fn()
+    render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={existingTarget} onChange={onChange} onRefresh={() => {}} />)
+    const summary = screen.getByText('Çoğaltma Hedefleri', { exact: false }).closest('summary')!
+    expect(summary.parentElement).not.toHaveAttribute('open')
+    expect(summary).toHaveTextContent('Toplam 2 hedef')
+    expect(screen.getByLabelText('Gerekli Doğrulanmış Kopya Sayısı')).not.toBeVisible()
+    fireEvent.click(summary)
+    expect(screen.getByRole('spinbutton', { name: 'Gerekli Doğrulanmış Kopya Sayısı' })).toHaveValue(2)
+    fireEvent.change(screen.getByLabelText('Depolama Sağlayıcısı'), { target: { value: 'central' } })
+    expect(onChange.mock.lastCall?.[0]).toMatchObject({
+      destinations: [{ ...configuration.destinations[0], storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend' }, configuration.destinations[1]],
+      requiredVerifiedReplicaCount: 2,
+      storagePrefix: 'kept-prefix',
+      stagingReference: 'kept-staging',
+    })
+  })
+
+  it.each([{ replicaError: 'Invalid replica count' }, { replicationError: 'Invalid source site' }, { fieldError: 'Invalid destination' }])('opens replication for validation errors', errors => {
+    const configuration = {
+      destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={false} onChange={() => {}} onRefresh={() => {}} {...errors} />)
+    expect(screen.getByText('Çoğaltma Hedefleri', { exact: false }).closest('details')).toHaveAttribute('open')
+    expect(screen.getByRole('alert')).toHaveTextContent(Object.values(errors)[0])
+  })
+
 describe('MultiDestinationPicker', () => {
+  it.each([
+    ['tr', 'Çalışma alanı yönetimli', 'Platform yönetimli'],
+    ['en', 'Workspace-managed', 'Platform-managed'],
+  ] as const)('shows only platform ownership in job storage labels (%s)', (language, tenantLabel, platformLabel) => {
+    changeLanguage(language)
+    try {
+      const managed = { ...dummyConnections[0], id: 'conn-central', name: 'Managed', providerType: 'central', providerDisplayName: 'Managed Storage (Central)', ownership: 'PlatformManaged' as const }
+      const connections = [...dummyConnections, managed]
+      const configuration = {
+        engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
+        integratedSecurity: true, databaseCredentialReference: null,
+        encrypt: true, trustServerCertificate: false, stagingReference: 'default',
+        storagePrefix: '', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+        destinations: [
+          { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
+          { storageProvider: 'central', storageConnectionId: 'conn-central', storageExecutionLocation: 'Backend', isPrimary: false },
+        ],
+        requiredVerifiedReplicaCount: 1,
+      } as BackupConfiguration
+      const props = { connections, providers: dummyProviders, pending: false, error: null, existingTarget: true, onChange: () => {}, onRefresh: () => {} }
+      const { container, rerender } = render(<MultiDestinationPicker {...props} configuration={configuration} />)
+      const options = () => [...container.querySelectorAll<HTMLOptionElement>('#primary-storage-connection option')].map(option => option.textContent ?? '')
+      expect(options()).toHaveLength(2)
+      expect(options().every(label => !label.includes(tenantLabel))).toBe(true)
+      expect(container.textContent).toContain(`Managed (${platformLabel})`)
+      rerender(<MultiDestinationPicker {...props} configuration={{ ...configuration, destinations: configuration.destinations.map(destination => ({ ...destination, isPrimary: !destination.isPrimary })) }} />)
+      expect(options().every(label => label.includes(platformLabel))).toBe(true)
+      expect(container.textContent).not.toContain(tenantLabel)
+      expect(container.textContent).not.toContain('Default Local ()')
+    } finally {
+      changeLanguage('tr')
+    }
+  })
+
   it('renders a canonical API response whose primary is not the first destination', () => {
     const configuration = {
       engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
@@ -176,8 +264,9 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
+    fireEvent.click(screen.getByText('Çoğaltma Hedefleri', { exact: false }))
     expect(screen.getByText("Birincil")).toBeInTheDocument()
-    expect(screen.getByText('Toplam 1 hedef')).toBeInTheDocument()
+    expect(screen.getByText(/Toplam 1 hedef/)).toBeInTheDocument()
 
     // Add secondary SFTP
     const select = screen.getByLabelText("Yeni Çoğaltma Hedefi Ekle")
@@ -222,7 +311,8 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    expect(screen.getByText('Toplam 2 hedef')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Çoğaltma Hedefleri', { exact: false }))
+    expect(screen.getByText(/Toplam 2 hedef/)).toBeInTheDocument()
     const count = screen.getByRole('spinbutton', { name: 'Gerekli Doğrulanmış Kopya Sayısı' })
     expect(count).toHaveAttribute('min', '1')
     expect(count).toHaveAttribute('max', '2')

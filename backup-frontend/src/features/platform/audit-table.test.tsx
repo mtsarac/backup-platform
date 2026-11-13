@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AuditTable } from './audit-table'
 import { renderPlatform } from './test-utils'
@@ -21,10 +21,12 @@ describe('audit action labels', () => {
     ['storage_connection.secret_rotated', 'Depolama bağlantısı kimlik bilgisi yenilendi'], ['storage_connection.secret_cleared', 'Depolama bağlantısı kimlik bilgisi temizlendi'],
     ['storage_connection.quota_scope_changed', 'Depolama bağlantısının kota kapsamı değiştirildi'],
     ['support.session.opened', 'Destek erişimi başlatıldı'],
-  ])('renders %s as readable Turkish and keeps the raw code in technical details', (action, label) => {
+  ])('renders %s as readable Turkish and keeps the raw code in technical details', async (action, label) => {
     renderPlatform(<AuditTable rows={[entry(action, 1)]} emptyMessage="yok" />)
     expect(screen.getByText(label)).toBeVisible()
-    expect(screen.getByText(action)).not.toBeVisible()
+    expect(screen.queryByText(action)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText(action)).toBeVisible()
   })
 })
 
@@ -36,19 +38,21 @@ describe('audit log rows', () => {
     expect(screen.getByText('Üyelik rolü değiştirildi')).toBeVisible()
     expect(screen.getByText('Platform Operatörü')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Acme A.Ş.' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
-    for (const raw of ['membership.role_changed', 'Membership', 'user-1', 'audit-1', 'role', 'Admin']) expect(screen.getByText(raw)).not.toBeVisible()
-    expect(screen.getByText('PlatformAdmin')).not.toBeVisible()
-    await userEvent.click(screen.getByText('Teknik ayrıntılar'))
-    expect(screen.getByText('membership.role_changed')).toBeVisible()
-    expect(screen.getByText('Admin')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Kopyala: İşlem kodu' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Kopyala: role' })).toBeVisible()
+    for (const raw of ['membership.role_changed', 'Membership', 'user-1', 'audit-1', 'role', 'Admin', 'PlatformAdmin']) expect(screen.queryByText(raw)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('membership.role_changed')).toBeVisible()
+    expect(within(dialog).getByText('Admin')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: İşlem kodu' })).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: role' })).toBeVisible()
   })
 
-  it('says a code it cannot translate is an unknown action instead of printing the code in the body', () => {
+  it('says a code it cannot translate is an unknown action instead of printing the code in the body', async () => {
     renderPlatform(<AuditTable rows={[entry('made.up_code', 1)]} emptyMessage="yok" />)
     expect(screen.getByText('Bilinmeyen işlem')).toBeVisible()
-    expect(screen.getByText('made.up_code')).not.toBeVisible()
+    expect(screen.queryByText('made.up_code')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText('made.up_code')).toBeVisible()
   })
 
   it('drops the tenant column where the tenant is the page', () => {

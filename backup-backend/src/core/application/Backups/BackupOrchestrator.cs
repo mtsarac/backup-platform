@@ -39,7 +39,9 @@ public sealed record BackupAttemptView(Guid Id, int Number, string Status, DateT
 public sealed record BackupArtifactView(Guid Id, long SizeBytes, string SourceChecksum, string ArtifactChecksum, string ChecksumAlgorithm, DateTimeOffset CreatedAt, IReadOnlyList<BackupReplicaView> Replicas,
     string State = "Available", DateTimeOffset? AcceptedAt = null, DateTimeOffset? RetentionExpiresAt = null, DateTimeOffset? RetentionPinnedAt = null, DateTimeOffset? DeleteAfter = null, string? DeleteReason = null,
     Guid? RunId = null, Guid? JobId = null, Guid? AttemptId = null, string? JobName = null, string? DatabaseName = null, string? AgentName = null, bool CancelDeleteAllowed = false, Guid? AgentId = null, string BackupType = "Full", BackupMetadataView? BackupMetadata = null,
-    BackupReplicationView? Replication = null, ArtifactEncryptionView? Encryption = null);
+    BackupReplicationView? Replication = null, ArtifactEncryptionView? Encryption = null,
+    /// <summary>For a file backup, the paths under the file source that the run was configured to archive (its own snapshot, not the job's current settings); null otherwise.</summary>
+    IReadOnlyList<string>? SourcePaths = null);
 /// <summary>An encrypted artifact's key index: which tenant wrap key sealed it and which recipients its header names. No wrapped key, no key material.</summary>
 public sealed record ArtifactEncryptionView(string Format, string KeyId, int KeyVersion, IReadOnlyList<ArtifactRecipientView> Recipients);
 public sealed record ArtifactRecipientView(string Type, string KeyId, int KeyVersion);
@@ -372,7 +374,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             runId, jobId, artifact.AttemptId, CancelDeleteAllowed: artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending && replica.VerificationState == "Verified"), BackupType: artifact.BackupType,
             BackupMetadata: BackupMetadataProjection.Read(artifact.SourceMetadataJson, artifact.AppliedOptionsJson),
             Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot, artifact.Replicas)),
-            Encryption: ToEncryptionView(artifact));
+            Encryption: ToEncryptionView(artifact),
+            SourcePaths: snapshot?.Files?.Paths.ToArray());
     }
 
     private static ArtifactEncryptionView? ToEncryptionView(BackupArtifact artifact)

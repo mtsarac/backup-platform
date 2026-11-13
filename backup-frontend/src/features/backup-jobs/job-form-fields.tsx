@@ -18,7 +18,7 @@ export function Question({ title, why, children }: { title: string; why: string;
 /** Collapsed-by-default settings with safe defaults; opens when one of its fields has an error. */
 export function Advanced({ open, children }: { open?: boolean; children: ReactNode }) {
   useLanguage()
-  return <Disclosure open={open} title={<>{tx("Teknik ayrıntılar")} <span className="text-sm font-normal text-text-muted">{tx("(güvenli varsayılanlar kullanılır; değiştirmeniz gerekmez)")}</span></>}><FormGrid>{children}</FormGrid></Disclosure>
+  return <Disclosure open={open} title={tx("Teknik ayrıntılar")}><FormGrid>{children}</FormGrid></Disclosure>
 }
 
 /** A ready-made choice for a setting: exactly one option is pressed, or none when the current value is custom. */

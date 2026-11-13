@@ -1,7 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
-import { MemoryRouter, Route, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
+import { Route, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render } from '@/test/render'
 import { ThemeProvider } from '@/components/theme-provider'
 import { renderPlatform } from '@/features/platform/test-utils'
 import { changeLanguage } from '@/lib/i18n/runtime'
@@ -17,7 +16,7 @@ beforeEach(() => { localStorage.setItem('backup-theme', 'light') })
 
 describe('Platform sidebar', () => {
   it('groups every platform page under plain-language headings with unchanged URLs', () => {
-    render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
+    renderPlatform(<PlatformSidebar />)
     expect(links('Genel bakış')).toEqual([['Platform özeti', '/platform']])
     expect(links('Müşteriler')).toEqual([
       ['Çalışma alanları', '/platform/tenants'],
@@ -38,7 +37,7 @@ describe('Platform sidebar', () => {
   })
 
   it('uses plain words in either language', () => {
-    render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
+    renderPlatform(<PlatformSidebar />)
     const labels = () => within(nav()).getAllByRole('link').map((link) => link.textContent ?? '')
     expect(labels().join(' ')).not.toMatch(/ajan|tenant|audit/i)
     act(() => changeLanguage('en'))
@@ -51,7 +50,7 @@ describe('Platform sidebar', () => {
   })
 
   it('never links to a page that has no route', () => {
-    render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
+    renderPlatform(<PlatformSidebar />)
     const routes = createRoutesFromChildren(platformRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith('/platform'))
     expect(targets).toHaveLength(11)
@@ -59,6 +58,13 @@ describe('Platform sidebar', () => {
     expect(matchRoutes(routes, removedRoute)?.at(-1)?.route.path).toBe('*')
     expect(matchRoutes(routes, `${removedRoute}/request-a`)?.at(-1)?.route.path).toBe('*')
     for (const href of targets) expect(matchRoutes(routes, href.slice('/platform'.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
+  })
+
+  it('pins the account settings entry with the display name', () => {
+    renderPlatform(<PlatformSidebar />)
+    const entry = within(nav().closest('aside')!).getByRole('link', { name: /Platform Operatörü/ })
+    expect(entry).toHaveAttribute('href', '/account')
+    expect(entry).toHaveTextContent('Ayarlar')
   })
 
   it('opens the same menu in a drawer from the top bar on phones', async () => {

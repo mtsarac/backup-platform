@@ -1,4 +1,5 @@
-import { act, screen, within } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from '@/test/render'
@@ -30,10 +31,21 @@ describe('backup job health card', () => {
     const region = screen.getByRole('region', { name: 'Yedekleme sağlığı' })
     expect(await within(region).findByText('35 / 100')).toBeInTheDocument()
     expect(within(region).getByText('Kritik')).toBeInTheDocument()
-    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).toBeInTheDocument()
-    expect(within(region).getByText('Doğrulanmış kopya sayısı, gerekli kopya sayısından az.')).toBeInTheDocument()
-    expect(within(region).getByText('Son izole geri yükleme testi başarısız oldu.')).toBeInTheDocument()
-    expect(within(region).getByText('Güncel ve ölçülebilir depolama kapasitesi bilgisi yok.')).toBeInTheDocument()
+    for (const reason of ['Son başarılı yedek, planlanan periyodu aştı.', 'Doğrulanmış kopya sayısı, gerekli kopya sayısından az.', 'Son izole geri yükleme testi başarısız oldu.', 'Güncel ve ölçülebilir depolama kapasitesi bilgisi yok.']) {
+      expect(within(region).getByText(reason)).not.toBeVisible()
+    }
+    const factor = within(region).getByText('Yedek güncelliği').parentElement!
+    fireEvent.mouseEnter(factor)
+    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).toBeVisible()
+    fireEvent.mouseLeave(factor)
+    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).not.toBeVisible()
+    const score = within(factor).getByText('20 / 40')
+    await userEvent.tab()
+    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).toBeVisible()
+    fireEvent.keyDown(score, { key: 'Escape' })
+    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).not.toBeVisible()
+    fireEvent.click(score, { detail: 1 })
+    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).toBeVisible()
     expect(within(region).getByText('Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.')).toBeInTheDocument()
   })
 

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -10,7 +9,6 @@ import { TextInput } from '@/components/ui/text-input'
 import { PageHeader } from '@/components/ui/page-header'
 import { Notice } from '@/components/ui/notice'
 import { EmailVerificationCard } from './email-verification-card'
-import { LanguageSwitcher } from '@/components/layout/language-switcher'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { apiRequest } from '@/lib/api/client'
 import { tx, useLanguage } from '@/lib/i18n'
@@ -162,14 +160,7 @@ export function SecurityPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-4 py-10">
-      <div className="flex items-center justify-between gap-4">
-        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/">
-          {tx('Çalışma alanlarına dön')}
-        </Link>
-        <LanguageSwitcher />
-      </div>
-
+    <div className="space-y-6">
       <PageHeader
         title={tx('Güvenlik ayarları')}
         description={tx('İki faktörlü kimlik doğrulama ve kurtarma kodlarınızı yönetin.')}
@@ -376,6 +367,6 @@ export function SecurityPage() {
           </Field>
         </FormDialog>
       )}
-    </main>
+    </div>
   )
 }

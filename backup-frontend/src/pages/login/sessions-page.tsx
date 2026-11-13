@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PageHeader } from '@/components/ui/page-header'
-import { LanguageSwitcher } from '@/components/layout/language-switcher'
 import { useAuth } from '@/features/auth/use-auth'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { apiRequest } from '@/lib/api/client'
@@ -40,8 +38,7 @@ export function SessionsPage() {
     } catch (error) { setError(error) } finally { setPending(false) }
   }
   const all = selected === 'all'
-  return <main className="mx-auto max-w-3xl space-y-6 px-4 py-10">
-    <div className="flex items-center justify-between gap-4"><Link className="text-sm text-primary underline-offset-4 hover:underline" to="/">{tx('Çalışma alanlarına dön')}</Link><LanguageSwitcher /></div>
+  return <div className="space-y-6">
     <PageHeader title={tx('Oturumlarım')} description={tx('Etkin oturumlarınızı görüntüleyin ve sonlandırın.')} actions={<Button variant="destructive" disabled={!sessions.data?.length || pending} onClick={() => { setError(null); setSelected('all') }}>{tx('Tüm oturumları sonlandır')}</Button>} />
     <QueryState isPending={sessions.isPending} error={sessions.error} empty={sessions.data?.length === 0} onRetry={() => { void sessions.refetch() }}>
       <Card padding="none"><ul className="divide-y divide-border">{sessions.data?.map(session => <li key={session.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
@@ -51,5 +48,5 @@ export function SessionsPage() {
       </li>)}</ul></Card>
     </QueryState>
     <ConfirmDialog open={selected !== null} onClose={() => setSelected(null)} title={all ? tx('Tüm oturumlar sonlandırılsın mı?') : tx('Oturum sonlandırılsın mı?')} consequence={{ what: all ? tx('Tüm oturumlarınız sonlandırılır.') : tx('Seçilen oturum sonlandırılır.'), who: all ? tx('Bu cihaz dahil tüm cihazlarda çıkış yapılır.') : selected?.isCurrent ? tx('Bu cihazda çıkış yapılır.') : tx('Seçilen cihazda çıkış yapılır.'), reversible: tx('Yeniden giriş yapabilirsiniz.') }} pending={pending} error={error} onConfirm={() => { void revoke() }} confirmLabel={all ? tx('Tüm oturumları sonlandır') : tx('Oturumu sonlandır')} />
-  </main>
+  </div>
 }

@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,7 +24,14 @@ function mount() {
 }
 const openTab = async (name: RegExp) => fireEvent.click(await screen.findByRole('tab', { name }))
 const row = (name: string) => screen.getByRole('row', { name: new RegExp(`^${name}`) })
-const technicalDetails = () => screen.getByText('Teknik ayrıntılar').closest('details')!
+const technicalDetails = async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+  return within(await screen.findByRole('dialog'))
+}
+const closeDialog = async () => {
+  await userEvent.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+}
 const rawRate = /\d B\/sn/
 
 beforeEach(() => {
@@ -53,15 +61,16 @@ describe('upload bandwidth page', () => {
   it('keeps the exact bytes per second under collapsed technical details on every tab', async () => {
     mount()
     await screen.findByTestId('tenant-limit')
-    expect(technicalDetails()).not.toHaveAttribute('open')
-    expect(within(technicalDetails()).getByText('12.500.000 B/sn')).toBeInTheDocument()
+    expect(screen.queryByText('12.500.000 B/sn')).not.toBeInTheDocument()
+    expect((await technicalDetails()).getByText('12.500.000 B/sn')).toBeInTheDocument()
+    await closeDialog()
     await openTab(/^Yedekleme bilgisayarları$/)
     await screen.findByRole('row', { name: /^SQL-01/ })
-    expect(technicalDetails()).not.toHaveAttribute('open')
-    expect(within(technicalDetails()).getByText('1.250.000 B/sn')).toBeInTheDocument()
+    expect((await technicalDetails()).getByText('1.250.000 B/sn')).toBeInTheDocument()
+    await closeDialog()
     await openTab(/^Yedekleme işleri$/)
     await screen.findByRole('row', { name: /^Günlük ERP/ })
-    expect(within(technicalDetails()).getByText('16.000 B/sn')).toBeInTheDocument()
+    expect((await technicalDetails()).getByText('16.000 B/sn')).toBeInTheDocument()
   })
 
   it('explains in plain words, outside the technical details, which limit wins and what is never limited', async () => {
@@ -199,12 +208,12 @@ describe('upload bandwidth page', () => {
     expect(await screen.findByText('Hafta içi 09:00–18:00: 10 Mbit/sn')).toBeInTheDocument()
     expect(screen.getByText('Hafta sonu 09:00–18:00: Aktarımı Duraklat')).toBeInTheDocument()
     expect(screen.getByText('Diğer saatlerde sınırsız.')).toBeInTheDocument()
-    expect(screen.queryByText(rawRate, { ignore: 'details *' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Europe/Istanbul', { ignore: 'details *' })).not.toBeInTheDocument()
-    expect(technicalDetails()).not.toHaveAttribute('open')
-    expect(within(technicalDetails()).getByText('profile-1')).toBeInTheDocument()
-    expect(within(technicalDetails()).getByText('Europe/Istanbul')).toBeInTheDocument()
-    expect(within(technicalDetails()).getAllByText('1.250.000 B/sn')).toHaveLength(5)
+    expect(screen.queryByText(rawRate)).not.toBeInTheDocument()
+    expect(screen.queryByText('Europe/Istanbul')).not.toBeInTheDocument()
+    const technical = await technicalDetails()
+    expect(technical.getByText('profile-1')).toBeInTheDocument()
+    expect(technical.getByText('Europe/Istanbul')).toBeInTheDocument()
+    expect(technical.getAllByText('1.250.000 B/sn')).toHaveLength(5)
   })
 
   it('guides to the one primary action when no profile exists, or to the administrator without permission', async () => {

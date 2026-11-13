@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/features/artifact-encryption/api'
@@ -29,9 +30,10 @@ describe('tenant encryption page', () => {
     mount()
     expect(await screen.findByText('Kurtarma anahtarınız eklenmemiş')).toBeInTheDocument()
     expect(screen.getByText('Şifreli yedekleriniz korunuyor')).toBeInTheDocument()
-    const details = screen.getByText(keyId).closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    expect(within(details).getByRole('button', { name: 'Kopyala: Yedekleme anahtarı kimliği', hidden: true })).toBeInTheDocument()
+    expect(screen.queryByText(keyId)).not.toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
+    const details = await screen.findByRole('dialog')
+    expect(within(details).getByRole('button', { name: 'Kopyala: Yedekleme anahtarı kimliği' })).toBeInTheDocument()
   })
 
   it('warns when the platform has no recovery key configured', async () => {

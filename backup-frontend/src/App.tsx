@@ -3,6 +3,9 @@ import { createBrowserRouter, Navigate, Route, RouterProvider, Routes } from 're
 import { ProtectedRoute } from './components/auth/protected-route'
 import { PlatformAdminRoute } from './components/auth/platform-admin-route'
 import { AppShell } from './components/layout/app-shell'
+import { AccountShell } from './components/layout/account-shell'
+import { AccountLayout } from './pages/account/account-layout'
+import { AccountPage } from './pages/account/account-page'
 import { PlatformShell } from './components/layout/platform-shell'
 import { QueryState } from './components/data/query-state'
 import { useAuth } from './features/auth/use-auth'
@@ -30,9 +33,15 @@ function AppRoutes() {
     <Route path="/verify-email" element={<VerifyEmailPage />} />
     <Route element={<ProtectedRoute isAuthenticated={isAuthenticated} />}>
       <Route path="/" element={<TenantSelectPage />} />
-      <Route path="/sessions" element={<SessionsPage />} />
-      <Route path="/security" element={<SecurityPage />} />
-      <Route path="/passkeys" element={<PasskeysPage />} />
+      <Route path="/account" element={<AccountShell />}>
+        <Route element={<AccountLayout />}>
+          <Route index element={<AccountPage />} />
+          <Route path="sessions" element={<SessionsPage />} />
+          <Route path="security" element={<SecurityPage />} />
+          <Route path="passkeys" element={<PasskeysPage />} />
+        </Route>
+      </Route>
+      {['sessions', 'security', 'passkeys'].map((page) => <Route key={page} path={`/${page}`} element={<Navigate to={`/account/${page}`} replace />} />)}
       <Route path="/tenants/:tenantId/*" element={<TenantProvider><AppShell><Routes>{tenantRoutes}</Routes></AppShell></TenantProvider>} />
       <Route path="/platform" element={<PlatformAdminRoute />}>
         <Route element={<PlatformShell />}>{platformRoutes}</Route>

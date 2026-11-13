@@ -5,7 +5,7 @@ import { Section, Fact, Facts } from '@/components/ui/section'
 import type { StatusLevel } from '@/lib/status'
 import { formatDateTime } from '@/lib/format'
 import { deletionInProgress } from './format'
-import { restoreIneligibility } from './restore-eligibility'
+import { artifactAvailability } from './availability'
 import type { BackupArtifact } from './types'
 
 interface Answer { level: StatusLevel; label: string; text: ReactNode }
@@ -17,9 +17,9 @@ function intact(artifact: BackupArtifact): Answer {
 }
 
 function restorable(artifact: BackupArtifact, canOperate: boolean): Answer {
-  const reason = restoreIneligibility(artifact)
-  if (reason) return { level: artifact.state === 'Deleted' ? 'neutral' : 'attention', label: tx('Geri yüklenemez'), text: reason }
-  return { level: 'safe', label: tx('Geri yüklenebilir'), text: canOperate ? tx('Sihirbaz hedefi seçtirir, ön kontrol yapar ve onayınızdan sonra başlatır.') : tx('Geri yüklemeyi başlatma yetkiniz yok. Yöneticinize danışın.') }
+  const { level, label, reason } = artifactAvailability(artifact)
+  if (level !== 'safe') return { level, label, text: reason }
+  return { level, label, text: canOperate ? tx('Sihirbaz hedefi seçtirir, ön kontrol yapar ve onayınızdan sonra başlatır.') : tx('Geri yüklemeyi başlatma yetkiniz yok. Yöneticinize danışın.') }
 }
 
 function deletion(artifact: BackupArtifact, now: number): Answer {
@@ -32,15 +32,15 @@ function deletion(artifact: BackupArtifact, now: number): Answer {
   return { level: 'neutral', label: tx('Süre sınırı yok'), text: tx('Siz silme isteği oluşturmadıkça saklanır.') }
 }
 
-/** The three things a reader came for, before any data: is the file intact, can it be restored, when will it be deleted. */
+/** The three things a reader came for, before any data: integrity, restore availability and retention. */
 export function ArtifactAnswers({ artifact, canOperate, now }: { artifact: BackupArtifact; canOperate: boolean; now: number }) {
   useLanguage()
   if (artifact.state === 'Deleted') return null
   const answers: [string, Answer][] = [
-    [tx('Dosya sağlam mı?'), intact(artifact)],
-    [tx('Geri yüklenebilir mi?'), restorable(artifact, canOperate)],
+    [tx('Bütünlük'), intact(artifact)],
+    [tx('Geri yükleme'), restorable(artifact, canOperate)],
   ]
-  if (!deletionInProgress(artifact) && artifact.state !== 'DeletePending') answers.push([tx('Ne zaman silinecek?'), deletion(artifact, now)])
+  if (!deletionInProgress(artifact) && artifact.state !== 'DeletePending') answers.push([tx('Saklama ve silme'), deletion(artifact, now)])
   return <Section title={tx('Kısaca durum')}>
     <Facts columns={3}>
       {answers.map(([question, { level, label, text }]) => <Fact key={question} label={question}><span className="block space-y-1.5"><StatusPill level={level}>{label}</StatusPill>{text && <span className="block text-sm text-text">{text}</span>}</span></Fact>)}

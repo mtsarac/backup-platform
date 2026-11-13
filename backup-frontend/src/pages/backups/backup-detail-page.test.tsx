@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
@@ -192,15 +193,18 @@ describe('run detail controls and attention', () => {
     await waitFor(() => expect(screen.getByText('Yedekleme denemesi özeti')).toBeInTheDocument())
   })
 
-  it('says what went wrong, that data is safe and what to do, with the code only under collapsed technical details', () => {
+  it('says what went wrong, that data is safe and what to do, with the code only under collapsed technical details', async () => {
     state.query.data = makeRun({ status: 'Failed', reasonCode: 'PermissionDenied' })
     renderDetail()
     const alert = within(screen.getByRole('alert'))
     expect(alert.getByText('İşlem için gerekli izinler bulunmuyor.')).toBeInTheDocument()
     expect(alert.getByText(/Verileriniz için:/)).toBeInTheDocument()
     expect(alert.getByText(/Ne yapmalı:/).closest('p')).toHaveTextContent(/Yeniden dene/)
-    const code = alert.getByText('PermissionDenied')
-    expect(code.closest('details')).not.toHaveAttribute('open')
+    expect(screen.queryByText('PermissionDenied')).not.toBeInTheDocument()
+    await userEvent.click(alert.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText('PermissionDenied')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Yeniden dene' })).toBeEnabled()
   })
 
@@ -212,16 +216,19 @@ describe('run detail controls and attention', () => {
     expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
   })
 
-  it('keeps trigger, planned time, attempt counts, engine and the run id under collapsed copyable technical details', () => {
+  it('keeps trigger, planned time, attempt counts, engine and the run id under collapsed copyable technical details', async () => {
     state.query.data = makeRun({ scheduledFor: '2026-10-06T09:59:00Z' })
     renderDetail()
-    const details = screen.getByRole('region', { name: 'Yedekleme denemesi ayrıntıları' })
-    expect(within(details).getByText('Teknik ayrıntılar').closest('details')).not.toHaveAttribute('open')
-    for (const label of ['Yedekleme denemesi kimliği', 'Tetikleyici', 'Planlanan zaman', 'Deneme sayısı', 'Veritabanı motoru']) expect(within(details).getByText(label)).toBeInTheDocument()
-    expect(within(details).getByText('run-id')).toBeInTheDocument()
-    expect(within(details).getByRole('button', { name: 'Kopyala: Yedekleme denemesi kimliği' })).toBeInTheDocument()
+    const region = screen.getByRole('region', { name: 'Yedekleme denemesi ayrıntıları' })
+    expect(screen.queryByText('run-id')).not.toBeInTheDocument()
+    expect(screen.queryByText('Elle başlatıldı')).not.toBeInTheDocument()
+    await userEvent.click(within(region).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const details = within(await screen.findByRole('dialog'))
+    for (const label of ['Yedekleme denemesi kimliği', 'Tetikleyici', 'Planlanan zaman', 'Deneme sayısı', 'Veritabanı motoru']) expect(details.getByText(label)).toBeInTheDocument()
+    expect(details.getByText('run-id')).toBeInTheDocument()
+    expect(details.getByRole('button', { name: 'Kopyala: Yedekleme denemesi kimliği' })).toBeInTheDocument()
+    expect(details.getByText('Elle başlatıldı')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Zamanlama ve politika' })).not.toBeInTheDocument()
-    for (const shown of screen.getAllByText('Elle başlatıldı')) expect(shown.closest('details')).not.toBeNull()
   })
 
   it('pausing and cancelling are separate: cancel never sends a pause and never offers to resume', async () => {

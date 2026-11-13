@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
+import { Disclosure } from '@/components/ui/disclosure'
 import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { JobSummary } from '@/features/backup-jobs/job-summary'
@@ -27,7 +28,7 @@ function CreatedJobsGroup({ name, selected, results }: { name: string; selected:
 export function OccurrencesGroup({ occurrences }: { occurrences: ReturnType<typeof useJobOccurrences> }) {
   useLanguage()
   const { tenantId } = useTenant()
-  return <Section title={tx("Son zamanlama oluşumları")}><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{formatDateTime(item.scheduledAt)} · {statusLabel('occurrence', item.outcome)} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : statusLabel('occurrenceReason', item.reason)}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>{tx("Yedekleme denemesini aç")}</Link></>}</li>)}</ul></QueryState></Section>
+  return <Disclosure title={tx("Son zamanlama oluşumları")}><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{formatDateTime(item.scheduledAt)} · {statusLabel('occurrence', item.outcome)} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : statusLabel('occurrenceReason', item.reason)}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>{tx("Yedekleme denemesini aç")}</Link></>}</li>)}</ul></QueryState></Disclosure>
 }
 
 /** The saved storage target cannot be used; the wizard can jump back to its step, the single-page form shows the section already. */

@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
-import { MemoryRouter, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
+import { BackupCenterLayout } from '@/pages/backup-center/backup-center-layout'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { changeLanguage } from '@/lib/i18n/runtime'
 import { tenantRoutes } from '@/route-tables'
@@ -24,13 +25,9 @@ describe('Tenant sidebar', () => {
   it('groups every existing page under four groups with unchanged URLs', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     expect(within(nav()).getByRole('link', { name: 'Genel Bakış' })).toHaveAttribute('href', base)
-    expect(links('Yedeklemeler')).toEqual([
-      ['Yedekleme işleri', `${base}/backup-jobs`],
-      ['Yedekleme denemeleri', `${base}/backup-runs`],
-      ['Yedek dosyaları', `${base}/artifacts`],
-      ['Geri yüklemeler', `${base}/restores`],
-      ['Paylaşımlarım', `${base}/shares`],
-    ])
+    expect(within(nav()).getByRole('link', { name: 'Yedeklemeler' })).toHaveAttribute('href', `${base}/backup-jobs`)
+    expect(within(nav()).getByRole('link', { name: 'Paylaşımlarım' })).toHaveAttribute('href', `${base}/shares`)
+    expect(within(nav()).queryByRole('link', { name: 'Yedekleme işleri' })).not.toBeInTheDocument()
     expect(links('Altyapı')).toEqual([
       ['Yedekleme bilgisayarları', `${base}/agents`],
       ['Veritabanı bulma', `${base}/discovery`],
@@ -48,7 +45,6 @@ describe('Tenant sidebar', () => {
     access.canAdmin = false
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     expect(links('Ayarlar')).toEqual([['Yükleme bant genişliği', `${base}/upload-bandwidth`]])
-    expect(links('Yedeklemeler')).toHaveLength(5)
     expect(links('Altyapı')).toHaveLength(3)
   })
 
@@ -63,14 +59,15 @@ describe('Tenant sidebar', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(tenantRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith(base))
-    expect(targets).toHaveLength(12)
+    expect(targets).toHaveLength(9)
     for (const href of targets) expect(matchRoutes(routes, href.slice(base.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 
   it('shows the same menu in English without leftover Turkish labels', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     act(() => changeLanguage('en'))
-    expect(links('Backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup attempts', 'Backup files', 'Restores', 'My shares'])
+    expect(within(nav()).getByRole('link', { name: 'Backups' })).toBeInTheDocument()
+    expect(within(nav()).getByRole('link', { name: 'My shares' })).toBeInTheDocument()
     expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Database discovery', 'Storage'])
     expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Upload bandwidth'])
     expect(within(nav()).getByRole('link', { name: 'Overview' })).toBeInTheDocument()
@@ -83,7 +80,36 @@ describe('Tenant sidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menüyü aç' }))
     const drawer = screen.getByRole('dialog', { name: 'Ana menü' })
     expect(showModal).toHaveBeenCalled()
-    expect(within(drawer).getByRole('link', { name: 'Yedekleme işleri' })).toHaveAttribute('href', `${base}/backup-jobs`)
+    expect(within(drawer).getByRole('link', { name: 'Yedeklemeler' })).toHaveAttribute('href', `${base}/backup-jobs`)
+    expect(within(drawer).getByRole('link', { name: /Ada/ })).toHaveAttribute('href', '/account')
     expect(within(drawer).getByRole('button', { name: 'Menüyü kapat' })).toBeInTheDocument()
+  })
+
+  it.each([
+    'backup-jobs', 'backup-jobs/new', 'backup-jobs/j1/edit', 'backup-runs', 'backup-runs/r1', 'artifacts', 'artifacts/a1', 'artifacts/a1/restore', 'restores', 'restores/x1',
+  ])('marks the single Yedeklemeler entry current on %s', (path) => {
+    render(<MemoryRouter initialEntries={[`${base}/${path}`]}><Sidebar /></MemoryRouter>)
+    expect(within(nav()).getAllByRole('link', { current: 'page' }).map((link) => link.textContent)).toEqual(['Yedeklemeler'])
+  })
+
+  it('leaves Yedeklemeler inactive on Paylaşımlarım and the dashboard', () => {
+    render(<MemoryRouter initialEntries={[`${base}/shares`]}><Sidebar /></MemoryRouter>)
+    expect(within(nav()).getAllByRole('link', { current: 'page' }).map((link) => link.textContent)).toEqual(['Paylaşımlarım'])
+  })
+
+  it('does not repeat any backup center tab name as a sidebar entry', () => {
+    render(<MemoryRouter><Sidebar /></MemoryRouter>)
+    const names = within(nav()).getAllByRole('link').map((link) => link.textContent)
+    render(<MemoryRouter initialEntries={[`${base}/backup-jobs`]}><Routes><Route path="/tenants/:tenantId" element={<BackupCenterLayout />}><Route path="backup-jobs" element={null} /></Route></Routes></MemoryRouter>)
+    const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' })).getAllByRole('link').map((link) => link.textContent)
+    expect(tabs).toHaveLength(4)
+    for (const tab of tabs) expect(names).not.toContain(tab)
+  })
+
+  it('pins the account settings entry with the display name', () => {
+    render(<MemoryRouter><Sidebar /></MemoryRouter>)
+    const entry = within(nav().closest('aside')!).getByRole('link', { name: /Ada/ })
+    expect(entry).toHaveAttribute('href', '/account')
+    expect(entry).toHaveTextContent('Ayarlar')
   })
 })

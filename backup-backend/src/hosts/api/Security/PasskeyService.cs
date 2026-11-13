@@ -9,6 +9,9 @@ using Microsoft.AspNetCore.Identity;
 
 namespace BackupPlatform.Api.Security;
 
+/// <summary>Passkey relying party ID or origins are not configured: an operator state, not a server fault.</summary>
+public sealed class PasskeysNotConfiguredException() : InvalidOperationException("Passkey relying party ID and origins must be configured.");
+
 public sealed class PasskeyService(
     IIdentityStore identityStore,
     PasswordHashService passwordHashService,
@@ -21,7 +24,7 @@ public sealed class PasskeyService(
         var rpId = configuration["Authentication:Passkeys:RelyingPartyId"];
         var configuredOrigins = configuration.GetSection("Authentication:Passkeys:Origins").Get<string[]>();
         if (string.IsNullOrWhiteSpace(rpId) || configuredOrigins is null || configuredOrigins.Length == 0)
-            throw new InvalidOperationException("Passkey relying party ID and origins must be configured.");
+            throw new PasskeysNotConfiguredException();
         var origins = new HashSet<string>(configuredOrigins, StringComparer.OrdinalIgnoreCase);
 
         var fidoConfig = new Fido2Configuration
