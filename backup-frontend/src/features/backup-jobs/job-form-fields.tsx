@@ -10,9 +10,9 @@ export function FormGrid({ children }: { children: ReactNode }) {
 }
 
 /** One wizard question with the short reason it is asked. */
-export function Question({ title, why, children }: { title: string; why: string; children?: ReactNode }) {
+export function Question({ title, why, children, headingLevel }: { title: string; why: string; children?: ReactNode; headingLevel?: 2 | 3 }) {
   useLanguage()
-  return <Section title={title} description={<><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}{why}</>}>{children}</Section>
+  return <Section title={title} headingLevel={headingLevel} description={<><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}{why}</>}>{children}</Section>
 }
 
 /** Collapsed-by-default settings with safe defaults; opens when one of its fields has an error. */

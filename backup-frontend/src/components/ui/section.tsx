@@ -3,15 +3,16 @@ import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /** A titled part of a page: heading, then content, no box. `flush` frames the body for tables and lists that bring their own rows; `danger` frames the whole section. */
-export function Section({ title, description, actions, children, flush, className, tone = 'default' }: {
-  title?: ReactNode; description?: ReactNode; actions?: ReactNode; children?: ReactNode; flush?: boolean; className?: string; tone?: 'default' | 'danger'
+export function Section({ title, description, actions, children, flush, className, tone = 'default', headingLevel = 2 }: {
+  title?: ReactNode; description?: ReactNode; actions?: ReactNode; children?: ReactNode; flush?: boolean; className?: string; tone?: 'default' | 'danger'; headingLevel?: 2 | 3
 }) {
   useLanguage()
   const id = useId()
+  const Heading = headingLevel === 3 ? 'h3' : 'h2'
   return <section aria-labelledby={title ? id : undefined} className={cn('min-w-0', tone === 'danger' && 'rounded-lg border border-error/40 p-4', className)}>
     {(title || actions) && <div className={cn('flex flex-wrap items-end justify-between gap-3', !flush && 'border-b border-border pb-2')}>
       <div className="min-w-0 space-y-0.5">
-        {title && <h2 id={id} className="text-base font-semibold text-text-heading">{title}</h2>}
+        {title && <Heading id={id} className="text-base font-semibold text-text-heading">{title}</Heading>}
         {description && <p className="text-sm text-text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
