@@ -88,7 +88,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(1_000_000, changed.Details.GetProperty("previousBytesPerSecond").GetInt64());
         Assert.Equal(1_500_000, changed.Details.GetProperty("bytesPerSecond").GetInt64());
         Assert.Contains(events, audit => audit.TargetType == "backup_job" && System.Text.Json.JsonDocument.Parse(audit.DetailsJson).RootElement.GetProperty("bytesPerSecond").ValueKind == System.Text.Json.JsonValueKind.Null);
-        Assert.All(events, audit => Assert.Equal(AuditActorKind.TenantAdministrator, audit.ActorKind));
+        Assert.All(events, audit => Assert.Equal(AuditActorKind.UserAdmin, audit.ActorKind));
     }
 
     [Fact]

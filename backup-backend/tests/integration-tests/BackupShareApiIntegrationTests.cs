@@ -67,7 +67,7 @@ public sealed class BackupShareApiIntegrationTests(PostgreSqlFixture fixture) : 
             Assert.NotNull(audit);
             Assert.Equal(scenario.Setup.Tenant.Id, audit.TenantId);
             Assert.Equal(scenario.Setup.Account.UserId, audit.ActorUserId);
-            Assert.Equal(AuditActorKind.TenantAdministrator, audit.ActorKind);
+            Assert.Equal(AuditActorKind.UserAdmin, audit.ActorKind);
 
             using var details = JsonDocument.Parse(audit.DetailsJson);
             Assert.Equal(scenario.Setup.Account.UserId.ToString(), details.RootElement.GetProperty("actor").GetString());
@@ -366,7 +366,7 @@ public sealed class BackupShareApiIntegrationTests(PostgreSqlFixture fixture) : 
             Assert.NotNull(audit);
             Assert.Equal(scenario.Setup.Tenant.Id, audit.TenantId);
             Assert.Equal(scenario.Setup.Account.UserId, audit.ActorUserId);
-            Assert.Equal(AuditActorKind.TenantAdministrator, audit.ActorKind);
+            Assert.Equal(AuditActorKind.UserAdmin, audit.ActorKind);
 
             using var details = JsonDocument.Parse(audit.DetailsJson);
             Assert.Equal("UserAdmin", details.RootElement.GetProperty("role").GetString());
@@ -440,7 +440,7 @@ public sealed class BackupShareApiIntegrationTests(PostgreSqlFixture fixture) : 
             Assert.NotNull(audit);
             Assert.Equal(scenario.Setup.Tenant.Id, audit.TenantId);
             Assert.Equal(scenario.Setup.Account.UserId, audit.ActorUserId);
-            Assert.Equal(AuditActorKind.TenantAdministrator, audit.ActorKind);
+            Assert.Equal(AuditActorKind.UserAdmin, audit.ActorKind);
 
             using var details = JsonDocument.Parse(audit.DetailsJson);
             Assert.Equal("Inspection complete", details.RootElement.GetProperty("reason").GetString());

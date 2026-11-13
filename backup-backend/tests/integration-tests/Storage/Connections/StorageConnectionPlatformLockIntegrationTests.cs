@@ -61,10 +61,8 @@ public sealed class StorageConnectionPlatformLockIntegrationTests(PostgreSqlFixt
         var path = env.TenantRoot + $"/storage-connections/{localId}";
         var platformPath = $"/api/platform/storage-connections/{localId}";
         await ToggleAsync(platform, platformPath, "disable");
-        var view = await GetAsync(reader, path);
-        AssertState(view, true, true, false);
-        Assert.False(view.GetProperty("permissions").GetProperty("canToggle").GetBoolean());
-        Assert.False(view.GetProperty("permissions").GetProperty("canDelete").GetBoolean());
+        using (var read = await reader.GetAsync(path))
+            Assert.Equal(HttpStatusCode.Forbidden, read.StatusCode);
         foreach (var action in new[] { "enable", "disable" })
         {
             using var tenantToggle = await reader.SendAsync(HttpMethod.Post, path + "/" + action);
@@ -209,9 +207,9 @@ public sealed class StorageConnectionPlatformLockIntegrationTests(PostgreSqlFixt
         var audits = await ToggleAuditsAsync(env, localId);
         Assert.Equal(4, audits.Count);
         AssertAudit(audits, StorageConnectionAuditActions.Disabled, AuditActorKind.PlatformAdmin, "platform", (true, true, false));
-        AssertAudit(audits, StorageConnectionAuditActions.Disabled, AuditActorKind.TenantAdministrator, "owner", (false, true, false));
+        AssertAudit(audits, StorageConnectionAuditActions.Disabled, AuditActorKind.UserAdmin, "owner", (false, true, false));
         AssertAudit(audits, StorageConnectionAuditActions.Enabled, AuditActorKind.PlatformAdmin, "platform", (false, false, false));
-        AssertAudit(audits, StorageConnectionAuditActions.Enabled, AuditActorKind.TenantAdministrator, "owner", (true, false, true));
+        AssertAudit(audits, StorageConnectionAuditActions.Enabled, AuditActorKind.UserAdmin, "owner", (true, false, true));
     }
 
     private static void AssertAudit(List<AuditEvent> audits, string action, AuditActorKind kind, string control, (bool Enabled, bool Locked, bool Effective) state)

@@ -70,7 +70,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task TenantAdministratorsCreateListAndRevokeTokensForTheirOwnEnabledTenant()
+    public async Task UserAdminsCreateListAndRevokeTokensForTheirOwnEnabledTenant()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
@@ -131,7 +131,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task PlatformAdminWithoutMembershipHasNoImplicitTenantAccess()
+    public async Task PlatformAdminManagesAnyTenantWithoutMembership()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
@@ -145,11 +145,13 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         using var detail = await platform.GetAsync($"/api/tenants/{tenant}/agents/{Guid.NewGuid()}");
         using var policy = await platform.GetAsync($"/api/tenants/{tenant}/agent-enrollment");
         using var changePolicy = await platform.SendAsync(HttpMethod.Put, $"/api/tenants/{tenant}/agent-enrollment", new { enabled = false });
-        Assert.All(new[] { create, list, status, agents, context, detail, policy, changePolicy }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.All(new[] { list, agents, context, policy, changePolicy }, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        Assert.All(new[] { status, detail }, response => Assert.Equal(HttpStatusCode.NotFound, response.StatusCode));
     }
 
     [Fact]
-    public async Task CrossTenantAdministratorCannotManageAnotherTenantsAgents()
+    public async Task UserAdminOfAnotherTenantCannotManageAnotherTenantsAgents()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var tenantA = await world.CreateTenantAsync();
@@ -188,7 +190,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task TenantAdministratorSeesOnlyTheirOwnAgentsWithoutSecrets()
+    public async Task UserAdminSeesOnlyTheirOwnAgentsWithoutSecrets()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var tenantA = await world.CreateTenantAsync();
@@ -285,7 +287,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task UserReportsRoleAndTenantReportsAdministrator()
+    public async Task UserReportsItsAccountRoleAndMembershipsCarryNoRole()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var tenant = await world.AddTenantAsync();
@@ -296,12 +298,13 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         Assert.False(AgentWorld.ReadJson(me).GetProperty("isPlatformAdmin").GetBoolean());
         Assert.Equal("UserAdmin", AgentWorld.ReadJson(me).GetProperty("role").GetString());
         using var memberships = await session.GetAsync("/api/me/tenants");
+        // A membership carries no role of its own: the account role is the only role.
         var membership = Assert.Single(AgentWorld.ReadJson(memberships).EnumerateArray());
-        Assert.Equal("Administrator", membership.GetProperty("role").GetString());
-        Assert.Equal("Administrator", membership.GetProperty("membershipRole").GetString());
+        Assert.Equal(tenant.Id.Value, membership.GetProperty("tenantId").GetGuid());
+        Assert.False(membership.TryGetProperty("role", out _));
         using var context = await session.GetAsync($"/api/tenants/{tenant.Id.Value}/context");
-        Assert.Equal("Administrator", AgentWorld.ReadJson(context).GetProperty("role").GetString());
-        Assert.Equal("Administrator", AgentWorld.ReadJson(context).GetProperty("membershipRole").GetString());
+        Assert.Equal(tenant.Id.Value, AgentWorld.ReadJson(context).GetProperty("tenantId").GetGuid());
+        Assert.False(AgentWorld.ReadJson(context).TryGetProperty("role", out _));
         var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
         using var platformMe = await platform.GetAsync("/api/me");
         Assert.True(AgentWorld.ReadJson(platformMe).GetProperty("isPlatformAdmin").GetBoolean());

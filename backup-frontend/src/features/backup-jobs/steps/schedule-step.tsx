@@ -26,7 +26,7 @@ export function ScheduleStep({ form }: { form: JobFormState }) {
     </Question>
     <Question title={tx("Yedekler ne kadar süre saklansın?")} why={tx("Süresi dolan yedekler silinir; böylece depolama alanı gereksiz yere dolmaz.")}>
       <FormGrid>
-        {!canAdmin && <p className="text-sm text-text-muted md:col-span-2">{tx("Saklama politikasını yalnızca Owner / Admin değiştirebilir.")}{' '}{form.job ? tx('Mevcut politika korunur.') : tx('Sunucunun varsayılan politikası uygulanır.')}</p>}
+        {!canAdmin && <p className="text-sm text-text-muted md:col-span-2">{form.job ? tx('Mevcut politika korunur.') : tx('Sunucunun varsayılan politikası uygulanır.')}</p>}
         <PresetChoice label={tx("Saklama süresi")} disabled={!canAdmin} options={[
           ...retentionPresets.map(([seconds]) => ({ text: keepForLabel(seconds), pressed: retention.enabled && retention.keepForSeconds === seconds, onSelect: () => setRetention({ ...retention, enabled: true, keepForSeconds: seconds }) })),
           { text: tx('Süresiz'), pressed: !retention.enabled, onSelect: () => setRetention({ ...retention, enabled: false }) },

@@ -231,7 +231,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             {
                 if (outcome != BackupArtifactDeleteOutcome.Requested) return;
                 var actorId = requestedByUserId.HasValue ? new UserId(requestedByUserId.Value) : UserId.System;
-                var actorKind = requestedByUserId.HasValue ? AuditActorKind.TenantAdministrator : AuditActorKind.System;
+                var actorKind = requestedByUserId.HasValue ? AuditActorKind.UserAdmin : AuditActorKind.System;
                 context.AuditEvents.Add(AuditEvent.Record(
                     now, actorId, actorKind, AuditActions.BackupArtifactDeleteRequested, tenantId,
                     "backup_artifact", artifactId.ToString("D"),
@@ -254,7 +254,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             {
                 if (restored == 0) return;
                 var actorId = requestedByUserId.HasValue ? new UserId(requestedByUserId.Value) : UserId.System;
-                var actorKind = requestedByUserId.HasValue ? AuditActorKind.TenantAdministrator : AuditActorKind.System;
+                var actorKind = requestedByUserId.HasValue ? AuditActorKind.UserAdmin : AuditActorKind.System;
                 context.AuditEvents.Add(AuditEvent.Record(
                     now, actorId, actorKind, AuditActions.BackupArtifactDeleteCancelled, tenantId,
                     "backup_artifact", artifactId.ToString("D"),

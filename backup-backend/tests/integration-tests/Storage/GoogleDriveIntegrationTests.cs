@@ -346,8 +346,9 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
         var adminUser = await world.SeedUserAsync();
         await world.GrantAsync(tenant, adminUser);
         await world.GrantAsync(foreign, adminUser);
+        // A UserAdmin of another tenant only: no access to this tenant's connection.
         var viewerUser = await world.SeedUserAsync();
-        await world.GrantAsync(tenant, viewerUser);
+        await world.GrantAsync(foreign, viewerUser);
         var admin = await world.SignInAsync(adminUser);
         var viewer = await world.SignInAsync(viewerUser);
         await world.Factory.Services.GetRequiredService<ISecretStore>().SetAsync(

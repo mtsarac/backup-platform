@@ -33,7 +33,7 @@ public sealed class PostgreSqlTenantRecoveryKeyStore(DbContextOptions<PlatformDb
             context.TenantRecoveryKeys.Add(key);
         }
         else key.Replace(keyId, spki, actor, now);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator, AuditActions.TenantRecoveryKeySet, tenantId, "tenant_recovery_key",
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.UserAdmin, AuditActions.TenantRecoveryKeySet, tenantId, "tenant_recovery_key",
             key.Id.ToString("D"), new Dictionary<string, object?> { ["result"] = "succeeded", ["keyId"] = keyId, ["keyVersion"] = key.Version }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -49,7 +49,7 @@ public sealed class PostgreSqlTenantRecoveryKeyStore(DbContextOptions<PlatformDb
         var key = await context.TenantRecoveryKeys.SingleOrDefaultAsync(row => row.TenantId == tenantId, cancellationToken);
         if (key is null) return false;
         context.TenantRecoveryKeys.Remove(key);
-        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor, AuditActorKind.TenantAdministrator, AuditActions.TenantRecoveryKeyRemoved, tenantId, "tenant_recovery_key",
+        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor, AuditActorKind.UserAdmin, AuditActions.TenantRecoveryKeyRemoved, tenantId, "tenant_recovery_key",
             key.Id.ToString("D"), new Dictionary<string, object?> { ["result"] = "succeeded", ["keyId"] = key.KeyId, ["keyVersion"] = key.Version }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

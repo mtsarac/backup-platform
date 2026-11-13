@@ -55,7 +55,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     }
 
     [Fact]
-    public async Task ViewerCanReadButCannotCreateStartOrCancelAndCrossTenantReadsAreHidden()
+    public async Task MemberReadsAreSafeNonMemberCannotCreateStartOrCancelAndCrossTenantReadsAreHidden()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
@@ -74,9 +74,10 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         using var list = await session.GetAsync(root + "/backup-runs");
         Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
         Assert.Equal(runId, Assert.Single(AgentWorld.ReadJson(list).GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
-        using var deniedCreate = await session.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
-        using var deniedStart = await StartAsync(session, root, jobId, "denied");
-        using var deniedCancel = await session.SendAsync(HttpMethod.Post, root + $"/backup-runs/{runId}/cancel");
+        var outsider = await world.SignInAsync(await world.SeedUserAsync());
+        using var deniedCreate = await outsider.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
+        using var deniedStart = await StartAsync(outsider, root, jobId, "denied");
+        using var deniedCancel = await outsider.SendAsync(HttpMethod.Post, root + $"/backup-runs/{runId}/cancel");
         Assert.Equal(HttpStatusCode.Forbidden, deniedCreate.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, deniedStart.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, deniedCancel.StatusCode);

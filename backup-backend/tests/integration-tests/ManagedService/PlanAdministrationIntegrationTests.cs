@@ -13,7 +13,7 @@ namespace BackupPlatform.IntegrationTests.ManagedService;
 public sealed class PlanAdministrationIntegrationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
     [Fact]
-    public async Task TenantOwnersAndAdminsCannotReachAnyManagedServiceRoute()
+    public async Task UserAdminsCannotReachAnyManagedServiceRoute()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));

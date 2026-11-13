@@ -134,7 +134,7 @@ export interface PlatformAuditEntry {
   at: string
   actorUserId: string
   actorDisplayName: string | null
-  actorKind: 'PlatformAdmin' | 'TenantAdministrator' | 'System' | 'User' | 'Anonymous'
+  actorKind: 'PlatformAdmin' | 'UserAdmin' | 'System' | 'User' | 'Anonymous'
   action: string
   tenantId: string | null
   tenantName: string | null

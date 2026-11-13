@@ -42,7 +42,7 @@ public sealed record StorageScope(TenantId? TenantId, bool CanManage)
 
     public static StorageScope Platform { get; } = new(null, true);
 
-    public AuditActorKind ActorKind => IsPlatform ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+    public AuditActorKind ActorKind => IsPlatform ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
 }
 
 public sealed record StorageActor(UserId UserId, AuditActorKind Kind);

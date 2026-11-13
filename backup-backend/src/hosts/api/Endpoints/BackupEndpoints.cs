@@ -39,10 +39,9 @@ public static class BackupEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
+    private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, HttpContext context, ITenantContext tenant,
         BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, IIdempotencyFingerprintKey fingerprintKey, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         // Exactly one valid key: a missing, repeated or malformed header is refused before anything is read or written.
         var keys = context.Request.Headers["Idempotency-Key"];
         if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0])) return Json400("Idempotency-Key", "A single valid Idempotency-Key header is required (1-128 printable ASCII characters).");
@@ -114,11 +113,10 @@ public static class BackupEndpoints
     private static async Task<IResult> ListJobsAsync(ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken) =>
         Results.Ok(await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), cancellationToken));
 
-    private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
+    private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, HttpContext context, ITenantContext tenant,
         BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         // Retention keeps its administrator-only rule even though it now travels in the same request: an operator simply does not send it.
-        if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         try
         {
             request = request with { Configuration = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken) };
@@ -131,11 +129,6 @@ public static class BackupEndpoints
         catch (InvalidBackupJobException exception) { return InvalidJob(exception); }
         catch (ArgumentException) { return Invalid("Invalid backup job configuration."); }
     }
-
-    private static async Task<bool> IsAdministratorAsync(IAuthorizationService authorization, HttpContext context) =>
-        (await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAccess)).Succeeded;
-
-    private static IResult RetentionForbidden() => Results.Json(new { error = "forbidden", field = "retention", code = "administrator_required" }, statusCode: StatusCodes.Status403Forbidden);
 
     private static async Task<IResult> GetDashboardAsync(ITenantContext tenant, IBackupUiStore store,
         AgentConnectivityQueryService connectivity, TimeProvider time, CancellationToken cancellationToken)

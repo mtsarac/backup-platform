@@ -25,7 +25,7 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
     }
 
     [Fact]
-    public async Task TenantOwnersAndAdminsCannotReachAnyPlatformRoute()
+    public async Task UserAdminsCannotReachAnyPlatformRoute()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
@@ -302,7 +302,7 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         Assert.All(audit, entry => Assert.Equal(AuditActions.EnrollmentPolicyChanged, entry.Action));
         Assert.Equal(AuditActorKind.PlatformAdmin, audit[0].ActorKind);
         Assert.Equal(platformAccount.UserId, audit[0].ActorUserId);
-        Assert.Equal(AuditActorKind.TenantAdministrator, audit[1].ActorKind);
+        Assert.Equal(AuditActorKind.UserAdmin, audit[1].ActorKind);
         Assert.Equal(setup.Account.UserId, audit[1].ActorUserId);
 
         var detail = await CallAsync(platform, HttpMethod.Get, $"/api/platform/tenants/{setup.Tenant.Id.Value}");

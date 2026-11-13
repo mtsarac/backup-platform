@@ -356,7 +356,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
             ["result"] = result,
             ["decrypted"] = session.Decrypted
         };
-        var actorKind = session.ShareId is not null ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        var actorKind = session.ShareId is not null ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
         context.AuditEvents.Add(AuditEvent.Record(now, new UserId(session.UserId), actorKind, action, session.TenantId,
             "download", session.Id.ToString("D"), details));
     }
@@ -388,7 +388,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         };
         // A refusal of a prepared download belongs to that session; the history shows it as the session's outcome, not as a second attempt.
         if (command.SessionId is { } sessionId) details["sessionId"] = sessionId;
-        var actorKind = command.IsPlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
+        var actorKind = command.IsPlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
         context.AuditEvents.Add(AuditEvent.Record(command.Now, new UserId(command.UserId), actorKind, "download.refused", command.TenantId,
             "download", (command.SessionId ?? command.ShareId ?? command.ArtifactId).ToString("D"), details));
         await context.SaveChangesAsync(cancellationToken);

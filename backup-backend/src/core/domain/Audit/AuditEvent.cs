@@ -10,7 +10,7 @@ namespace BackupPlatform.Domain.Audit;
 public enum AuditActorKind
 {
     PlatformAdmin = 1,
-    TenantAdministrator = 2,
+    UserAdmin = 2,
     System = 3,
     User = 4,
     Anonymous = 5

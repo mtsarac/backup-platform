@@ -346,7 +346,7 @@ public sealed class StorageConnectionServiceCreateTests
 
         var audit = Assert.Single(_h.Store.Audit);
         Assert.Equal(StorageConnectionAuditActions.Created, audit.Action);
-        Assert.Equal(AuditActorKind.TenantAdministrator, audit.ActorKind);
+        Assert.Equal(AuditActorKind.UserAdmin, audit.ActorKind);
         Assert.Equal("Audited", audit.Details["name"]);
         Assert.Equal(TestProviders.Fake, audit.Details["providerType"]);
         Assert.Equal("TenantManaged", audit.Details["ownership"]);

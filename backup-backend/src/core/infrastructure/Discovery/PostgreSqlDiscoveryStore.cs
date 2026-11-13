@@ -275,7 +275,7 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
             context.DiscoveryAgentStates.Add(state);
         }
         state.ChangeSettings(enabled, scanIntervalMinutes, includeDocker, now);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator, AuditActions.DiscoverySettingsChanged, tenantId, "agent", agentId.Value.ToString("D"),
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.UserAdmin, AuditActions.DiscoverySettingsChanged, tenantId, "agent", agentId.Value.ToString("D"),
             new Dictionary<string, object?> { ["result"] = "succeeded", ["enabled"] = enabled, ["scanIntervalMinutes"] = scanIntervalMinutes, ["includeDocker"] = includeDocker }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

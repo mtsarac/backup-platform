@@ -45,8 +45,8 @@ public sealed class RemoveArtifactAccessMigrationTests(PostgreSqlFixture fixture
                 FROM download_sessions s CROSS JOIN (VALUES ({streamingId}, 'Streaming'), ({preparingId}, 'Preparing'), ({readyId}, 'Ready'), ({completedId}, 'Completed')) AS v(id, state)
                 WHERE s."Id" = {normalId}
                 """);
-            using var beforeKey = await AgentAsync(streamingId, "artifact-key", new { leaseToken = token });
-            Assert.Equal(HttpStatusCode.OK, beforeKey.StatusCode);
+            // The current API cannot serve a pre-rework schema, so the legacy session is checked in the database before the upgrade.
+            Assert.Equal("Streaming", await context.Database.SqlQuery<string>($"SELECT \"State\" AS \"Value\" FROM download_sessions WHERE \"Id\" = {streamingId}").SingleAsync());
             await migrator.MigrateAsync();
         }
 

@@ -157,7 +157,7 @@ public sealed class GoogleDriveOAuthService(
             if (!string.IsNullOrWhiteSpace(accountName)) config["accountName"] = accountName;
             connection.Reconfigure(config, now);
             db.AuditEvents.Add(AuditEvent.Record(
-                now, new UserId(oauthState.UserId), AuditActorKind.TenantAdministrator,
+                now, new UserId(oauthState.UserId), AuditActorKind.UserAdmin,
                 "storage_connection.oauth_connected", oauthState.TenantId,
                 BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
                 new Dictionary<string, object?> { ["accountEmail"] = accountEmail, ["accountName"] = accountName }));
@@ -208,7 +208,7 @@ public sealed class GoogleDriveOAuthService(
             config.Remove("accountName");
             connection.Reconfigure(config, now);
             db.AuditEvents.Add(AuditEvent.Record(
-                now, new UserId(userId), AuditActorKind.TenantAdministrator,
+                now, new UserId(userId), AuditActorKind.UserAdmin,
                 "storage_connection.oauth_disconnected", tenantId,
                 BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
                 new Dictionary<string, object?>()));

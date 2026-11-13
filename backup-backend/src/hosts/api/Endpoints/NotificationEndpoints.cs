@@ -128,7 +128,7 @@ public static class NotificationEndpoints
 
     // ---- shared -------------------------------------------------------------------------------------------------------------------------
 
-    private static NotificationActor TenantActor(ICurrentUser user) => new(user.UserId!, AuditActorKind.TenantAdministrator);
+    private static NotificationActor TenantActor(ICurrentUser user) => new(user.UserId!, AuditActorKind.UserAdmin);
 
     private static NotificationActor PlatformActor(ICurrentUser user) => new(user.UserId!, AuditActorKind.PlatformAdmin);
 
