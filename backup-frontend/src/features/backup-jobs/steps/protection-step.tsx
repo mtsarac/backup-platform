@@ -13,15 +13,15 @@ export function ProtectionStep({ form, advancedTitle, headingLevel }: { form: Jo
   useLanguage()
   const { errors, setConfiguration: onChange } = form
   const { configuration } = form.values
-  const { check, select, withErrors } = fieldKit(errors)
+  const { check, select } = fieldKit(errors)
   return <>
-    <Question headingLevel={headingLevel} title={tx("Yedekler şifrelensin mi?")} why={tx("Şifreli bir yedek, dosya yanlış ellere geçse bile okunamaz.")}>
+    <Question compact={Boolean(form.job)} headingLevel={headingLevel} title={tx("Yedekler şifrelensin mi?")} why={tx("Şifreli bir yedek, dosya yanlış ellere geçse bile okunamaz.")}>
       <div className="min-w-0 space-y-1">
         {select('configuration.encryptionPolicy', tx('Yedek şifreleme politikası'), configuration.encryptionPolicy, encryptionPolicies.map(policy => [policy, policyLabels[policy]] as const), value => onChange({ ...configuration, encryptionPolicy: value as EncryptionPolicy }))}
         <p className="text-sm text-text-muted">{policyDescriptions[configuration.encryptionPolicy]}{' '}{tx("Şifreleme Agent'ta, depolamaya yazılmadan önce yapılır.")}</p>
       </div>
     </Question>
-    <Advanced title={advancedTitle} open={withErrors('configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy')}>
+    <Advanced title={advancedTitle} open={['configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy'].some(name => Boolean(errors[name] ?? errors[name.split('.').at(-1) ?? name]))}>
       {configuration.engine === 'mssql' && check(tx('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)'), configuration.copyOnly, copyOnly => onChange({ ...configuration, copyOnly }))}
       {configuration.engine !== 'file-system' && select('configuration.checksumPolicy', configuration.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)'), configuration.checksumPolicy, policies, value => onChange({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
       {select('configuration.compressionPolicy', tx('Sıkıştırma (Compression)'), configuration.compressionPolicy, policies, value => onChange({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}

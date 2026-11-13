@@ -35,6 +35,7 @@ function FileSourceGroup({ configuration, errors, onChange, edit }: GroupProps &
   const files = configuration.files ?? defaultFiles
   const snapshotsOn = isFeatureEnabled('windowsVss') || isFeatureEnabled('linuxSnapshots')
   const pathError = (field: string) => Object.entries(errors).find(([key]) => key === field || key.startsWith(`${field}[`) || key.startsWith(`${field}.`))?.[1]
+  const fileSourceHelp = <p className="text-sm text-text-muted md:col-span-2">{tx('Referans Agent FileSources ayarındaki ada karşılık gelir; fiziksel kök yol sunucudan seçilemez. . tüm kaynağı seçer. İzinler ve SHA-256 manifesti arşivde korunur. Canlı dosya değişiklikleri yedeği durdurur.')}{snapshotsOn && ' ' + tx('Noktasal görünüm için yapılandırılmış snapshot kaynağı kullanın.')}</p>
   const filters = <>
     <FilePathList id="configuration.files.includes" label={tx('Dahil Edilecekler')} paths={files.includes} error={pathError('configuration.files.includes')} onChange={includes => onChange({ ...configuration, files: { ...files, includes } })} />
     <FilePathList id="configuration.files.excludes" label={tx('Hariç Tutulacaklar')} paths={files.excludes} error={pathError('configuration.files.excludes')} onChange={excludes => onChange({ ...configuration, files: { ...files, excludes } })} />
@@ -42,10 +43,10 @@ function FileSourceGroup({ configuration, errors, onChange, edit }: GroupProps &
     <p className="text-sm text-text-muted md:col-span-2">{tx('Filtrelerde * tek yol bileşenini, ** alt klasörleri, ? tek karakteri eşleştirir. Boş dahil listesi tüm yolları kapsar; hariç kuralları önceliklidir. Korunan sembolik bağlantılar izlenmez ve kaynak dışına çıkamaz.')}</p>
   </>
   return <FormGrid>
-    {text('configuration.database', tx('Dosya kaynağı referansı'), configuration.database, database => onChange({ ...configuration, database }))}
-    <p className="text-sm text-text-muted md:col-span-2">{tx('Referans Agent FileSources ayarındaki ada karşılık gelir; fiziksel kök yol sunucudan seçilemez. . tüm kaynağı seçer. İzinler ve SHA-256 manifesti arşivde korunur. Canlı dosya değişiklikleri yedeği durdurur.')}{snapshotsOn && ' ' + tx('Noktasal görünüm için yapılandırılmış snapshot kaynağı kullanın.')}</p>
+    {text('configuration.database', edit ? tx('Dosya kaynağı adı') : tx('Dosya kaynağı referansı'), configuration.database, database => onChange({ ...configuration, database }))}
+    {edit ? <p className="text-sm text-text-muted md:col-span-2">{tx('Bu ad, yedekleme bilgisayarında yapılandırılmış dosya kaynağıdır; fiziksel kök yol sunucudan seçilemez. Tüm kaynağı seçmek için . kullanın.')}</p> : fileSourceHelp}
     <FilePathList id="configuration.files.paths" label={tx('Yedeklenecek dosya ve klasörler')} paths={files.paths} error={pathError('configuration.files.paths') ?? errors['configuration.files']} onChange={paths => onChange({ ...configuration, files: { ...files, paths } })} />
-    {edit ? <div className="md:col-span-2"><Disclosure title={tx('Dosya filtreleri')}><FormGrid>{filters}</FormGrid></Disclosure></div> : filters}
+    {edit ? <div className="md:col-span-2"><Disclosure title={tx('Dosya filtreleri')} open={Boolean(pathError('configuration.files.includes') || pathError('configuration.files.excludes') || errors['configuration.files.symlinkPolicy'])}><FormGrid>{fileSourceHelp}{filters}</FormGrid></Disclosure></div> : filters}
   </FormGrid>
 }
 
@@ -127,21 +128,22 @@ export function SourceStep({ form }: { form: JobFormState }) {
   const sourceError = sourceErrorKeys.map(key => errors[key]).find(Boolean)
   const group = { configuration, errors, onChange: setConfiguration }
   return <>
-    <Question title={manual ? tx("Yedekleme işi ve bilgisayar") : tx("Yedekleme işi")} why={manual ? tx("İşi listelerde bu adla tanırsınız; yedeği, kaynağa ulaşabilen yedekleme bilgisayarındaki program alır.") : tx("İşi listelerde bu adla tanırsınız.")}>
+    <Question compact={Boolean(job)} title={manual ? tx("Yedekleme işi ve bilgisayar") : tx("Yedekleme işi")} why={manual ? tx("İşi listelerde bu adla tanırsınız; yedeği, kaynağa ulaşabilen yedekleme bilgisayarındaki program alır.") : tx("İşi listelerde bu adla tanırsınız.")}>
       <FormGrid>
         {text('name', tx('İş adı'), values.name, name => set({ name }))}
+        {job && <div className="md:col-span-2"><EngineGroup engine={configuration.engine} onEngine={form.changeEngine} /></div>}
         {manual && <div className="min-w-0 space-y-1">
-          {select('agentId', tx('Yedekleme bilgisayarı'), values.agentId, [['', tx('Yedekleme bilgisayarı seçin')], ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', item.operationalStatus)}`] as const)], agentId => set({ agentId }))}
+          {select('agentId', tx('Yedekleme bilgisayarı'), values.agentId, [['', tx('Yedekleme bilgisayarı seçin')], ...(values.agentId && !agents.data?.some(item => item.agentId === values.agentId) ? [[values.agentId, `${tx('Adsız bilgisayar')} · ${values.agentId}`] as const] : []), ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', item.operationalStatus)}`] as const)], agentId => set({ agentId }))}
           {agents.isPending && <p role="status" className="text-sm text-text-muted">{tx("Bilgisayar listesi yükleniyor…")}</p>}{agents.error && <p role="alert" className="text-sm text-error">{errorMessage(agents.error)}</p>}
         </div>}
       </FormGrid>
     </Question>
-    {manual ? <Question title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
+    {manual ? <Question compact={Boolean(job)} title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
       {!job && <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => set({ sourceMode: 'discovery' })}>{tx("Otomatik keşiften seç")}</Button>}
-      <EngineGroup engine={configuration.engine} onEngine={form.changeEngine} />
+      {!job && <EngineGroup engine={configuration.engine} onEngine={form.changeEngine} />}
       {isFiles ? <FileSourceGroup key={configuration.engine} {...group} edit={Boolean(job)} /> : <DatabaseSourceGroup key={configuration.engine} {...group} />}
     </Question>
-    : <Question title={tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
+    : <Question compact={Boolean(job)} title={tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
       {picked ? <DiscoveredSource form={form} /> : <DiscoverySourceChoice form={form} />}
       {sourceError && <p role="alert" className="mt-3 text-sm text-error">{sourceError}</p>}
     </Question>}
