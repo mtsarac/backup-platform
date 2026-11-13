@@ -62,7 +62,8 @@ describe('Storage connections list and detail', () => {
     expect(local.getByText('3 saat önce')).toBeInTheDocument()
     expect(local.getByText("Çalışma alanı yönetimli")).toBeInTheDocument()
     expect(article('Managed Storage').getByText('Platform yönetimli')).toBeInTheDocument()
-    expect(article('Managed Storage').getByText('Henüz test edilmedi')).toBeInTheDocument()
+    expect(article('Managed Storage').getByText('Test edilmedi')).toBeInTheDocument()
+    expect(article('Managed Storage').queryByText('Henüz test edilmedi')).not.toBeInTheDocument()
     // The footprint is a statistic: collapsed until the card's technical details are opened.
     expect(local.queryByText('6,2 GB')).not.toBeInTheDocument()
     expect(article('Managed Storage').queryByText('123 MB')).not.toBeInTheDocument()
@@ -73,11 +74,19 @@ describe('Storage connections list and detail', () => {
     expect(dialog.getByRole('button', { name: 'Kopyala: Saklanan veri' })).toBeInTheDocument()
   })
 
-  it('summarizes the tenant in one line instead of a collapsed statistics block, and gives each card one link to its page', async () => {
+  it('retains untested information when another health state takes precedence', async () => {
+    serve([makeConnection({ enabled: false, effectiveEnabled: false, lastTest: null })])
+    mount()
+    const local = within(await screen.findByRole('article', { name: 'Local' }))
+    expect(local.getByText('Devre dışı')).toBeInTheDocument()
+    expect(local.getByText('Henüz test edilmedi')).toBeInTheDocument()
+  })
+
+  it('gives each destination one link to its page without repeating health totals', async () => {
     serve([makeConnection({ lastTest: { status: 'Succeeded', code: 'ok', message: '', testedAt: new Date().toISOString() } }), s3({ lastTest: { status: 'Failed', code: 'access_denied', message: 'Access denied.', testedAt: new Date().toISOString() } }), makeManaged()])
     mount()
     await screen.findByRole('article', { name: "Local" })
-    expect(screen.getByText('3 bağlantı · 1 sağlıklı · 1 dikkat gerektiriyor')).toBeVisible()
+    expect(screen.queryByText(/bağlantı · .* sağlıklı/)).not.toBeInTheDocument()
     expect(screen.queryByText('Ayrıntılar')).not.toBeInTheDocument()
     expect(article('Local').getAllByRole('link')).toHaveLength(1)
     expect(article('Local').getByRole('link', { name: 'Local' })).toHaveAttribute('href', `${base}/connections/conn-local`)
@@ -426,7 +435,7 @@ describe('Connection wizard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'İleri' }))
     expect(screen.getByRole('textbox', { name: 'Ad' })).toBeInTheDocument()
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Ad')
-    expect(screen.getAllByText(/Neden soruluyor/)).toHaveLength(1)
+    expect(screen.queryByText(/Neden soruluyor/)).not.toBeInTheDocument()
   })
 
   it('does not accept provider preselection for a provider that cannot be created', async () => {

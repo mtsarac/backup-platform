@@ -41,7 +41,7 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
     </div>
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3">
       <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Sağlayıcı")}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-x-2 text-body text-text">{tx(connection.providerDisplayName)}<StatusPill domain="ownership" status={connection.ownership} /></dd></div>
-      <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Son test")}</dt><dd className="mt-0.5 text-body text-text">{connection.lastTest ? <RelativeTime value={connection.lastTest.testedAt} /> : tx('Henüz test edilmedi')}</dd></div>
+      {connectionHealth(connection).key !== 'untested' && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Son test")}</dt><dd className="mt-0.5 text-body text-text">{connection.lastTest ? <RelativeTime value={connection.lastTest.testedAt} /> : tx('Henüz test edilmedi')}</dd></div>}
       {capacity && capacity.status !== 'Pending' && capacity.freeBytes != null && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Boş Alan")}</dt><dd className="mt-0.5 text-body text-text">{formatBytes(capacity.freeBytes)}</dd></div>}
     </dl>
     {connection.administrativelyDisabled && <p className="text-sm font-medium text-warning">{tx(platformLockState)}</p>}
@@ -59,15 +59,11 @@ export function ConnectionList() {
   const ops = useTenantConnectionOps()
   const list = connections.data?.items ?? []
   const total = list.reduce((sum, item) => sum + item.storedBytes, 0)
-  const healths = list.map((item) => connectionHealth(item).key)
-  const healthy = healths.filter((key) => key === 'healthy').length
-  const attention = healths.filter((key) => key === 'failed' || key === 'reauthorize').length
   return <QueryState isPending={connections.isPending} error={connections.error} onRetry={() => void connections.refetch()}>
     <Section title={tx("Depolama hedefleri")} description={tx("Backup'ların yazıldığı yerler. Bir hedefi devre dışı bırakmak yalnızca yeni backup'ları durdurur; mevcut backup'lar silinmez.")} flush>
       {list.length === 0
         ? <EmptyState icon={Cable} message={canAdmin ? tx("Henüz depolama bağlantısı yok. İlk hedefi “Bağlantı ekle” ile ekleyin.") : tx("Henüz depolama bağlantısı yok")} canAct={canAdmin} />
         : <>
-          <p className="border-b border-border px-5 py-3 text-sm text-text-muted">{tx("{0} bağlantı · {1} sağlıklı · {2} dikkat gerektiriyor", { "0": list.length, "1": healthy, "2": attention })}</p>
           <ul className="divide-y divide-border">{list.map((connection) => <ConnectionCard key={connection.id} connection={connection} tenantId={tenantId} total={total}
             testing={ops.test.isPending && ops.test.variables?.id === connection.id} testError={ops.test.error && ops.test.variables?.id === connection.id ? errorMessage(ops.test.error, 'storageConnection') : undefined} onTest={() => ops.test.mutate(connection)} />)}</ul>
         </>}

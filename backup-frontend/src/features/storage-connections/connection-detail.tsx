@@ -69,7 +69,6 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
   return (
     <Section
       title={<span className="flex flex-wrap items-center gap-2"><span>{tx("Depolama alanı")}</span><CapacityPill status={capacity?.status} /></span>}
-      description={tx("Depolamada ne kadar boş yer kaldığı.")}
       actions={
         <Button
           variant="outline"

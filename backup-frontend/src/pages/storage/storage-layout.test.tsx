@@ -47,6 +47,7 @@ describe('Storage hub', () => {
     await userEvent.click(screen.getByRole('link', { name: 'Kullanım ve kota' }))
     expect(await screen.findByRole('heading', { name: 'Plan ve abonelik' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Kullanım' })).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Nasıl hesaplanır'))
     expect(screen.getByText('Kota kapsamı: managed')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Sağlayıcılar' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'SFTP' })).toBeInTheDocument()
@@ -83,6 +84,20 @@ describe('Storage hub', () => {
     expect(within(card).getByText(/Yakında \/ henüz kullanılamaz/)).toBeInTheDocument()
     expect(within(card).queryByText('Yakında')).not.toBeInTheDocument()
   })
+  it('keeps calculation details and provider capabilities available on request', async () => {
+    mount('/usage')
+    const calculation = await screen.findByText('Nasıl hesaplanır')
+    expect(calculation.parentElement).not.toHaveAttribute('open')
+    await userEvent.click(calculation)
+    expect(screen.getByText('Eşikler')).toBeVisible()
+    await userEvent.click(screen.getByRole('link', { name: 'Sağlayıcılar' }))
+    const card = (await screen.findByRole('heading', { name: 'SFTP' })).closest('li')!
+    const capabilities = within(card).getByText('Yetenekler')
+    expect(capabilities.parentElement).not.toHaveAttribute('open')
+    await userEvent.click(capabilities)
+    expect(within(card).getByRole('list', { name: 'SFTP yetenekleri' })).toBeVisible()
+  })
+
 
   it('shows the quota state, thresholds, subscription status and API eligibility once each on the usage tab', async () => {
     vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, state: 'Warning', usedBytes: 8_500_000_000, remainingBytes: 1_500_000_000 })
