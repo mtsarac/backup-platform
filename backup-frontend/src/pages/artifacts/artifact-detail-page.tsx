@@ -163,6 +163,7 @@ function ArtifactDetail({ id }: { id: string }) {
         {artifact && <>
           <ArtifactDeletedNotice artifact={artifact} />
           <ArtifactAnswers artifact={artifact} canOperate={canOperate} now={now} />
+          {user?.role === 'PlatformAdmin' && <Notice tone="info">{tx('Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.')}</Notice>}
           {pending && <Section title={tx("Silme süreci")} className="border-warning/40">
             <div className="space-y-3">
               {artifact.deleteAfter && <DeleteCountdown deleteAfter={artifact.deleteAfter} />}
