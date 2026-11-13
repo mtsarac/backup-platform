@@ -400,4 +400,54 @@ describe('MultiDestinationPicker', () => {
 
     expect(screen.getByText(/(?:Each destination is written and verified independently|Her hedefe ayrı yazılır ve bağımsız olarak doğrulanır)/i)).toBeInTheDocument()
   })
+  it('keeps default and explicit destinations distinct in compact edit mode', () => {
+    const config = {
+      destinations: [
+        { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: false },
+        { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
+      ],
+      requiredVerifiedReplicaCount: 2,
+    } as BackupConfiguration
+    const onChange = vi.fn()
+    const props = { connections: dummyConnections, providers: dummyProviders, pending: false, error: null, existingTarget: true, compact: true, onChange, onRefresh: () => {} }
+    const { rerender } = render(<MultiDestinationPicker {...props} configuration={config} />)
+    const destination = screen.getByLabelText('Depolama hedefi')
+    expect(destination).toHaveValue(JSON.stringify(['local', 'conn-local']))
+    const defaults = within(destination).getAllByRole('option').filter(option => (option as HTMLOptionElement).value.endsWith(',null]'))
+    expect(new Set(defaults.map(option => option.textContent)).size).toBe(dummyProviders.length)
+    expect(defaults.find(option => (option as HTMLOptionElement).value === JSON.stringify(['sftp', null]))).toHaveTextContent('SFTP')
+    fireEvent.change(destination, { target: { value: JSON.stringify(['local', null]) } })
+    expect(onChange.mock.calls[0][0].destinations).toEqual([config.destinations[0], { ...config.destinations[1], storageConnectionId: null }])
+    fireEvent.change(destination, { target: { value: JSON.stringify(['central', null]) } })
+    expect(onChange.mock.calls[1][0].destinations).toEqual([config.destinations[0], { storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend', isPrimary: true }])
+    rerender(<MultiDestinationPicker {...props} configuration={{ ...config, destinations: [config.destinations[0], { ...config.destinations[1], storageConnectionId: null }] }} />)
+    expect(screen.getByLabelText('Depolama hedefi')).toHaveValue(JSON.stringify(['local', null]))
+  })
+
+  it('preserves a missing saved destination in compact edit mode', () => {
+    const config = {
+      destinations: [{ storageProvider: 'missing-provider', storageConnectionId: 'missing-id', storageExecutionLocation: 'Agent', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    const onChange = vi.fn()
+    render(<MultiDestinationPicker configuration={config} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget compact onChange={onChange} onRefresh={() => {}} />)
+    const destination = screen.getByLabelText('Depolama hedefi')
+    expect(destination).toHaveValue(JSON.stringify(['missing-provider', 'missing-id']))
+    expect(within(destination).getByRole('option', { name: /missing-id/ })).toBeDisabled()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows platform ownership and retains an unavailable saved connection in compact mode', () => {
+    const connection = { ...dummyConnections[0], id: 'managed', name: 'Managed', providerType: 'central', providerDisplayName: 'Managed Storage (Central)', ownership: 'PlatformManaged', effectiveEnabled: false } as ConnectionView
+    const config = {
+      destinations: [{ storageProvider: 'central', storageConnectionId: 'managed', storageExecutionLocation: 'Backend', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    const onChange = vi.fn()
+    render(<MultiDestinationPicker configuration={config} connections={[connection]} providers={dummyProviders} pending={false} error={null} existingTarget compact onChange={onChange} onRefresh={() => {}} />)
+    const destination = screen.getByLabelText('Depolama hedefi')
+    expect(destination).toHaveValue(JSON.stringify(['central', 'managed']))
+    expect(within(destination).getByRole('option', { name: /^Managed · .* · Platform yönetimli · Devre dışı$/ })).toBeDisabled()
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })

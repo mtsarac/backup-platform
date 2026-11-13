@@ -52,12 +52,9 @@ export function ReviewStep({ form, onGo }: { form: JobFormState; onGo: (step: Ed
 export function ChangesSummary({ form }: { form: JobFormState }) {
   useLanguage()
   const changed = changedSections(form.saved, form.values)
-  return <Section title={tx("Kaydedilecek değişiklikler")}>
-    {changed.length === 0
-      ? <p className="text-sm text-text-muted">{tx("Henüz değişiklik yok.")}</p>
-      : <>
-        <p className="text-sm text-text">{tx("Değişen bölümler:")}{' '}{changed.map(step => stepLabel(step)).join(', ')}</p>
-        <p className="mt-1 text-sm text-text-muted">{tx("Değişiklikler sonraki çalıştırmalardan itibaren geçerli olur; mevcut yedekler ve geçmiş çalıştırmalar değişmez.")}</p>
-      </>}
-  </Section>
+  if (changed.length === 0) return null
+  return <div className="text-sm">
+    <p>{tx("Değişen bölümler:")}{' '}{changed.map(step => stepLabel(step)).join(', ')}</p>
+    <p className="mt-1 text-text-muted">{tx("Değişiklikler sonraki çalıştırmalardan itibaren geçerli olur; mevcut yedekler ve geçmiş çalıştırmalar değişmez.")}</p>
+  </div>
 }

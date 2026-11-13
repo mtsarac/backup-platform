@@ -21,6 +21,7 @@ interface Props {
   replicaError?: string
   replicationError?: string
   existingTarget: boolean
+  compact?: boolean
   onChange: (configuration: BackupConfiguration) => void
   onRefresh: () => void
 }
@@ -29,7 +30,7 @@ function pickerOwnership(ownership: string) {
   return ownership === 'TenantManaged' ? '' : ownershipLabel(ownership)
 }
 
-export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, replicaError, replicationError, existingTarget, onChange, onRefresh }: Props) {
+export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, replicaError, replicationError, existingTarget, compact = false, onChange, onRefresh }: Props) {
   useLanguage()
   const destinations = configuration.destinations
   const primary = primaryDestination(configuration)
@@ -112,6 +113,37 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
 
   return (
     <>
+      {compact ? <div className="space-y-1 md:col-span-2">
+        <label htmlFor="primary-storage-destination" className="block text-sm font-medium text-text-heading">{tx('Depolama hedefi')}</label>
+        <Select id="primary-storage-destination" value={JSON.stringify([primary.storageProvider, primary.storageConnectionId ?? null])} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? 'primary-storage-connection-error' : undefined} onChange={event => {
+          const [providerType, connectionId] = JSON.parse(event.target.value) as [string, string | null]
+          if (connectionId) {
+            chooseConnection(connectionId)
+          } else if (providerType === primary.storageProvider) {
+            chooseConnection('')
+          } else {
+            const descriptor = providers.find(item => item.providerType === providerType)
+            if (descriptor?.availability === 'Available' && descriptor.executionLocation && descriptor.topology) {
+              replacePrimaryTarget({ storageProvider: providerType, storageConnectionId: null, storageExecutionLocation: descriptor.executionLocation })
+            }
+          }
+        }}>
+          {(!provider || selectedMissing || (target && target.providerType !== primary.storageProvider)) && <option value={JSON.stringify([primary.storageProvider, primary.storageConnectionId ?? null])} disabled>{primary.storageConnectionId ?? primary.storageProvider} · {tx('Bağlantı bulunamadı')}</option>}
+          {providers.map(item => {
+            const defaultConnection = connections.find(connection => connection.providerType === item.providerType && connection.isDefault)
+            const unavailable = connectionUnavailableReason(defaultConnection, item)
+            return <optgroup key={item.providerType} label={tx(item.displayName)}>
+              <option value={JSON.stringify([item.providerType, null])} disabled={item.availability !== 'Available' || !item.executionLocation || !item.topology || (item.providerType === primary.storageProvider && Boolean(unavailable))}>{tx('Varsayılan ·')} {tx(item.displayName)} · {defaultConnection?.name ?? tx('Bağlantı yok')}{defaultConnection && pickerOwnership(defaultConnection.ownership) ? ` · ${pickerOwnership(defaultConnection.ownership)}` : ''} · {unavailable ?? tx('Kullanılabilir')}</option>
+              {connections.filter(connection => connection.providerType === item.providerType).map(connection => {
+                const reason = connectionUnavailableReason(connection, item)
+                return <option key={connection.id} value={JSON.stringify([item.providerType, connection.id])} disabled={Boolean(reason)}>{[connection.name, tx(item.displayName), pickerOwnership(connection.ownership), reason ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
+              })}
+            </optgroup>
+          })}
+        </Select>
+        {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-destructive">{fieldError}</p>}
+        <p className="text-xs text-text-muted">{tx("Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.")}</p>
+      </div> : <>
       <div className="space-y-1">
         <label htmlFor="primary-storage-provider" className="block text-sm font-medium text-text-heading">{tx("Storage Provider")}</label>
         <Select id="primary-storage-provider" value={primary.storageProvider} disabled={pending || Boolean(error)} onChange={event => {
@@ -139,13 +171,14 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
         <p id="storage-connection-help" className="text-xs text-text-muted">{tx("Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.")}</p>
       </div>
       <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">{tx("Depolama yürütme konumu")}</span><p className="text-sm">{executionLocationLabel(primary.storageExecutionLocation)}</p><p className="text-xs text-text-muted">{tx("Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.")}</p></div>
+      </>}
       {pending && <p role="status" className="text-sm">{tx("Depolama bağlantıları yükleniyor…")}</p>}
       {error ? <div role="alert" className="text-sm text-destructive">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</Button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
 
       <Disclosure className="border-t border-border pt-4 md:col-span-2" open={Boolean(fieldError || replicaError || replicationError)} title={<>{tx("Replikasyon Hedefleri (Multi-Storage Replication)")} <span className="text-xs font-normal">· {tx("Toplam")}{' '}{destinations.length}{' '}{tx("hedef")}</span></>}>
         <div className="space-y-3">
         <p className="text-xs text-text-muted">{tx("Bu yedekleme işinin birden fazla depolama konumuna kopyalanmasını yapılandırın.")}</p>
-        {replicationError && <p role="alert" className="text-sm text-destructive">{replicationError}</p>}
+        {replicationError && <p id="replication-error" role="alert" className="text-sm text-destructive">{replicationError}</p>}
 
         <div className="space-y-2">
           {destinations.map((dest, index) => {
@@ -276,6 +309,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
         {configuration.enforceThreeTwoOne && <div className="space-y-1">
           <label htmlFor="backup-source-site" className="block text-sm font-medium">{tx('Kaynak fiziksel site')}</label>
           <TextInput id="backup-source-site" required maxLength={64} pattern="[A-Za-z0-9_-]+"
+            aria-invalid={Boolean(replicationError)} aria-describedby={replicationError ? 'replication-error' : undefined}
             value={configuration.sourceSite ?? ''} onChange={event => onChange({ ...configuration, sourceSite: event.target.value })} />
         </div>}
         </div>

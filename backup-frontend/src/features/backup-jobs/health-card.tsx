@@ -1,5 +1,5 @@
 import { StatusPill } from '@/components/data/status-pill'
-import { Section, Facts } from '@/components/ui/section'
+import { Disclosure } from '@/components/ui/disclosure'
 import { tx, useLanguage } from '@/lib/i18n'
 import { useBackupHealth } from './health'
 import { formatDateTime } from '@/lib/format'
@@ -26,37 +26,28 @@ export function BackupHealthCard({ jobId }: { jobId: string }) {
   useLanguage()
   const query = useBackupHealth(jobId)
   const health = query.data
-  return <Section title={tx('Yedekleme sağlığı')} description={tx('Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.')}
-    actions={health && !query.error ? <StatusPill domain="backupHealth" status={health.state} /> : undefined}>
+  return <section aria-label={tx('Yedekleme sağlığı')} className="space-y-2">
+    <div className="flex flex-wrap items-center gap-2">
+      <h2 className="text-base font-semibold text-text-heading">{tx('Yedekleme sağlığı')}</h2>
+      {health && !query.error && <><StatusPill domain="backupHealth" status={health.state} /><span className="text-sm tabular-nums">{health.score} / 100</span></>}
+    </div>
     {query.isPending ? <p role="status" className="text-sm text-text-muted">{tx('Sağlık bilgisi yükleniyor…')}</p>
       : query.error || !health ? <p role="alert" className="text-sm text-error">{tx('Sağlık bilgisi alınamadı.')}</p>
-      : <div className="space-y-4">
-        <p className="text-2xl font-semibold tabular-nums text-text-heading">{health.score} / 100</p>
-        <Facts>
-          {(Object.keys(labels) as (keyof typeof labels)[]).map(key => {
-            const factor = health.factors[key]
-            return <div key={key} className="min-w-0 border-l-2 border-border pl-3"
-              onMouseEnter={event => { const details = event.currentTarget.querySelector('details'); if (details) details.open = true }}
-              onMouseLeave={event => { const details = event.currentTarget.querySelector('details'); if (details && !details.contains(document.activeElement)) details.open = false }}>
-              <dt className="text-sm font-medium text-text-heading">{tx(labels[key])}</dt>
-              <dd className="mt-1 text-sm">
-                <details className="relative"
-                  onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false }}
-                  onKeyDown={event => { if (event.key === 'Escape') event.currentTarget.open = false }}>
-                  <summary onFocus={event => { if (event.currentTarget.matches(':focus-visible')) event.currentTarget.closest('details')!.open = true }}
-                    onClick={event => { if (event.detail > 0) { event.preventDefault(); event.currentTarget.closest('details')!.open = true } }}
-                    className="w-fit cursor-pointer list-none rounded-sm tabular-nums underline decoration-dotted underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
-                    {factor.score} / {factor.maxScore}
-                  </summary>
-                  <p className="absolute left-0 top-full z-20 mt-1 w-64 max-w-[min(16rem,calc(100vw-3rem))] rounded-lg border border-border bg-surface p-3 text-sm text-text shadow-overlay">
-                    {tx(reasons[factor.reason] ?? 'Bu etken için açıklama bulunamadı.')}
-                  </p>
-                </details>
-              </dd>
-            </div>
-          })}
-        </Facts>
-        <p className="text-xs text-text-muted">{tx('Değerlendirme zamanı:')}{' '}{formatDateTime(health.evaluatedAt)}</p>
-      </div>}
-  </Section>
+      : <>
+        <ul className="space-y-1 text-sm">
+          {(Object.keys(labels) as (keyof typeof labels)[]).filter(key => health.factors[key].score < health.factors[key].maxScore).map(key =>
+            <li key={key}>{tx(labels[key])}: {tx(reasons[health.factors[key].reason] ?? 'Bu etken için açıklama bulunamadı.')}</li>)}
+        </ul>
+        <Disclosure title={tx('Ayrıntılar')}>
+          <p className="text-sm text-text-muted">{tx('Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.')}</p>
+          <dl className="mt-2 space-y-2 text-sm">
+            {(Object.keys(labels) as (keyof typeof labels)[]).map(key => {
+              const factor = health.factors[key]
+              return <div key={key}><dt className="font-medium">{tx(labels[key])}: {factor.score} / {factor.maxScore}</dt><dd>{tx(reasons[factor.reason] ?? 'Bu etken için açıklama bulunamadı.')}</dd></div>
+            })}
+          </dl>
+          <p className="mt-2 text-xs text-text-muted">{tx('Değerlendirme zamanı:')}{' '}{formatDateTime(health.evaluatedAt)}</p>
+        </Disclosure>
+      </>}
+  </section>
 }

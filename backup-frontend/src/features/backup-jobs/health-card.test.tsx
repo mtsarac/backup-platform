@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -32,21 +32,13 @@ describe('backup job health card', () => {
     expect(await within(region).findByText('35 / 100')).toBeInTheDocument()
     expect(within(region).getByText('Kritik')).toBeInTheDocument()
     for (const reason of ['Son başarılı yedek, planlanan periyodu aştı.', 'Doğrulanmış kopya sayısı, gerekli kopya sayısından az.', 'Son izole geri yükleme testi başarısız oldu.', 'Güncel ve ölçülebilir depolama kapasitesi bilgisi yok.']) {
-      expect(within(region).getByText(reason)).not.toBeVisible()
+      expect(within(region).getByRole('list')).toHaveTextContent(reason)
     }
-    const factor = within(region).getByText('Yedek güncelliği').parentElement!
-    fireEvent.mouseEnter(factor)
-    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).toBeVisible()
-    fireEvent.mouseLeave(factor)
-    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).not.toBeVisible()
-    const score = within(factor).getByText('20 / 40')
-    await userEvent.tab()
-    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).toBeVisible()
-    fireEvent.keyDown(score, { key: 'Escape' })
-    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).not.toBeVisible()
-    fireEvent.click(score, { detail: 1 })
-    expect(within(region).getByText('Son başarılı yedek, planlanan periyodu aştı.')).toBeVisible()
-    expect(within(region).getByText('Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.')).toBeInTheDocument()
+    const details = within(region).getByText('Ayrıntılar')
+    expect(within(region).getByText('20 / 40', { exact: false })).not.toBeVisible()
+    await userEvent.click(details)
+    expect(within(region).getByText('20 / 40', { exact: false })).toBeVisible()
+    expect(within(region).getByText('Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.')).toBeVisible()
   })
 
   it('does not invent a score on request failure', async () => {

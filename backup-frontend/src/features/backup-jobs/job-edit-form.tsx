@@ -48,14 +48,14 @@ export function JobEditForm({ job }: { job: BackupJob }) {
     <Tabs label={tx('İş ayarları')} value={active} onChange={setActive} items={editSections.map(value => ({ value, label: stepLabel(value) }))} idPrefix="job-edit" />
     <div role="tabpanel" id="job-edit-panel-source" aria-labelledby="job-edit-tab-source" hidden={active !== 'source'}><SourceStep form={form} /></div>
     <div role="tabpanel" id="job-edit-panel-storage" aria-labelledby="job-edit-tab-storage" hidden={active !== 'storage'}><StorageStep form={form} /></div>
-    <div role="tabpanel" id="job-edit-panel-schedule" aria-labelledby="job-edit-tab-schedule" hidden={active !== 'schedule'}><ScheduleStep form={form} /><OccurrencesGroup occurrences={occurrences} /></div>
+    <div role="tabpanel" id="job-edit-panel-schedule" aria-labelledby="job-edit-tab-schedule" hidden={active !== 'schedule'}><ScheduleStep form={form} />{(occurrences.isPending || occurrences.error || (occurrences.data?.length ?? 0) > 0) && <OccurrencesGroup occurrences={occurrences} />}</div>
     <div role="tabpanel" id="job-edit-panel-protection" aria-labelledby="job-edit-tab-protection" hidden={active !== 'protection'}><ProtectionStep form={form} /></div>
     <ChangesSummary form={form} />
     {form.cannotSave && <StorageBlockedNotice onFix={() => setActive('storage')} />}
     {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError} />}
     <div className="flex flex-wrap items-center justify-end gap-3">
       <DiscardChangesLink to={form.listPath} dirty={form.dirty} />
-      <Button type="submit" size="lg" disabled={save.isPending || form.cannotSave}>{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet')}</Button>
+      <Button type="submit" size="lg" disabled={!form.dirty || save.isPending || form.cannotSave}>{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet')}</Button>
     </div>
   </form>
 }

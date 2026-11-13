@@ -89,6 +89,7 @@ describe('encryption policy in the job wizard', () => {
     vi.mocked(getBackupJob).mockResolvedValue(withPolicy('Optional'))
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'configuration.encryptionPolicy', code: 'invalid_value' }))
     renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Updated job' } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(document.getElementById('configuration.encryptionPolicy-error')).toHaveTextContent(/.+/))

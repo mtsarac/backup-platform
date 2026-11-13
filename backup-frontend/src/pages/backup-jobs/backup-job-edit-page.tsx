@@ -19,16 +19,23 @@ export function BackupJobEditPage() {
   const job = useBackupJob(id)
   const toggle = useToggleBackupJob()
   const readOnly = !canOperate
+  const source = job.data?.configuration
+  const paths = source?.files?.paths
+  const sourceSummary = source && [
+    source.engine === 'file-system' ? tx('Dosya / Klasör') : source.engine === 'mssql' ? 'Microsoft SQL Server' : 'PostgreSQL',
+    source.database,
+    source.engine === 'file-system' && paths?.length ? paths.every(path => path === '.') ? tx('Tüm kaynak') : paths.join(', ') : null,
+  ].filter(Boolean).join(' · ')
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Yedekleme işleri'), to: `/tenants/${tenantId}/backup-jobs` }, { label: readOnly ? tx('Yedekleme sağlığı') : tx('Düzenle') }]}
-      title={readOnly ? tx('Yedekleme sağlığı') : tx('Yedekleme işini düzenle')}
-      description={readOnly ? job.data?.name : tx("Form değişiklikleri Kaydet'e basana kadar uygulanmaz. İş durumunu değiştirmek hemen uygulanır ve kaydedilmemiş form değişikliklerini etkilemez.")}
+      title={job.data?.name ?? (readOnly ? tx('Yedekleme sağlığı') : tx('Yedekleme işini düzenle'))}
+      description={job.data && [job.data.agentName, sourceSummary].filter(Boolean).join(' · ')}
       meta={job.data && <><span className="text-sm text-text-muted">{tx('İş durumu')}:</span><StatusPill status={job.data.enabled ? 'Active' : 'Disabled'} /></>}
-      actions={job.data && canOperate && <Button type="button" variant="outline" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: job.data!.id, enabled: !job.data!.enabled })}>{toggle.isPending ? tx('İşleniyor…') : job.data.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>} />
+      actions={job.data && canOperate && <div className="space-y-1"><Button type="button" variant="outline" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: job.data!.id, enabled: !job.data!.enabled })}>{toggle.isPending ? tx('İşleniyor…') : job.data.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button><p className="text-xs text-text-muted">{tx("İş durumu hemen değişir; Kaydet'e basmak gerekmez.")}</p></div>} />
     {toggle.isError && <ErrorNotice title={tx('İşlem tamamlanamadı')} error={toggle.error} />}
     <BackupHealthCard key={`${tenantId}:${id}`} jobId={id} />
-    {job.data && <JobDetails job={job.data} readOnly={readOnly} />}
-    {readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p>
+    {readOnly ? <>{job.data && <JobDetails job={job.data} readOnly />}<p className="text-sm text-text-muted">{tx('Salt okunur')}</p></>
       : <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobEditForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>}
+    {!readOnly && job.data && <JobDetails job={job.data} readOnly={false} />}
   </div>
 }
