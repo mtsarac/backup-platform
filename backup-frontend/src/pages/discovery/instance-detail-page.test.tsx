@@ -90,7 +90,7 @@ describe('instance detail page', () => {
     expect(await screen.findByRole('heading', { name: 'Seçilen kaynak' })).toBeInTheDocument()
     expect(screen.getByText('ERP, CRM')).toBeInTheDocument()
     expect(screen.queryByLabelText('Yedekleme bilgisayarı')).not.toBeInTheDocument()
-    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
     expect(saveBackupJob).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(2))
