@@ -34,6 +34,8 @@ export function SharesPage() {
         />
       </QueryState>
 
+      <details className="group">
+        <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('İndirme girişimleri')}</summary>
       <Section
         title={tx('İndirme girişimleri')}
         description={tx('Çalışma alanınıza ait paylaşımlar ve yedek dosyaları üzerindeki indirme girişimleri.')}
@@ -42,6 +44,7 @@ export function SharesPage() {
           <DownloadAttemptsTable attempts={attempts} onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined} loadingMore={attemptsQuery.isFetchingNextPage} />
         </QueryState>
       </Section>
+      </details>
     </div>
   )
 }

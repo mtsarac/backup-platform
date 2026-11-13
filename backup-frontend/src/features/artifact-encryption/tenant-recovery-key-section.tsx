@@ -67,6 +67,8 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
 
     <Section title={tx("Kendi kurtarma anahtarınız")} description={tx("İsteğe bağlıdır. Genel anahtarınız yalnızca bundan sonra oluşturulan şifreli yedeklere eklenir; eski dosyalar değişmez. Özel anahtarı güvenle saklayın: platform bu anahtarı görmez ve kaybederseniz sizin için geri getiremez.")}
       actions={tenantRecovery && <Button variant="outline" onClick={() => { remove.reset(); setRemoving(true) }}>{tx("Anahtarı kaldır")}</Button>}>
+      <details>
+        <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('Genel anahtarı yükle veya değiştir')}</summary>
       <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (!set.isPending && pem.trim()) submit() }}>
         <Field label={tx('Genel anahtar dosyası')} hint={tx('Yalnızca genel anahtar dosyasını seçin; özel anahtarınızı yüklemeyin.')}>
           {control => <TextInput {...control} type="file" accept=".pem,.pub,text/plain"  disabled={set.isPending} onChange={event => {
@@ -94,6 +96,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
         {saved && <Notice tone="success">{tx("Kurtarma anahtarınız kaydedildi. Sonraki şifreli yedeklere eklenir.")}</Notice>}
         <Button type="submit" disabled={set.isPending || !pem.trim()}>{set.isPending ? tx('Kaydediliyor…') : tenantRecovery ? tx('Anahtarı değiştir') : tx('Anahtarı kaydet')}</Button>
       </form>
+      </details>
     </Section>
 
     <ConfirmDialog open={removing} onClose={() => setRemoving(false)} name={tenantName} title={tx("Kurtarma anahtarınız kaldırılsın mı?")}
