@@ -531,6 +531,17 @@ describe('adım adım sihirbaz', () => {
     expect(items.map(item => item.getAttribute('aria-current'))).toEqual(items.map((_, index) => index === target ? 'step' : null))
     expect(screen.queryAllByText(/Neden soruluyor\?/).length).toBeGreaterThan(0)
   })
+  it('nests schedule and protection questions below their section headings', async () => {
+    renderPage()
+    await reach(2)
+    const schedule = screen.getByRole('region', { name: 'Zamanlama' })
+    const protection = screen.getByRole('region', { name: 'Koruma' })
+    expect(within(schedule).getByRole('heading', { name: 'Zamanlama', level: 2 })).toBeInTheDocument()
+    expect(within(schedule).getByRole('heading', { name: 'Yedek ne zaman alınsın?', level: 3 })).toBeInTheDocument()
+    expect(within(schedule).getByRole('heading', { name: 'Yedekler ne kadar süre saklansın?', level: 3 })).toBeInTheDocument()
+    expect(within(protection).getByRole('heading', { name: 'Koruma', level: 2 })).toBeInTheDocument()
+    expect(within(protection).getByRole('heading', { name: 'Yedekler şifrelensin mi?', level: 3 })).toBeInTheDocument()
+  })
   it('blocks a fractional required replica count before leaving storage', async () => {
     renderPage()
     await reach(1)
@@ -705,6 +716,15 @@ describe('adım adım sihirbaz', () => {
 })
 
 describe('mevcut işi düzenleme sayfası', () => {
+  it('keeps edit section questions at level two', async () => {
+    renderPage(editRoute)
+    await screen.findByLabelText('İş adı')
+    fireEvent.click(screen.getByRole('tab', { name: 'Zamanlama' }))
+    expect(screen.getByRole('heading', { name: 'Yedek ne zaman alınsın?', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Yedekler ne kadar süre saklansın?', level: 2 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Koruma' }))
+    expect(screen.getByRole('heading', { name: 'Yedekler şifrelensin mi?', level: 2 })).toBeInTheDocument()
+  })
   it('changes status immediately without losing edits or resubmitting stale status', async () => {
     const { promise, resolve } = Promise.withResolvers<BackupJob>()
     vi.mocked(setJobEnabled).mockReturnValue(promise)

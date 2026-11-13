@@ -56,11 +56,11 @@ export function JobWizard({ prefill }: { prefill?: JobPrefill }) {
     {step === 'schedule-protection' && <>
       <section aria-labelledby="wizard-schedule" className="space-y-5">
         <h2 id="wizard-schedule" className="text-lg font-semibold text-text-heading">{tx("Zamanlama")}</h2>
-        <ScheduleStep form={form} advancedTitle={tx("Zamanlama teknik ayrıntıları")} />
+        <ScheduleStep form={form} headingLevel={3} advancedTitle={tx("Zamanlama teknik ayrıntıları")} />
       </section>
       <section aria-labelledby="wizard-protection" className="space-y-5 border-t border-border pt-5">
         <h2 id="wizard-protection" className="text-lg font-semibold text-text-heading">{tx("Koruma")}</h2>
-        <ProtectionStep form={form} advancedTitle={tx("Koruma teknik ayrıntıları")} />
+        <ProtectionStep form={form} headingLevel={3} advancedTitle={tx("Koruma teknik ayrıntıları")} />
       </section>
     </>}
     {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} />}

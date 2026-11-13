@@ -9,13 +9,13 @@ import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 const policies = [['Disabled', 'Off — kapalı'], ['Preferred', 'IfSupported — destekleniyorsa'], ['Required', 'Required — zorunlu']] as const
 
 /** Question: whether backups are encrypted. Copy-only, checksum and compression stay under the technical details. */
-export function ProtectionStep({ form, advancedTitle }: { form: JobFormState; advancedTitle?: string }) {
+export function ProtectionStep({ form, advancedTitle, headingLevel }: { form: JobFormState; advancedTitle?: string; headingLevel?: 2 | 3 }) {
   useLanguage()
   const { errors, setConfiguration: onChange } = form
   const { configuration } = form.values
   const { check, select, withErrors } = fieldKit(errors)
   return <>
-    <Question title={tx("Yedekler şifrelensin mi?")} why={tx("Şifreli bir yedek, dosya yanlış ellere geçse bile okunamaz.")}>
+    <Question headingLevel={headingLevel} title={tx("Yedekler şifrelensin mi?")} why={tx("Şifreli bir yedek, dosya yanlış ellere geçse bile okunamaz.")}>
       <div className="min-w-0 space-y-1">
         {select('configuration.encryptionPolicy', tx('Yedek şifreleme politikası'), configuration.encryptionPolicy, encryptionPolicies.map(policy => [policy, policyLabels[policy]] as const), value => onChange({ ...configuration, encryptionPolicy: value as EncryptionPolicy }))}
         <p className="text-sm text-text-muted">{policyDescriptions[configuration.encryptionPolicy]}{' '}{tx("Şifreleme Agent'ta, depolamaya yazılmadan önce yapılır.")}</p>

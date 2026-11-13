@@ -5,7 +5,7 @@ import { keepForLabel, retentionPresets, schedulePresets } from '@/features/back
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 
 /** Questions: when the job runs on its own and how long backups are kept. Cron, time zone, overlap, retry and exact retention seconds stay under the technical details. */
-export function ScheduleStep({ form, advancedTitle }: { form: JobFormState; advancedTitle?: string }) {
+export function ScheduleStep({ form, advancedTitle, headingLevel }: { form: JobFormState; advancedTitle?: string; headingLevel?: 2 | 3 }) {
   useLanguage()
   const { values, errors, canAdmin, nextRun, set } = form
   const { scheduled, schedule, overlap, retry, retention } = values
@@ -16,7 +16,7 @@ export function ScheduleStep({ form, advancedTitle }: { form: JobFormState; adva
   const setRetry = (next: typeof retry) => set({ retry: next })
   const setRetention = (next: typeof retention) => set({ retention: next })
   return <>
-    <Question title={tx("Yedek ne zaman alınsın?")} why={tx("Düzenli yedek, bir sorun çıktığında kaybedeceğiniz veriyi sınırlar. Elle çalıştırma her zaman mümkündür.")}>
+    <Question headingLevel={headingLevel} title={tx("Yedek ne zaman alınsın?")} why={tx("Düzenli yedek, bir sorun çıktığında kaybedeceğiniz veriyi sınırlar. Elle çalıştırma her zaman mümkündür.")}>
       <PresetChoice label={tx("Hazır zamanlamalar")} options={[
         ...schedulePresets.map(([label, cron]) => ({ text: tx(label), pressed: scheduled && schedule.cronExpression === cron, onSelect: () => set({ scheduled: true, schedule: { ...schedule, cronExpression: cron } }) })),
         { text: tx('Elle çalıştır'), pressed: !scheduled, onSelect: () => set({ scheduled: false }) },
@@ -24,7 +24,7 @@ export function ScheduleStep({ form, advancedTitle }: { form: JobFormState; adva
       {customSchedule && <p className="mt-3 text-sm text-text-muted">{tx("Özel bir zamanlama kullanılıyor; ayrıntıları aşağıdaki Teknik ayrıntılar bölümünde görebilirsiniz.")}</p>}
       {nextRun && <p className="mt-3 text-sm text-text-muted">{tx("Kaydedilmiş zamanlamanın sonraki çalışması: {0}. Değişiklikler kaydedildikten sonra sunucu tarafından hesaplanır.", { '0': nextRun })}</p>}
     </Question>
-    <Question title={tx("Yedekler ne kadar süre saklansın?")} why={tx("Süresi dolan yedekler silinir; böylece depolama alanı gereksiz yere dolmaz.")}>
+    <Question headingLevel={headingLevel} title={tx("Yedekler ne kadar süre saklansın?")} why={tx("Süresi dolan yedekler silinir; böylece depolama alanı gereksiz yere dolmaz.")}>
       <FormGrid>
         {!canAdmin && <p className="text-sm text-text-muted md:col-span-2">{form.job ? tx('Mevcut politika korunur.') : tx('Sunucunun varsayılan politikası uygulanır.')}</p>}
         <PresetChoice label={tx("Saklama süresi")} disabled={!canAdmin} options={[
