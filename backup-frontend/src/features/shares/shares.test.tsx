@@ -9,7 +9,7 @@ import { PlatformSharesPage } from '@/pages/platform/platform-shares-page'
 import { ApiError, apiRequest } from '@/lib/api/client'
 import type * as ApiClient from '@/lib/api/client'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import type { BackupShareView } from './types'
+import type { BackupShareView, DownloadAttemptView } from './types'
 
 vi.mock('@/lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiClient>()
@@ -134,6 +134,57 @@ const platformAdminShare: BackupShareView = {
   createdByRole: 'PlatformAdmin',
   createdByDisplayName: 'Platform Admin Peter',
 }
+
+const completedAttempt: DownloadAttemptView = {
+  id: 'attempt-completed-1',
+  shareId: 'share-1',
+  tenantId: 'tenant-a',
+  tenantName: 'Tenant A',
+  artifactId: 'artifact-1',
+  artifactName: 'ProductionDb',
+  initiatingUserId: 'platform-user-1',
+  initiatingUserDisplayName: 'Super Admin',
+  startedAtUtc: '2026-11-11T14:00:00Z',
+  endedAtUtc: '2026-11-11T14:01:00Z',
+  result: 'Completed',
+  bytesTransferred: 2048,
+  failureReason: null,
+  decrypted: true,
+}
+
+const refusedAttempt: DownloadAttemptView = {
+  id: 'attempt-refused-1',
+  shareId: 'share-3',
+  tenantId: 'tenant-a',
+  tenantName: 'Tenant A',
+  artifactId: 'artifact-1',
+  artifactName: 'ProductionDb',
+  initiatingUserId: 'platform-user-1',
+  initiatingUserDisplayName: 'Super Admin',
+  startedAtUtc: '2026-11-11T15:00:00Z',
+  endedAtUtc: '2026-11-11T15:00:00Z',
+  result: 'Refused',
+  bytesTransferred: 0,
+  failureReason: 'share_revoked',
+  decrypted: false,
+}
+
+const failedAttempt: DownloadAttemptView = {
+  id: 'attempt-failed-1',
+  shareId: 'share-platform-1',
+  tenantId: 'tenant-b',
+  tenantName: 'Acme Corp',
+  artifactId: 'artifact-2',
+  artifactName: 'AnalyticsDb',
+  initiatingUserId: 'platform-user-1',
+  initiatingUserDisplayName: 'Super Admin',
+  startedAtUtc: '2026-11-11T16:00:00Z',
+  endedAtUtc: '2026-11-11T16:00:30Z',
+  result: 'Failed',
+  bytesTransferred: 512,
+  failureReason: 'integrity_mismatch',
+  decrypted: false,
+}
 const request = vi.mocked(apiRequest)
 
 afterEach(() => {
@@ -201,7 +252,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return [testShare]
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderDetailPage()
@@ -223,7 +274,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return []
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderDetailPage()
@@ -260,7 +311,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return []
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderDetailPage()
@@ -296,7 +347,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return []
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return unverifiedArtifact
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderDetailPage()
@@ -311,7 +362,7 @@ describe('BackupShare frontend', () => {
   })
 
   it('renders Paylaşımlarım page with active, expired, and revoked shares', async () => {
-    request.mockImplementation(async () => [testShare, expiredShare, revokedShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
@@ -325,7 +376,7 @@ describe('BackupShare frontend', () => {
   })
 
   it('renders empty state in Paylaşımlarım when no shares exist', async () => {
-    request.mockImplementation(async () => [])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : []))
 
     renderSharesPage()
 
@@ -338,7 +389,7 @@ describe('BackupShare frontend', () => {
   })
 
   it('shows PlatformAdmin-created shares in Paylaşımlarım as read-only with PlatformAdmin role', async () => {
-    request.mockImplementation(async () => [platformShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [platformShare]))
 
     renderSharesPage()
 
@@ -368,7 +419,7 @@ describe('BackupShare frontend', () => {
           page: 1,
         }
       }
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderPlatformSharesPage()
@@ -407,7 +458,7 @@ describe('BackupShare frontend', () => {
           pageSize: 100,
         }
       }
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderPlatformSharesPage()
@@ -472,7 +523,7 @@ describe('BackupShare frontend', () => {
       if (options?.method === 'POST' && path.includes('/extend')) {
         return { ...testShare, expiresAtUtc: '2026-11-13T00:00:00Z' }
       }
-      return [testShare]
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]
     })
 
     renderSharesPage()
@@ -509,7 +560,7 @@ describe('BackupShare frontend', () => {
       if (options?.method === 'POST' && path.includes('/revoke')) {
         return { ...testShare, status: 'Revoked', revokedAtUtc: '2026-11-11T13:00:00Z' }
       }
-      return [testShare]
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]
     })
 
     renderSharesPage()
@@ -543,7 +594,7 @@ describe('BackupShare frontend', () => {
   it('UserAdmin cannot see extend/revoke actions on PlatformAdmin-created share, expired share, or revoked share', async () => {
     permissions.role = 'UserAdmin'
     permissions.canAdmin = true
-    request.mockImplementation(async () => [testShare, platformAdminShare, expiredShare, revokedShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
@@ -557,7 +608,7 @@ describe('BackupShare frontend', () => {
   it('PlatformAdmin can see extend/revoke actions on both PlatformAdmin-created and UserAdmin-created shares', async () => {
     permissions.role = 'PlatformAdmin'
     permissions.canAdmin = false
-    request.mockImplementation(async () => [testShare, platformAdminShare, expiredShare, revokedShare])
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
@@ -573,7 +624,7 @@ describe('BackupShare frontend', () => {
       if (options?.method === 'POST' && path.includes('/revoke')) {
         throw new ApiError(403, { error: 'forbidden' })
       }
-      return [testShare]
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]
     })
 
     renderSharesPage()
@@ -612,7 +663,7 @@ describe('BackupShare frontend', () => {
       }
       if (path.includes('platform/backup-shares')) return [platformShare, expiredShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderPlatformSharesPage()
@@ -638,7 +689,7 @@ describe('BackupShare frontend', () => {
       }
       if (path.includes('platform/backup-shares')) return [platformShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderPlatformSharesPage()
@@ -662,7 +713,7 @@ describe('BackupShare frontend', () => {
       }
       if (path.includes('platform/backup-shares')) return [platformShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
-      return []
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
     renderPlatformSharesPage()
@@ -675,6 +726,106 @@ describe('BackupShare frontend', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Kopya şu anda indirme için kullanılamıyor.')
+    })
+  })
+
+  it('renders tenant download attempt history in Paylaşımlarım for UserAdmin without platform retention controls', async () => {
+    permissions.role = 'UserAdmin'
+    permissions.canAdmin = true
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('download-attempts')) return path.includes('cursor=next-page')
+        ? { items: [failedAttempt], nextCursor: null }
+        : { items: [completedAttempt, refusedAttempt], nextCursor: 'next-page' }
+      if (path.includes('backup-shares')) return [testShare, revokedShare]
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+    })
+
+    renderSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Paylaşımlarım' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
+      expect(screen.getByText('Tamamlandı')).toBeInTheDocument()
+      expect(screen.getByText('Reddedildi')).toBeInTheDocument()
+      expect(screen.getByText('share_revoked')).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Denetim ve paylaşım geçmişi saklama süresi' })).not.toBeInTheDocument()
+    })
+
+    // Older attempts are fetched with the cursor of the previous page and appended; the control disappears on the last page.
+    expect(screen.queryByText('integrity_mismatch')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Daha eski girişimleri göster' }))
+    await waitFor(() => {
+      expect(screen.getByText('integrity_mismatch')).toBeInTheDocument()
+      expect(screen.getByText('share_revoked')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Daha eski girişimleri göster' })).not.toBeInTheDocument()
+    })
+    expect(request).toHaveBeenCalledWith(expect.stringContaining('download-attempts?cursor=next-page'), expect.anything())
+  })
+
+  it('renders download attempt history with filters and configurable 365-day retention in Paylaşılan Yedekler for PlatformAdmin', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string, options?: { method?: string; json?: unknown }) => {
+      if (path.includes('platform/settings/audit-retention')) {
+        if (options?.method === 'PUT') {
+          return {
+            retentionDays: 180,
+            defaultRetentionDays: 365,
+            minRetentionDays: 1,
+            maxRetentionDays: 36500,
+            updatedAtUtc: '2026-11-12T10:00:00Z',
+          }
+        }
+        return {
+          retentionDays: 365,
+          defaultRetentionDays: 365,
+          minRetentionDays: 1,
+          maxRetentionDays: 36500,
+          updatedAtUtc: null,
+        }
+      }
+      if (path.includes('platform/download-attempts')) {
+        if (path.includes('result=Failed')) return { items: [failedAttempt], nextCursor: null }
+        return { items: [completedAttempt, refusedAttempt, failedAttempt], nextCursor: null }
+      }
+      if (path.includes('platform/backup-shares')) return [platformShare]
+      if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+    })
+
+    renderPlatformSharesPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
+      expect(screen.getByText('share_revoked')).toBeInTheDocument()
+      expect(screen.getByText('integrity_mismatch')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('365')).toBeInTheDocument()
+    })
+
+    // Filter by result = Failed
+    const resultSelect = screen.getByRole('combobox', { name: 'Sonuç' })
+    fireEvent.change(resultSelect, { target: { value: 'Failed' } })
+
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(
+        expect.stringContaining('platform/download-attempts?result=Failed'),
+        expect.anything()
+      )
+    })
+
+    // Update retention period to 180 days
+    const retentionInput = screen.getByLabelText('Saklama süresi (gün)')
+    fireEvent.change(retentionInput, { target: { value: '180' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Saklama süresini kaydet' }))
+
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledWith(
+        'platform/settings/audit-retention',
+        expect.objectContaining({
+          method: 'PUT',
+          json: { retentionDays: 180 },
+        })
+      )
+      expect(screen.getByText('Saklama süresi güncellendi.')).toBeInTheDocument()
     })
   })
 })

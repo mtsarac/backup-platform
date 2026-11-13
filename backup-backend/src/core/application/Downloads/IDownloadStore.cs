@@ -6,7 +6,7 @@ namespace BackupPlatform.Application.Downloads;
 
 public sealed record DownloadCreateCommand(TenantId TenantId, Guid ArtifactId, Guid ReplicaId, Guid UserId, string Filename, DateTimeOffset Now, TimeSpan Lifetime,
     bool Decrypted = false, Guid? DirectAgentId = null, Guid? ShareId = null);
-public sealed record DownloadRefusalCommand(TenantId TenantId, Guid ArtifactId, Guid UserId, Guid? ShareId, string Reason, DateTimeOffset Now, bool IsPlatformAdmin = false);
+public sealed record DownloadRefusalCommand(TenantId TenantId, Guid ArtifactId, Guid UserId, Guid? ShareId, string Reason, DateTimeOffset Now, bool IsPlatformAdmin = false, Guid? SessionId = null);
 public sealed record DownloadTransition(DownloadState ExpectedState, DownloadState State, string? ExpectedOwner, string? Owner,
     DateTimeOffset Now, TimeSpan? LeaseDuration = null, long Bytes = 0, string? FailureCode = null);
 

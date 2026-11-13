@@ -168,7 +168,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
                     if (startsStreaming && session.AgentId is null)
                     {
                         var reason = share?.RevokedAtUtc is not null ? "share_revoked" : "share_not_found";
-                        await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, shareId, reason, transition.Now, true), cancellationToken);
+                        await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, shareId, reason, transition.Now, true, session.Id), cancellationToken);
                         await transaction.CommitAsync(cancellationToken);
                     }
                     else if (share?.RevokedAtUtc is not null && session.AgentId is not null && !session.IsTerminal)
@@ -186,7 +186,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
                 {
                     if (startsStreaming)
                     {
-                        await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, shareId, "share_expired", transition.Now, true), cancellationToken);
+                        await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, shareId, "share_expired", transition.Now, true, session.Id), cancellationToken);
                         await transaction.CommitAsync(cancellationToken);
                     }
                     return null;
@@ -194,7 +194,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
             }
             else if (startsStreaming && !await centralAuth.EvaluateContentAccessAsync(new UserId(session.UserId), session.TenantId, cancellationToken))
             {
-                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, null, "forbidden", transition.Now, false), cancellationToken);
+                await RecordRefusalInternalAsync(context, new DownloadRefusalCommand(session.TenantId, session.ArtifactId, session.UserId, null, "forbidden", transition.Now, false, session.Id), cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return null;
             }
@@ -386,9 +386,11 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
             ["failureReason"] = command.Reason,
             ["failure"] = command.Reason
         };
+        // A refusal of a prepared download belongs to that session; the history shows it as the session's outcome, not as a second attempt.
+        if (command.SessionId is { } sessionId) details["sessionId"] = sessionId;
         var actorKind = command.IsPlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.TenantAdministrator;
         context.AuditEvents.Add(AuditEvent.Record(command.Now, new UserId(command.UserId), actorKind, "download.refused", command.TenantId,
-            "download", command.ShareId?.ToString("D") ?? command.ArtifactId.ToString("D"), details));
+            "download", (command.SessionId ?? command.ShareId ?? command.ArtifactId).ToString("D"), details));
         await context.SaveChangesAsync(cancellationToken);
     }
 

@@ -1,7 +1,8 @@
 import { QueryState } from '@/components/data/query-state'
 import { PageHeader } from '@/components/ui/page-header'
-import { useShares } from '@/features/shares/hooks'
-import { SharesTable } from '@/features/shares/shares-table'
+import { Section } from '@/components/ui/section'
+import { useShares, useTenantDownloadAttempts } from '@/features/shares/hooks'
+import { DownloadAttemptsTable, SharesTable } from '@/features/shares/shares-table'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { tx, useLanguage } from '@/lib/i18n'
 
@@ -9,8 +10,9 @@ export function SharesPage() {
   useLanguage()
   const { tenantId, canAdmin } = useTenant()
   const query = useShares(tenantId)
+  const attemptsQuery = useTenantDownloadAttempts(tenantId)
   const shares = query.data ?? []
-
+  const attempts = attemptsQuery.data?.pages.flatMap((page) => page.items) ?? []
   return (
     <div className="space-y-6">
       <PageHeader
@@ -31,6 +33,15 @@ export function SharesPage() {
           }
         />
       </QueryState>
+
+      <Section
+        title={tx('İndirme girişimleri')}
+        description={tx('Çalışma alanınıza ait paylaşımlar ve yedek dosyaları üzerindeki indirme girişimleri.')}
+      >
+        <QueryState isPending={attemptsQuery.isPending} error={attemptsQuery.error}>
+          <DownloadAttemptsTable attempts={attempts} onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined} loadingMore={attemptsQuery.isFetchingNextPage} />
+        </QueryState>
+      </Section>
     </div>
   )
 }

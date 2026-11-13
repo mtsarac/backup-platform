@@ -359,6 +359,8 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<BackupArtifactService>();
         services.AddScoped<IBackupShareStore, PostgreSqlBackupShareStore>();
         services.AddScoped<BackupShareService>();
+        services.AddSingleton<AuditAndShareHistoryPruningWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<AuditAndShareHistoryPruningWorker>());
         services.AddScoped<IReplicaRepairStore, PostgreSqlReplicaRepairStore>();
         services.AddScoped<IReplicaMissingReporter, PostgreSqlReplicaMissingReporter>();
         services.AddScoped<ReplicaRepairService>();

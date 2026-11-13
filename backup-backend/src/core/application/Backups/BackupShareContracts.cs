@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
@@ -72,6 +73,63 @@ public sealed record BackupShareView(
     string? CreatedByDisplayName = null,
     string? TenantName = null);
 
+public sealed record DownloadAttemptFilter(
+    Guid? ShareId = null,
+    TenantId? TenantId = null,
+    Guid? ArtifactId = null,
+    Guid? InitiatingUserId = null,
+    string? Result = null);
+
+public sealed record DownloadAttemptView(
+    Guid Id,
+    Guid? ShareId,
+    Guid TenantId,
+    string? TenantName,
+    Guid ArtifactId,
+    string? ArtifactName,
+    Guid InitiatingUserId,
+    string? InitiatingUserDisplayName,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? EndedAtUtc,
+    string Result,
+    long BytesTransferred,
+    string? FailureReason,
+    bool Decrypted);
+
+/// <summary>Keyset position in the history: attempts are ordered newest first by start time, then id.</summary>
+public sealed record DownloadAttemptCursor(DateTimeOffset StartedAtUtc, Guid Id)
+{
+    public override string ToString() => $"{StartedAtUtc.UtcTicks}_{Id:N}";
+
+    public static bool TryParse(string? value, out DownloadAttemptCursor? cursor)
+    {
+        cursor = null;
+        var parts = value?.Split('_');
+        if (parts is not { Length: 2 } || !long.TryParse(parts[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var ticks)
+            || ticks > DateTimeOffset.MaxValue.UtcTicks || !Guid.TryParseExact(parts[1], "N", out var id)) return false;
+        cursor = new DownloadAttemptCursor(new DateTimeOffset(ticks, TimeSpan.Zero), id);
+        return true;
+    }
+}
+
+public sealed record DownloadAttemptPage(IReadOnlyList<DownloadAttemptView> Items, string? NextCursor)
+{
+    public const int DefaultLimit = 50;
+    public const int MaximumLimit = 200;
+}
+
+public sealed record AuditRetentionSettingsView(
+    int RetentionDays,
+    int DefaultRetentionDays = PlatformAuditRetentionSettings.DefaultRetentionDays,
+    int MinRetentionDays = PlatformAuditRetentionSettings.MinimumRetentionDays,
+    int MaxRetentionDays = PlatformAuditRetentionSettings.MaximumRetentionDays,
+    DateTimeOffset? UpdatedAtUtc = null,
+    Guid? UpdatedByUserId = null);
+
+public sealed record UpdateAuditRetentionRequest(int? RetentionDays);
+
+public sealed record AuditHistoryPruneResult(int AuditEventsRemoved, int DownloadSessionsRemoved, int SharesRemoved);
+
 public interface IBackupShareStore
 {
     Task<BackupShareCreateResult> CreateAsync(
@@ -122,6 +180,26 @@ public interface IBackupShareStore
 
     Task<BackupShareView?> GetPlatformAsync(
         Guid shareId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<DownloadAttemptPage> ListDownloadAttemptsAsync(
+        DownloadAttemptFilter filter,
+        bool tenantScoped,
+        DownloadAttemptCursor? after,
+        int limit,
+        CancellationToken cancellationToken);
+
+    Task<AuditRetentionSettingsView> GetAuditRetentionAsync(
+        CancellationToken cancellationToken);
+
+    Task<AuditRetentionSettingsView> SaveAuditRetentionAsync(
+        int retentionDays,
+        UserId actor,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<AuditHistoryPruneResult> PruneHistoryAsync(
         DateTimeOffset now,
         CancellationToken cancellationToken);
 }

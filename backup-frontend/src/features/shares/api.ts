@@ -1,5 +1,14 @@
 import { apiRequest } from '@/lib/api/client'
-import type { BackupShareView, CreatePlatformShareRequest, CreateShareRequest, ExtendShareRequest, RevokeShareRequest } from './types'
+import type {
+  AuditRetentionSettings,
+  BackupShareView,
+  CreatePlatformShareRequest,
+  CreateShareRequest,
+  DownloadAttemptFilters,
+  DownloadAttemptPage,
+  ExtendShareRequest,
+  RevokeShareRequest,
+} from './types'
 
 export async function listShares(tenantId: string, artifactId?: string, signal?: AbortSignal): Promise<BackupShareView[]> {
   const query = artifactId ? `?artifactId=${encodeURIComponent(artifactId)}` : ''
@@ -64,4 +73,35 @@ export async function revokeShare(
       json: request ?? {},
     }
   )
+}
+
+function buildAttemptQuery(filters?: DownloadAttemptFilters, cursor?: string): string {
+  const search = new URLSearchParams()
+  if (filters?.shareId) search.set('shareId', filters.shareId)
+  if (filters?.tenantId) search.set('tenantId', filters.tenantId)
+  if (filters?.artifactId) search.set('artifactId', filters.artifactId)
+  if (filters?.userId) search.set('userId', filters.userId)
+  if (filters?.result) search.set('result', filters.result)
+  if (cursor) search.set('cursor', cursor)
+  const qs = search.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export function listTenantDownloadAttempts(tenantId: string, filters?: DownloadAttemptFilters, cursor?: string, signal?: AbortSignal) {
+  return apiRequest<DownloadAttemptPage>(`tenants/${encodeURIComponent(tenantId)}/backup-shares/download-attempts${buildAttemptQuery(filters, cursor)}`, { signal })
+}
+
+export function listPlatformDownloadAttempts(filters?: DownloadAttemptFilters, cursor?: string, signal?: AbortSignal) {
+  return apiRequest<DownloadAttemptPage>(`platform/download-attempts${buildAttemptQuery(filters, cursor)}`, { signal })
+}
+
+export function getAuditRetention(signal?: AbortSignal): Promise<AuditRetentionSettings> {
+  return apiRequest<AuditRetentionSettings>('platform/settings/audit-retention', { signal })
+}
+
+export async function updateAuditRetention(retentionDays: number): Promise<AuditRetentionSettings> {
+  return apiRequest<AuditRetentionSettings>('platform/settings/audit-retention', {
+    method: 'PUT',
+    json: { retentionDays },
+  })
 }

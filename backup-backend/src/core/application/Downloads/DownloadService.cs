@@ -59,13 +59,18 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         if (availability is null) return null;
         var decrypt = auth?.IsPlatformAdmin == true ? availability.Format == BackupArtifact.BpeFormat : request.Decrypt;
         BackupArtifact? artifact = null;
+        async Task<PreparedDownload?> RefuseAsync(string reason)
+        {
+            await store.RecordRefusalAsync(new DownloadRefusalCommand(tenantId, artifactId, userId, auth?.AuthorizedShareId ?? request.ShareId, reason, time.GetUtcNow(), auth?.IsPlatformAdmin == true), cancellationToken);
+            throw new DownloadUnavailableException(reason);
+        }
         if (decrypt)
         {
-            if (availability.Format != BackupArtifact.BpeFormat) throw new DownloadUnavailableException("artifact_not_encrypted");
+            if (availability.Format != BackupArtifact.BpeFormat) return await RefuseAsync("artifact_not_encrypted");
             artifact = await store.GetArtifactAsync(tenantId, artifactId, cancellationToken);
             if (artifact is null) return null;
             if (wrapKeys is null || !await wrapKeys.OwnsKeyAsync(tenantId, artifact.EncryptionKeyId!, artifact.EncryptionKeyVersion!.Value, cancellationToken))
-                throw new DownloadUnavailableException("key_unavailable");
+                return await RefuseAsync("key_unavailable");
         }
         var selected = request.ReplicaId is { } requested
             ? availability.Replicas.SingleOrDefault(replica => replica.ReplicaId == requested)
@@ -73,14 +78,14 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
                 .Where(replica => replica.Available)
                 .OrderBy(replica => ReplicaRepairSourceEvaluator.GetProviderPriority(replica.StorageProvider))
                 .FirstOrDefault();
-        if (selected is null) throw new DownloadUnavailableException(request.ReplicaId is null ? availability.Reason! : "replica_not_found");
-        if (!selected.Available) throw new DownloadUnavailableException(selected.Reason!);
+        if (selected is null) return await RefuseAsync(request.ReplicaId is null ? availability.Reason! : "replica_not_found");
+        if (!selected.Available) return await RefuseAsync(selected.Reason!);
         artifact ??= await store.GetArtifactAsync(tenantId, artifactId, cancellationToken);
         if (artifact is null) return null;
         var replica = artifact.Replicas.Single(item => item.Id == selected.ReplicaId);
         var external = StorageProviderTypes.AgentExecuted(replica.StorageProvider);
         var directAgent = external ? await agentSource.SelectAgentAsync(tenantId, replica, cancellationToken) : null;
-        if (external && directAgent is null) throw new DownloadUnavailableException("DirectPathUnavailable");
+        if (external && directAgent is null) return await RefuseAsync("DirectPathUnavailable");
         var extension = availability.Engine switch { DatabaseEngines.PostgreSql => "dump", DatabaseEngines.MsSql => "bak", DatabaseEngines.FileSystem => "zip", _ => "bin" };
         var filename = $"backup-{artifactId:N}.{extension}" + (availability.Format == BackupArtifact.BpeFormat && !decrypt ? ".bpe" : string.Empty);
         var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime,

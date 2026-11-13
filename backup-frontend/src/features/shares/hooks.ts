@@ -1,6 +1,26 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createPlatformShare, createShare, extendShare, getPlatformShare, getShare, listPlatformShares, listShares, revokeShare } from './api'
-import type { CreatePlatformShareRequest, CreateShareRequest, ExtendShareRequest, RevokeShareRequest } from './types'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  createPlatformShare,
+  createShare,
+  extendShare,
+  getAuditRetention,
+  getPlatformShare,
+  getShare,
+  listPlatformDownloadAttempts,
+  listPlatformShares,
+  listShares,
+  listTenantDownloadAttempts,
+  revokeShare,
+  updateAuditRetention,
+} from './api'
+import type {
+  CreatePlatformShareRequest,
+  CreateShareRequest,
+  DownloadAttemptFilters,
+  DownloadAttemptPage,
+  ExtendShareRequest,
+  RevokeShareRequest,
+} from './types'
 
 export function useShares(tenantId: string, artifactId?: string) {
   return useQuery({
@@ -76,6 +96,45 @@ export function useRevokeShare(tenantId: string) {
       void queryClient.invalidateQueries({ queryKey: ['shares', tenantId] })
       void queryClient.invalidateQueries({ queryKey: ['share', tenantId] })
       void queryClient.invalidateQueries({ queryKey: ['platform-shares'] })
+    },
+  })
+}
+
+const attemptPaging = {
+  initialPageParam: undefined as string | undefined,
+  getNextPageParam: (page: DownloadAttemptPage) => page.nextCursor ?? undefined,
+}
+
+export function useTenantDownloadAttempts(tenantId: string, filters?: DownloadAttemptFilters) {
+  return useInfiniteQuery({
+    queryKey: ['tenant-download-attempts', tenantId, filters ?? {}],
+    queryFn: ({ pageParam, signal }) => listTenantDownloadAttempts(tenantId, filters, pageParam, signal),
+    enabled: Boolean(tenantId),
+    ...attemptPaging,
+  })
+}
+
+export function usePlatformDownloadAttempts(filters?: DownloadAttemptFilters) {
+  return useInfiniteQuery({
+    queryKey: ['platform-download-attempts', filters ?? {}],
+    queryFn: ({ pageParam, signal }) => listPlatformDownloadAttempts(filters, pageParam, signal),
+    ...attemptPaging,
+  })
+}
+
+export function useAuditRetention() {
+  return useQuery({
+    queryKey: ['audit-retention'],
+    queryFn: ({ signal }) => getAuditRetention(signal),
+  })
+}
+
+export function useUpdateAuditRetention() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (retentionDays: number) => updateAuditRetention(retentionDays),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['audit-retention'] })
     },
   })
 }

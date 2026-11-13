@@ -36,3 +36,20 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
         builder.HasIndex(auditEvent => new { auditEvent.TenantId, auditEvent.At });
     }
 }
+
+internal sealed class PlatformAuditRetentionSettingsConfiguration : IEntityTypeConfiguration<PlatformAuditRetentionSettings>
+{
+    public void Configure(EntityTypeBuilder<PlatformAuditRetentionSettings> builder)
+    {
+        builder.ToTable("platform_audit_retention_settings", table =>
+        {
+            table.HasCheckConstraint("ck_platform_audit_retention_settings_singleton", "\"Id\" = 1");
+            table.HasCheckConstraint("ck_platform_audit_retention_settings_days", "\"RetentionDays\" >= 1");
+        });
+        builder.HasKey(settings => settings.Id);
+        builder.Property(settings => settings.Id).ValueGeneratedNever();
+        builder.Property(settings => settings.RetentionDays).IsRequired();
+        builder.Property(settings => settings.UpdatedBy).HasConversion<UserIdConverter>().HasColumnType("uuid").IsRequired();
+        builder.Property(settings => settings.UpdatedAt).HasColumnType("timestamp with time zone").IsRequired();
+    }
+}

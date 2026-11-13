@@ -206,6 +206,15 @@ const dictionary = {
     Expired: { level: 'neutral', get label() { return tx("Süresi doldu") } },
     Revoked: { level: 'urgent', get label() { return tx("İptal edildi") } },
   },
+  downloadAttempt: {
+    Completed: { level: 'safe', get label() { return tx("Tamamlandı") } },
+    Failed: { level: 'urgent', get label() { return tx("Başarısız") } },
+    Cancelled: { level: 'neutral', get label() { return tx("İptal edildi") } },
+    Refused: { level: 'urgent', get label() { return tx("Reddedildi") } },
+    Streaming: { level: 'running', get label() { return tx("İndiriliyor") } },
+    Ready: { level: 'pending', get label() { return tx("Hazır") } },
+    Preparing: { level: 'pending', get label() { return tx("Hazırlanıyor") } },
+  },
 } as const satisfies Record<string, Record<string, StatusMeta>>
 
 export type StatusDomain = keyof typeof dictionary

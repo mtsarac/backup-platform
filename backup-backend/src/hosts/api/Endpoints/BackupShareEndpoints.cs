@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Api.Security;
 using Microsoft.AspNetCore.Mvc;
 using BackupPlatform.Application.Backups;
@@ -32,6 +33,8 @@ public static class BackupShareEndpoints
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/shares/{shareId:guid}/revoke", RevokeShareForArtifactAsync)
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-shares/download-attempts", ListTenantDownloadAttemptsAsync)
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
 
         var platform = endpoints.MapGroup("/api/platform/backup-shares")
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -39,6 +42,12 @@ public static class BackupShareEndpoints
         platform.MapPost("", CreatePlatformShareAsync);
         platform.MapGet("", ListPlatformSharesAsync);
         platform.MapGet("/{shareId:guid}", GetPlatformShareAsync);
+
+        var platformRoot = endpoints.MapGroup("/api/platform")
+            .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+        platformRoot.MapGet("/download-attempts", ListPlatformDownloadAttemptsAsync);
+        platformRoot.MapGet("/settings/audit-retention", GetAuditRetentionAsync);
+        platformRoot.MapPut("/settings/audit-retention", UpdateAuditRetentionAsync);
 
         return endpoints;
     }
@@ -336,4 +345,50 @@ public static class BackupShareEndpoints
             _ => Results.BadRequest(new { error = result.ErrorCode ?? "modify_failed", message = result.ErrorMessage ?? "Failed to modify backup share." })
         };
     }
+
+    private static async Task<IResult> ListTenantDownloadAttemptsAsync(
+        [FromQuery] Guid? shareId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [FromQuery] string? cursor, [FromQuery] int? limit,
+        ITenantContext tenant, BackupShareService service, CancellationToken cancellationToken)
+    {
+        if (!TryPage(result, cursor, limit, out var after, out var size, out var problem)) return problem!;
+        return Results.Ok(await service.ListTenantDownloadAttemptsAsync(
+            tenant.TenantId!, new DownloadAttemptFilter(shareId, tenant.TenantId!, artifactId, userId, result), after, size, cancellationToken));
+    }
+
+    private static async Task<IResult> ListPlatformDownloadAttemptsAsync(
+        [FromQuery] Guid? shareId, [FromQuery] Guid? tenantId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [FromQuery] string? cursor, [FromQuery] int? limit,
+        BackupShareService service, CancellationToken cancellationToken)
+    {
+        if (!TryPage(result, cursor, limit, out var after, out var size, out var problem)) return problem!;
+        return Results.Ok(await service.ListPlatformDownloadAttemptsAsync(
+            new DownloadAttemptFilter(shareId, tenantId is { } id ? new TenantId(id) : null, artifactId, userId, result), after, size, cancellationToken));
+    }
+
+    private static bool TryPage(string? result, string? cursor, int? limit, out DownloadAttemptCursor? after, out int size, out IResult? problem)
+    {
+        after = null;
+        size = limit ?? DownloadAttemptPage.DefaultLimit;
+        problem = !IsValidResultFilter(result) ? Results.BadRequest(new { error = "invalid_result" })
+            : size is < 1 or > DownloadAttemptPage.MaximumLimit ? Results.BadRequest(new { error = "invalid_limit" })
+            : cursor is not null && !DownloadAttemptCursor.TryParse(cursor, out after) ? Results.BadRequest(new { error = "invalid_cursor" })
+            : null;
+        return problem is null;
+    }
+
+    private static async Task<IResult> GetAuditRetentionAsync(BackupShareService service, CancellationToken cancellationToken) =>
+        Results.Ok(await service.GetAuditRetentionAsync(cancellationToken));
+
+    private static async Task<IResult> UpdateAuditRetentionAsync(
+        UpdateAuditRetentionRequest? request, ICurrentUser user, BackupShareService service, CancellationToken cancellationToken)
+    {
+        if (user.UserId is not { } actor) return Results.Unauthorized();
+        return request?.RetentionDays is { } days && await service.UpdateAuditRetentionAsync(actor, days, cancellationToken) is { } settings
+            ? Results.Ok(settings)
+            : Results.BadRequest(new { error = "invalid_retention_days" });
+    }
+
+    private static bool IsValidResultFilter(string? result) =>
+        string.IsNullOrWhiteSpace(result)
+        || string.Equals(result, "Refused", StringComparison.OrdinalIgnoreCase)
+        || (Enum.TryParse<DownloadState>(result, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) && result.All(char.IsAsciiLetter));
 }

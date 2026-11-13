@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -179,5 +180,26 @@ public sealed class BackupShareService(
     {
         var now = timeProvider.GetUtcNow();
         return await store.GetPlatformAsync(shareId, now, cancellationToken);
+    }
+
+    public Task<DownloadAttemptPage> ListTenantDownloadAttemptsAsync(
+        TenantId tenantId, DownloadAttemptFilter filter, DownloadAttemptCursor? after, int limit, CancellationToken cancellationToken) =>
+        store.ListDownloadAttemptsAsync(filter with { TenantId = tenantId }, tenantScoped: true, after, limit, cancellationToken);
+
+    public Task<DownloadAttemptPage> ListPlatformDownloadAttemptsAsync(
+        DownloadAttemptFilter filter, DownloadAttemptCursor? after, int limit, CancellationToken cancellationToken) =>
+        store.ListDownloadAttemptsAsync(filter, tenantScoped: false, after, limit, cancellationToken);
+
+    public Task<AuditRetentionSettingsView> GetAuditRetentionAsync(
+        CancellationToken cancellationToken)
+    {
+        return store.GetAuditRetentionAsync(cancellationToken);
+    }
+
+    /// <summary>Null when the value is outside the allowed range. The caller is a PlatformAdmin (endpoint policy).</summary>
+    public async Task<AuditRetentionSettingsView?> UpdateAuditRetentionAsync(UserId actor, int retentionDays, CancellationToken cancellationToken)
+    {
+        if (retentionDays is < PlatformAuditRetentionSettings.MinimumRetentionDays or > PlatformAuditRetentionSettings.MaximumRetentionDays) return null;
+        return await store.SaveAuditRetentionAsync(retentionDays, actor, timeProvider.GetUtcNow(), cancellationToken);
     }
 }
