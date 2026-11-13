@@ -1,7 +1,7 @@
 import { cleanup, render as rtlRender, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it } from 'vitest'
-import { artifactAvailability } from './availability'
+import { artifactAvailability, downloadAvailability } from './availability'
 import { ArtifactAvailability } from './artifact-availability'
 import { artifactSourceLabel, artifactSourceScope } from './source'
 import { backupOption } from './backup-option'
@@ -17,6 +17,7 @@ vi.mock('@/lib/api/client', () => ({
 }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }) }))
 vi.mock('@/hooks/use-large-screen', () => ({ useLargeScreen: () => large.value }))
+vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: 'UserAdmin' } }) }))
 const large = vi.hoisted(() => ({ value: true }))
 
 const replica: BackupReplica = {
@@ -67,6 +68,22 @@ describe('artifactAvailability', () => {
   it('renders icon-independent text', () => {
     rtlRender(<ArtifactAvailability artifact={artifact()} />)
     expect(screen.getByText('Geri yüklemeye hazır')).toBeVisible()
+  })
+})
+
+describe('downloadAvailability', () => {
+  it('never says ready from a listing: a verified copy still needs the live check', () => {
+    expect(downloadAvailability(artifact(), true).label).toBe('Kontrol gerekli')
+  })
+  it.each([
+    ['delete pending', { state: 'DeletePending' }],
+    ['no verified copy', { replicas: [{ ...replica, verificationState: 'Pending' }] }],
+    ['copy being deleted', { replicas: [{ ...replica, status: 'DeletePending' }] }],
+  ] as [string, Partial<BackupArtifact>][])('is a definite no for %s', (_name, overrides) => {
+    expect(downloadAvailability(artifact(overrides), true).label).toBe('Uygun değil')
+  })
+  it('tells a PlatformAdmin that a share is needed instead of offering a direct download', () => {
+    expect(downloadAvailability(artifact(), false).label).toBe('Paylaşım gerekli')
   })
 })
 

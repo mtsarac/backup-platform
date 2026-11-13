@@ -19,3 +19,13 @@ export function artifactAvailability(artifact: BackupArtifact): ArtifactAvailabi
   const degraded = artifact.replication && artifact.replication.status !== 'Healthy'
   return { level: 'safe', label: tx('Geri yüklemeye hazır'), reason: degraded ? tx('Kopya sayısı politikanın gerisinde.') : null }
 }
+
+/**
+ * What a listing can say about downloading without probing storage or the agent: a definite "no", or "needs a check".
+ * Whether the stored object is reachable right now is only known to the detail page's availability request, so a listing never says "ready".
+ */
+export function downloadAvailability(artifact: BackupArtifact, canDownload: boolean): ArtifactAvailability {
+  if (artifact.state !== 'Available' || !artifact.replicas.some(r => r.status === 'Available' && r.verificationState === 'Verified')) return { level: 'neutral', label: tx('Uygun değil'), reason: null }
+  // PlatformAdmin downloads only through a BackupShare.
+  return { level: 'neutral', label: canDownload ? tx('Kontrol gerekli') : tx('Paylaşım gerekli'), reason: null }
+}
