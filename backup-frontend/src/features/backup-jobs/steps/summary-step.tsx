@@ -8,7 +8,7 @@ import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { JobSummary } from '@/features/backup-jobs/job-summary'
 import type { useJobOccurrences } from '@/features/backup-jobs/hooks'
-import { changedSections, stepLabel, type JobStep } from '@/features/backup-jobs/job-wizard-model'
+import { changedSections, stepLabel, type EditSection } from '@/features/backup-jobs/job-wizard-model'
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
@@ -38,7 +38,7 @@ export function StorageBlockedNotice({ onFix }: { onFix?: () => void }) {
 }
 
 /** Last wizard step: everything that will be created. */
-export function ReviewStep({ form, onGo }: { form: JobFormState; onGo: (step: JobStep) => void }) {
+export function ReviewStep({ form, onGo }: { form: JobFormState; onGo: (step: EditSection) => void }) {
   const { values, agent } = form
   const agentLabel = agent ? `${agent.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', agent.operationalStatus)}` : values.agentId ? tx('Bilgisayar bulunamadı') : tx('Seçilmedi')
   return <>

@@ -54,7 +54,7 @@ async function reachOptionsStep() {
   fireEvent.change(screen.getByLabelText('Yedekleme bilgisayarı'), { target: { value: 'agent-a' } })
   fireEvent.change(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu'), { target: { value: 'sql' } })
   fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'ERP' } })
-  next(3)
+  next(2)
   await screen.findByLabelText('Yedek şifreleme politikası')
 }
 

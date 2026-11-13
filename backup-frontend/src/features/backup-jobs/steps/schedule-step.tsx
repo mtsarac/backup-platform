@@ -5,7 +5,7 @@ import { keepForLabel, retentionPresets, schedulePresets } from '@/features/back
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 
 /** Questions: when the job runs on its own and how long backups are kept. Cron, time zone, overlap, retry and exact retention seconds stay under the technical details. */
-export function ScheduleStep({ form }: { form: JobFormState }) {
+export function ScheduleStep({ form, advancedTitle }: { form: JobFormState; advancedTitle?: string }) {
   useLanguage()
   const { values, errors, canAdmin, nextRun, set } = form
   const { scheduled, schedule, overlap, retry, retention } = values
@@ -35,7 +35,7 @@ export function ScheduleStep({ form }: { form: JobFormState }) {
         {form.job && <p className="text-sm text-text-muted md:col-span-2">{tx("Politika değişikliği mevcut yedeklerin son kullanma tarihini değiştirmez.")}</p>}
       </FormGrid>
     </Question>
-    <Advanced open={withErrors('cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.maxAttempts', 'retryPolicy.initialDelaySeconds', 'retryPolicy.maxDelaySeconds', 'retryPolicy.backoff', 'retryPolicy.jitter', 'retention.keepForSeconds', 'retention.deleteGracePeriodSeconds')}>
+    <Advanced title={advancedTitle} open={withErrors('cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.maxAttempts', 'retryPolicy.initialDelaySeconds', 'retryPolicy.maxDelaySeconds', 'retryPolicy.backoff', 'retryPolicy.jitter', 'retention.keepForSeconds', 'retention.deleteGracePeriodSeconds')}>
       {scheduled && text('cronExpression', tx('Cron ifadesi'), schedule.cronExpression, cronExpression => setSchedule({ ...schedule, cronExpression }))}
       {scheduled && text('timeZone', tx('Saat dilimi (IANA / sistem adı)'), schedule.timeZone, timeZone => setSchedule({ ...schedule, timeZone }))}
       {scheduled && number('missedRunGraceSeconds', tx('Kaçırılan çalışma toleransı (saniye)'), schedule.missedRunGraceSeconds, value => setSchedule({ ...schedule, missedRunGraceSeconds: value ?? 0 }))}

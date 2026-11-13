@@ -3,8 +3,8 @@ import { initialValues, switchEngine, type EngineMemory } from './job-form-value
 import { changedSections, jobSteps, stepOfField, validateJob, validateStep } from './job-wizard-model'
 
 describe('job steps', () => {
-  it('has five steps in order', () => {
-    expect(jobSteps).toEqual(['source', 'storage', 'schedule', 'protection', 'review'])
+  it('has four steps in order', () => {
+    expect(jobSteps).toEqual(['source', 'storage', 'schedule-protection', 'review'])
   })
   it.each([
     ['name', 'source'], ['agentId', 'source'], ['configuration.host', 'source'], ['configuration.databaseLogin.password', 'source'], ['configuration.files.paths[0]', 'source'],
