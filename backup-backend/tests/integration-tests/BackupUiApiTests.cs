@@ -65,7 +65,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         Assert.Equal(HttpStatusCode.BadRequest, csrf.StatusCode);
         foreach (var resource in new[] { "/backup-jobs", "/dashboard", "/backup-runs?page=1" })
         {
-            using var response = await viewer.GetAsync(scenario.Root + resource);
+            using var response = await scenario.Admin.GetAsync(scenario.Root + resource);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var json = await response.Content.ReadAsStringAsync();
             Assert.DoesNotContain(scenario.Agent.Secret, json);

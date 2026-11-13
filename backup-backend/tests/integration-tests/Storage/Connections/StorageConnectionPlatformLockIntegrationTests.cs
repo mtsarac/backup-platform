@@ -61,10 +61,8 @@ public sealed class StorageConnectionPlatformLockIntegrationTests(PostgreSqlFixt
         var path = env.TenantRoot + $"/storage-connections/{localId}";
         var platformPath = $"/api/platform/storage-connections/{localId}";
         await ToggleAsync(platform, platformPath, "disable");
-        var view = await GetAsync(reader, path);
-        AssertState(view, true, true, false);
-        Assert.False(view.GetProperty("permissions").GetProperty("canToggle").GetBoolean());
-        Assert.False(view.GetProperty("permissions").GetProperty("canDelete").GetBoolean());
+        using (var read = await reader.GetAsync(path))
+            Assert.Equal(HttpStatusCode.Forbidden, read.StatusCode);
         foreach (var action in new[] { "enable", "disable" })
         {
             using var tenantToggle = await reader.SendAsync(HttpMethod.Post, path + "/" + action);

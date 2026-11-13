@@ -145,7 +145,6 @@ const messages: Record<string, string> = {
   get EncryptionRequired() { return tx("İş şifreleme gerektiriyor ama yedek dosyası şifrelenmeden geldi; dosya yayımlanmadı.") },
   get artifact_not_encrypted() { return tx("Bu yedek dosyası şifreli değil; şifre çözme uygulanamaz.") },
   get key_unavailable() { return tx("Şifreleme anahtarı kullanılamıyor (emekli veya eksik). Dosya yalnızca Platform kurtarma anahtarı ile çevrimdışı çözülebilir.") },
-  get decrypt_not_permitted() { return tx("Destek oturumu üzerinden şifre çözülemez.") },
   get artifact_not_found() { return tx("Backup bulunamadı veya bu tenant'a ait değil.") },
   get key_not_found() { return tx("Anahtar sürümü bulunamadı.") },
   get cannot_retire_active_key() { return tx("Etkin anahtar emekli edilemez. Önce anahtarı döndürün.") },

@@ -595,7 +595,7 @@ public sealed class ShareRevocationCancellationIntegrationTests(PostgreSqlFixtur
         }
     }
 
-    private static Task<DownloadApiScenario> CreateGatedScenarioAsync(
+    internal static Task<DownloadApiScenario> CreateGatedScenarioAsync(
         PostgreSqlFixture fixture,
         ConcurrentQueue<StreamGate> gates,
         IReadOnlyDictionary<string, string?>? configuration = null)
@@ -615,7 +615,7 @@ public sealed class ShareRevocationCancellationIntegrationTests(PostgreSqlFixtur
             configuration: configuration);
     }
 
-    private sealed class StreamGate(int firstChunkBytes)
+    public sealed class StreamGate(int firstChunkBytes)
     {
         public int FirstChunkBytes { get; } = firstChunkBytes;
         public TaskCompletionSource FirstChunkTransferred { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

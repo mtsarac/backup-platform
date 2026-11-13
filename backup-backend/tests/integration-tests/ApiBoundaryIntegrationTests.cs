@@ -137,7 +137,10 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
             ("GET", "/api/agent-dist/status"),
             ("GET", "/api/notifications/recipient/{route}"), ("POST", "/api/notifications/recipient/{route}"),
             ("GET", "/api/tenants/{tenantId:guid}/storage-connections/google-drive/callback"),
-            ("GET", "/api/platform/google-drive/oauth/callback")
+            ("GET", "/api/platform/google-drive/oauth/callback"),
+            ("POST", "/api/auth/passkeys/login/options"), ("POST", "/api/auth/passkeys/login"),
+            ("GET", "/api/auth/email-recovery"), ("POST", "/api/auth/password-reset/request"),
+            ("POST", "/api/auth/password-reset/complete"), ("POST", "/api/auth/email-verification/confirm")
         };
         // These browser routes resolve the tenant inside their handlers, or operate on the current session.
         var authenticated = new HashSet<(string Method, string Pattern)>
@@ -148,6 +151,11 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
             ("GET", "/api/auth/security"), ("POST", "/api/auth/security/totp/setup"),
             ("POST", "/api/auth/security/totp/enroll"), ("POST", "/api/auth/security/totp/remove"),
             ("POST", "/api/auth/security/recovery-codes/regenerate"),
+            ("POST", "/api/auth/change-password"), ("POST", "/api/auth/email-verification/request"),
+            ("GET", "/api/auth/passkeys"), ("DELETE", "/api/auth/passkeys/{id:guid}"),
+            ("POST", "/api/auth/passkeys/register/options"), ("POST", "/api/auth/passkeys/register"),
+            ("POST", "/api/auth/passkeys/second-factor/options"), ("POST", "/api/auth/passkeys/second-factor"),
+            ("GET", "/api/notifications/in-app/"), ("POST", "/api/notifications/in-app/{id:guid}/read"),
             ("GET", "/api/me"), ("GET", "/api/me/tenants"),
             ("POST", "/api/backups/runs/{runId:guid}/pause"), ("POST", "/api/backups/runs/{runId:guid}/resume"),
             ("GET", "/api/v1/backups/jobs/{id:guid}/health"), ("GET", "/api/v1/observability/health-summary"),

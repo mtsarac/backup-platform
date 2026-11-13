@@ -53,8 +53,8 @@ public sealed class RemoveLegacyAccessMigrationTests(PostgreSqlFixture fixture) 
                 WHERE s."Id" = {normalId};
                 """);
 
-            using var beforeRenew = await AgentAsync(streamingId, "lease", new { leaseToken = token });
-            Assert.Equal(HttpStatusCode.OK, beforeRenew.StatusCode);
+            // The current API cannot serve a pre-rework schema, so the legacy session is checked in the database before the upgrade.
+            Assert.Equal("Streaming", await context.Database.SqlQuery<string>($"SELECT \"State\" AS \"Value\" FROM download_sessions WHERE \"Id\" = {streamingId}").SingleAsync());
 
             await migrator.MigrateAsync();
         }

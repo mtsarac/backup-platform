@@ -176,7 +176,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Şifreli yedeklerinizin korumasını inceleyin.": { tr: "Şifreli yedeklerinizin korumasını inceleyin.", en: "Review protection for your encrypted backups." },
   "Şifreleme korumasını yalnızca çalışma alanı sahibi veya yöneticisi görüntüleyebilir.": { tr: "Şifreleme korumasını yalnızca çalışma alanı sahibi veya yöneticisi görüntüleyebilir.", en: "Only the workspace owner or administrator can view encryption protection." },
   "Bu yedek dosyası şifreli değil; şifre çözme uygulanamaz.": { tr: "Bu yedek dosyası şifreli değil; şifre çözme uygulanamaz.", en: "This backup file is not encrypted and cannot be decrypted." },
-  "Destek oturumu üzerinden şifre çözülemez.": { tr: "Destek oturumu üzerinden şifre çözülemez.", en: "Decryption is not permitted through a support session." },
   "Anahtar": { tr: "Anahtar", en: "Key" },
   "Etkin anahtar": { tr: "Etkin anahtar", en: "Active key" },
   "Kullanımdan kaldırılmış anahtar": { tr: "Kullanımdan kaldırılmış anahtar", en: "Retired key" },

@@ -15,7 +15,7 @@ export function safeDownloadUrl(path: string): string | undefined {
 }
 
 /**
- * The one download flow behind tenant, support and emergency downloads: prepare, poll the transfer, let the browser save the file
+ * The one download flow behind artifact downloads: prepare, poll the transfer, let the browser save the file
  * (or hand a direct transfer to its button). The link is never put in the query or mutation cache or in rendered state: a browser
  * navigation link waits in a ref until it is used once, a direct transfer's link stays in state only until the transfer is over.
  */
@@ -25,7 +25,7 @@ export function useDownloadFlow({ active = true, prepare, fetchStatus, statusKey
   prepare: () => Promise<PreparedDownload>
   fetchStatus: (sessionId: string, signal: AbortSignal) => Promise<DownloadStatus>
   statusKey: (sessionId: string | undefined) => QueryKey
-  /** The server has accepted the request (an emergency grant is spent at this point). */
+  /** The server has accepted the request (a share grant is checked at this point). */
   onPrepared?: () => void
 }) {
   const visible = useVisibleTab()

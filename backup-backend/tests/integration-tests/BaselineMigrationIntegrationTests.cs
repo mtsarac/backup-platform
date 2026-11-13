@@ -19,7 +19,8 @@ public sealed class BaselineMigrationIntegrationTests(PostgreSqlFixture fixture)
     public async Task TheBaselineCarriesTheObjectsTheModelCannotExpress()
     {
         await using var context = fixture.CreatePlatformContext();
-        Assert.Equal(16L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'trg\\_%'").SingleAsync());
+        // 16 in the baseline, minus the three Support Session triggers removed with it, plus the two membership/role guards of the two-role model.
+        Assert.Equal(15L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'trg\\_%'").SingleAsync());
         Assert.Equal(1L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM quota_policies WHERE \"IsDefault\"").SingleAsync());
         Assert.Equal(5L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM plans").SingleAsync());
         Assert.Equal(1L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM information_schema.schemata WHERE schema_name = 'quartz'").SingleAsync());
