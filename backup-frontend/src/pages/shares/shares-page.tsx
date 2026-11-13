@@ -12,7 +12,7 @@ export function SharesPage() {
   const query = useShares(tenantId)
   const attemptsQuery = useTenantDownloadAttempts(tenantId)
   const shares = query.data ?? []
-  const attempts = attemptsQuery.data ?? []
+  const attempts = attemptsQuery.data?.pages.flatMap((page) => page.items) ?? []
   return (
     <div className="space-y-6">
       <PageHeader
@@ -39,7 +39,7 @@ export function SharesPage() {
         description={tx('Çalışma alanınıza ait paylaşımlar ve yedek dosyaları üzerindeki indirme girişimleri.')}
       >
         <QueryState isPending={attemptsQuery.isPending} error={attemptsQuery.error}>
-          <DownloadAttemptsTable attempts={attempts} />
+          <DownloadAttemptsTable attempts={attempts} onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined} loadingMore={attemptsQuery.isFetchingNextPage} />
         </QueryState>
       </Section>
     </div>

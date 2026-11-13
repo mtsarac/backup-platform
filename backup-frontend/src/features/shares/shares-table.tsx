@@ -221,12 +221,17 @@ export interface DownloadAttemptsTableProps {
   attempts: DownloadAttemptView[]
   showTenant?: boolean
   emptyMessage?: string
+  /** Present while older attempts remain on the server. */
+  onLoadMore?: () => void
+  loadingMore?: boolean
 }
 
 export function DownloadAttemptsTable({
   attempts,
   showTenant = false,
   emptyMessage,
+  onLoadMore,
+  loadingMore = false,
 }: DownloadAttemptsTableProps) {
   useLanguage()
 
@@ -295,11 +300,18 @@ export function DownloadAttemptsTable({
   }
 
   return (
-    <DataList
-      rows={attempts}
-      columns={columns}
-      keyExtractor={(attempt) => attempt.id}
-      caption={tx('İndirme girişimleri')}
-    />
+    <div className="space-y-3">
+      <DataList
+        rows={attempts}
+        columns={columns}
+        keyExtractor={(attempt) => attempt.id}
+        caption={tx('İndirme girişimleri')}
+      />
+      {onLoadMore && (
+        <Button variant="outline" size="sm" disabled={loadingMore} onClick={onLoadMore}>
+          {loadingMore ? tx('Yükleniyor…') : tx('Daha eski girişimleri göster')}
+        </Button>
+      )}
+    </div>
   )
 }

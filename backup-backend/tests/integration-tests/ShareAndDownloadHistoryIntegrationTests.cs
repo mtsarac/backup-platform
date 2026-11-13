@@ -35,11 +35,28 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         return (scenario, shareId);
     }
 
-    private static async Task<List<JsonElement>> AttemptsAsync(BrowserSession session, string path)
+    /// <summary>Walks every page of the history by following the cursor.</summary>
+    private static async Task<List<JsonElement>> AttemptsAsync(BrowserSession session, string path, int? limit = null, string? cursor = null)
     {
-        using var response = await session.GetAsync(path);
+        var all = new List<JsonElement>();
+        do
+        {
+            var (items, next) = await PageAsync(session, path, limit, cursor);
+            all.AddRange(items);
+            cursor = next;
+        }
+        while (cursor is not null);
+        return all;
+    }
+
+    private static async Task<(List<JsonElement> Items, string? Next)> PageAsync(BrowserSession session, string path, int? limit = null, string? cursor = null)
+    {
+        var query = string.Join('&', new[] { limit is null ? null : $"limit={limit}", cursor is null ? null : $"cursor={cursor}" }.Where(part => part is not null));
+        using var response = await session.GetAsync(query.Length == 0 ? path : path + (path.Contains('?') ? '&' : '?') + query);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return AgentWorld.ReadJson(response).EnumerateArray().ToList();
+        var json = AgentWorld.ReadJson(response);
+        var next = json.GetProperty("nextCursor");
+        return (json.GetProperty("items").EnumerateArray().ToList(), next.ValueKind == JsonValueKind.Null ? null : next.GetString());
     }
 
     private static async Task<Guid> DownloadAsync(BrowserSession session, DownloadApiScenario scenario, object body, HttpStatusCode expectedContent = HttpStatusCode.OK)
@@ -97,6 +114,107 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         Assert.Empty(await AttemptsAsync(platform, $"/api/platform/download-attempts?tenantId={tenantId}&userId={Guid.NewGuid()}"));
         using var invalid = await platform.GetAsync("/api/platform/download-attempts?result=nonsense");
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
+    public async Task SeparateRefusalDoesNotHidePreparedDownload()
+    {
+        var (scenario, shareId) = await CreateScenarioWithShareAsync(fixture);
+        await using var _ = scenario;
+        var account = await scenario.World.SeedUserAsync(platformAdmin: true);
+        var platform = await scenario.World.SignInAsync(account);
+        using var prepared = await platform.SendAsync(HttpMethod.Post, $"{scenario.ArtifactPath}/downloads", new { shareId });
+        Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
+        var sessionId = AgentWorld.ReadJson(prepared).GetProperty("sessionId").GetGuid();
+        await scenario.Store().RecordRefusalAsync(new DownloadRefusalCommand(
+            scenario.Backup.Backup.Setup.Tenant.Id, scenario.Accepted.ArtifactId, account.UserId.Value,
+            shareId, "replica_not_found", scenario.Backup.Clock.GetUtcNow().AddSeconds(1), true), default);
+        var attempts = await AttemptsAsync(platform, $"/api/platform/download-attempts?shareId={shareId}");
+        Assert.Contains(attempts, item => item.GetProperty("id").GetGuid() == sessionId);
+        Assert.Contains(attempts, item => item.GetProperty("result").GetString() == "Refused");
+    }
+
+    [Fact]
+    public async Task Pagination_ReachesEveryAttemptBeyond500_InStableOrder_WhileNewAttemptsArrive()
+    {
+        var (scenario, shareId) = await CreateScenarioWithShareAsync(fixture);
+        await using var _ = scenario;
+        var account = await scenario.World.SeedUserAsync(platformAdmin: true);
+        var platform = await scenario.World.SignInAsync(account);
+        var tenant = scenario.Backup.Backup.Setup.Tenant.Id;
+        var store = scenario.Store();
+        var start = scenario.Backup.Clock.GetUtcNow().AddDays(-1);
+        // 520 refused attempts; every three share one timestamp, so the id tie-break is exercised.
+        for (var index = 0; index < 520; index++)
+            await store.RecordRefusalAsync(new DownloadRefusalCommand(tenant, scenario.Accepted.ArtifactId, account.UserId.Value, shareId, "share_expired", start.AddSeconds(index / 3), true), default);
+
+        var path = $"/api/platform/download-attempts?tenantId={tenant.Value}";
+        var (first, cursor) = await PageAsync(platform, path, limit: 100);
+        Assert.Equal(100, first.Count);
+        Assert.NotNull(cursor);
+
+        // Attempts made while someone is paging: a prepared download and a new refusal, both newer than the cursor.
+        var arrived = (await scenario.CreateSessionAsync()).GetProperty("sessionId").GetGuid();
+        await store.RecordRefusalAsync(new DownloadRefusalCommand(tenant, scenario.Accepted.ArtifactId, account.UserId.Value, shareId, "share_expired", scenario.Backup.Clock.GetUtcNow(), true), default);
+
+        var walked = first.Concat(await AttemptsAsync(platform, path, limit: 100, cursor: cursor)).ToList();
+        Assert.Equal(520, walked.Count);
+        Assert.Equal(520, walked.Select(item => item.GetProperty("id").GetGuid()).Distinct().Count());
+        Assert.DoesNotContain(walked, item => item.GetProperty("id").GetGuid() == arrived);
+        var times = walked.Select(item => item.GetProperty("startedAtUtc").GetDateTimeOffset()).ToList();
+        Assert.Equal(times.OrderByDescending(time => time), times);
+        Assert.Equal(start.AddSeconds(0), times[^1]);
+
+        // A fresh walk sees everything, on both routes and with a different page size.
+        Assert.Equal(522, (await AttemptsAsync(platform, path)).Count);
+        var tenantWalk = await AttemptsAsync(scenario.Admin, $"{scenario.Root}/backup-shares/download-attempts", limit: 200);
+        Assert.Equal(522, tenantWalk.Select(item => item.GetProperty("id").GetGuid()).Distinct().Count());
+        Assert.Equal(521, (await AttemptsAsync(platform, $"{path}&shareId={shareId}&result=Refused", limit: 200)).Count);
+
+        foreach (var bad in new[] { "limit=0", "limit=201", "cursor=nonsense" })
+        {
+            using var response = await platform.GetAsync($"{path}&{bad}");
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+        using var anonymous = await scenario.World.Anonymous.GetAsync(path);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    [Fact]
+    public async Task RefusalOfAPreparedDownload_IsShownOnThatSessionOnly_AmongConcurrentAttemptsOnTheSameShare()
+    {
+        var (scenario, shareId) = await CreateScenarioWithShareAsync(fixture);
+        await using var _ = scenario;
+        var account = await scenario.World.SeedUserAsync(platformAdmin: true);
+        var platform = await scenario.World.SignInAsync(account);
+
+        // Two independent attempts with the same tenant, artifact, share and user, prepared at the same time.
+        async Task<JsonElement> PrepareAsync()
+        {
+            using var prepared = await platform.SendAsync(HttpMethod.Post, $"{scenario.ArtifactPath}/downloads", new { shareId });
+            Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
+            return AgentWorld.ReadJson(prepared);
+        }
+        var prepared = await Task.WhenAll(PrepareAsync(), PrepareAsync());
+        var refusedSession = prepared[0].GetProperty("sessionId").GetGuid();
+        var otherSession = prepared[1].GetProperty("sessionId").GetGuid();
+
+        using (var revoke = await scenario.Admin.SendAsync(HttpMethod.Post, $"{scenario.Root}/backup-shares/{shareId}/revoke", new { reason = "Correlation test" }))
+            Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        using (var content = await platform.Client.GetAsync(prepared[0].GetProperty("downloadUrl").GetString()!))
+            Assert.NotEqual(HttpStatusCode.OK, content.StatusCode);
+
+        var attempts = await AttemptsAsync(platform, $"/api/platform/download-attempts?shareId={shareId}");
+        Assert.Equal(new[] { refusedSession, otherSession }.Order(), attempts.Select(item => item.GetProperty("id").GetGuid()).Order());
+        var refused = attempts.Single(item => item.GetProperty("id").GetGuid() == refusedSession);
+        Assert.Equal("Refused", refused.GetProperty("result").GetString());
+        Assert.Equal("share_revoked", refused.GetProperty("failureReason").GetString());
+        Assert.NotEqual(JsonValueKind.Null, refused.GetProperty("endedAtUtc").ValueKind);
+        Assert.NotEqual("Refused", attempts.Single(item => item.GetProperty("id").GetGuid() == otherSession).GetProperty("result").GetString());
+
+        // The result filter follows the same rule, and the refusal is not a second row.
+        Assert.Equal([refusedSession], (await AttemptsAsync(platform, $"/api/platform/download-attempts?shareId={shareId}&result=Refused")).Select(item => item.GetProperty("id").GetGuid()));
+        Assert.DoesNotContain(await AttemptsAsync(platform, $"/api/platform/download-attempts?shareId={shareId}&result=Ready"), item => item.GetProperty("id").GetGuid() == refusedSession);
     }
 
     [Fact]
@@ -222,11 +340,13 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         var recentPlain = Old("marker", "recent", 10);
         var oldForActiveShare = Old("backup_share", activeShare.ToString("D"), 45);
         var oldForRunningDownload = Old("download", running.ToString("D"), 45);
+        var oldRefusal = AuditEvent.Record(now.AddDays(-45), platformAccount.UserId, AuditActorKind.PlatformAdmin,
+            "download.refused", tenantId, "download", activeShare.ToString("D"), new Dictionary<string, object?> { ["shareId"] = activeShare });
         var oldNotification = new NotificationEvent(Guid.NewGuid(), tenantId, NotificationEventTypes.BackupFailed, NotificationPhase.Raised, NotificationSeverity.Warning,
             new NotificationSubject("backup_job", Guid.NewGuid(), "Old job"), null, $"prune-test:{Guid.NewGuid():N}", now.AddDays(-45), now.AddDays(-45));
         await using (var seed = fixture.CreatePlatformContext())
         {
-            seed.AuditEvents.AddRange(oldPlain, recentPlain, oldForActiveShare, oldForRunningDownload);
+            seed.AuditEvents.AddRange(oldPlain, recentPlain, oldForActiveShare, oldForRunningDownload, oldRefusal);
             seed.NotificationEvents.Add(oldNotification);
             await seed.SaveChangesAsync();
         }
@@ -245,6 +365,7 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
             Assert.Contains(recentPlain.Id, kept);
             Assert.Contains(oldForActiveShare.Id, kept);
             Assert.Contains(oldForRunningDownload.Id, kept);
+            Assert.True(await context.AuditEvents.AnyAsync(row => row.Id == oldRefusal.Id));
             Assert.True(await context.NotificationEvents.AnyAsync(row => row.Id == oldNotification.Id));
             Assert.Equal(2, await context.BackupShares.CountAsync(row => row.TenantId == tenantId));
             Assert.Equal(2, await context.DownloadSessions.CountAsync(row => row.Id == finished || row.Id == running));
@@ -259,5 +380,80 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
             Assert.Equal([activeShare], await context.BackupShares.Where(row => row.TenantId == tenantId).Select(row => row.Id).ToListAsync());
             Assert.True(await context.NotificationEvents.AnyAsync(row => row.Id == oldNotification.Id));
         }
+    }
+
+    [Fact]
+    public async Task RetentionChangeAndPruning_AreSerializedAcrossApiInstances_AndAPruneUsesTheCommittedSetting()
+    {
+        var (scenario, _) = await CreateScenarioWithShareAsync(fixture);
+        await using var _1 = scenario;
+        // A second API host on the same database.
+        await using var second = await AgentWorld.CreateAsync(fixture, clock: scenario.Backup.Clock);
+        var actor = (await scenario.World.SeedUserAsync(platformAdmin: true)).UserId;
+        var now = scenario.Backup.Clock.GetUtcNow();
+        await using var firstScope = scenario.World.Factory.Services.CreateAsyncScope();
+        await using var secondScope = second.Factory.Services.CreateAsyncScope();
+        var firstStore = firstScope.ServiceProvider.GetRequiredService<IBackupShareStore>();
+        var secondStore = secondScope.ServiceProvider.GetRequiredService<IBackupShareStore>();
+        await firstStore.SaveAuditRetentionAsync(30, actor, now, default);
+        var old = AuditEvent.Record(now.AddDays(-45), actor, AuditActorKind.PlatformAdmin, "test.lock_marker", null, "marker", "old", new Dictionary<string, object?>());
+        await using (var seed = fixture.CreatePlatformContext())
+        {
+            seed.AuditEvents.Add(old);
+            await seed.SaveChangesAsync();
+        }
+
+        Task<AuditHistoryPruneResult> prune;
+        Task<AuditRetentionSettingsView> update;
+        await using (var holder = fixture.CreatePlatformContext())
+        {
+            // Stands for a retention change in flight on a third connection: it holds the shared lock and raises the retention to 90 days.
+            await using var transaction = await holder.Database.BeginTransactionAsync();
+            await holder.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(hashtext('audit_retention'))");
+            prune = secondStore.PruneHistoryAsync(now, default);
+            update = firstStore.SaveAuditRetentionAsync(120, actor, now, default);
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            Assert.False(prune.IsCompleted);
+            Assert.False(update.IsCompleted);
+            await holder.Database.ExecuteSqlRawAsync("UPDATE platform_audit_retention_settings SET \"RetentionDays\" = 90");
+            await transaction.CommitAsync();
+        }
+        await Task.WhenAll(prune, update).WaitAsync(TimeSpan.FromSeconds(20));
+
+        // The prune started while 30 days was current, but it ran after the change was committed: the 45-day-old record survives.
+        await using var context = fixture.CreatePlatformContext();
+        Assert.True(await context.AuditEvents.AnyAsync(row => row.Id == old.Id));
+        Assert.Equal(120, (await secondStore.GetAuditRetentionAsync(default)).RetentionDays);
+    }
+
+    [Fact]
+    public async Task Pruning_LeavesTheSealsOfRemainingAuditEventsVerifiable()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var actor = (await scenario.World.SeedUserAsync(platformAdmin: true)).UserId;
+        var now = scenario.Clock.GetUtcNow();
+        using var key = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var signing = new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>(fixture.Options)
+            .AddInterceptors(new BackupPlatform.Infrastructure.Persistence.AuditSigningInterceptor("prune-test-key", key.ExportPkcs8PrivateKeyPem())).Options;
+        var old = AuditEvent.Record(now.AddDays(-400), actor, AuditActorKind.PlatformAdmin, "test.sealed_marker", null, "marker", "old", new Dictionary<string, object?>());
+        var kept = AuditEvent.Record(now.AddDays(-5), actor, AuditActorKind.PlatformAdmin, "test.sealed_marker", null, "marker", "kept", new Dictionary<string, object?> { ["value"] = 1.5 });
+        await using (var writer = BackupPlatform.Infrastructure.Persistence.PlatformDbContext.CreateForPlatformOperations(signing))
+        {
+            writer.AuditEvents.AddRange(old, kept);
+            await writer.SaveChangesAsync();
+        }
+        await using (var scope = scenario.World.Factory.Services.CreateAsyncScope())
+        {
+            var store = scope.ServiceProvider.GetRequiredService<IBackupShareStore>();
+            await store.SaveAuditRetentionAsync(365, actor, now, default);
+            Assert.True((await store.PruneHistoryAsync(now, default)).AuditEventsRemoved >= 1);
+        }
+
+        await using var reader = fixture.CreatePlatformContext();
+        var remaining = await reader.AuditEvents.Where(row => row.Action == "test.sealed_marker").ToListAsync();
+        var survivor = Assert.Single(remaining);
+        Assert.Equal(kept.Id, survivor.Id);
+        var signature = (string)reader.Entry(survivor).Property(BackupPlatform.Infrastructure.Persistence.AuditSigningInterceptor.SignatureProperty).CurrentValue!;
+        Assert.True(BackupPlatform.Infrastructure.Persistence.AuditSigningInterceptor.Verify(survivor, signature, key.ExportSubjectPublicKeyInfoPem()));
     }
 }

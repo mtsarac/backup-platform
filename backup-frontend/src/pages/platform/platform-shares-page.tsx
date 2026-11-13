@@ -43,7 +43,7 @@ export function PlatformSharesPage() {
     userId: userFilter || undefined,
     result: resultFilter || undefined,
   })
-  const attempts = attemptsQuery.data ?? []
+  const attempts = attemptsQuery.data?.pages.flatMap((page) => page.items) ?? []
 
   const retentionQuery = useAuditRetention()
   const updateRetention = useUpdateAuditRetention()
@@ -160,6 +160,8 @@ export function PlatformSharesPage() {
             <DownloadAttemptsTable
               attempts={attempts}
               showTenant
+              onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined}
+              loadingMore={attemptsQuery.isFetchingNextPage}
               emptyMessage={tx('Henüz indirme girişimi kaydı yok.')}
             />
           </QueryState>

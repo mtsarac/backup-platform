@@ -182,31 +182,13 @@ public sealed class BackupShareService(
         return await store.GetPlatformAsync(shareId, now, cancellationToken);
     }
 
-    public Task<IReadOnlyList<DownloadAttemptView>> ListTenantDownloadAttemptsAsync(
-        TenantId tenantId,
-        DownloadAttemptFilter filter,
-        CancellationToken cancellationToken)
-    {
-        if (filter.TenantId is not null && filter.TenantId != tenantId)
-        {
-            return Task.FromResult<IReadOnlyList<DownloadAttemptView>>([]);
-        }
+    public Task<DownloadAttemptPage> ListTenantDownloadAttemptsAsync(
+        TenantId tenantId, DownloadAttemptFilter filter, DownloadAttemptCursor? after, int limit, CancellationToken cancellationToken) =>
+        store.ListDownloadAttemptsAsync(filter with { TenantId = tenantId }, tenantScoped: true, after, limit, cancellationToken);
 
-        return store.ListDownloadAttemptsAsync(
-            filter with { TenantId = tenantId },
-            tenantScoped: true,
-            cancellationToken);
-    }
-
-    public Task<IReadOnlyList<DownloadAttemptView>> ListPlatformDownloadAttemptsAsync(
-        DownloadAttemptFilter filter,
-        CancellationToken cancellationToken)
-    {
-        return store.ListDownloadAttemptsAsync(
-            filter,
-            tenantScoped: false,
-            cancellationToken);
-    }
+    public Task<DownloadAttemptPage> ListPlatformDownloadAttemptsAsync(
+        DownloadAttemptFilter filter, DownloadAttemptCursor? after, int limit, CancellationToken cancellationToken) =>
+        store.ListDownloadAttemptsAsync(filter, tenantScoped: false, after, limit, cancellationToken);
 
     public Task<AuditRetentionSettingsView> GetAuditRetentionAsync(
         CancellationToken cancellationToken)

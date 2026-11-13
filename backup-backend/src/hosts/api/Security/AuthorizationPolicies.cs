@@ -90,9 +90,10 @@ internal sealed class ArtifactContentAuthorizationHandler(ICurrentUser currentUs
                 shareId = hSid;
             }
             bool allowExpiredShare = false;
+            Guid? refusedSessionId = null;
+            var downloadStore = httpContext.RequestServices.GetService<IDownloadStore>();
             if (httpContext.Request.RouteValues.TryGetValue("sessionId", out var sVal) && Guid.TryParse(sVal?.ToString(), out var sessionId))
             {
-                var downloadStore = httpContext.RequestServices.GetService<IDownloadStore>();
                 if (downloadStore is not null)
                 {
                     var session = await downloadStore.GetAsync(tenantId, sessionId, httpContext.RequestAborted);
@@ -104,6 +105,7 @@ internal sealed class ArtifactContentAuthorizationHandler(ICurrentUser currentUs
                             return;
                         }
                         shareId ??= session.ShareId;
+                        if (session.State == BackupPlatform.Domain.Downloads.DownloadState.Ready) refusedSessionId = session.Id;
                         allowExpiredShare = session.State == BackupPlatform.Domain.Downloads.DownloadState.Streaming || session.IsTerminal;
                     }
                 }
@@ -113,6 +115,12 @@ internal sealed class ArtifactContentAuthorizationHandler(ICurrentUser currentUs
             if (auth.Authorized)
             {
                 context.Succeed(requirement);
+            }
+            else if (refusedSessionId is { } refused && downloadStore is not null)
+            {
+                // The stream of a prepared download is refused here, before the endpoint runs; the history must still show that attempt as refused.
+                await downloadStore.RecordRefusalAsync(new DownloadRefusalCommand(tenantId, artifactId, userId.Value, shareId, auth.RefusalReason ?? "forbidden",
+                    httpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow(), true, refused), httpContext.RequestAborted);
             }
         }
     }

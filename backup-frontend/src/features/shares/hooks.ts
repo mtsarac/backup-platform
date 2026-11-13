@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createPlatformShare,
   createShare,
@@ -17,6 +17,7 @@ import type {
   CreatePlatformShareRequest,
   CreateShareRequest,
   DownloadAttemptFilters,
+  DownloadAttemptPage,
   ExtendShareRequest,
   RevokeShareRequest,
 } from './types'
@@ -99,32 +100,25 @@ export function useRevokeShare(tenantId: string) {
   })
 }
 
+const attemptPaging = {
+  initialPageParam: undefined as string | undefined,
+  getNextPageParam: (page: DownloadAttemptPage) => page.nextCursor ?? undefined,
+}
+
 export function useTenantDownloadAttempts(tenantId: string, filters?: DownloadAttemptFilters) {
-  return useQuery({
-    queryKey: [
-      'tenant-download-attempts',
-      tenantId,
-      filters?.shareId ?? '',
-      filters?.artifactId ?? '',
-      filters?.userId ?? '',
-      filters?.result ?? '',
-    ],
-    queryFn: ({ signal }) => listTenantDownloadAttempts(tenantId, filters, signal),
+  return useInfiniteQuery({
+    queryKey: ['tenant-download-attempts', tenantId, filters ?? {}],
+    queryFn: ({ pageParam, signal }) => listTenantDownloadAttempts(tenantId, filters, pageParam, signal),
     enabled: Boolean(tenantId),
+    ...attemptPaging,
   })
 }
 
 export function usePlatformDownloadAttempts(filters?: DownloadAttemptFilters) {
-  return useQuery({
-    queryKey: [
-      'platform-download-attempts',
-      filters?.shareId ?? '',
-      filters?.tenantId ?? '',
-      filters?.artifactId ?? '',
-      filters?.userId ?? '',
-      filters?.result ?? '',
-    ],
-    queryFn: ({ signal }) => listPlatformDownloadAttempts(filters, signal),
+  return useInfiniteQuery({
+    queryKey: ['platform-download-attempts', filters ?? {}],
+    queryFn: ({ pageParam, signal }) => listPlatformDownloadAttempts(filters, pageParam, signal),
+    ...attemptPaging,
   })
 }
 

@@ -575,198 +575,125 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             tenantNames.GetValueOrDefault(share.TenantId));
     }
 
-    /// <summary>The history view shows the most recent attempts; older ones are reached by narrowing the filters.</summary>
-    private const int MaximumAttempts = 500;
+    private const string RefusedAction = "download.refused";
+    private const string RetentionLock = "SELECT pg_advisory_xact_lock(hashtext('audit_retention'))";
 
-    public async Task<IReadOnlyList<DownloadAttemptView>> ListDownloadAttemptsAsync(
+    /// <summary>
+    /// One page of download attempts, newest first. An attempt is a download session, or a refusal that happened before any session existed.
+    /// A refusal of a prepared session carries that session's id and is shown as the session's outcome, never matched by time, user or artifact.
+    /// Both sources are filtered and keyset-limited in the database, so every attempt is reachable by following the cursor.
+    /// </summary>
+    public async Task<DownloadAttemptPage> ListDownloadAttemptsAsync(
         DownloadAttemptFilter filter,
         bool tenantScoped,
+        DownloadAttemptCursor? after,
+        int limit,
         CancellationToken cancellationToken)
     {
+        var empty = new DownloadAttemptPage([], null);
+        if (tenantScoped && filter.TenantId is null) return empty;
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
 
-        HashSet<Guid>? tenantShareIds = null;
-        if (tenantScoped)
+        var result = string.IsNullOrWhiteSpace(filter.Result) ? null : filter.Result.Trim();
+        var refusedOnly = string.Equals(result, "Refused", StringComparison.OrdinalIgnoreCase);
+        DownloadState? state = result is null || refusedOnly ? null : Enum.Parse<DownloadState>(result, ignoreCase: true);
+        var refusals = context.AuditEvents.AsNoTracking().Where(e => e.Action == RefusedAction && e.TargetType == "download");
+
+        var sessionQuery = context.DownloadSessions.AsNoTracking().AsQueryable();
+        var refusalQuery = refusals.Where(e => !EF.Functions.JsonExists(e.DetailsJson, "sessionId"));
+        if (filter.TenantId is { } tenantId)
         {
-            if (filter.TenantId is null)
-            {
-                return [];
-            }
-
-            var shareIdsList = await context.BackupShares
-                .AsNoTracking()
-                .Where(s => s.TenantId == filter.TenantId)
-                .Select(s => s.Id)
-                .ToListAsync(cancellationToken);
-            tenantShareIds = [.. shareIdsList];
-
-            if (filter.ShareId.HasValue && !tenantShareIds.Contains(filter.ShareId.Value))
-            {
-                return [];
-            }
-
-            if (filter.ArtifactId.HasValue)
-            {
-                var artifactExists = await context.BackupArtifacts
-                    .AsNoTracking()
-                    .AnyAsync(a => a.TenantId == filter.TenantId && a.Id == filter.ArtifactId.Value, cancellationToken);
-                if (!artifactExists)
-                {
-                    return [];
-                }
-            }
+            sessionQuery = sessionQuery.Where(s => s.TenantId == tenantId);
+            refusalQuery = refusalQuery.Where(e => e.TenantId == tenantId);
+        }
+        if (filter.ShareId is { } shareId)
+        {
+            sessionQuery = sessionQuery.Where(s => s.ShareId == shareId);
+            refusalQuery = refusalQuery.Where(e => EF.Functions.JsonContains(e.DetailsJson, JsonSerializer.Serialize(new { shareId })));
+        }
+        if (filter.ArtifactId is { } artifactId)
+        {
+            sessionQuery = sessionQuery.Where(s => s.ArtifactId == artifactId);
+            refusalQuery = refusalQuery.Where(e => EF.Functions.JsonContains(e.DetailsJson, JsonSerializer.Serialize(new { artifactId })));
+        }
+        if (filter.InitiatingUserId is { } initiatingUserId)
+        {
+            var actor = new UserId(initiatingUserId);
+            sessionQuery = sessionQuery.Where(s => s.UserId == initiatingUserId);
+            refusalQuery = refusalQuery.Where(e => e.ActorUserId == actor);
+        }
+        if (after is not null)
+        {
+            sessionQuery = sessionQuery.Where(s => s.CreatedAt < after.StartedAtUtc || (s.CreatedAt == after.StartedAtUtc && s.Id.CompareTo(after.Id) < 0));
+            refusalQuery = refusalQuery.Where(e => e.At < after.StartedAtUtc || (e.At == after.StartedAtUtc && e.Id.CompareTo(after.Id) < 0));
         }
 
-        var normalizedResult = NormalizeResultFilter(filter.Result);
-        var includeSessions = normalizedResult is null || !string.Equals(normalizedResult, "Refused", StringComparison.OrdinalIgnoreCase);
-        var includeRefusals = normalizedResult is null || string.Equals(normalizedResult, "Refused", StringComparison.OrdinalIgnoreCase);
-
-        var sessions = new List<DownloadSession>();
-        if (includeSessions)
+        // A prepared session that was refused when its stream started is reported as Refused while it is still unstarted.
+        var candidates = sessionQuery.Select(s => new
         {
-            var sessionQuery = context.DownloadSessions.AsNoTracking();
-            if (filter.TenantId is not null)
-            {
-                sessionQuery = sessionQuery.Where(s => s.TenantId == filter.TenantId);
-            }
-            if (filter.ShareId.HasValue)
-            {
-                sessionQuery = sessionQuery.Where(s => s.ShareId == filter.ShareId.Value);
-            }
-            if (filter.ArtifactId.HasValue)
-            {
-                sessionQuery = sessionQuery.Where(s => s.ArtifactId == filter.ArtifactId.Value);
-            }
-            if (filter.InitiatingUserId.HasValue)
-            {
-                sessionQuery = sessionQuery.Where(s => s.UserId == filter.InitiatingUserId.Value);
-            }
-            if (normalizedResult is not null && Enum.TryParse<DownloadState>(normalizedResult, ignoreCase: true, out var stateFilter))
-            {
-                sessionQuery = sessionQuery.Where(s => s.State == stateFilter);
-            }
-            sessions = await sessionQuery.OrderByDescending(s => s.CreatedAt).Take(MaximumAttempts).ToListAsync(cancellationToken);
-        }
+            Session = s,
+            Refused = s.State == DownloadState.Ready && refusals.Any(e => e.TargetId == s.Id.ToString())
+        });
+        if (refusedOnly) candidates = candidates.Where(row => row.Refused);
+        else if (state is not null) candidates = candidates.Where(row => row.Session.State == state && !row.Refused);
 
-        var refusalAuditQuery = context.AuditEvents
-            .AsNoTracking()
-            .Where(e => e.Action == "download.refused");
-        if (filter.TenantId is not null)
-        {
-            refusalAuditQuery = refusalAuditQuery.Where(e => e.TenantId == filter.TenantId);
-        }
-        if (filter.InitiatingUserId.HasValue)
-        {
-            var actorUserId = new UserId(filter.InitiatingUserId.Value);
-            refusalAuditQuery = refusalAuditQuery.Where(e => e.ActorUserId == actorUserId);
-        }
-
-        var refusalEvents = (includeRefusals || sessions.Any(s => s.State == DownloadState.Ready && s.ReleasedAt == null))
-            ? await refusalAuditQuery.OrderByDescending(e => e.At).Take(MaximumAttempts).ToListAsync(cancellationToken)
+        var sessions = await candidates.OrderByDescending(row => row.Session.CreatedAt).ThenByDescending(row => row.Session.Id)
+            .Take(limit + 1).ToListAsync(cancellationToken);
+        var sessionless = result is null || refusedOnly
+            ? await refusalQuery.OrderByDescending(e => e.At).ThenByDescending(e => e.Id).Take(limit + 1).ToListAsync(cancellationToken)
             : [];
 
-        var parsedRefusals = new List<ParsedRefusal>(refusalEvents.Count);
-        foreach (var audit in refusalEvents)
-        {
-            var parsed = ParseRefusal(audit, tenantShareIds);
-            if (parsed is null) continue;
-            parsedRefusals.Add(parsed);
-        }
+        var refusedSessionIds = sessions.Where(row => row.Refused).Select(row => row.Session.Id.ToString("D")).ToArray();
+        var sessionRefusals = refusedSessionIds.Length == 0 ? [] : (await refusals.Where(e => refusedSessionIds.Contains(e.TargetId)).ToListAsync(cancellationToken))
+            .GroupBy(e => e.TargetId).ToDictionary(group => group.Key, group => group.MaxBy(e => e.At)!);
 
-        // If a Ready session was later refused when attempting to start streaming, suppress the unstarted Ready row so the attempt is represented once by its Refused outcome.
-        if (sessions.Count > 0 && parsedRefusals.Count > 0)
-        {
-            sessions.RemoveAll(s =>
-                s.State == DownloadState.Ready &&
-                s.ReleasedAt == null &&
-                s.TransferredBytes == 0 &&
-                parsedRefusals.Any(r =>
-                    r.TenantId == s.TenantId &&
-                    r.ArtifactId == s.ArtifactId &&
-                    r.ShareId == s.ShareId &&
-                    r.InitiatingUserId == s.UserId &&
-                    r.StartedAtUtc >= s.CreatedAt));
-        }
-
-        var filteredRefusals = includeRefusals
-            ? parsedRefusals
-                .Where(r =>
-                    (filter.TenantId is null || r.TenantId == filter.TenantId) &&
-                    (!filter.ShareId.HasValue || r.ShareId == filter.ShareId.Value) &&
-                    (!filter.ArtifactId.HasValue || r.ArtifactId == filter.ArtifactId.Value) &&
-                    (!filter.InitiatingUserId.HasValue || r.InitiatingUserId == filter.InitiatingUserId.Value))
-                .ToList()
-            : [];
-
-        if (sessions.Count == 0 && filteredRefusals.Count == 0)
-        {
-            return [];
-        }
-
-        var allUserIds = sessions.Select(s => new UserId(s.UserId))
-            .Concat(filteredRefusals.Select(r => new UserId(r.InitiatingUserId)))
-            .Distinct()
-            .ToArray();
-        var allTenantIds = sessions.Select(s => s.TenantId)
-            .Concat(filteredRefusals.Select(r => r.TenantId))
-            .Distinct()
-            .ToArray();
-        var allArtifactIds = sessions.Select(s => s.ArtifactId)
-            .Concat(filteredRefusals.Select(r => r.ArtifactId))
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
-
-        var userNames = await ResolveUserNamesAsync(context, allUserIds, cancellationToken);
-        var tenantNames = await ResolveTenantNamesAsync(context, allTenantIds, cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, allArtifactIds, cancellationToken, filter.TenantId);
-
-        var results = new List<DownloadAttemptView>(sessions.Count + filteredRefusals.Count);
-        foreach (var s in sessions)
-        {
-            var userId = new UserId(s.UserId);
-            results.Add(new DownloadAttemptView(
-                s.Id,
-                s.ShareId,
-                s.TenantId.Value,
-                tenantNames.GetValueOrDefault(s.TenantId),
-                s.ArtifactId,
-                artifactNames.GetValueOrDefault(s.ArtifactId),
-                s.UserId,
-                userNames.GetValueOrDefault(userId),
-                s.CreatedAt,
-                s.ReleasedAt,
-                s.State.ToString(),
-                s.TransferredBytes,
-                s.FailureCode,
-                s.Decrypted));
-        }
-
-        foreach (var r in filteredRefusals)
-        {
-            var userId = new UserId(r.InitiatingUserId);
-            results.Add(new DownloadAttemptView(
-                r.Id,
-                r.ShareId,
-                r.TenantId.Value,
-                tenantNames.GetValueOrDefault(r.TenantId),
-                r.ArtifactId,
-                artifactNames.GetValueOrDefault(r.ArtifactId),
-                r.InitiatingUserId,
-                userNames.GetValueOrDefault(userId),
-                r.StartedAtUtc,
-                r.EndedAtUtc,
-                "Refused",
-                r.BytesTransferred,
-                r.FailureReason,
-                Decrypted: false));
-        }
-
-        return results
-            .OrderByDescending(a => a.StartedAtUtc)
-            .ThenByDescending(a => a.Id)
-            .Take(MaximumAttempts)
+        var merged = sessions.Select(row =>
+            {
+                var s = row.Session;
+                var refusal = row.Refused ? sessionRefusals.GetValueOrDefault(s.Id.ToString("D")) : null;
+                return new Attempt(s.Id, s.ShareId, s.TenantId, s.ArtifactId, s.UserId, s.CreatedAt, refusal?.At ?? s.ReleasedAt,
+                    refusal is null ? s.State.ToString() : "Refused", s.TransferredBytes, refusal is null ? s.FailureCode : RefusalReason(refusal), s.Decrypted);
+            })
+            .Concat(sessionless.Select(ToAttempt).OfType<Attempt>())
+            // PostgreSQL orders uuid bytewise, which is the ordinal order of its hex form; the in-memory merge must agree with the keyset predicate.
+            .OrderByDescending(attempt => attempt.StartedAtUtc).ThenByDescending(attempt => attempt.Id.ToString("N"), StringComparer.Ordinal)
             .ToList();
+        var page = merged.Take(limit).ToList();
+        if (page.Count == 0) return empty;
+
+        HashSet<Guid>? tenantShareIds = tenantScoped
+            ? [.. await context.BackupShares.AsNoTracking().Where(s => s.TenantId == filter.TenantId).Select(s => s.Id).ToListAsync(cancellationToken)]
+            : null;
+        var userNames = await ResolveUserNamesAsync(context, page.Select(a => new UserId(a.UserId)).Distinct().ToArray(), cancellationToken);
+        var tenantNames = await ResolveTenantNamesAsync(context, page.Select(a => a.TenantId).Distinct().ToArray(), cancellationToken);
+        var artifactNames = await ResolveArtifactNamesAsync(context, page.Select(a => a.ArtifactId).Where(id => id != Guid.Empty).Distinct().ToArray(), cancellationToken, filter.TenantId);
+
+        var items = page.Select(a => new DownloadAttemptView(
+            a.Id,
+            // A tenant never learns the id of a share that is not its own, even when someone used it against its artifact.
+            a.ShareId is { } id && tenantShareIds is not null && !tenantShareIds.Contains(id) ? null : a.ShareId,
+            a.TenantId.Value, tenantNames.GetValueOrDefault(a.TenantId), a.ArtifactId, artifactNames.GetValueOrDefault(a.ArtifactId),
+            a.UserId, userNames.GetValueOrDefault(new UserId(a.UserId)), a.StartedAtUtc, a.EndedAtUtc, a.Result, a.Bytes, a.FailureReason, a.Decrypted)).ToList();
+        var last = page[^1];
+        return new DownloadAttemptPage(items, merged.Count > limit ? new DownloadAttemptCursor(last.StartedAtUtc, last.Id).ToString() : null);
+    }
+
+    private sealed record Attempt(Guid Id, Guid? ShareId, TenantId TenantId, Guid ArtifactId, Guid UserId, DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc,
+        string Result, long Bytes, string? FailureReason, bool Decrypted);
+
+    private static string RefusalReason(AuditEvent audit)
+    {
+        using var details = JsonDocument.Parse(audit.DetailsJson);
+        return TryGetString(details.RootElement, "failureReason") ?? "refused";
+    }
+
+    private static Attempt? ToAttempt(AuditEvent audit)
+    {
+        if (audit.TenantId is not { } tenantId) return null;
+        using var details = JsonDocument.Parse(audit.DetailsJson);
+        var root = details.RootElement;
+        return new Attempt(audit.Id, TryGetGuid(root, "shareId"), tenantId, TryGetGuid(root, "artifactId") ?? Guid.Empty, audit.ActorUserId.Value,
+            audit.At, audit.At, "Refused", 0, TryGetString(root, "failureReason") ?? "refused", false);
     }
 
     public async Task<AuditRetentionSettingsView> GetAuditRetentionAsync(CancellationToken cancellationToken)
@@ -794,6 +721,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         var utcNow = now.ToUniversalTime();
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        // One lock for the setting and the pruning on every API node: a prune always runs with a committed setting, never across a change of it.
+        await context.Database.ExecuteSqlRawAsync(RetentionLock, cancellationToken);
 
         var row = await context.PlatformAuditRetentionSettings
             .SingleOrDefaultAsync(s => s.Id == PlatformAuditRetentionSettings.SingletonId, cancellationToken);
@@ -842,6 +771,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         var utcNow = now.ToUniversalTime();
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        // One lock for the setting and the pruning on every API node: a prune always runs with a committed setting, never across a change of it.
+        await context.Database.ExecuteSqlRawAsync(RetentionLock, cancellationToken);
 
         var retentionDays = (await context.PlatformAuditRetentionSettings
                 .AsNoTracking()
@@ -865,24 +796,14 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
                 && !context.DownloadSessions.Any(d => d.ShareId == s.Id))
             .ExecuteDeleteAsync(cancellationToken);
 
-        var activeDownloadIds = await context.DownloadSessions
-            .AsNoTracking()
-            .Where(d => d.ReleasedAt == null)
-            .Select(d => d.Id)
-            .ToListAsync(cancellationToken);
-        var activeDownloadTargetIds = activeDownloadIds.Select(id => id.ToString("D")).ToArray();
-
-        var activeShareIds = await context.BackupShares
-            .AsNoTracking()
-            .Where(s => s.RevokedAtUtc == null && s.ExpiresAtUtc > utcNow)
-            .Select(s => s.Id)
-            .ToListAsync(cancellationToken);
-        var activeShareTargetIds = activeShareIds.Select(id => id.ToString("D")).ToArray();
-
+        // Sessions that survived the step above and are older than the cutoff are exactly the protected ones (running, or of an active share);
+        // their audit trail, including refusals recorded against them, stays with them.
+        var protectedSessions = context.DownloadSessions.Where(d => d.ReleasedAt == null || (d.ShareId != null && activeShareIdsQuery.Contains(d.ShareId.Value)));
         var auditEventsRemoved = await context.AuditEvents
             .Where(e => e.At < cutoff
-                && !(e.TargetType == "download" && activeDownloadTargetIds.Contains(e.TargetId))
-                && !(e.TargetType == "backup_share" && activeShareTargetIds.Contains(e.TargetId)))
+                && !(e.TargetType == "download" && protectedSessions.Any(d => d.Id.ToString() == e.TargetId))
+                && !((e.TargetType == "backup_share" || (e.TargetType == "download" && e.Action == RefusedAction))
+                    && activeShareIdsQuery.Any(id => id.ToString() == e.TargetId)))
             .ExecuteDeleteAsync(cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
@@ -890,96 +811,11 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         return new AuditHistoryPruneResult(auditEventsRemoved, downloadSessionsRemoved, sharesRemoved);
     }
 
-    private static string? NormalizeResultFilter(string? result)
-    {
-        if (string.IsNullOrWhiteSpace(result))
-        {
-            return null;
-        }
-
-        var trimmed = result.Trim();
-        if (string.Equals(trimmed, "Refused", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Refused";
-        }
-        if (Enum.TryParse<DownloadState>(trimmed, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed))
-        {
-            return parsed.ToString();
-        }
-        return trimmed;
-    }
-
-    private sealed record ParsedRefusal(
-        Guid Id,
-        Guid? ShareId,
-        TenantId TenantId,
-        Guid ArtifactId,
-        Guid InitiatingUserId,
-        DateTimeOffset StartedAtUtc,
-        DateTimeOffset EndedAtUtc,
-        long BytesTransferred,
-        string FailureReason);
-
-    private static ParsedRefusal? ParseRefusal(AuditEvent audit, HashSet<Guid>? tenantShareIds)
-    {
-        using var doc = JsonDocument.Parse(audit.DetailsJson);
-        var root = doc.RootElement;
-
-        var tenantGuid = audit.TenantId?.Value ?? TryGetGuid(root, "tenantId");
-        if (tenantGuid is null || tenantGuid == Guid.Empty)
-        {
-            return null;
-        }
-
-        var shareId = TryGetGuid(root, "shareId");
-        if (tenantShareIds is not null && shareId.HasValue && !tenantShareIds.Contains(shareId.Value))
-        {
-            shareId = null;
-        }
-
-        var artifactId = TryGetGuid(root, "artifactId")
-            ?? (Guid.TryParse(audit.TargetId, out var targetGuid) && targetGuid != shareId ? targetGuid : Guid.Empty);
-        var userId = TryGetGuid(root, "initiatingUser") ?? audit.ActorUserId.Value;
-        var startedAt = TryGetDateTimeOffset(root, "startTime") ?? TryGetDateTimeOffset(root, "startedAt") ?? audit.At;
-        var endedAt = TryGetDateTimeOffset(root, "endTime") ?? TryGetDateTimeOffset(root, "completedAt") ?? audit.At;
-        var bytes = TryGetInt64(root, "bytesTransferred") ?? TryGetInt64(root, "transferredBytes") ?? 0L;
-        var reason = TryGetString(root, "failureReason") ?? TryGetString(root, "failure") ?? "refused";
-
-        return new ParsedRefusal(
-            audit.Id,
-            shareId,
-            new TenantId(tenantGuid.Value),
-            artifactId,
-            userId,
-            startedAt,
-            endedAt,
-            bytes,
-            reason);
-    }
-
     private static Guid? TryGetGuid(JsonElement root, string property)
     {
         if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.String && Guid.TryParse(elem.GetString(), out var g))
         {
             return g;
-        }
-        return null;
-    }
-
-    private static DateTimeOffset? TryGetDateTimeOffset(JsonElement root, string property)
-    {
-        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(elem.GetString(), out var dt))
-        {
-            return dt.ToUniversalTime();
-        }
-        return null;
-    }
-
-    private static long? TryGetInt64(JsonElement root, string property)
-    {
-        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.Number && elem.TryGetInt64(out var val))
-        {
-            return val;
         }
         return null;
     }

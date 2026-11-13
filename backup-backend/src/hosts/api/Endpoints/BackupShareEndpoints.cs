@@ -347,21 +347,32 @@ public static class BackupShareEndpoints
     }
 
     private static async Task<IResult> ListTenantDownloadAttemptsAsync(
-        [FromQuery] Guid? shareId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result,
+        [FromQuery] Guid? shareId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [FromQuery] string? cursor, [FromQuery] int? limit,
         ITenantContext tenant, BackupShareService service, CancellationToken cancellationToken)
     {
-        if (!IsValidResultFilter(result)) return Results.BadRequest(new { error = "invalid_result" });
+        if (!TryPage(result, cursor, limit, out var after, out var size, out var problem)) return problem!;
         return Results.Ok(await service.ListTenantDownloadAttemptsAsync(
-            tenant.TenantId!, new DownloadAttemptFilter(shareId, tenant.TenantId!, artifactId, userId, result), cancellationToken));
+            tenant.TenantId!, new DownloadAttemptFilter(shareId, tenant.TenantId!, artifactId, userId, result), after, size, cancellationToken));
     }
 
     private static async Task<IResult> ListPlatformDownloadAttemptsAsync(
-        [FromQuery] Guid? shareId, [FromQuery] Guid? tenantId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result,
+        [FromQuery] Guid? shareId, [FromQuery] Guid? tenantId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [FromQuery] string? cursor, [FromQuery] int? limit,
         BackupShareService service, CancellationToken cancellationToken)
     {
-        if (!IsValidResultFilter(result)) return Results.BadRequest(new { error = "invalid_result" });
+        if (!TryPage(result, cursor, limit, out var after, out var size, out var problem)) return problem!;
         return Results.Ok(await service.ListPlatformDownloadAttemptsAsync(
-            new DownloadAttemptFilter(shareId, tenantId is { } id ? new TenantId(id) : null, artifactId, userId, result), cancellationToken));
+            new DownloadAttemptFilter(shareId, tenantId is { } id ? new TenantId(id) : null, artifactId, userId, result), after, size, cancellationToken));
+    }
+
+    private static bool TryPage(string? result, string? cursor, int? limit, out DownloadAttemptCursor? after, out int size, out IResult? problem)
+    {
+        after = null;
+        size = limit ?? DownloadAttemptPage.DefaultLimit;
+        problem = !IsValidResultFilter(result) ? Results.BadRequest(new { error = "invalid_result" })
+            : size is < 1 or > DownloadAttemptPage.MaximumLimit ? Results.BadRequest(new { error = "invalid_limit" })
+            : cursor is not null && !DownloadAttemptCursor.TryParse(cursor, out after) ? Results.BadRequest(new { error = "invalid_cursor" })
+            : null;
+        return problem is null;
     }
 
     private static async Task<IResult> GetAuditRetentionAsync(BackupShareService service, CancellationToken cancellationToken) =>

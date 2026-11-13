@@ -58,6 +58,12 @@ export interface DownloadAttemptView {
   decrypted: boolean
 }
 
+/** One page of the history, newest first; `nextCursor` is null on the last page. */
+export interface DownloadAttemptPage {
+  items: DownloadAttemptView[]
+  nextCursor: string | null
+}
+
 export interface DownloadAttemptFilters {
   shareId?: string
   tenantId?: string
