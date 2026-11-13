@@ -105,7 +105,8 @@ internal sealed class ArtifactContentAuthorizationHandler(ICurrentUser currentUs
                             return;
                         }
                         shareId ??= session.ShareId;
-                        if (session.State == BackupPlatform.Domain.Downloads.DownloadState.Ready) refusedSessionId = session.Id;
+                        if (session.State == BackupPlatform.Domain.Downloads.DownloadState.Ready && HttpMethods.IsGet(httpContext.Request.Method) && path.EndsWith("/content", StringComparison.OrdinalIgnoreCase))
+                            refusedSessionId = session.Id;
                         allowExpiredShare = session.State == BackupPlatform.Domain.Downloads.DownloadState.Streaming || session.IsTerminal;
                     }
                 }

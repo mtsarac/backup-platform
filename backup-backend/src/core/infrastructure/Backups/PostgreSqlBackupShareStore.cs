@@ -601,6 +601,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
 
         var sessionQuery = context.DownloadSessions.AsNoTracking().AsQueryable();
         var refusalQuery = refusals.Where(e => !EF.Functions.JsonExists(e.DetailsJson, "sessionId"));
+        // Only a refusal the platform recorded against a session counts for it: the target id of a sessionless refusal is caller-chosen.
+        var sessionBound = refusals.Where(e => EF.Functions.JsonExists(e.DetailsJson, "sessionId"));
         if (filter.TenantId is { } tenantId)
         {
             sessionQuery = sessionQuery.Where(s => s.TenantId == tenantId);
@@ -632,7 +634,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         var candidates = sessionQuery.Select(s => new
         {
             Session = s,
-            Refused = s.State == DownloadState.Ready && refusals.Any(e => e.TargetId == s.Id.ToString())
+            Refused = s.State == DownloadState.Ready && sessionBound.Any(e => e.TenantId == s.TenantId && e.TargetId == s.Id.ToString())
         });
         if (refusedOnly) candidates = candidates.Where(row => row.Refused);
         else if (state is not null) candidates = candidates.Where(row => row.Session.State == state && !row.Refused);
@@ -644,7 +646,7 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
             : [];
 
         var refusedSessionIds = sessions.Where(row => row.Refused).Select(row => row.Session.Id.ToString("D")).ToArray();
-        var sessionRefusals = refusedSessionIds.Length == 0 ? [] : (await refusals.Where(e => refusedSessionIds.Contains(e.TargetId)).ToListAsync(cancellationToken))
+        var sessionRefusals = refusedSessionIds.Length == 0 ? [] : (await sessionBound.Where(e => refusedSessionIds.Contains(e.TargetId)).ToListAsync(cancellationToken))
             .GroupBy(e => e.TargetId).ToDictionary(group => group.Key, group => group.MaxBy(e => e.At)!);
 
         var merged = sessions.Select(row =>
@@ -801,9 +803,9 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         var protectedSessions = context.DownloadSessions.Where(d => d.ReleasedAt == null || (d.ShareId != null && activeShareIdsQuery.Contains(d.ShareId.Value)));
         var auditEventsRemoved = await context.AuditEvents
             .Where(e => e.At < cutoff
-                && !(e.TargetType == "download" && protectedSessions.Any(d => d.Id.ToString() == e.TargetId))
+                && !(e.TargetType == "download" && protectedSessions.Any(d => d.TenantId == e.TenantId && d.Id.ToString() == e.TargetId))
                 && !((e.TargetType == "backup_share" || (e.TargetType == "download" && e.Action == RefusedAction))
-                    && activeShareIdsQuery.Any(id => id.ToString() == e.TargetId)))
+                    && context.BackupShares.Any(s => s.RevokedAtUtc == null && s.ExpiresAtUtc > utcNow && s.TenantId == e.TenantId && s.Id.ToString() == e.TargetId)))
             .ExecuteDeleteAsync(cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);

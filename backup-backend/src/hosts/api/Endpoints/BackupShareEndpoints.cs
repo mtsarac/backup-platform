@@ -390,5 +390,5 @@ public static class BackupShareEndpoints
     private static bool IsValidResultFilter(string? result) =>
         string.IsNullOrWhiteSpace(result)
         || string.Equals(result, "Refused", StringComparison.OrdinalIgnoreCase)
-        || (Enum.TryParse<DownloadState>(result, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) && !result.All(char.IsDigit));
+        || (Enum.TryParse<DownloadState>(result, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) && result.All(char.IsAsciiLetter));
 }

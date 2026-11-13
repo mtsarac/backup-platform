@@ -212,6 +212,15 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         Assert.NotEqual(JsonValueKind.Null, refused.GetProperty("endedAtUtc").ValueKind);
         Assert.NotEqual("Refused", attempts.Single(item => item.GetProperty("id").GetGuid() == otherSession).GetProperty("result").GetString());
 
+        // A refused request that names the other session's id as its share id is its own attempt; it cannot mark that session as refused.
+        using (var forged = await platform.SendAsync(HttpMethod.Post, $"{scenario.ArtifactPath}/downloads", new { shareId = otherSession }))
+            Assert.Equal(HttpStatusCode.Forbidden, forged.StatusCode);
+        var afterForgery = await AttemptsAsync(platform, $"/api/platform/download-attempts?tenantId={scenario.Backup.Backup.Setup.Tenant.Id.Value}");
+        Assert.NotEqual("Refused", afterForgery.Single(item => item.GetProperty("id").GetGuid() == otherSession).GetProperty("result").GetString());
+        Assert.Equal(3, afterForgery.Count);
+        using (var list = await platform.GetAsync("/api/platform/download-attempts?result=Ready,Failed"))
+            Assert.Equal(HttpStatusCode.BadRequest, list.StatusCode);
+
         // The result filter follows the same rule, and the refusal is not a second row.
         Assert.Equal([refusedSession], (await AttemptsAsync(platform, $"/api/platform/download-attempts?shareId={shareId}&result=Refused")).Select(item => item.GetProperty("id").GetGuid()));
         Assert.DoesNotContain(await AttemptsAsync(platform, $"/api/platform/download-attempts?shareId={shareId}&result=Ready"), item => item.GetProperty("id").GetGuid() == refusedSession);
