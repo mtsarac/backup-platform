@@ -73,12 +73,16 @@ describe('upload bandwidth page', () => {
     expect((await technicalDetails()).getByText('16.000 B/sn')).toBeInTheDocument()
   })
 
-  it('explains in plain words, outside the technical details, which limit wins and what is never limited', async () => {
+  it('summarizes limits and manual resume, with precedence and exceptions available on demand', async () => {
     mount()
-    const help = await screen.findByRole('region', { name: 'Hangi sınır geçerli?' })
-    expect(help.closest('details')).toBeNull()
+    expect(await screen.findByText('Tüm sabit sınırlar geçerlidir; profil bunları yalnızca düşürebilir.')).toBeVisible()
+    expect(screen.getByText(/kendiliğinden devam etmez/)).toBeVisible()
+    const summary = screen.getByText('Hangi sınır geçerli?', { selector: 'summary' })
+    expect(summary.parentElement).not.toHaveAttribute('open')
+    await userEvent.click(summary)
+    const help = summary.parentElement!
     expect(help).toHaveTextContent('Çalışma alanı sınırı, eşzamanlı yüklemelerin toplamını sınırlar.')
-    expect(help).toHaveTextContent('sabit sınırları yalnızca düşürebilir; tüm sabit sınırlar geçerliliğini korur.')
+    expect(help).toHaveTextContent('Önce yedekleme işinin, sonra yedekleme bilgisayarının, en son çalışma alanının profili kullanılır.')
     expect(help).toHaveTextContent('Profil saatleri dışında yalnızca sabit sınırlar geçerlidir.')
     expect(help).toHaveTextContent(/geri yükleme/i)
     expect(help).not.toHaveTextContent(rawRate)

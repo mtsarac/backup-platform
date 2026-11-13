@@ -6,6 +6,7 @@ import type { Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
@@ -155,14 +156,17 @@ export function UploadBandwidthPage() {
         </QueryState>}
       </QueryState>
     </div>
-    <Section title={tx("Hangi sınır geçerli?")}>
-      <ul className="list-disc space-y-2 pl-5 text-sm text-text">
-        <li>{tx("Yedekleme işi, yedekleme bilgisayarı ve çalışma alanı için ayarlanan sabit sınırların tümü geçerlidir. Çalışma alanı sınırı, eşzamanlı yüklemelerin toplamını sınırlar.")}</li>
-        <li>{tx("Bir profil (saate göre değişen sınırlar) sabit sınırları yalnızca düşürebilir; tüm sabit sınırlar geçerliliğini korur. Önce yedekleme işinin, sonra yedekleme bilgisayarının, en son çalışma alanının profili kullanılır. Profil saatleri dışında yalnızca sabit sınırlar geçerlidir.")}</li>
-        <li>{tx("Profilde duraklatılan aktarımlar kendiliğinden devam etmez; elle devam ettirmeniz gerekir.")}</li>
-        <li>{tx("Sınırlanmayanlar: geri yükleme ve indirmeler, dosya doğrulama ve yedekleme bilgisayarlarının bağlantı kontrolleri.")}</li>
-      </ul>
-    </Section>
+    <div className="space-y-2 text-sm text-text">
+      <p>{tx("Tüm sabit sınırlar geçerlidir; profil bunları yalnızca düşürebilir.")}</p>
+      <p>{tx("Profilde duraklatılan aktarımlar kendiliğinden devam etmez; elle devam ettirmeniz gerekir.")}</p>
+      <Disclosure title={tx("Hangi sınır geçerli?")}>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>{tx("Yedekleme işi, yedekleme bilgisayarı ve çalışma alanı için ayarlanan sabit sınırların tümü geçerlidir. Çalışma alanı sınırı, eşzamanlı yüklemelerin toplamını sınırlar.")}</li>
+          <li>{tx("Bir profil (saate göre değişen sınırlar) sabit sınırları yalnızca düşürebilir; tüm sabit sınırlar geçerliliğini korur. Önce yedekleme işinin, sonra yedekleme bilgisayarının, en son çalışma alanının profili kullanılır. Profil saatleri dışında yalnızca sabit sınırlar geçerlidir.")}</li>
+          <li>{tx("Sınırlanmayanlar: geri yükleme ve indirmeler, dosya doğrulama ve yedekleme bilgisayarlarının bağlantı kontrolleri.")}</li>
+        </ul>
+      </Disclosure>
+    </div>
     {editing && data && <LimitDialog {...editing} minimum={data.minimumBytesPerSecond} maximum={data.maximumBytesPerSecond} onClose={() => setEditing(null)} />}
     {assigning && <AssignProfileDialog {...assigning} onClose={() => setAssigning(null)} />}
     {editingProfile && data && <ProfileDialog profile={editingProfile === 'new' ? null : editingProfile} minimum={data.minimumBytesPerSecond} maximum={data.maximumBytesPerSecond} onClose={() => setEditingProfile(null)} />}

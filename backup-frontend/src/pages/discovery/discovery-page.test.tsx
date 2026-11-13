@@ -31,6 +31,7 @@ describe('discovery page', () => {
   it('links each server to its databases and keeps scan internals collapsed and copyable', async () => {
     mount()
     expect(await screen.findByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
+    expect(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }).parentElement).not.toHaveAttribute('open')
     expect(screen.getByText('Kimlik bilgisi gerekli')).toBeInTheDocument()
     const computer = screen.getByRole('region', { name: 'SQL Agent' })
     expect(within(computer).getByText('Liste güncel')).toBeInTheDocument()
@@ -51,6 +52,7 @@ describe('discovery page', () => {
     mount('/?agentId=agent-a&engine=mssql&includeMissing=1')
     await screen.findByRole('link', { name: 'SQL Server (default)' })
     expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', { agentId: 'agent-a', engine: 'mssql', includeMissing: true }, expect.anything())
+    expect(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }).parentElement).toHaveAttribute('open')
     expect(screen.getByLabelText('Veritabanı türü')).toHaveValue('mssql')
     cleanup()
     mount('/?agentId=gone&engine=oracle')
@@ -187,6 +189,7 @@ describe('discovery page', () => {
   it('passes filters to the API', async () => {
     mount()
     await screen.findByRole('link', { name: 'SQL Server (default)' })
+    await userEvent.click(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }))
     fireEvent.change(screen.getByLabelText('Veritabanı türü'), { target: { value: 'mssql' } })
     fireEvent.click(screen.getByLabelText('Bulunamayanları da göster'))
     fireEvent.change(screen.getByLabelText('Bilgisayar'), { target: { value: 'agent-a' } })
