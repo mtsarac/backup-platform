@@ -6,14 +6,11 @@ import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
-import { StatusPill } from '@/components/data/status-pill'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { ArtifactAvailability } from '@/features/artifacts/artifact-availability'
-import { downloadAvailability } from '@/features/artifacts/availability'
-import { useAuth } from '@/features/auth/use-auth'
 import { artifactSource, artifactSourceScope } from '@/features/artifacts/source'
 import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, BackupArtifact } from '@/features/artifacts/types'
@@ -34,8 +31,7 @@ const states = stateOptions.flatMap((option) => option.value ? [option.value] : 
 
 export function ArtifactsPage() {
   useLanguage()
-  const { tenantId, canAdmin } = useTenant()
-  const canDownload = useAuth().user?.role === 'UserAdmin' && canAdmin
+  const { tenantId } = useTenant()
   const { page, get, update } = useListParams()
   const filter: ArtifactFilters = { page, pageSize: LIST_PAGE_SIZE, state: oneOf(get('state'), states) ?? '', from: dayParam(get('from')), to: dayParam(get('to')) }
   const query = useArtifacts(tenantId, filter)
@@ -59,7 +55,6 @@ export function ArtifactsPage() {
       </div>
     } },
     { key: 'state', card: 'status', header: tx('Geri yükleme'), wrap: true, render: (artifact) => <ArtifactAvailability artifact={artifact} /> },
-    { key: 'download', header: tx('İndirme'), render: (artifact) => { const { level, label } = downloadAvailability(artifact, canDownload); return <StatusPill level={level}>{label}</StatusPill> } },
     { key: 'size', header: tx('Boyut'), render: (artifact) => formatBytes(artifact.sizeBytes) },
     { key: 'created', header: tx('Oluşturulma'), render: (artifact) => <div><p>{formatDateTime(artifact.createdAt)}</p><p className="text-sm text-text-muted">{artifact.retentionExpiresAt ? tx("Saklama sonu: {0}", { "0": formatDateTime(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p></div> },
     { key: 'replicas', header: tx('Replika'), wrap: true, render: (artifact) => <ReplicationSummary replication={artifact.replication} /> },
