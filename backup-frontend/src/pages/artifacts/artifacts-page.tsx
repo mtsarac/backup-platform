@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { ArtifactAvailability } from '@/features/artifacts/artifact-availability'
+import { downloadAvailability } from '@/features/artifacts/availability'
+import { useAuth } from '@/features/auth/use-auth'
 import { artifactSource, artifactSourceScope } from '@/features/artifacts/source'
 import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, BackupArtifact } from '@/features/artifacts/types'
@@ -32,7 +34,8 @@ const states = stateOptions.flatMap((option) => option.value ? [option.value] : 
 
 export function ArtifactsPage() {
   useLanguage()
-  const { tenantId } = useTenant()
+  const { tenantId, canAdmin } = useTenant()
+  const canDownload = useAuth().user?.role === 'UserAdmin' && canAdmin
   const { page, get, update } = useListParams()
   const filter: ArtifactFilters = { page, pageSize: LIST_PAGE_SIZE, state: oneOf(get('state'), states) ?? '', from: dayParam(get('from')), to: dayParam(get('to')) }
   const query = useArtifacts(tenantId, filter)
@@ -55,11 +58,11 @@ export function ArtifactsPage() {
         </p>
       </div>
     } },
-    { key: 'state', card: 'status', header: tx('Kullanılabilirlik'), wrap: true, render: (artifact) => <ArtifactAvailability artifact={artifact} /> },
+    { key: 'state', card: 'status', header: tx('Geri yükleme'), wrap: true, render: (artifact) => <ArtifactAvailability artifact={artifact} /> },
+    { key: 'download', header: tx('İndirme'), render: (artifact) => { const { level, label } = downloadAvailability(artifact, canDownload); return <StatusPill level={level}>{label}</StatusPill> } },
     { key: 'size', header: tx('Boyut'), render: (artifact) => formatBytes(artifact.sizeBytes) },
-    { key: 'encryption', card: 'hidden', header: tx('Şifreleme'), render: (artifact) => artifact.encryption ? <StatusPill level="safe">{tx("Şifreli · v2-bpe")}</StatusPill> : <span className="text-text-muted">{tx("Şifresiz · v1")}</span> },
     { key: 'created', header: tx('Oluşturulma'), render: (artifact) => <div><p>{formatDateTime(artifact.createdAt)}</p><p className="text-sm text-text-muted">{artifact.retentionExpiresAt ? tx("Saklama sonu: {0}", { "0": formatDateTime(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p></div> },
-    { key: 'replicas', header: tx('Replika'), wrap: true, render: (artifact) => <div className="space-y-1"><ReplicationSummary replication={artifact.replication} /><div className="flex flex-wrap gap-1">{artifact.replicas.map((replica, index) => <span key={replica.id} className="flex items-center gap-1"><span className="text-sm text-text-muted">{index + 1}.</span><StatusPill status={replica.status} /></span>)}</div></div> },
+    { key: 'replicas', header: tx('Replika'), wrap: true, render: (artifact) => <ReplicationSummary replication={artifact.replication} /> },
   ]
   return (
     <div className="space-y-6">
