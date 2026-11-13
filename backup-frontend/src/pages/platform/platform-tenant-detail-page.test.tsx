@@ -158,7 +158,7 @@ describe('platform tenant detail', () => {
     expect(within(await screen.findByRole('dialog')).getByText('Evet')).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(api.getAudit).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 10 }, expect.any(AbortSignal))
+    expect(api.getAudit).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 3 }, expect.any(AbortSignal))
     expect(api.getMemberships).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
     expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
@@ -169,6 +169,7 @@ describe('platform tenant detail', () => {
   it('renames the tenant', async () => {
     vi.mocked(api.renameTenant).mockResolvedValue({ tenantId: 'tenant-a', name: 'Acme Corp', memberCount: 2, agentCount: 4, enrollmentEnabled: true })
     mount()
+    await userEvent.click(await screen.findByText('Yeniden adlandır', { selector: 'summary' }))
     const input = await screen.findByLabelText('Ad')
     await userEvent.clear(input)
     await userEvent.type(input, 'Acme Corp')
