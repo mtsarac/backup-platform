@@ -39,15 +39,18 @@ export function StorageUsageTab() {
         {quota.plan?.subscriptionEndsAt && <Fact label={tx("Abonelik bitişi")}>{formatDateTime(quota.plan.subscriptionEndsAt, tx('Henüz bildirilmedi'))}</Fact>}
       </Facts>
     </Section>
-    <Section title={tx("Nasıl hesaplanır")}>
-      <Facts>
-        <Fact label={tx("Hesaplama modu")} hint={accountingModeHelp[quota.accountingMode]}>{accountingModeLabels[quota.accountingMode]}</Fact>
-        <Fact label={tx("Kotaya dahil storage kapsamı")} hint={tx("Yalnızca bu kapsamdaki kopyalar kullanıma sayılır.")}>
-          <ul className="list-inside list-disc">{scopeLabels(quota.includedStorageScopes).map((label) => <li key={label}>{tx(label)}</li>)}</ul>
-        </Fact>
-        <Fact label={tx("Kota uygulaması")} hint={enforcementModeHelp[quota.enforcementMode]}>{enforcementModeLabels[quota.enforcementMode]}</Fact>
-        {quota.limitBytes !== null && <Fact label={tx("Eşikler")}>{tx("Warning %")}{quota.warningThreshold}{' '}{tx("· Critical %")}{quota.criticalThreshold}</Fact>}
-      </Facts>
-    </Section>
+    <details className="rounded-lg border border-border bg-surface">
+      <summary className="cursor-pointer px-5 py-4 font-medium text-text-heading focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{tx("Nasıl hesaplanır")}</summary>
+      <div className="px-5 pb-5">
+        <Facts>
+          <Fact label={tx("Hesaplama modu")} hint={accountingModeHelp[quota.accountingMode]}>{accountingModeLabels[quota.accountingMode]}</Fact>
+          <Fact label={tx("Kotaya dahil storage kapsamı")} hint={tx("Yalnızca bu kapsamdaki kopyalar kullanıma sayılır.")}>
+            <ul className="list-inside list-disc">{scopeLabels(quota.includedStorageScopes).map((label) => <li key={label}>{tx(label)}</li>)}</ul>
+          </Fact>
+          <Fact label={tx("Kota uygulaması")} hint={enforcementModeHelp[quota.enforcementMode]}>{enforcementModeLabels[quota.enforcementMode]}</Fact>
+          {quota.limitBytes !== null && <Fact label={tx("Eşikler")}>{tx("Warning %")}{quota.warningThreshold}{' '}{tx("· Critical %")}{quota.criticalThreshold}</Fact>}
+        </Facts>
+      </div>
+    </details>
   </div>
 }
