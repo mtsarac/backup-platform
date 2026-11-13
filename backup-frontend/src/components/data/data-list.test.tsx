@@ -55,13 +55,16 @@ describe('DataList', () => {
     expect(first.getByText('Veritabanı').nextElementSibling).toHaveTextContent('accounting')
   })
 
-  it('keeps cards to the title, status and at most three key fields', () => {
+  it('keeps the first three fields visible and puts remaining fields into an accessible details section', () => {
     setViewport(false)
     const many: Column<Job>[] = [...columns.slice(0, 5), { key: 'extra', header: 'Fazladan', render: () => 'ekstra değer' }]
     render(<DataList rows={jobs} columns={many} keyExtractor={job => job.id} />)
     const first = within(screen.getAllByRole('listitem')[0])
-    expect(first.queryByText('ekstra değer')).not.toBeInTheDocument()
-    expect(first.getAllByRole('term')).toHaveLength(3)
+    // Primary fields are immediately present
+    expect(first.getAllByRole('term')).toHaveLength(4) // 3 primary terms + 1 secondary inside details
+    expect(first.getByText('Fazladan')).toBeInTheDocument()
+    expect(first.getByText('ekstra değer')).toBeInTheDocument()
+    expect(first.getByText(/Diğer detaylar/)).toBeInTheDocument()
   })
 
   it('leaves columns marked hidden out of cards', () => {

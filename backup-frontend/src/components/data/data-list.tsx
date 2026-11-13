@@ -39,9 +39,12 @@ const KEY_FIELDS = 3
 type ListProps<T> = Pick<DataListProps<T>, 'columns' | 'keyExtractor' | 'className' | 'caption'> & { rows: readonly T[] }
 
 function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps<T>) {
+  useLanguage()
   const untagged = columns.filter(column => !column.card)
   const title = columns.find(column => column.card === 'title') ?? untagged[0]
-  const fields = untagged.filter(column => column !== title).slice(0, KEY_FIELDS)
+  const visibleFields = untagged.filter(column => column !== title)
+  const primaryFields = visibleFields.slice(0, KEY_FIELDS)
+  const secondaryFields = visibleFields.slice(KEY_FIELDS)
   const statuses = columns.filter(column => column.card === 'status')
   const actions = columns.filter(column => column.card === 'actions')
   return (
@@ -52,15 +55,30 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
             {title && <h2 className="min-w-0 break-words text-base font-semibold text-text-heading">{title.render(row)}</h2>}
             {statuses.length > 0 && <div className="flex flex-wrap items-center gap-2">{statuses.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
           </div>
-          {fields.length > 0 && (
+          {primaryFields.length > 0 && (
             <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-              {fields.map((column) => (
+              {primaryFields.map((column) => (
                 <div key={column.key} className="min-w-0">
                   <dt className="text-sm text-text-muted">{column.header}</dt>
                   <dd className="mt-0.5 break-words text-body text-text">{column.render(row)}</dd>
                 </div>
               ))}
             </dl>
+          )}
+          {secondaryFields.length > 0 && (
+            <details className="group rounded-md border border-border/60 bg-surface-2/40 px-3 py-2 text-sm">
+              <summary className="cursor-pointer select-none font-medium text-text-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                {tx('Diğer detaylar ({0})', { '0': String(secondaryFields.length) })}
+              </summary>
+              <dl className="mt-3 grid gap-x-6 gap-y-2 border-t border-border/40 pt-2 sm:grid-cols-2">
+                {secondaryFields.map((column) => (
+                  <div key={column.key} className="min-w-0">
+                    <dt className="text-sm text-text-muted">{column.header}</dt>
+                    <dd className="mt-0.5 break-words text-body text-text">{column.render(row)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
           )}
           {actions.length > 0 && <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-11 [&_button]:min-w-11">{actions.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
         </Card>
