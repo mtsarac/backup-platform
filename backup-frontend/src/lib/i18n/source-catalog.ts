@@ -1,5 +1,7 @@
 // UI source copy only. Stable wire values and customer-entered names are never catalog lookups.
 export const sourceCatalog: Record<string, { tr: string; en: string }> = {
+  "İş ve bilgisayar ayrıntıları": { tr: "İş ve bilgisayar ayrıntıları", en: "Job and computer details" },
+  "Diğer filtreler": { tr: "Diğer filtreler", en: "More filters" },
   "İş durumu hemen değişir; Kaydet'e basmak gerekmez.": { tr: "İş durumu hemen değişir; Kaydet'e basmak gerekmez.", en: "Job status changes immediately; there is no need to press Save." },
   "Dosya kaynağı adı": { tr: "Dosya kaynağı adı", en: "File source name" },
   "Bu ad, yedekleme bilgisayarında yapılandırılmış dosya kaynağıdır; fiziksel kök yol sunucudan seçilemez. Tüm kaynağı seçmek için . kullanın.": { tr: "Bu ad, yedekleme bilgisayarında yapılandırılmış dosya kaynağıdır; fiziksel kök yol sunucudan seçilemez. Tüm kaynağı seçmek için . kullanın.", en: "This name identifies a file source configured on the backup computer; its physical root cannot be selected from the server. Use . to select the entire source." },

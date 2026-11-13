@@ -42,6 +42,9 @@ describe('run history filters and pagination', () => {
 
   it('submits all filters to query hook, resets page on change, and clears filters', () => {
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
+    expect(screen.getByRole('combobox', { name: 'Durum' })).toBeVisible()
+    expect(screen.getByLabelText('Tetikleyici')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Diğer filtreler'))
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
     expect(state.filters.at(-1)?.page).toBe(2)
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
@@ -163,6 +166,7 @@ describe('run history URL state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
     expect(screen.getByTestId('location')).toHaveTextContent('/?page=2')
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
+    fireEvent.click(screen.getByText('Diğer filtreler'))
     expect(screen.getByTestId('location')).toHaveTextContent('/?status=Failed')
     fireEvent.change(screen.getByLabelText('Oluşturulma başlangıcı'), { target: { value: '2026-10-01' } })
     expect(screen.getByTestId('location')).toHaveTextContent('/?status=Failed&from=2026-10-01')

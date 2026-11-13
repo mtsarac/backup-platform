@@ -281,6 +281,8 @@ describe('RestoresPage', () => {
   it('filters by a backup found through the picker by its name', async () => {
     renderWithClient(<RestoresPage />)
     await screen.findByText('RestoredSalesDB')
+    expect(screen.getByLabelText('Yedek dosyası')).not.toBeVisible()
+    await userEvent.click(screen.getByText('Diğer filtreler'))
     await userEvent.type(screen.getByRole('combobox', { name: 'Yedek dosyası' }), 'hr')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(1)
     await userEvent.click(screen.getByRole('option', { name: /HRDB/ }))
