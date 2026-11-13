@@ -812,6 +812,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Sonuç": {"tr":"Sonuç","en":"Result"},
   "Tür": {"tr":"Tür","en":"Type"},
   "Diğer detaylar ({0})": {"tr":"Diğer detaylar ({0})","en":"Other details ({0})"},
+  "Diğer işlemler: {0}": {"tr":"Diğer işlemler: {0}","en":"Other actions: {0}"},
   "Storage Provider": {"tr":"Depolama Sağlayıcısı","en":"Storage Provider"},
   "Backup filtreleri": {"tr":"Yedekleme filtreleri","en":"Backup filters"},
   "Tüm durumlar": {"tr":"Tüm durumlar","en":"All statuses"},
