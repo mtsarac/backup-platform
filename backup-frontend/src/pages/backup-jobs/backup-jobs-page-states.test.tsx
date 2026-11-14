@@ -34,11 +34,12 @@ it('a failed load says what happened, what it means for the data and what to do,
   expect(alert).toHaveTextContent('Sunucu isteği tamamlayamadı')
   expect(alert).toHaveTextContent('Mevcut yedekleriniz etkilenmedi')
   expect(alert).toHaveTextContent('Sorun sürerse teknik ayrıntıları destek ekibine iletin.')
-  expect(within(alert).getByText('storage_unavailable')).not.toBeVisible()
-  await userEvent.click(within(alert).getByText('Teknik ayrıntılar'))
-  expect(within(alert).getByText('storage_unavailable')).toBeVisible()
-  expect(within(alert).getByText('503')).toBeVisible()
-  await userEvent.click(within(alert).getByRole('button', { name: 'Kopyala: Hata kodu' }))
+  expect(within(alert).queryByText('storage_unavailable')).toBeNull()
+  await userEvent.click(within(alert).getByRole('button', { name: 'Teknik ayrıntılar' }))
+  const dialog = within(await screen.findByRole('dialog'))
+  expect(dialog.getByText('storage_unavailable')).toBeVisible()
+  expect(dialog.getByText('503')).toBeVisible()
+  await userEvent.click(dialog.getByRole('button', { name: 'Kopyala: Hata kodu' }))
   expect(writeText).toHaveBeenCalledWith('storage_unavailable')
 })
 
@@ -49,7 +50,9 @@ it('a refused backup start explains that stored backups are safe and keeps the c
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('Mevcut yedekleriniz silinmedi ve geri yüklenebilir.')
   expect(alert).toHaveTextContent('Depolama alanı açmak için yöneticinize danışın.')
-  expect(within(alert).getByText('quota_exceeded')).not.toBeVisible()
+  expect(within(alert).queryByText('quota_exceeded')).toBeNull()
+  await userEvent.click(within(alert).getByRole('button', { name: 'Teknik ayrıntılar' }))
+  expect(within(await screen.findByRole('dialog')).getByText('quota_exceeded')).toBeVisible()
 })
 
 it('an empty list offers the one primary action to someone who can create jobs', async () => {

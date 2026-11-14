@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@/lib/api/client'
 import { ErrorNotice, Notice } from './notice'
@@ -15,10 +15,11 @@ describe('ErrorNotice', () => {
 
   it('keeps the technical code collapsed and copyable', async () => {
     render(<ErrorNotice error={new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded' })} />)
-    expect(screen.getByText('quota_exceeded')).not.toBeVisible()
-    await userEvent.click(screen.getByText('Teknik ayrıntılar'))
-    expect(screen.getByText('quota_exceeded')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
+    expect(screen.queryByText('quota_exceeded')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('quota_exceeded')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
   })
 
   it('accepts the three parts directly for failures that are not API errors', () => {

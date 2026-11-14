@@ -110,6 +110,8 @@ export interface BackupArtifact {
   jobName?: string | null
   databaseName?: string | null
   agentName?: string | null
+  /** File backups only: the paths under the file source this run archived. */
+  sourcePaths?: string[] | null
   agentId?: string | null
   cancelDeleteAllowed?: boolean
   backupType?: string

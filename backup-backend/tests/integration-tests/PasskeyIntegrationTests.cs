@@ -51,6 +51,21 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task UnconfiguredRelyingParty_AnswersControlled503_NotAServerFault()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture, configuration: new Dictionary<string, string?> { ["Authentication:Passkeys:RelyingPartyId"] = "" });
+        var account = await world.SeedUserAsync();
+        var anonymous = new BrowserSession(world.Factory.CreateBrowser());
+        using var login = await anonymous.SendAsync(HttpMethod.Post, "/api/auth/passkeys/login/options", new { });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, login.StatusCode);
+        Assert.Equal("passkeys_not_configured", AgentWorld.ReadJson(login).GetProperty("error").GetString());
+
+        var browser = await SignInWithPasswordAsync(world, account);
+        using var register = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register/options");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, register.StatusCode);
+    }
+
+    [Fact]
     public async Task PasswordlessAssertion_ProducesFullyAuthenticatedSession()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);

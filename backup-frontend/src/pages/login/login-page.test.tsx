@@ -121,6 +121,18 @@ describe('Sign-in page', () => {
     await waitFor(() => expect(loginWithPasskeyMock).toHaveBeenCalled())
   })
 
+  it.each([
+    ['a cancelled prompt', new DOMException('x', 'NotAllowedError'), 'Geçiş anahtarı işlemi iptal edildi veya zaman aşımına uğradı.'],
+    ['an unsupported device', new DOMException('x', 'NotSupportedError'), 'Bu tarayıcı veya cihaz geçiş anahtarlarını desteklemiyor.'],
+    ['an unconfigured server', new client.ApiError(503, { error: 'passkeys_not_configured' }), 'Geçiş anahtarları bu sunucuda henüz yapılandırılmamış.'],
+  ])('explains %s in plain words instead of a server error', async (_case, failure, message) => {
+    loginWithPasskeyMock.mockRejectedValueOnce(failure)
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ile giriş yap' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.queryByText(/Sunucu isteği tamamlayamadı/)).toBeNull()
+  })
+
   it('switches to second-factor view when password login requires second factor', async () => {
     loginMock.mockResolvedValueOnce({ requiresSecondFactor: true })
     verifySecondFactorMock.mockResolvedValueOnce(undefined)

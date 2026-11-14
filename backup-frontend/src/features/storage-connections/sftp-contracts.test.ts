@@ -80,6 +80,9 @@ describe('SFTP frontend contracts and behaviors', () => {
     const [tenantOption] = connectionOptions([conn], [provider], true)
     expect(tenantOption.label).toMatch(/^Acme Corp · SFTP Primary · SFTP · (?:Tenant|Çalışma alanı) yönetimli · Kullanılabilir$/)
     const [jobOption] = connectionOptions([conn], [provider], false)
-    expect(jobOption.label).toMatch(/^SFTP Primary · SFTP · (?:Tenant|Çalışma alanı) yönetimli · Kullanılabilir$/)
+    expect(jobOption.label).toBe('SFTP Primary · SFTP · Kullanılabilir')
+    const platformConnection = { ...conn, ownership: 'PlatformManaged' as const }
+    const platformProvider = makeProvider({ ...provider, supportedOwnerships: ['PlatformManaged'] })
+    expect(connectionOptions([platformConnection], [platformProvider])[0].label).toBe('SFTP Primary · SFTP · Platform yönetimli · Kullanılabilir')
   })
 })

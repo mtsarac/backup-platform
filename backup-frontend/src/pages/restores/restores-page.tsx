@@ -10,6 +10,7 @@ import { StatusPill } from '@/components/data/status-pill'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Filters, FilterField } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
 import { ErrorNotice } from '@/components/ui/notice'
@@ -60,11 +61,15 @@ export function RestoresPage() {
     <Filters label={tx("Geri yükleme filtreleri")} onClear={filtering ? clearFilters : undefined}>
       <FilterField label={tx("Liste türü")}><Select aria-label={tx("Liste türü")} value={verification ? 'tests' : 'restores'} onChange={(event) => update({ view: event.target.value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })}><option value="restores">{tx("Geri yüklemeler")}</option><option value="tests">{tx("Geri yükleme testleri")}</option></Select></FilterField>
       <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</Select></FilterField>
+    </Filters>
+    <Disclosure title={tx('Diğer filtreler')} open={Boolean(filters.artifactId || filters.agentId)}>
+      <Filters label={tx('Diğer filtreler')}>
       <BackupPicker tenantId={tenantId} value={filters.artifactId ?? ''} onChange={(artifactId) => update({ artifactId })} />
       <SearchablePicker label={tx("Yedekleme bilgisayarı")} placeholder={tx("Tüm yedekleme bilgisayarları")} value={filters.agentId ?? ''} onChange={agentId => update({ agentId })}
         options={(agents.data ?? []).map(agent => ({ value: agent.agentId, label: agent.hostName ?? tx("Adsız yedekleme bilgisayarı") }))}
         selectedLabel={filters.agentId ? tx("Yedekleme bilgisayarı bulunamadı") : undefined} disabled={agents.isPending || Boolean(agents.error)} />
     </Filters>
+    </Disclosure>
     {agents.error && <ErrorNotice title={tx("Yedekleme bilgisayarları yüklenemedi")} error={agents.error} onRetry={() => void agents.refetch()} />}
     <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
       {query.data?.items.length === 0

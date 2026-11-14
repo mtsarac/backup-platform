@@ -5,14 +5,17 @@ import { validFilePaths } from './file-path-validation'
 import type { JobValues } from './job-form-values'
 import { formatSeconds } from '@/lib/format'
 
-/** Create flow, in order. The edit page shows the same sections on one page, without the review step. */
-export const jobSteps = ['source', 'storage', 'schedule', 'protection', 'review'] as const
+/** Create flow, in order. Schedule and protection share one step; the edit page keeps them as separate sections, without the review step. */
+export const jobSteps = ['source', 'storage', 'schedule-protection', 'review'] as const
 export type JobStep = (typeof jobSteps)[number]
-export type EditSection = Exclude<JobStep, 'review'>
+export type EditSection = 'source' | 'storage' | 'schedule' | 'protection'
 export const editSections: readonly EditSection[] = ['source', 'storage', 'schedule', 'protection']
+/** The wizard step that shows a section. */
+export const wizardStepOf = (section: EditSection): JobStep => section === 'schedule' || section === 'protection' ? 'schedule-protection' : section
 
-export function stepLabel(step: JobStep) {
+export function stepLabel(step: JobStep | EditSection) {
   switch (step) {
+    case 'schedule-protection': return tx('Zamanlama ve Koruma')
     case 'source': return tx('Kaynak')
     case 'storage': return tx('Depolama')
     case 'schedule': return tx('Zamanlama')
@@ -78,10 +81,12 @@ export function changedSections(saved: JobValues, current: JobValues) {
 
 export type StepErrors = Record<string, string>
 /** Required fields and numeric sanity only; cron syntax and policy limits remain server-authoritative. Each step validates only what it shows. */
-export function validateStep(step: JobStep, values: JobValues): StepErrors {
+export function validateStep(step: JobStep | EditSection, values: JobValues): StepErrors {
+  if (step === 'schedule-protection') return { ...validateStep('schedule', values), ...validateStep('protection', values) }
   const errors: StepErrors = {}
   if (step === 'source') {
     if (!values.name.trim()) errors.name = tx('İş adını girin.')
+    if (values.sourceMode === 'discovery' && !values.selected.length) { errors.source = tx('Otomatik keşiften bir veritabanı seçin veya kaynağı elle yapılandırın.'); return errors }
     if (!values.agentId) errors.agentId = tx('Bir yedekleme bilgisayarı seçin.')
     const { host, database, port } = values.configuration
     if (values.configuration.engine === 'file-system') {

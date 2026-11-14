@@ -9,7 +9,7 @@ import { discoveredConfiguration } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import type { FieldErrors } from '@/features/backup-jobs/job-field-kit'
-import { initialValues, switchEngine, type Engine, type EngineMemory, type JobPrefill, type JobValues } from '@/features/backup-jobs/job-form-values'
+import { initialValues, resetSource, switchEngine, type Engine, type EngineMemory, type JobPrefill, type JobValues } from '@/features/backup-jobs/job-form-values'
 import { stepOfField } from '@/features/backup-jobs/job-wizard-model'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
@@ -27,7 +27,8 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   const [saved, setSaved] = useState(() => initialValues(job, prefill))
   const [values, setValues] = useState(saved)
   const [results, setResults] = useState<Record<string, string>>({})
-  const [discoveryInstanceId, setDiscoveryInstanceId] = useState(prefill?.instance.id ?? '')
+  /** The inventory instance the selected databases belong to; the source summary shows it and a failed create is checked against it. */
+  const [discovered, setDiscovered] = useState<DiscoveryInstanceDetail | null>(prefill?.databases.length ? prefill.instance : null)
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const engines = useRef<EngineMemory>({})
   const saving = useRef(false)
@@ -69,12 +70,13 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     setResults({})
   }
   function applyDiscovery(instance: DiscoveryInstanceDetail, databases: string[]) {
-    setDiscoveryInstanceId(instance.id)
+    setDiscovered(instance)
     set({ agentId: instance.agentId, configuration: discoveredConfiguration(configuration, instance, databases), selected: databases })
     setResults({})
   }
   function clearDiscovery() {
-    set({ selected: [], configuration: { ...configuration, database: '' } })
+    setDiscovered(null)
+    set({ selected: [], configuration: resetSource(configuration) })
     setResults({})
   }
   const listPath = `/tenants/${tenantId}/backup-jobs`
@@ -90,7 +92,7 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     if (saving.current || cannotSave) return
     saving.current = true
     const { name, agentId, enabled, scheduled, schedule, overlap, retry, retention } = values
-    const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, enabled, schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, ...(canAdmin ? { retention } : {}) }
+    const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, ...(!job ? { enabled } : {}), schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, ...(canAdmin ? { retention } : {}) }
     if (multi) { void createMany(input); return }
     save.mutate(input, {
       onSuccess: finish,
@@ -117,9 +119,9 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     if (selected.every(item => outcome[item] === 'ok')) finish()
   }
   async function coveredAfterFailure(retrying: string[]) {
-    if (!discoveryInstanceId || retrying.length === 0) return new Set<string>()
+    if (!discovered || retrying.length === 0) return new Set<string>()
     try {
-      const detail = await getDiscoveryInstance(tenantId, discoveryInstanceId)
+      const detail = await getDiscoveryInstance(tenantId, discovered.id)
       return new Set(detail.databases.filter(database => retrying.includes(database.name) && database.jobs.length > 0).map(database => database.name))
     } catch { return new Set<string>() }
   }
@@ -130,7 +132,7 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   }, [clientErrors])
 
   return {
-    job, tenantId, canAdmin, listPath, saved, values, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery,
+    job, tenantId, canAdmin, listPath, saved, values, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery, discovered, prefillInstanceId: prefill?.instance.id,
     agents, agent: agents.data?.find(item => item.agentId === values.agentId),
     picker: { connections: connectionItems, providers: providerItems, pending: pickerPending, error: pickerError, existingTarget, onRefresh: refreshConnections },
     cannotSave, results, failedCount: Object.values(results).filter(value => value !== 'ok').length,

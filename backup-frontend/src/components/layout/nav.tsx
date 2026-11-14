@@ -1,11 +1,15 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, type ComponentType, type ReactNode } from 'react'
 import { X } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { Link, matchPath, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { isFeatureEnabled, type FeatureKey } from '@/features/feature-flags/feature-flags'
 
-export interface NavItem { label: string; to: string; icon: ComponentType<{ className?: string }>; end?: boolean; feature?: FeatureKey }
+export interface NavItem { label: string; to: string; icon: ComponentType<{ className?: string }>; end?: boolean; feature?: FeatureKey; /** Extra route prefixes (full paths) that keep this item active, e.g. the sibling lists and detail pages it stands for. */ activeFor?: readonly string[] }
+
+function isActive(item: NavItem, pathname: string) {
+  return !!matchPath({ path: item.to, end: item.end ?? false }, pathname) || !!item.activeFor?.some((prefix) => !!matchPath({ path: prefix, end: false }, pathname))
+}
 export interface NavGroup { heading?: string; items: readonly NavItem[] }
 
 function Brand({ icon: Icon, title, caption }: { icon: ComponentType<{ className?: string }>; title: string; caption: string }) {
@@ -18,6 +22,7 @@ function Brand({ icon: Icon, title, caption }: { icon: ComponentType<{ className
 
 function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { icon: ComponentType<{ className?: string }>; title: string; caption: string }; label: string; groups: readonly NavGroup[]; footer?: ReactNode; onClose?: () => void }) {
   useLanguage()
+  const { pathname } = useLocation()
   return <>
     <div className="flex h-14 shrink-0 items-center justify-between px-5">
       <Brand {...brand} />
@@ -27,14 +32,14 @@ function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { ic
       {groups.map((group, index) => <div key={group.heading ?? index} role={group.heading ? 'group' : undefined} aria-label={group.heading}>
         {group.heading && <p aria-hidden="true" className="mb-1 px-3 text-xs font-medium text-sidebar-muted">{group.heading}</p>}
         <ul className="space-y-0.5">{group.items.filter((item) => !item.feature || isFeatureEnabled(item.feature)).map((item) => <li key={item.to}>
-          <NavLink to={item.to} end={item.end} onClick={onClose}
-            className={({ isActive }) => `flex min-h-9 pointer-coarse:min-h-11 items-center gap-3 rounded-md px-3 text-body transition-colors ${isActive ? 'bg-sidebar-active font-semibold text-text-heading' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
+          {(() => { const active = isActive(item, pathname); return <Link to={item.to} onClick={onClose} aria-current={active ? 'page' : undefined}
+            className={`flex min-h-9 pointer-coarse:min-h-11 items-center gap-3 rounded-md px-3 text-body transition-colors ${active ? 'bg-sidebar-active font-semibold text-text-heading' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
             <item.icon className="size-4 shrink-0 text-sidebar-muted" /><span className="min-w-0 break-words">{tx(item.label)}</span>
-          </NavLink>
+          </Link> })()}
         </li>)}</ul>
       </div>)}
     </nav>
-    {footer && <div className="shrink-0 border-t border-border p-3">{footer}</div>}
+    {footer && <div onClick={onClose} className="shrink-0 border-t border-border p-3">{footer}</div>}
   </>
 }
 

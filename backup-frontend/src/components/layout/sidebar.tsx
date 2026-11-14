@@ -1,6 +1,7 @@
-import { Activity, Bell, Database, DatabaseBackup, Gauge, HardDrive, KeyRound, LayoutDashboard, Monitor, Radar, RotateCcw, Share2, ShieldCheck, Upload } from 'lucide-react'
+import { Bell, Database, DatabaseBackup, Gauge, KeyRound, LayoutDashboard, Monitor, Radar, Share2, ShieldCheck, Upload } from 'lucide-react'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { AccountLink } from './account-link'
 import { SidebarFrame, type NavGroup, type NavItem } from './nav'
 import { tx, useLanguage } from '@/lib/i18n'
 
@@ -13,12 +14,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
   useLanguage()
   const base = `/tenants/${tenantId}`
   const config: { heading?: string; items: GatedItem[] }[] = [
-    { items: [{ label: tx("Genel Bakış"), to: base, icon: LayoutDashboard, end: true }] },
-    { heading: tx("Yedeklemeler"), items: [
-      { label: tx("Yedekleme işleri"), to: `${base}/backup-jobs`, icon: Database },
-      { label: tx("Yedekleme denemeleri"), to: `${base}/backup-runs`, icon: Activity },
-      { label: tx("Yedek dosyaları"), to: `${base}/artifacts`, icon: HardDrive },
-      { label: tx("Geri yüklemeler"), to: `${base}/restores`, icon: RotateCcw },
+    { items: [
+      { label: tx("Genel Bakış"), to: base, icon: LayoutDashboard, end: true },
+      { label: tx("Yedeklemeler"), to: `${base}/backup-jobs`, icon: Database, activeFor: ['backup-jobs', 'backup-runs', 'artifacts', 'restores'].map((path) => `${base}/${path}`) },
       { label: tx("Paylaşımlarım"), to: `${base}/shares`, icon: Share2 },
     ] },
     { heading: tx("Altyapı"), items: [
@@ -34,5 +32,5 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
     ...(user?.role === 'PlatformAdmin' ? [{ heading: tx("Platform"), items: [{ label: tx("Platform Yönetimi"), to: '/platform', icon: ShieldCheck }] }] : []),
   ]
   const groups: NavGroup[] = config.map(({ heading, items }) => ({ heading, items: items.filter((item) => canAdmin || !item.admin) }))
-  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Ana menü")} label={tx("Ana gezinme")} brand={{ icon: DatabaseBackup, title: tx("Yedekleme Platformu"), caption: tx("Yönetim Konsolu") }} groups={groups} />
+  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Ana menü")} label={tx("Ana gezinme")} brand={{ icon: DatabaseBackup, title: tx("Yedekleme Platformu"), caption: tx("Yönetim Konsolu") }} groups={groups} footer={<AccountLink />} />
 }

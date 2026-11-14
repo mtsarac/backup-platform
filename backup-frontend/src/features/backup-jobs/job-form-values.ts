@@ -8,6 +8,8 @@ export interface JobValues {
   scheduled: boolean; schedule: Schedule; overlap: 'Skip' | 'Queue'; retry: RetryPolicy; retention: RetentionPolicy
   /** Databases picked from the discovery inventory; one job is created per name. */
   selected: string[]
+  /** How the source of a new job is chosen: from the discovery inventory (primary) or typed by hand. Existing jobs are always edited by hand. */
+  sourceMode: 'discovery' | 'manual'
 }
 export interface JobPrefill { instance: DiscoveryInstanceDetail; databases: string[] }
 
@@ -26,7 +28,7 @@ export function initialValues(job?: BackupJob, prefill?: JobPrefill): JobValues 
     name: job?.name ?? '', agentId: job?.agentId ?? prefill?.instance.agentId ?? '', enabled: job?.enabled ?? true,
     configuration: saved ?? (prefill?.databases.length ? discoveredConfiguration(initialConfiguration, prefill.instance, prefill.databases) : initialConfiguration),
     scheduled: Boolean(job?.schedule), schedule: job?.schedule ?? initialSchedule, overlap: job?.overlapPolicy ?? 'Skip',
-    retry: job?.retryPolicy ?? initialRetry, retention: job?.retention ?? initialRetention, selected: prefill?.databases ?? [],
+    retry: job?.retryPolicy ?? initialRetry, retention: job?.retention ?? initialRetention, selected: prefill?.databases ?? [], sourceMode: job ? 'manual' : 'discovery',
   }
 }
 
@@ -46,3 +48,7 @@ export function switchEngine(configuration: BackupConfiguration, memory: EngineM
   const remembered: EngineMemory = { ...memory, [configuration.engine]: Object.fromEntries(sourceKeys.map(key => [key, configuration[key] ?? null])) as SourceFields }
   return { memory: remembered, configuration: { ...configuration, ...(remembered[engine] ?? engineDefaults[engine]), engine } }
 }
+
+/** Source fields back to the engine's blank state, e.g. after a discovered source is dropped; the engine itself is kept. */
+export const resetSource = (configuration: BackupConfiguration): BackupConfiguration =>
+  ({ ...configuration, ...engineDefaults[configuration.engine], encrypt: true, trustServerCertificate: false })

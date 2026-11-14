@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useSearchParams } from 'react-router-dom'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -8,7 +8,6 @@ import { useDiscoveryInstance } from '@/features/discovery/hooks'
 import { selectableNames } from '@/features/discovery/job-prefill'
 import { JobWizard } from '@/features/backup-jobs/job-wizard'
 import { AccessDenied } from '@/components/auth/access-denied'
-import { errorMessage } from '@/lib/api/failure-messages'
 
 /** `…/backup-jobs/new`: the create wizard, optionally prefilled from `?discoveryInstance=…&database=…`. */
 export function BackupJobWizardPage() {
@@ -22,7 +21,7 @@ export function BackupJobWizardPage() {
   if (!canOperate) body = <AccessDenied what={tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.")} />
   else if (discoveryInstance && discovered.isPending) body = <QueryState isPending error={null} />
   else body = <>
-    {discovered.error && <Notice tone="warning" title={tx("Keşfedilen veritabanları yüklenemedi")}>{errorMessage(discovered.error)}{' '}{tx("Kaynağı elle girebilirsiniz.")}</Notice>}
+    {discovered.error && <ErrorNotice title={tx("Keşfedilen veritabanları yüklenemedi")} error={discovered.error} onRetry={() => void discovered.refetch()} />}
     <JobWizard key={`${tenantId}:new`} prefill={prefill} />
   </>
   return <div className="space-y-6">

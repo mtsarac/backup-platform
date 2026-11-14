@@ -1,5 +1,6 @@
 import { tx } from '@/lib/i18n'
 import { ApiError } from './client'
+import { isWebAuthnSupported } from '@/features/auth/webauthn'
 import type { TechnicalItem } from '@/components/ui/technical-details'
 
 const messages: Record<string, string> = {
@@ -286,4 +287,29 @@ export function describeError(error: unknown, scope?: ErrorScope): ErrorDescript
   if (error.status === 404) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
   if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), technical }
   return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Bilgileri kontrol edip tekrar deneyin."), technical }
+}
+
+/** A passkey step that failed in the browser (cancelled prompt, no support, wrong origin) or on the server; none of these is a server fault worth a raw 500 message. */
+export function describePasskeyError(error: unknown): ErrorDescription {
+  const unchanged = () => tx("Hesabınızda değişiklik yapılmadı.")
+  if (error instanceof ApiError) {
+    if (error.status === 503 && error.code === 'passkeys_not_configured') {
+      return { what: tx("Geçiş anahtarları bu sunucuda henüz yapılandırılmamış."), dataImpact: unchanged(), action: tx("Şifrenizle giriş yapın veya platform yöneticisine başvurun."), technical: technicalItems(error) }
+    }
+    return describeError(error)
+  }
+  const name = error instanceof Error ? error.name : ''
+  if (name === 'NotAllowedError' || name === 'AbortError') {
+    return { what: tx("Geçiş anahtarı işlemi iptal edildi veya zaman aşımına uğradı."), dataImpact: unchanged(), action: tx("Tekrar deneyin. Kayıtlı bir geçiş anahtarınız yoksa şifrenizle giriş yapıp ekleyin."), technical: [] }
+  }
+  if (name === 'NotSupportedError' || !isWebAuthnSupported()) {
+    return { what: tx("Bu tarayıcı veya cihaz geçiş anahtarlarını desteklemiyor."), dataImpact: unchanged(), action: tx("Şifrenizle giriş yapın veya başka bir tarayıcı ya da cihaz kullanın."), technical: [] }
+  }
+  if (name === 'InvalidStateError') {
+    return { what: tx("Bu cihazdaki geçiş anahtarı hesabınıza zaten kayıtlı."), dataImpact: unchanged(), action: tx("Başka bir cihaz veya güvenlik anahtarı ile deneyin."), technical: [] }
+  }
+  if (name === 'SecurityError') {
+    return { what: tx("Geçiş anahtarı bu adreste kullanılamıyor. Adres güvenli (HTTPS) olmalı ve sunucu yapılandırmasıyla eşleşmelidir."), dataImpact: unchanged(), action: tx("Yöneticinize danışın."), technical: [] }
+  }
+  return describeError(error)
 }

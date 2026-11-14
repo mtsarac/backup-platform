@@ -12,6 +12,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Disclosure } from '@/components/ui/disclosure'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
 import { PageHeader } from '@/components/ui/page-header'
@@ -42,6 +43,11 @@ export function DiscoveryPage() {
   const agentName = (id: string) => agentList.find(item => item.agentId === id)?.hostName || tx('Adsız bilgisayar')
   const computersPath = `/tenants/${tenantId}/agents`
   const filtered = Boolean(agentId || engine || includeMissing)
+  const scans = agentList.map(agent => {
+    const status = statuses.data?.items.find(item => item.agentId === agent.agentId)
+    const needsAttention = !supportsDiscovery(agent.capabilities) || agent.connectivity !== 'online' || !status || !status.enabled || status.scanState !== 'Idle' || status.lastOutcome !== 'Completed'
+    return { agent, status, needsAttention }
+  })
   const columns: Column<DiscoveryInstanceSummary>[] = [
     { key: 'name', card: 'title', header: tx('Veritabanı sunucusu'), wrap: true, render: item => <Link className={linkClass} to={discoveryInstancePath(tenantId, item.id)}>{item.displayName}</Link> },
     { key: 'status', card: 'status', header: tx('Durum'), render: item => <span className="flex flex-wrap gap-1"><StatusPill domain="access" status={item.access} />{item.presence === 'Missing' && <StatusPill level="neutral">{tx("Bulunamadı")}</StatusPill>}</span> },
@@ -56,11 +62,13 @@ export function DiscoveryPage() {
   else if (agents.isSuccess && agentList.length === 0) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Henüz yedekleme bilgisayarı yok; veritabanları bir yedekleme bilgisayarında aranır.")} canAct={canAdmin} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarı ekle")}</Link>} /></Card>
   else if (agents.isSuccess && !agentList.some(item => supportsDiscovery(item.capabilities))) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Yedekleme bilgisayarlarınızdaki program veritabanı bulmayı desteklemiyor; programı güncelleyin veya veritabanını yedekleme işinde elle girin.")} canAct={canAdmin} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarlarına git")}</Link>} /></Card>
   else body = <>
-    <div className="grid gap-4 lg:grid-cols-2">{agentList.map(agent => <ComputerScanCard key={agent.agentId} agent={agent} status={statuses.data?.items.find(item => item.agentId === agent.agentId)} />)}</div>
+    <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
+    <Disclosure title={tx("Veritabanı bulma filtreleri")} open={filtered}>
     <Filters label={tx("Veritabanı bulma filtreleri")} footer={<CheckField label={tx("Bulunamayanları da göster")} checked={includeMissing} onChange={event => update({ includeMissing: event.target.checked ? '1' : '' })} />}>
       <FilterField label={tx("Veritabanı türü")}><Select aria-label={tx("Veritabanı türü")} className="text-sm" value={engine} onChange={event => update({ engine: event.target.value })}><option value="">{tx("Tümü")}</option><option value="mssql">MSSQL</option><option value="postgres">PostgreSQL</option></Select></FilterField>
       {agentList.length > 1 && <FilterField label={tx("Bilgisayar")}><Select aria-label={tx("Bilgisayar")} className="text-sm" value={agentId} onChange={event => update({ agentId: event.target.value })}><option value="">{tx("Tümü")}</option>{agentList.map(item => <option key={item.agentId} value={item.agentId}>{item.hostName || tx('Adsız bilgisayar')}</option>)}</Select></FilterField>}
     </Filters>
+    </Disclosure>
     <QueryState isPending={instances.isPending} error={instances.error}>
       {instances.data && (instances.data.items.length === 0
         ? <Card padding="none"><EmptyState icon={Radar} message={filtered ? tx("Seçilen filtrelere uyan veritabanı sunucusu bulunamadı.") : tx("Bu bilgisayarlarda henüz veritabanı bulunamadı. Bilgisayar kartındaki \"Yeniden tara\" ile yeniden arayabilirsiniz.")} canAct={filtered || canOperate} action={filtered
@@ -68,6 +76,7 @@ export function DiscoveryPage() {
           : <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx("Yeni yedekleme işi")}</Link>} /></Card>
         : <DataList rows={instances.data.items} columns={columns} keyExtractor={item => item.id} caption={tx("Bulunan veritabanı sunucuları")} />)}
     </QueryState>
+    <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => !scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
   </>
   return <div className="space-y-6">
     <PageHeader title={tx("Veritabanı bulma")} description={tx("Yedekleme bilgisayarlarınızda bulunan veritabanları ve hangilerinin yedeklenebileceği.")} />

@@ -5,7 +5,7 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { Stepper } from '@/components/ui/stepper'
 import { DiscardChangesLink } from '@/features/backup-jobs/discard-changes-link'
 import type { JobPrefill } from '@/features/backup-jobs/job-form-values'
-import { jobSteps, stepLabel, validateJob, validateStep, type JobStep } from '@/features/backup-jobs/job-wizard-model'
+import { jobSteps, stepLabel, validateJob, validateStep, wizardStepOf, type JobStep } from '@/features/backup-jobs/job-wizard-model'
 import { SourceStep } from '@/features/backup-jobs/steps/source-step'
 import { StorageStep } from '@/features/backup-jobs/steps/storage-step'
 import { ScheduleStep } from '@/features/backup-jobs/steps/schedule-step'
@@ -41,7 +41,7 @@ export function JobWizard({ prefill }: { prefill?: JobPrefill }) {
   function submit() {
     // Steps can be revisited out of order, so everything is checked again before anything is created.
     const { firstInvalid } = validateJob(values)
-    if (firstInvalid) { go(firstInvalid); setClientErrors(validateStep(firstInvalid, values)) }
+    if (firstInvalid) { go(wizardStepOf(firstInvalid)); setClientErrors(validateStep(wizardStepOf(firstInvalid), values)) }
     else form.submit()
   }
   return <form noValidate className="space-y-5" onSubmit={event => {
@@ -53,11 +53,19 @@ export function JobWizard({ prefill }: { prefill?: JobPrefill }) {
     <h2 ref={headingRef} tabIndex={-1} className="sr-only">{tx("Adım")}{' '}{index + 1} / {jobSteps.length}: {stepLabel(step)}</h2>
     {step === 'source' && <SourceStep form={form} />}
     {step === 'storage' && <StorageStep form={form} />}
-    {step === 'schedule' && <ScheduleStep form={form} />}
-    {step === 'protection' && <ProtectionStep form={form} />}
-    {last && <ReviewStep form={form} onGo={go} />}
+    {step === 'schedule-protection' && <>
+      <section aria-labelledby="wizard-schedule" className="space-y-5">
+        <h2 id="wizard-schedule" className="text-lg font-semibold text-text-heading">{tx("Zamanlama")}</h2>
+        <ScheduleStep form={form} headingLevel={3} advancedTitle={tx("Zamanlama teknik ayrıntıları")} />
+      </section>
+      <section aria-labelledby="wizard-protection" className="space-y-5 border-t border-border pt-5">
+        <h2 id="wizard-protection" className="text-lg font-semibold text-text-heading">{tx("Koruma")}</h2>
+        <ProtectionStep form={form} headingLevel={3} advancedTitle={tx("Koruma teknik ayrıntıları")} />
+      </section>
+    </>}
+    {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} />}
     {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
-      control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": stepLabel(item) })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
+      control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{[...new Set(errorSteps.map(wizardStepOf))].map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": stepLabel(item) })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <Button type="button" variant="outline" disabled={index === 0 || save.isPending} onClick={() => go(jobSteps[index - 1])}>{tx("Geri")}</Button>
       <div className="flex flex-wrap items-center gap-3">

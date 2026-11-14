@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, createRoutesFromElements, MemoryRouter, Route, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -47,12 +48,13 @@ beforeEach(() => {
 })
 /** Fill the required fields and stop on the "Koruma" step. */
 async function reachOptionsStep() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Elle yapılandır' }))
   fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup' } })
   await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
   fireEvent.change(screen.getByLabelText('Yedekleme bilgisayarı'), { target: { value: 'agent-a' } })
   fireEvent.change(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu'), { target: { value: 'sql' } })
   fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'ERP' } })
-  next(3)
+  next(2)
   await screen.findByLabelText('Yedek şifreleme politikası')
 }
 
@@ -87,6 +89,7 @@ describe('encryption policy in the job wizard', () => {
     vi.mocked(getBackupJob).mockResolvedValue(withPolicy('Optional'))
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'configuration.encryptionPolicy', code: 'invalid_value' }))
     renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Updated job' } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(document.getElementById('configuration.encryptionPolicy-error')).toHaveTextContent(/.+/))
@@ -107,7 +110,9 @@ describe('encryption policy on the job page and the job list', () => {
     vi.mocked(getBackupJob).mockResolvedValue(withPolicy('Required'))
     renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
     const details = await screen.findByRole('region', { name: 'İş ayrıntıları' })
-    expect(within(details).getByText('Zorunlu · şifrelenemezse başarısız')).not.toBeVisible()
+    expect(within(details).queryByText('Zorunlu · şifrelenemezse başarısız')).toBeNull()
+    await userEvent.click(within(details).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText('Zorunlu · şifrelenemezse başarısız')).toBeInTheDocument()
   })
 
   it('leaves the policy off the list', async () => {

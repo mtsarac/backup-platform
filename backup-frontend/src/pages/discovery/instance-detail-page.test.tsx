@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -70,9 +71,8 @@ describe('instance detail page', () => {
   it('links back to the computer and keeps per-database lines out of the technical details', async () => {
     mount()
     expect(await screen.findByRole('link', { name: 'SQL Agent' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
-    const summary = screen.getByText('Teknik ayrıntılar')
-    fireEvent.click(summary)
-    expect(within(summary.closest('details')!).queryByText('ERP')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).queryByText('ERP')).not.toBeInTheDocument()
   })
   it('prefills the ticket 10 wizard and creates only the picked databases after confirmation', async () => {
     mount()
@@ -87,10 +87,10 @@ describe('instance detail page', () => {
     fireEvent.click(screen.getByLabelText('CRM seç'))
     fireEvent.click(screen.getByRole('button', { name: /Yedekleme işi oluştur/ }))
     fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Finance' } })
-    expect(screen.getByLabelText('Yedekleme bilgisayarı')).toHaveValue('agent-a')
-    expect(screen.getByLabelText('Veritabanı')).toHaveValue('ERP')
-    expect(screen.getByLabelText('Veritabanı')).toBeDisabled()
-    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(await screen.findByRole('heading', { name: 'Seçilen kaynak' })).toBeInTheDocument()
+    expect(screen.getByText('ERP, CRM')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Yedekleme bilgisayarı')).not.toBeInTheDocument()
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
     expect(saveBackupJob).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(2))
@@ -110,10 +110,10 @@ describe('instance detail page', () => {
   })
   it('keeps identifiers, versions and raw reasons collapsed and copyable', async () => {
     mount()
-    const summary = await screen.findByText('Teknik ayrıntılar')
-    const details = summary.closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    fireEvent.click(summary)
+    const trigger = await screen.findByRole('button', { name: 'Teknik ayrıntılar' })
+    expect(screen.queryByText('inst-1')).not.toBeInTheDocument()
+    await userEvent.click(trigger)
+    const details = await screen.findByRole('dialog')
     expect(within(details).getByText('inst-1')).toBeInTheDocument()
     expect(within(details).getByText('16.0')).toBeInTheDocument()
     expect(within(details).getByRole('button', { name: 'Kopyala: Sunucu kimliği' })).toBeInTheDocument()

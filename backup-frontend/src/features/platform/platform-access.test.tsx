@@ -36,7 +36,7 @@ describe('Platform Administration entry points', () => {
   it('tenant sidebar hides it from a user who is only a tenant Owner', () => {
     renderPlatform(<Sidebar />, { user: tenantOwner })
     expect(screen.queryByText(/Platform Administration|Platform Yönetimi/)).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Yedekleme işleri/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Yedeklemeler/).length).toBeGreaterThan(0)
   })
 
   it('tenant picker links PlatformAdmin users and hides it for others', () => {
@@ -70,11 +70,11 @@ describe('PlatformAdminRoute guard', () => {
     expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
     expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
     expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()
-    expect(screen.getByText('Platform Operatörü')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Platform Operatörü/ })).toHaveAttribute('href', '/account')
     expect(screen.queryByRole('button', { name: "Temayı değiştir" })).not.toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Görünüm' }))
     expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Çıkış' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Çalışma Alanı")).not.toBeInTheDocument()
     expect(api.getSummary).toHaveBeenCalled()
   })

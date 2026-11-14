@@ -3,14 +3,14 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Question } from '@/features/backup-jobs/job-form-fields'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
-import { keepForLabel, schedulePresetLabel, type JobStep } from '@/features/backup-jobs/job-wizard-model'
+import { keepForLabel, schedulePresetLabel, type EditSection } from '@/features/backup-jobs/job-wizard-model'
 import type { JobValues } from '@/features/backup-jobs/job-form-values'
 import { policyLabels } from '@/features/artifact-encryption/labels'
 import type { ConnectionView } from '@/features/storage-connections/types'
 import { formatSeconds } from '@/lib/format'
 import { executionLocationLabel, storageProviderLabel } from '@/features/storage-connections/labels'
 
-export interface JobSummaryProps { values: JobValues; agentLabel: string; canAdmin: boolean; connections: readonly ConnectionView[]; onGo: (step: JobStep) => void }
+export interface JobSummaryProps { values: JobValues; agentLabel: string; canAdmin: boolean; connections: readonly ConnectionView[]; onGo: (step: EditSection) => void }
 
 const policyText = { get Disabled() { return tx("Kapalı") }, get Preferred() { return tx("Destekleniyorsa") }, get Required() { return tx("Zorunlu") } } as const
 
@@ -20,7 +20,7 @@ export function JobSummary({ values, agentLabel, canAdmin, connections, onGo }: 
   const { name, enabled, configuration: c, scheduled, schedule, overlap, retry, retention } = values
   const isFiles = c.engine === 'file-system'
   // The change button sits in a second `dd` so every `dl` child stays a valid term/definition group.
-  const row = (label: string, step: JobStep, children: ReactNode) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 border-b border-border py-3 last:border-b-0">
+  const row = (label: string, step: EditSection, children: ReactNode) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 border-b border-border py-3 last:border-b-0">
     <dt className="col-start-1 text-sm text-text-muted">{label}</dt><dd className="col-start-1 mt-0.5 break-words text-body text-text">{children}</dd>
     <dd className="col-start-2 row-span-2 row-start-1"><Button type="button" variant="outline" size="sm" aria-label={tx("Değiştir: {0}", { "0": label })} onClick={() => onGo(step)}>{tx("Değiştir")}</Button></dd>
   </div>

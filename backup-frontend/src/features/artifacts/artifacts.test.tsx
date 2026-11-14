@@ -9,6 +9,7 @@ import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
 import { apiRequest } from '@/lib/api/client'
 import type { BackupArtifact, BackupReplica } from './types'
 import { canCancelDeletion, deletionInProgress } from './format'
+import { getDownloadAvailability } from './api'
 import type * as ArtifactApi from './api'
 
 vi.mock('@/lib/api/client', () => ({
@@ -62,8 +63,10 @@ describe('Backup dosyaları', () => {
     permissions.role = 'PlatformAdmin'
     request.mockResolvedValue(artifact())
     mount()
-    await screen.findByText('Dosya sağlam mı?')
+    await screen.findByText('Kısaca durum')
     expect(screen.queryByRole('button', { name: 'İndir' })).not.toBeInTheDocument()
+    expect(screen.getByText('Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.')).toBeVisible()
+    expect(getDownloadAvailability).not.toHaveBeenCalled()
   })
   it('shows PostgreSQL archive facts without SQL Server physical backup metadata', async () => {
     request.mockResolvedValue(artifact({ backupMetadata: {
@@ -74,7 +77,7 @@ describe('Backup dosyaları', () => {
       postgreSqlDetails: { archiveFormat: 'custom', clientVersion: '18.6', encoding: 'UTF8', collation: 'C', dataChecksums: 'on', databaseSizeBytes: '16384', extensions: 'hstore' },
     } }))
     mount()
-    await screen.findByText('Ne zaman silinecek?')
+    await screen.findByText('Kısaca durum')
     expect(screen.getByText('UTF8')).not.toBeVisible()
     openDetails()
     expect(screen.getByRole('heading', { name: /PostgreSQL/ })).toBeVisible()
@@ -88,12 +91,12 @@ describe('Backup dosyaları', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
     const router = createMemoryRouter([{ path: '/tenants/:tenantId/artifacts/:id', element: <ArtifactDetailPage /> }], { initialEntries: ['/tenants/tenant-a/artifacts/artifact-a'] })
     render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
-    await screen.findByText('Ne zaman silinecek?')
+    await screen.findByText('Kısaca durum')
     openDetails()
     fireEvent.click(screen.getByRole('button', { name: 'Silme isteği oluştur' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     await act(async () => { await router.navigate('/tenants/tenant-a/artifacts/artifact-b') })
-    await screen.findByText('Ne zaman silinecek?')
+    await screen.findByText('Kısaca durum')
     expect(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(request.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
@@ -123,7 +126,7 @@ describe('Backup dosyaları', () => {
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a', { method: 'DELETE' })
     expect(screen.getByText(/Fiziksel silmeye kalan süre/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeEnabled()
-    expect(screen.queryByText('Ne zaman silinecek?')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Siliniyor').length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-artifacts'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
@@ -141,7 +144,7 @@ describe('Backup dosyaları', () => {
     await screen.findByText("Silme iptal edildi. Yedekleme dosyaları korunuyor.")
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a/cancel-delete', { method: 'POST' })
     expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
-    expect(screen.getByText('Ne zaman silinecek?')).toBeVisible()
+    expect(screen.getByText('Kısaca durum')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Veritabanını geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
   })
 
@@ -187,10 +190,11 @@ describe('Backup dosyaları', () => {
   it('önce dosyanın sağlam olup olmadığını, geri yüklenip yüklenemeyeceğini ve ne zaman silineceğini söyler', async () => {
     request.mockResolvedValue(artifact())
     mount()
-    await screen.findByText('Dosya sağlam mı?')
-    for (const question of ['Geri yüklenebilir mi?', 'Ne zaman silinecek?']) expect(screen.getByText(question)).toBeVisible()
+    await screen.findByText('Kısaca durum')
+    for (const label of ['Geri yükleme', 'Saklama ve silme']) expect(screen.getAllByText(label)[0]).toBeVisible()
+    expect(screen.queryByText(/\?$/)).not.toBeInTheDocument()
     expect(screen.getByText('Sağlam')).toBeVisible()
-    expect(screen.getByText('Geri yüklenebilir')).toBeVisible()
+    expect(screen.getByText('Geri yüklemeye hazır')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Veritabanını geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
     // The checksums, replicas and metadata wait behind the collapsed details.
     for (const checksum of screen.getAllByText('abc123')) expect(checksum).not.toBeVisible()
@@ -210,7 +214,7 @@ describe('Backup dosyaları', () => {
   it('doğrulanmış kopya yoksa sağlam demez; silinmiş dosya geri yüklenemez', async () => {
     request.mockResolvedValue(artifact({ replicas: [{ ...replica, verificationState: 'Pending' }] }))
     mount()
-    await screen.findByText('Dosya sağlam mı?')
+    await screen.findByText('Kısaca durum')
     expect(screen.queryByText('Sağlam')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     cleanup()
@@ -225,7 +229,7 @@ describe('Backup dosyaları', () => {
     permissions.canOperate = false
     request.mockResolvedValue(artifact())
     mount()
-    await screen.findByText('Dosya sağlam mı?')
+    await screen.findByText('Kısaca durum')
     expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     expect(screen.getByText(/Yöneticinize danışın/)).toBeVisible()
   })
@@ -233,12 +237,12 @@ describe('Backup dosyaları', () => {
   it('saklama süresini ve etkin silme korumasını silme cevabında gösterir', async () => {
     request.mockResolvedValue(artifact({ retentionExpiresAt: '2099-01-01T00:00:00Z', retentionPinnedAt: null }))
     mount()
-    await screen.findByText('Ne zaman silinecek?')
+    await screen.findByText('Kısaca durum')
     expect(screen.getByText(/Saklama süresi dolunca silinir/)).toBeVisible()
     cleanup()
     request.mockResolvedValue(artifact({ retentionExpiresAt: '2026-11-05T10:02:00Z', retentionPinnedAt: '2026-10-07T00:00:00Z' }))
     mount()
-    await screen.findByText('Ne zaman silinecek?')
+    await screen.findByText('Kısaca durum')
     expect(screen.getByText(/Otomatik silme koruması etkin/)).toBeVisible()
   })
 

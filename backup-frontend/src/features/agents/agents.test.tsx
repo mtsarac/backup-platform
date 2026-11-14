@@ -1,6 +1,7 @@
 /// <reference lib="es2024.promise" />
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -149,10 +150,11 @@ describe('Backup computer page', () => {
   it('keeps platform, versions, identifiers and lifecycle in collapsed, copyable technical details', async () => {
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
-    for (const value of ['agent-a', 'Windows', 'Windows Server', '1.2.0', '.NET 10']) expect(screen.getByText(value)).not.toBeVisible()
-    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
-    for (const value of ['agent-a', 'Windows Server', '1.2.0', '.NET 10']) expect(screen.getByText(value)).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+    for (const value of ['agent-a', 'Windows', 'Windows Server', '1.2.0', '.NET 10']) expect(screen.queryByText(value)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    for (const value of ['agent-a', 'Windows Server', '1.2.0', '.NET 10']) expect(dialog.getByText(value)).toBeVisible()
+    expect(dialog.getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
   })
 
   it('lists reported capabilities under technical details with separate supported, unsupported and unknown states', async () => {
@@ -165,23 +167,24 @@ describe('Backup computer page', () => {
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities, capabilitiesRevision: 'c1-abc', capabilitiesReportedAt: '2026-10-06T12:00:00Z' })
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
-    const section = screen.getByRole('heading', { name: 'Bildirilen yetenekler' }).parentElement!
-    expect(section).not.toBeVisible()
-    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(screen.queryByRole('heading', { name: 'Bildirilen yetenekler' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    const section = dialog.getByRole('heading', { name: 'Bildirilen yetenekler' }).parentElement!
     expect(within(section).getAllByText('Destekleniyor')).toHaveLength(2)
     expect(within(section).getByText('Desteklenmiyor')).toBeInTheDocument()
     expect(within(section).getByText('Bilinmiyor')).toBeInTheDocument()
     expect(within(section).getByText('vendor.custom-feature')).toBeInTheDocument()
     expect(within(section).getByText('MSSQL Tam Yedekleme')).toBeInTheDocument()
-    expect(screen.getByText('c1-abc')).toBeInTheDocument()
+    expect(dialog.getByText('c1-abc')).toBeInTheDocument()
   })
 
   it('says capabilities were not reported yet instead of inventing support', async () => {
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [] })
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
-    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
-    expect(screen.getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(await screen.findByRole('dialog')).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
   })
 
   it('shows only this computer\'s backup jobs', async () => {

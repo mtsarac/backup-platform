@@ -705,6 +705,8 @@ public static class AuthenticationEndpoints
 
         return Results.Ok(new { recoveryCodes });
     }
+    private static IResult PasskeysNotConfigured => Results.Json(new { error = "passkeys_not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+
     private static async Task<IResult> ListPasskeysAsync(HttpContext context, IIdentityStore store)
     {
         if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
@@ -721,8 +723,12 @@ public static class AuthenticationEndpoints
     private static async Task<IResult> CreatePasskeyRegistrationOptionsAsync(HttpContext context, PasskeyService passkeyService)
     {
         if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
-        var (options, challengeId) = await passkeyService.CreateRegistrationOptionsAsync(userId!, context, context.RequestAborted);
-        return Results.Ok(new { options, challengeId });
+        try
+        {
+            var (options, challengeId) = await passkeyService.CreateRegistrationOptionsAsync(userId!, context, context.RequestAborted);
+            return Results.Ok(new { options, challengeId });
+        }
+        catch (PasskeysNotConfiguredException) { return PasskeysNotConfigured; }
     }
 
     private static async Task<IResult> RegisterPasskeyAsync(RegisterPasskeyRequest request, HttpContext context, PasskeyService passkeyService)
@@ -770,8 +776,12 @@ public static class AuthenticationEndpoints
 
     private static async Task<IResult> CreatePasskeyLoginOptionsAsync(PasskeyLoginOptionsRequest? request, HttpContext context, PasskeyService passkeyService)
     {
-        var (options, challengeId) = await passkeyService.CreateLoginOptionsAsync(request?.LoginIdentifier, context, context.RequestAborted);
-        return Results.Ok(new { options, challengeId });
+        try
+        {
+            var (options, challengeId) = await passkeyService.CreateLoginOptionsAsync(request?.LoginIdentifier, context, context.RequestAborted);
+            return Results.Ok(new { options, challengeId });
+        }
+        catch (PasskeysNotConfiguredException) { return PasskeysNotConfigured; }
     }
 
     private static async Task<IResult> PasskeyLoginAsync(PasskeyLoginRequest request, HttpContext context, PasskeyService passkeyService, LoginThrottle throttle)
@@ -808,6 +818,7 @@ public static class AuthenticationEndpoints
             var (options, challengeId) = await passkeyService.CreateSecondFactorOptionsAsync(userId!, sessionId, context, context.RequestAborted);
             return Results.Ok(new { options, challengeId });
         }
+        catch (PasskeysNotConfiguredException) { return PasskeysNotConfigured; }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);

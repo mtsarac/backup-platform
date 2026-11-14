@@ -7,7 +7,7 @@ import { SourceStep } from './source-step'
 
 afterEach(() => setFeatureFlags({}))
 
-const form = { values: { name: '', agentId: '', selected: null, enabled: true, configuration: { engine: 'file-system' } }, errors: {}, agents: { data: [] }, set: () => {}, setConfiguration: () => {}, job: undefined } as unknown as JobFormState
+const form = { values: { name: '', agentId: '', selected: [], sourceMode: 'manual', enabled: true, configuration: { engine: 'file-system' } }, errors: {}, agents: { data: [] }, set: () => {}, setConfiguration: () => {}, job: undefined } as unknown as JobFormState
 
 describe('file source hint', () => {
   it.each([['windowsVss'], ['linuxSnapshots']] as const)('mentions snapshot sources only while %s is on', (flag) => {

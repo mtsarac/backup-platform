@@ -6,12 +6,12 @@ import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
-import { StatusPill } from '@/components/data/status-pill'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
-import { artifactState } from '@/features/artifacts/format'
+import { ArtifactAvailability } from '@/features/artifacts/artifact-availability'
+import { artifactSource, artifactSourceScope } from '@/features/artifacts/source'
 import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, BackupArtifact } from '@/features/artifacts/types'
 import { ReplicationSummary } from '@/features/backups/replication'
@@ -39,19 +39,25 @@ export function ArtifactsPage() {
   const filtering = Boolean(filter.state || filter.from || filter.to)
   const base = `/tenants/${tenantId}`
   const columns: Column<BackupArtifact>[] = [
-    { key: 'database', header: tx('Backup'), wrap: true, render: (artifact) => <div className="space-y-0.5">
-      <Link className={`${linkClass} ${rowLinkClass}`} to={`${base}/artifacts/${artifact.id}`}>{artifact.databaseName || tx('Backup detayları')}</Link>
-      <p className="flex flex-wrap items-center gap-x-2 text-sm text-text-muted">
-        {artifact.jobId ? <Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işi')}</Link> : <span>{tx('Backup Job yok')}</span>}
-        {artifact.runId && <><span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-runs/${artifact.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}
-        <span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/restores?artifactId=${encodeURIComponent(artifact.id)}`}>{tx("Bu yedeğin geri yüklemeleri")}</Link>
-      </p>
-    </div> },
-    { key: 'state', card: 'status', header: tx('Durum'), render: (artifact) => <StatusPill status={artifactState(artifact)} /> },
+    { key: 'database', header: tx('Kaynak'), wrap: true, card: 'title', render: (artifact) => {
+      const { type, name, agent } = artifactSource(artifact)
+      const title = name || tx('Backup detayları')
+      const scope = artifactSourceScope(artifact)
+      const meta = [type, scope && tx('Kapsam: {0}', { '0': scope }), agent].filter(Boolean).join(' · ')
+      return <div className="min-w-0 space-y-0.5">
+        <Link className={`${linkClass} ${rowLinkClass} block max-w-full truncate`} title={title} to={`${base}/artifacts/${artifact.id}`}>{title}</Link>
+        {meta && <p className="max-w-full truncate text-sm text-text-muted" title={meta}>{meta}</p>}
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-text-muted">
+          {artifact.jobId ? <Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işi')}</Link> : <span>{tx('Backup Job yok')}</span>}
+          {artifact.runId && <><span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-runs/${artifact.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}
+          <span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/restores?artifactId=${encodeURIComponent(artifact.id)}`}>{tx("Bu yedeğin geri yüklemeleri")}</Link>
+        </p>
+      </div>
+    } },
+    { key: 'state', card: 'status', header: tx('Geri yükleme'), wrap: true, render: (artifact) => <ArtifactAvailability artifact={artifact} /> },
     { key: 'size', header: tx('Boyut'), render: (artifact) => formatBytes(artifact.sizeBytes) },
-    { key: 'encryption', card: 'hidden', header: tx('Şifreleme'), render: (artifact) => artifact.encryption ? <StatusPill level="safe">{tx("Şifreli · v2-bpe")}</StatusPill> : <span className="text-text-muted">{tx("Şifresiz · v1")}</span> },
     { key: 'created', header: tx('Oluşturulma'), render: (artifact) => <div><p>{formatDateTime(artifact.createdAt)}</p><p className="text-sm text-text-muted">{artifact.retentionExpiresAt ? tx("Saklama sonu: {0}", { "0": formatDateTime(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p></div> },
-    { key: 'replicas', header: tx('Replika'), wrap: true, render: (artifact) => <div className="space-y-1"><ReplicationSummary replication={artifact.replication} /><div className="flex flex-wrap gap-1">{artifact.replicas.map((replica, index) => <span key={replica.id} className="flex items-center gap-1"><span className="text-sm text-text-muted">{index + 1}.</span><StatusPill status={replica.status} /></span>)}</div></div> },
+    { key: 'replicas', header: tx('Replika'), wrap: true, render: (artifact) => <ReplicationSummary replication={artifact.replication} /> },
   ]
   return (
     <div className="space-y-6">

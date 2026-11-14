@@ -12,7 +12,7 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useAuth } from '@/features/auth/use-auth'
 import { ROUTES } from '@/lib/routes'
 import { apiRequest, ApiError } from '@/lib/api/client'
-import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
+import { type ErrorDescription, describeError, describePasskeyError } from '@/lib/api/failure-messages'
 import { LanguageSwitcher } from '@/components/layout/language-switcher'
 import { usePageTitle } from '@/hooks/use-page-title'
 
@@ -161,7 +161,7 @@ export function LoginPage() {
       await loginWithPasskey?.(rememberMe, loginIdentifier.trim() || undefined)
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Geçiş anahtarı doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describeError(error))
+      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Geçiş anahtarı doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describePasskeyError(error))
     } finally {
       setLoading(false)
     }
@@ -175,7 +175,7 @@ export function LoginPage() {
       setPassword('')
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('İkinci faktör doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describeError(error))
+      setError(error instanceof ApiError && error.status === 401 ? { what: tx('İkinci faktör doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : factorMode === 'passkey' ? describePasskeyError(error) : describeError(error))
     } finally {
       setLoading(false)
     }

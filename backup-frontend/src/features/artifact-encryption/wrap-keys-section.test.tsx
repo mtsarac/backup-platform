@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderPlatform } from '@/features/platform/test-utils'
@@ -20,9 +21,11 @@ describe('tenant wrap key lifecycle', () => {
     const rows = await screen.findAllByRole('row')
     expect(rows).toHaveLength(4)
     expect(within(rows[2]).getByText('7')).toBeInTheDocument()
-    const details = within(rows[2]).getByText('c'.repeat(32)).closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    expect(within(details).getByRole('button', { name: 'Kopyala: Anahtar kimliği', hidden: true })).toBeInTheDocument()
+    expect(within(rows[2]).queryByText('c'.repeat(32))).toBeNull()
+    await userEvent.click(within(rows[2]).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText('c'.repeat(32))).toBeVisible()
+    expect(dialog.getByRole('button', { name: 'Kopyala: Anahtar kimliği' })).toBeInTheDocument()
   })
 
   it('cannot retire the active key and offers nothing for a retired one', async () => {

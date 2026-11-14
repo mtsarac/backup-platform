@@ -741,6 +741,8 @@ describe('BackupShare frontend', () => {
     })
 
     renderSharesPage()
+    expect(screen.getByText('İndirme girişimleri', { selector: 'h2' })).not.toBeVisible()
+    fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Paylaşımlarım' })).toBeInTheDocument()
@@ -760,6 +762,18 @@ describe('BackupShare frontend', () => {
       expect(screen.queryByRole('button', { name: 'Daha eski girişimleri göster' })).not.toBeInTheDocument()
     })
     expect(request).toHaveBeenCalledWith(expect.stringContaining('download-attempts?cursor=next-page'), expect.anything())
+  })
+
+  it('opens filtered platform audit history from a deep link', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('platform/download-attempts')) return { items: [failedAttempt], nextCursor: null }
+      if (path.includes('audit-retention')) return { retentionDays: 365 }
+      return []
+    })
+    renderPlatformSharesPage('/platform/shares?result=Failed')
+    expect(await screen.findByRole('combobox', { name: 'Sonuç' })).toHaveValue('Failed')
+    expect(await screen.findByText('integrity_mismatch')).toBeVisible()
   })
 
   it('renders download attempt history with filters and configurable 365-day retention in Paylaşılan Yedekler for PlatformAdmin', async () => {
@@ -793,6 +807,9 @@ describe('BackupShare frontend', () => {
     })
 
     renderPlatformSharesPage()
+    expect(screen.getByText('İndirme girişimleri', { selector: 'h2' })).not.toBeVisible()
+    fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
+    fireEvent.click(screen.getByText('Denetim ve paylaşım geçmişi saklama süresi', { selector: 'summary' }))
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()

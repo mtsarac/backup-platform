@@ -246,6 +246,22 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+async function closeTechnical() {
+  await userEvent.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+}
+/** Opens the technical-details dialogs in turn until one holds `text`; leaves it open. */
+async function technicalWith(text: string | RegExp) {
+  const count = screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length
+  for (let i = 0; i < count; i++) {
+    await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[i])
+    const dialog = within(await screen.findByRole('dialog'))
+    if (dialog.queryAllByText(text).length) return dialog
+    await closeTechnical()
+  }
+  throw new Error(`No technical details contain ${String(text)}`)
+}
+
 describe('RestoresPage', () => {
   it('renders restore history list and filters', async () => {
     renderWithClient(<RestoresPage />)
@@ -265,6 +281,8 @@ describe('RestoresPage', () => {
   it('filters by a backup found through the picker by its name', async () => {
     renderWithClient(<RestoresPage />)
     await screen.findByText('RestoredSalesDB')
+    expect(screen.getByLabelText('Yedek dosyası')).not.toBeVisible()
+    await userEvent.click(screen.getByText('Diğer filtreler'))
     await userEvent.type(screen.getByRole('combobox', { name: 'Yedek dosyası' }), 'hr')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(1)
     await userEvent.click(screen.getByRole('option', { name: /HRDB/ }))
@@ -419,11 +437,13 @@ describe('RestoreDetailPage', () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
     await screen.findByRole('link', { name: 'SalesDB' })
-    const sections = screen.getAllByText('Teknik ayrıntılar').map(summary => summary.closest('details'))
-    expect(sections.length).toBeGreaterThan(0)
-    for (const section of sections) expect(section).not.toHaveAttribute('open')
+    expect(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     for (const label of ['Geri yükleme kimliği', 'Yedek dosyası kimliği', 'Yedekleme bilgisayarı kimliği', 'Yedek kopyası kimliği', 'Hedef durumu kodu', 'Hedef sunucu']) {
-      expect(screen.getByRole('button', { name: `Kopyala: ${label}` }), label).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: `Kopyala: ${label}` }), label).not.toBeInTheDocument()
+      const dialog = await technicalWith(label)
+      expect(dialog.getByRole('button', { name: `Kopyala: ${label}` }), label).toBeInTheDocument()
+      await closeTechnical()
     }
   })
 
@@ -433,7 +453,9 @@ describe('RestoreDetailPage', () => {
     const notice = await screen.findByRole('alert')
     expect(within(notice).getByText('Verileriniz için:')).toBeInTheDocument()
     expect(within(notice).getByText('Ne yapmalı:')).toBeInTheDocument()
-    expect(within(notice).getByText('SqlRestoreFailed').closest('details')).not.toHaveAttribute('open')
+    expect(within(notice).queryByText('SqlRestoreFailed')).not.toBeInTheDocument()
+    expect(screen.queryByText('SqlRestoreFailed')).not.toBeInTheDocument()
+    expect((await technicalWith('SqlRestoreFailed')).getByText('SqlRestoreFailed')).toBeInTheDocument()
   })
 
   it('keeps source safety options and attempt progress accessible in their tabs', async () => {
@@ -441,7 +463,9 @@ describe('RestoreDetailPage', () => {
     expect(await screen.findByRole('heading', { name: /Geri yükleme · RestoredSalesDB/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Seçenekler' }))
     expect(screen.getByText("Etkin bağlantıları sonlandır")).toBeInTheDocument()
-    expect(screen.getByText("Geri yükleme için silmeye karşı korunuyor").closest('details')).not.toBeNull()
+    expect(screen.queryByText("Geri yükleme için silmeye karşı korunuyor")).not.toBeInTheDocument()
+    expect((await technicalWith("Geri yükleme için silmeye karşı korunuyor")).getByText("Geri yükleme için silmeye karşı korunuyor")).toBeVisible()
+    await closeTechnical()
     fireEvent.click(screen.getByRole('tab', { name: 'Denemeler' }))
     expect(screen.getByRole('article', { name: '1. deneme' })).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '1. deneme ilerlemesi' })).toHaveAttribute('aria-valuenow', '65.5')
@@ -459,8 +483,11 @@ describe('RestoreDetailPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Doğrulama sonucu' }))
     expect(screen.getByText('Yeterli disk alanı var')).toBeInTheDocument()
     for (const raw of ['restore.disk-space', 'SomeWarning']) expect(visibleLeaves(raw), raw).toEqual([])
-    expect(screen.getByRole('button', { name: 'Kopyala: restore.disk-space' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Kopyala: SomeWarning' })).toBeInTheDocument()
+    for (const raw of ['restore.disk-space', 'SomeWarning']) {
+      expect(screen.queryByText(raw), raw).not.toBeInTheDocument()
+      expect((await technicalWith(raw)).getByRole('button', { name: `Kopyala: ${raw}` })).toBeInTheDocument()
+      await closeTechnical()
+    }
   })
 })
 
@@ -514,7 +541,8 @@ describe('RestoreWizardPage', () => {
     expect(screen.getByText('localhost:1433')).toBeInTheDocument()
     expect(screen.getByText('SalesDB_restored')).toBeInTheDocument()
     expect(screen.queryByText('Yedeklenen veritabanı')).not.toBeInTheDocument()
-    expect(screen.getAllByText('artifact-1')).toHaveLength(1)
+    expect(screen.queryByText('artifact-1')).not.toBeInTheDocument()
+    expect((await technicalWith('artifact-1')).getAllByText('artifact-1')).toHaveLength(1)
   })
 
   it('routes a custom PostgreSQL target with password authentication and rejects identifiers over 63 UTF-8 bytes', async () => {
@@ -695,11 +723,11 @@ describe('RestoreWizardPage', () => {
   it('keeps identifiers out of the way: they are collapsed by default and copyable', async () => {
     renderWithClient(wizardRoutes, wizardUrl)
     await screen.findByRole('combobox', { name: 'Yedekleme bilgisayarı' })
-    const sections = screen.getAllByText('Teknik ayrıntılar').map(summary => summary.closest('details'))
-    expect(sections.length).toBeGreaterThan(0)
-    for (const section of sections) expect(section).not.toHaveAttribute('open')
-    expect(screen.getByText('artifact-1')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length).toBeGreaterThan(0)
+    expect(screen.queryByText('artifact-1')).not.toBeInTheDocument()
+    const dialog = await technicalWith('artifact-1')
+    expect(dialog.getByText('artifact-1')).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).toBeInTheDocument()
   })
 
   it('does not let a check that no longer matches the settings start the restore', async () => {
@@ -1029,13 +1057,14 @@ describe('file archive restore', () => {
   it('keeps identifiers collapsed and copyable on every step', async () => {
     renderWithClient(fileWizard, wizardUrl)
     await screen.findByRole('combobox', { name: 'Yedekleme bilgisayarı' })
-    const collapsed = () => screen.getAllByText('Teknik ayrıntılar').map(summary => summary.closest('details'))
-    expect(collapsed().length).toBeGreaterThan(0)
-    for (const section of collapsed()) expect(section).not.toHaveAttribute('open')
-    expect(screen.getByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).not.toBeInTheDocument()
+    expect((await technicalWith('Yedek dosyası kimliği')).getByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).toBeInTheDocument()
+    await closeTechnical()
     await reachFileConfirmStep()
-    for (const section of collapsed()) expect(section).not.toHaveAttribute('open')
-    expect(screen.getByRole('button', { name: /Kopyala: Yedekleme bilgisayarı kimliği/ })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Kopyala: Yedekleme bilgisayarı kimliği/ })).not.toBeInTheDocument()
+    expect((await technicalWith('Yedekleme bilgisayarı kimliği')).getByRole('button', { name: /Kopyala: Yedekleme bilgisayarı kimliği/ })).toBeInTheDocument()
   })
 
   it('disables original location when its source-agent mapping is unavailable', async () => {
@@ -1070,33 +1099,38 @@ describe('precheck verdict', () => {
 
   it('names every check in plain words and keeps raw check ids in the collapsed technical details, copyable', async () => {
     await showVerdict(withChecks('Succeeded', [check('server.reachable', 'Passed', 'ok'), check('restore.target-sessions', 'Warning', 'sessions_open'), check('some.future-check', 'Passed', 'ok')]))
-    await screen.findByRole('button', { name: /Kopyala: server.reachable/ })
+    await screen.findAllByRole('button', { name: 'Teknik ayrıntılar' })
     expect(visibleRawIds()).toEqual([])
-    expect(screen.queryByText('some.future-check')?.closest('details')).not.toHaveAttribute('open')
-    expect(screen.getByText('restore.target-sessions').closest('details')).not.toHaveAttribute('open')
-    for (const id of ['restore.target-sessions', 'some.future-check']) expect(screen.getByRole('button', { name: `Kopyala: ${id}` })).toBeInTheDocument()
+    expect(screen.queryByText('some.future-check')).not.toBeInTheDocument()
+    expect(screen.queryByText('restore.target-sessions')).not.toBeInTheDocument()
     expect(screen.getAllByRole('row').length).toBeGreaterThanOrEqual(4)
+    const dialog = await technicalWith('restore.target-sessions')
+    for (const id of ['server.reachable', 'restore.target-sessions', 'some.future-check']) expect(dialog.getByRole('button', { name: `Kopyala: ${id}` })).toBeInTheDocument()
   })
 
   it('explains a failed check in plain words without exposing its reason code', async () => {
     await showVerdict(withChecks('Failed', [check('restore.disk-space', 'Failed', 'InsufficientDiskSpace')]))
-    await screen.findByRole('button', { name: /Kopyala: restore.disk-space/ })
+    await screen.findAllByRole('button', { name: 'Teknik ayrıntılar' })
     expect(visibleRawIds()).toEqual([])
-    for (const node of screen.queryAllByText(/InsufficientDiskSpace/)) expect(node.closest('details')).not.toBeNull()
+    expect(screen.queryAllByText(/InsufficientDiskSpace/)).toEqual([])
+    expect((await technicalWith(/InsufficientDiskSpace/)).getAllByText(/InsufficientDiskSpace/).length).toBeGreaterThan(0)
+    await closeTechnical()
     expect(screen.getAllByText('Hedefte yeterli disk alanı yok.').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Devam et/ })).toBeDisabled()
   })
 
   it('shows a repeated check once, however many times the agent reported it', async () => {
     await showVerdict(withChecks('Succeeded', [check('restore.target-sessions', 'Passed', 'ok'), check('server.reachable', 'Passed', 'ok'), check('restore.target-sessions', 'Passed', 'ok')]))
-    await screen.findByRole('button', { name: /Kopyala: server.reachable/ })
-    expect(screen.getAllByRole('button', { name: 'Kopyala: restore.target-sessions' })).toHaveLength(1)
+    await screen.findAllByRole('button', { name: 'Teknik ayrıntılar' })
+    expect((await technicalWith('restore.target-sessions')).getAllByRole('button', { name: 'Kopyala: restore.target-sessions' })).toHaveLength(1)
+    await closeTechnical()
   })
 
   it('keeps the worse status when one check is reported twice with different results', async () => {
     await showVerdict(withChecks('Failed', [check('restore.disk-space', 'Passed', 'ok'), check('restore.disk-space', 'Failed', 'InsufficientDiskSpace')]))
-    await screen.findByRole('button', { name: /Kopyala: restore.disk-space/ })
-    expect(screen.getAllByRole('button', { name: 'Kopyala: restore.disk-space' })).toHaveLength(1)
+    await screen.findAllByRole('button', { name: 'Teknik ayrıntılar' })
+    expect((await technicalWith('restore.disk-space')).getAllByRole('button', { name: 'Kopyala: restore.disk-space' })).toHaveLength(1)
+    await closeTechnical()
     expect(screen.getAllByText('Hedefte yeterli disk alanı yok.').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Devam et/ })).toBeDisabled()
   })

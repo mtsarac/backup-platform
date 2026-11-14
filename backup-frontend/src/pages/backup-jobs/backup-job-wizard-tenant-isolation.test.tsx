@@ -19,6 +19,7 @@ vi.mock('@/features/backup-jobs/api', () => ({ getBackupJob: vi.fn(), getBackupJ
 
 /** Fills the required fields of the first step and lands on the Depolama step. */
 async function reachStorage(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: 'Elle yapılandır' }))
   fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: name } })
   await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
   fireEvent.change(screen.getByLabelText("Yedekleme bilgisayarı"), { target: { value: 'agent-a' } })

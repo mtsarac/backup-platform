@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as platformApi from '@/features/platform/api'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
@@ -23,7 +23,7 @@ function mount(path = '/platform/storage-connections') {
   return renderPlatform(<PlatformStorageConnectionsPage />, { path, route: '/platform/storage-connections' })
 }
 const rowOf = (name: string) => within(screen.getByText(name).closest('tr') as HTMLElement)
-const rowButtons = (name: string) => rowOf(name).queryAllByRole('button').map((button) => button.textContent).filter((label) => label !== 'Kopyala')
+const rowButtons = (name: string) => rowOf(name).queryAllByRole('button').map((button) => button.textContent).filter((label) => label !== 'Kopyala' && label !== 'Teknik ayrıntılar')
 const location = () => screen.getByTestId('location').textContent
 
 function serve(items: ConnectionView[], overrides: { totalCount?: number } = {}) {
@@ -49,10 +49,11 @@ describe('platform storage targets list', () => {
     expect(row.getByText('Etkin')).toBeInTheDocument()
     expect(row.getByText('Başarılı')).toBeInTheDocument()
     expect(row.getByText('123 MB')).toBeVisible()
-    for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(row.getByText(technical)).not.toBeVisible()
-    fireEvent.click(row.getByText('Teknik ayrıntılar'))
-    for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(row.getByText(technical)).toBeVisible()
-    expect(row.getByRole('button', { name: 'Kopyala: Bağlantı kimliği' })).toBeInTheDocument()
+    for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(row.queryByText(technical)).not.toBeInTheDocument()
+    await userEvent.click(row.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const technicalDialog = within(await screen.findByRole('dialog'))
+    for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(technicalDialog.getByText(technical)).toBeVisible()
+    expect(technicalDialog.getByRole('button', { name: 'Kopyala: Bağlantı kimliği' })).toBeInTheDocument()
   })
 
   it('becomes cards on a phone with the action buttons and no sideways table', async () => {
@@ -64,7 +65,8 @@ describe('platform storage targets list', () => {
     expect(card.getByText('Etkin')).toBeInTheDocument()
     expect(card.getByText('Başarılı')).toBeInTheDocument()
     expect(card.getByRole('button', { name: 'Managed Storage bağlantısı: test et' })).toBeInTheDocument()
-    expect(card.getByText('conn-central')).not.toBeVisible()
+    expect(card.queryByText('conn-central')).not.toBeInTheDocument()
+    expect(card.getByRole('button', { name: 'Teknik ayrıntılar' })).toBeInTheDocument()
   })
 
   it('explains the platform lock in one always-visible sentence instead of a collapsed section', async () => {

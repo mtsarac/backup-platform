@@ -2,6 +2,7 @@ import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { Select, TextInput } from '@/components/ui/text-input'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Menu } from '@base-ui/react/menu'
 import { Plus, DatabaseBackup } from 'lucide-react'
 import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
@@ -39,7 +40,6 @@ export function BackupJobsPage() {
   const base = `/tenants/${tenantId}`
   const all = jobs.data ?? []
   const newJob = <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx("Yeni iş")}</Link>
-  const describedBy = (id: string) => ({ 'aria-describedby': id })
   const columns: Column<BackupJob>[] = [
     { key: 'name', card: 'title', header: tx('İş adı'), wrap: true, render: job => <Link to={`${base}/backup-jobs/${job.id}/edit`} className={`block font-medium ${linkClass}`}>{job.name}</Link> },
     { key: 'status', card: 'status', header: tx('Durum'), render: job => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
@@ -50,8 +50,35 @@ export function BackupJobsPage() {
       <Link to={`${base}/backup-runs?jobId=${encodeURIComponent(job.id)}`} className={`block text-sm ${linkClass}`}>{tx("Tüm denemeler")}</Link>
     </div> : <span className="text-text-muted">{tx("Henüz çalıştırılmadı")}</span> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: job => canOperate ? <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="outline" {...describedBy(runHint)} disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx("Şimdi çalıştır")}</Button>
-      <Button size="sm" variant="outline" {...describedBy(job.enabled ? disableHint : enableHint)} disabled={toggle.isPending} onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}>{job.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
+      <Button size="sm" aria-describedby={runHint} disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx("Şimdi çalıştır")}</Button>
+      <Menu.Root>
+        <Menu.Trigger
+          aria-label={tx("Diğer işlemler: {0}", { "0": job.name })}
+          className="flex size-8 items-center justify-center rounded-md border border-border bg-surface text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pointer-coarse:size-11"
+        >
+          <span className="text-xs" aria-hidden="true">▾</span>
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
+            <Menu.Popup className="min-w-36 rounded-md border border-border bg-surface p-1 shadow-overlay focus-visible:outline-none">
+              <Menu.Item
+                render={<Link to={`${base}/backup-jobs/${job.id}/edit`} />}
+                className="block w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+              >
+                {tx("Düzenle")}
+              </Menu.Item>
+              <Menu.Item
+                disabled={toggle.isPending}
+                onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}
+                aria-describedby={job.enabled ? disableHint : enableHint}
+                className="block w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none disabled:opacity-50"
+              >
+                {job.enabled ? tx("Devre dışı bırak") : tx("Etkinleştir")}
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     </div> : <span className="text-text-muted">{tx("Yöneticinize danışın")}</span> },
   ]
   const overlap = actionError instanceof ApiError && actionError.status === 409 && actionError.activeRunId
@@ -66,14 +93,12 @@ export function BackupJobsPage() {
     {startedRun && <Notice tone="success" title={tx("Yedekleme denemesi başlatıldı")}>{tx("Yedekleme denemesi kuyruğa alındı.")}{' '}<Link className={linkClass} to={`${base}/backup-runs/${startedRun}`}>{tx("Denemeyi aç")}</Link></Notice>}
     <QueryState isPending={jobs.isPending} error={jobs.error}>
       {all.length === 0 ? <Card padding="none"><EmptyState icon={DatabaseBackup} message={tx("Henüz yedekleme işi oluşturulmadı.")} canAct={canOperate} action={<Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx("İlk yedeğinizi oluşturun")}</Link>} /></Card> : <div className="space-y-4">
-        {canOperate && <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1 text-sm text-text-muted">
-            <p id={runHint}>{tx("Şimdi çalıştır: yedekleme hemen başlar; zamanlanmış çalışmalar etkilenmez.")}</p>
-            <p id={disableHint}>{tx("Devre dışı bırak: zamanlanmış yedekleme durur, mevcut yedekler silinmez.")}</p>
-            <p id={enableHint}>{tx("Etkinleştir: zamanlanmış yedekleme yeniden başlar.")}</p>
-          </div>
-          {newJob}
-        </div>}
+        {canOperate && <div className="flex justify-end">{newJob}</div>}
+        <div className="sr-only">
+          <p id={runHint}>{tx("Şimdi çalıştır: yedekleme hemen başlar; zamanlanmış çalışmalar etkilenmez.")}</p>
+          <p id={disableHint}>{tx("Devre dışı bırak: zamanlanmış yedekleme durur, mevcut yedekler silinmez.")}</p>
+          <p id={enableHint}>{tx("Etkinleştir: zamanlanmış yedekleme yeniden başlar.")}</p>
+        </div>
         <Filters label={tx("Yedekleme işi filtreleri")} onClear={filtering ? () => update({ search: '', state: '' }) : undefined}>
           <FilterField label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")}><TextInput type="search" value={search} aria-label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")} onChange={event => update({ search: event.target.value }, { replace: true })} /></FilterField>
           <FilterField label={tx("Durum")}><Select value={state ?? 'all'} aria-label={tx("Durum")} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="enabled">{tx("Etkin")}</option><option value="disabled">{tx("Devre dışı")}</option></Select></FilterField>

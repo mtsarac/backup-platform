@@ -1,25 +1,20 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, Menu } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { A11yToolbar } from './a11y-toolbar'
 import { LanguageSwitcher } from './language-switcher'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ErrorNotice } from '@/components/ui/notice'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
 import { Select } from '@/components/ui/text-input'
 import { InAppNotifications } from '@/features/notifications/in-app'
 
 /** Shared by the tenant and platform shells: context on the left, account and display controls on the right. */
 export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () => void; context: ReactNode; badges?: ReactNode }) {
-  const { logout, user } = useAuth()
+  const { user } = useAuth()
   useLanguage()
-  const [error, setError] = useState<ErrorDescription | null>(null)
-  const [busy, setBusy] = useState(false)
-  async function signOut() { setBusy(true); setError(null); try { await logout() } catch (error) { setError(describeError(error)) } finally { setBusy(false) } }
   return <>
     <header className="sticky top-0 z-10 flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-canvas px-4 py-2 sm:px-6">
       <div className="flex min-w-0 items-center gap-3 max-sm:w-full">
@@ -31,14 +26,8 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
         <A11yToolbar />
         {user && <InAppNotifications key={user.userId} userId={user.userId} />}
         <LanguageSwitcher />
-        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/sessions">{tx('Oturumlarım')}</Link>
-        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/security">{tx('Güvenlik')}</Link>
-        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/passkeys">{tx('Geçiş anahtarları')}</Link>
-        <span className="hidden max-w-40 truncate text-sm text-text-muted xl:inline" title={user?.displayName}>{user?.displayName}</span>
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => { void signOut() }}><LogOut aria-hidden="true" className="size-4" />{tx("Çıkış")}</Button>
       </div>
     </header>
-    {error && <div className="px-4 pt-3 sm:px-6"><ErrorNotice {...error} /></div>}
   </>
 }
 

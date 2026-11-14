@@ -41,10 +41,7 @@ const stepQuestions: Record<StepKey, () => string> = {
   credentials: () => tx("Depolamaya nasıl giriş yapılsın?"),
   review: () => tx("Bağlantı oluşturulsun mu?"),
 }
-const stepReasons: Record<StepKey, () => string> = {
-  provider: () => tx("Neden soruluyor? Yedek dosyalarınızı saklayacak hizmeti seçmeniz gerekir."),
-  connection: () => tx("Neden soruluyor? Bu ad, depolamayı listelerde ve yedekleme ayarlarında tanımanızı sağlar."),
-  settings: () => tx("Neden soruluyor? Yedeklerin yazılacağı sunucu ve klasöre ulaşmak için bu ayarlar gerekir."),
+const stepReasons: Partial<Record<StepKey, () => string>> = {
   credentials: () => tx("Neden soruluyor? Yedekleri saklamak için depolamaya giriş izni gerekir. Girdiğiniz gizli bilgiler kayıttan sonra gösterilmez."),
   review: () => tx("Neden soruluyor? Kaydetmeden önce seçimlerinizi kontrol edin. Önce bağlantı oluşturulur, ardından ayrı bir işlemle test edilir; mevcut yedekleriniz değişmez."),
 }
@@ -184,10 +181,10 @@ function ConnectionWizardForm() {
 
   const stepNames = steps.map((key) => stepLabels[key])
   return <>
-    <PageHeader title={tx("Bağlantı ekle")} description={tx("Yedekleriniz için yeni bir depolama ekleyin. Adım adım ayarlayın, kontrol edin ve test edin.")} crumbs={crumbs} />
+    <PageHeader title={tx("Bağlantı ekle")} crumbs={crumbs} />
     <Stepper steps={stepNames} current={stepIndex} />
     <form onSubmit={step === 'review' ? submit : next} noValidate>
-      <Section title={stepQuestions[step]()} description={stepReasons[step]()}>
+      <Section title={stepQuestions[step]()} description={stepReasons[step]?.()}>
         <div className="max-w-2xl space-y-5">
           <QueryState isPending={providers.isPending || connections.isPending} error={providers.error ?? connections.error}>
             {step === 'provider' && <ProviderStep providers={creatable} connections={connections.data?.items ?? []} value={chosen} onChange={choose} />}
