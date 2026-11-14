@@ -53,7 +53,9 @@ coverage/
 .omo/
 .superpowers/
 .serena/
-docs/
+docs/*
+!docs/agents/
+!docs/adr/
 
 # AI agent tooling, instructions, and local agent files
 .scratch/

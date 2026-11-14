@@ -108,3 +108,27 @@ _Avoid_: StorageType, StorageKind, ProviderName
 
 **AgentExecuted**:
 A StorageProvider whose physical removal and repair only an agent performs because the backend holds no credential for it: `sftp` and `google-drive`. `s3` and `smb` are external but still handled by the backend today.
+
+### Backup Lifecycle & Verification
+
+**FileBackup**:
+A copy-only directory archive verified against a SHA-256 manifest and restored into the source root. The API rejects non-copy-only or unchecksummed file backup configurations.
+_Avoid_: FolderSync, DirectoryBackup, FileMirror
+
+**DatabaseBackup**:
+A full database backup artifact for MSSQL or PostgreSQL (`pg_dump` custom format), checksummed and read back before verification completes.
+_Avoid_: DBSnapshot, SQLDump, DBExport
+
+**RestoreVerification**:
+An automated post-backup verification process that restores an artifact into a disposable temporary database, executes an integrity check, and cleans up.
+_Avoid_: TestRestore, DryRunRestore, SyntheticCheck
+
+### Fleet & Enrollment
+
+**AgentLease**:
+A time-bounded lease renewed periodically by an agent during an active backup run to guard against stalls, detect crashes, and enforce concurrency limits.
+_Avoid_: JobLock, AgentHeartbeatLock, ExecutionToken
+
+**EnrollmentToken**:
+A single-use, time-limited token created in the UI to authenticate and register a new agent instance with the platform.
+_Avoid_: RegistrationKey, AgentSecret, InviteCode

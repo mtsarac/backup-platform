@@ -1,7 +1,13 @@
-# Backend
+# Backend (.NET 10 Solution)
 
-The .NET 10 solution behind Backup Platform: the multi-tenant API, the agent that runs on database hosts, and the modules and providers they share. Open `BackupPlatform.sln`.
+[![CI](https://github.com/mtsarac/backup-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mtsarac/backup-platform/actions/workflows/ci.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
+![PostgreSQL 18](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql)
+![Quartz.NET](https://img.shields.io/badge/Quartz.NET-Scheduling-orange)
 
+The backend solution behind Backup Platform: the multi-tenant ASP.NET Core API, background scheduler/workers, outward-polling database/filesystem agents, and modular domain/infrastructure providers. Open `BackupPlatform.sln`.
+
+> 🔗 **Subsystem Hub**: [Root README](../README.md) · [Frontend Guide](../backup-frontend/README.md) · [Scripts & Tooling](../scripts/README.md) · [Domain Glossary](../GLOSSARY.md) · [Architecture Decisions](../docs/adr/)
 ## Layout
 
 ```text

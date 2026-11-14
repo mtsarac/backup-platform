@@ -1,9 +1,8 @@
 # Local Development and Test Scripts
 
-Repository root: `/home/msarac/Projects/internship/internship-2/Projects/backup-app`.
+> 🔗 **Subsystem Hub**: [Root README](../README.md) · [Backend Guide](../backup-backend/README.md) · [Frontend Guide](../backup-frontend/README.md) · [Domain Glossary](../GLOSSARY.md) · [Architecture Decisions](../docs/adr/)
 
-Reusable local/test automation lives under `scripts/`. This is the canonical
-location. Do not keep permanent reusable helpers under `/tmp`.
+Reusable local and test automation lives under `scripts/`. This is the canonical location for development stacks, E2E scenarios, and agent distribution tools.
 
 ## Linux agent packages and platform providers
 
