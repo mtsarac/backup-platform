@@ -1,7 +1,15 @@
-# Frontend
+# Frontend (React 19 & Tailwind CSS 4)
 
-The web UI for Backup Platform. React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query, and Base UI components. It talks to the backend through same-origin `/api` requests.
+[![CI](https://github.com/mtsarac/backup-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mtsarac/backup-platform/actions/workflows/ci.yml)
+![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![TypeScript 5.8](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)
+![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss)
+![Bun](https://img.shields.io/badge/Bun-1.4+-fbf0df?logo=bun)
+![TanStack Query](https://img.shields.io/badge/TanStack_Query-v5-FF4154?logo=reactquery)
 
+The web UI for Backup Platform: modern, accessible, multi-tenant SPA with strict design token enforcement, Passkeys/WebAuthn, real-time in-app notifications, and dual-language (TR/EN) support. Communicates via same-origin `/api` and `/hubs` requests.
+
+> 🔗 **Subsystem Hub**: [Root README](../README.md) · [Backend Guide](../backup-backend/README.md) · [Scripts & Tooling](../scripts/README.md) · [Domain Glossary](../GLOSSARY.md) · [Architecture Decisions](../docs/adr/)
 ## Layout
 
 ```text
