@@ -7,3 +7,9 @@ Issue #176 için üç yön, tek dosyalık HTML. `file://` ile açılır, bağım
 - `variant-c.html` Rehberli görev (tek sütun, ekran başına bir soru)
 
 Her dosyada: `#home`, `#job-new`, açık/koyu anahtarı, "Yeni kullanıcı (boş)" durumu. Main'e birleştirilmez.
+
+## A'nın çeşitlemeleri (aynı renk/yarıçap/gölge dili, farklı yapı)
+- `variant-a1.html` Rahat A: 16 px, tek cümlelik durum + tek birincil eylem, 4 adımlı boş durum listesi, seçenek kartlı sihirbaz
+- `variant-a2.html` İş satırı akışı: kaynak→hedef→son sonuç satırları, ince durum çubuğu, tek sayfa sihirbaz + yapışkan Özet
+- `variant-a3.html` Dar ray + liste: ikon rayı, ortalanmış sütun, gruplu liste, arama/"Yeni", sihirbaz sağ çekmece
+- `variant-a4.html` Çalışma alanı: sol iş listesi + sağ ayrıntı, üst adım çubuğu + canlı Özet

@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Variant A3 · Dar ray + liste</title>
+<!--
+VARIANT A3 — "Dar ray + liste" (A'nın alt yönü; Linear / GitHub Issues ilhamlı)
+
+Gerekçe
+- Daraltılmış ikon rayı (etiketler üzerine gelince/odaklanınca ipucu olarak çıkar, düğmeyle genişler) içeriği ~960px'lik ortalanmış tek sütuna bırakır; ekran boyunca okuma satırı kısa ve sakin kalır.
+- Ana sayfa bir kart panosu değil, sorun takipçisi gibi gruplanmış liste: "Dikkat gerekiyor" üstte, "Sağlıklı" altta; her satırda eylemler satır içinde. Üstte arama/komut çubuğu ("/" ile odaklanır) ve genel "Yeni" menüsü.
+- Sihirbaz sayfa değiştirmez: listenin üstünde sağdan açılan bir çekmecede (üstte adım çubuğu, altta sabit eylemler) çalışır; liste arkada görünür kalır, bağlam kaybolmaz.
+
+Ödünleşim
+- Etiketsiz ray ilk kez gelen kullanıcı için ilk bakışta daha az açıklayıcıdır (ipucu ve genişlet düğmesi bunu hafifletir); çekmece dar olduğundan uzun formlar kaydırma ister, ve çekmece açıkken arka plan etkileşimsizdir.
+
+Kullanılacak web fontları (burada yalnızca sistem yığını var): Inter (arayüz, tabular-nums açık) — Geist Sans da olur.
+
+Tasarım belirteçleri aşağıda :root (açık) ve :root.dark (koyu) altında; Tailwind 4 @theme'e doğrudan taşınabilir.
+Tema geçişi <html class="dark"> ile yapılır; hiçbir şey saklanmaz.
+Yönlendirme: #home, #jobs (Yedeklemeler › İşler), #job-new (çekmece; arkadaki liste önceki ekranda kalır).
+-->
+<style>
+:root{
+  /* renk — açık */
+  --bg:#fafafa; --side-bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --raised:#ffffff;
+  --border:#e4e4e7; --border-input:#8e8e98;
+  --fg:#18181b; --muted:#52525b;
+  --accent:#0f5e63; --accent-hover:#0b4a4e; --accent-fg:#ffffff; --accent-subtle:#e6f1f1;
+  --focus:#0f5e63;
+  --ok-fg:#166534; --ok-bg:#dcfce7; --ok-bd:#86d9a2;
+  --warn-fg:#854d0e; --warn-bg:#fef9c3; --warn-bd:#e5c64f;
+  --err-fg:#b91c1c; --err-bg:#fee2e2; --err-bd:#f1a1a1;
+  --neutral-fg:#3f3f46; --neutral-bg:#e4e4e7;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .14);
+  --scrim:rgb(0 0 0 / .35);
+  /* radius */
+  --radius:.375rem; --radius-sm:.25rem; --radius-full:9999px;
+  /* boşluk (4px ızgara) */
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.5rem; --space-6:2rem;
+  /* tipografi */
+  --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --text-xs:.75rem; --text-sm:.8125rem; --text-base:.875rem; --text-lg:1rem; --text-xl:1.25rem;
+  --leading:1.5; --control-h:2rem;
+  /* yerleşim */
+  --proto-h:2.5rem; --rail-w:3.5rem; --col:63rem;
+}
+:root.dark{
+  /* koyu: yükseltilmiş yüzeyler tabandan açık */
+  --bg:#09090b; --side-bg:#0f0f12; --surface:#18181b; --surface-2:#232328; --raised:#27272c;
+  --border:#2e2e34; --border-input:#71717a;
+  --fg:#fafafa; --muted:#a1a1aa;
+  --accent:#8cc5c8; --accent-hover:#a6d3d5; --accent-fg:#052a2c; --accent-subtle:#14302f;
+  --focus:#8cc5c8;
+  --ok-fg:#86efac; --ok-bg:#12301d; --ok-bd:#235f37;
+  --warn-fg:#fcd34d; --warn-bg:#33270a; --warn-bd:#6b5314;
+  --err-fg:#fca5a5; --err-bg:#3d1414; --err-bd:#7a2b2b;
+  --neutral-fg:#d4d4d8; --neutral-bg:#2e2e34;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .6);
+  --scrim:rgb(0 0 0 / .55);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light}
+html.dark{color-scheme:dark}
+html.lock{overflow:hidden}
+body{margin:0;font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--leading);background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,ol,dl,dd{margin:0}
+ul,ol{padding:0;list-style:none}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--radius-sm)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic-lg{width:1.25rem;height:1.25rem}
+.muted{color:var(--muted)}
+
+/* ---------- prototip şeridi ---------- */
+.proto{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:var(--space-3);height:var(--proto-h);padding:0 var(--space-4);background:var(--surface-2);border-bottom:1px solid var(--border);overflow:hidden}
+.proto .grow{flex:1}
+.proto-label{font-size:var(--text-xs);color:var(--muted);white-space:nowrap}
+.seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface)}
+.seg a{display:inline-flex;align-items:center;min-height:1.5rem;padding:0 var(--space-3);border-radius:var(--radius-sm);color:var(--muted);text-decoration:none;font-weight:500;font-size:var(--text-sm);white-space:nowrap}
+.seg a:hover{color:var(--fg)}
+.seg a[aria-current]{background:var(--accent);color:var(--accent-fg)}
+
+/* ---------- kabuk: dar ray ---------- */
+.shell{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);min-height:calc(100vh - var(--proto-h))}
+.shell.rail-open{--rail-w:13rem}
+.rail{position:sticky;top:var(--proto-h);z-index:20;height:calc(100vh - var(--proto-h));display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-2);background:var(--side-bg);border-right:1px solid var(--border)}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:var(--space-2)}
+.ri{position:relative;display:flex;align-items:center;gap:var(--space-3);min-height:2.5rem;padding:0 .625rem;border:0;border-radius:var(--radius);background:none;color:var(--muted);font:inherit;font-weight:500;text-decoration:none;cursor:pointer;width:100%;text-align:left}
+.ri:hover{background:var(--surface-2);color:var(--fg)}
+.ri[aria-current]{background:var(--surface-2);color:var(--fg)}
+.ri[aria-current] .ic{color:var(--accent)}
+.brand{color:var(--fg);font-weight:600}
+.brand:hover{background:none}
+.brand-mark{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-fg);flex:none}
+.brand-mark .ic{width:.875rem;height:.875rem}
+.rail-toggle{margin-top:auto}
+/* etiket: daralmışken ipucu (kaldırılmaz, erişilebilir ad olarak kalır), genişken satır içi */
+.rail .lbl{position:absolute;left:calc(100% + .5rem);top:50%;transform:translateY(-50%);padding:.25rem .5rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--raised);box-shadow:var(--shadow-overlay);color:var(--fg);font-size:var(--text-sm);font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;z-index:40}
+.rail .ri:hover .lbl,.rail .ri:focus-visible .lbl{opacity:1}
+.shell.rail-open .rail .lbl{position:static;transform:none;padding:0;border:0;background:none;box-shadow:none;color:inherit;font-size:inherit;opacity:1}
+.shell.rail-open .rail .brand .lbl{color:var(--fg)}
+
+/* ---------- üst çubuk + sütun ---------- */
+.main{min-width:0}
+.topbar{position:sticky;top:var(--proto-h);z-index:15;background:var(--bg);border-bottom:1px solid var(--border)}
+.wrap{max-width:var(--col);margin:0 auto;padding:0 var(--space-5)}
+.topbar .wrap{display:flex;align-items:center;gap:var(--space-2);min-height:3.25rem}
+.topbar .grow{flex:1}
+.search{position:relative;flex:1;max-width:30rem;min-width:0}
+.search .ic{position:absolute;left:.625rem;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.search input{width:100%;min-height:var(--control-h);padding:0 2.25rem 0 2.125rem;border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit}
+.search input::placeholder{color:var(--muted);opacity:1}
+.search input:focus-visible{outline-offset:0}
+.kbd{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);min-width:1.25rem;padding:0 .3rem;border:1px solid var(--border-input);border-radius:var(--radius-sm);font-size:var(--text-xs);line-height:1.25rem;text-align:center;color:var(--muted);pointer-events:none}
+.page{padding-top:var(--space-5);padding-bottom:3rem}
+
+/* ---------- bileşenler ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s}
+.btn:hover{background:var(--surface-2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn[disabled],.btn[aria-disabled=true]{opacity:.55;cursor:not-allowed}
+.btn-quiet{border-color:transparent;background:none;color:var(--muted)}
+.btn-quiet:hover{color:var(--fg)}
+.btn-sm{min-height:1.75rem;padding:0 var(--space-2);font-size:var(--text-sm)}
+.btn-icon{padding:0 .375rem}
+.link{display:inline-flex;align-items:center;min-height:1.5rem;padding:0;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.link:hover{color:var(--accent-hover)}
+.switch{display:inline-flex;align-items:center;gap:var(--space-2);min-height:1.75rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-size:var(--text-sm);font-weight:500;cursor:pointer;white-space:nowrap}
+.switch:hover{background:var(--surface-2)}
+.switch .box{display:grid;place-items:center;width:1rem;height:1rem;border:1px solid var(--border-input);border-radius:var(--radius-sm);color:transparent}
+.switch[aria-checked=true] .box,.switch[aria-pressed=true] .box{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.switch .box .ic{width:.75rem;height:.75rem;stroke-width:3}
+.theme-btn .i-sun{display:none}
+.dark .theme-btn .i-sun{display:block}
+.dark .theme-btn .i-moon{display:none}
+.avatar{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-full);background:var(--accent-subtle);color:var(--accent);font-size:var(--text-xs);font-weight:600;flex:none}
+
+.badge{display:inline-flex;align-items:center;gap:.3rem;min-height:1.375rem;padding:0 .5rem;border:1px solid transparent;border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:500;white-space:nowrap}
+.badge .ic{width:.8125rem;height:.8125rem}
+.b-ok{color:var(--ok-fg);background:var(--ok-bg);border-color:var(--ok-bd)}
+.b-warn{color:var(--warn-fg);background:var(--warn-bg);border-color:var(--warn-bd)}
+.b-err{color:var(--err-fg);background:var(--err-bg);border-color:var(--err-bd)}
+.b-neutral{color:var(--neutral-fg);background:var(--neutral-bg)}
+
+/* menüler (yer paylaşımı: gölge serbest) */
+.menu-wrap{position:relative}
+.menu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:16rem;padding:4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);box-shadow:var(--shadow-overlay)}
+.menu [role=menuitem]{display:flex;align-items:center;gap:var(--space-2);width:100%;min-height:2rem;padding:0 var(--space-2);border:0;border-radius:var(--radius-sm);background:none;color:var(--fg);font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.menu [role=menuitem]:hover,.menu [role=menuitem]:focus-visible{background:var(--surface-2)}
+.menu [role=menuitem]:focus-visible{outline-offset:-2px}
+.menu-head{padding:var(--space-2);margin-bottom:4px;border-bottom:1px solid var(--border);font-size:var(--text-sm);line-height:1.3}
+.menu-head b{display:block;font-weight:600}
+
+.ph{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-3);margin:0 0 var(--space-4)}
+.ph h1{font-size:var(--text-xl);line-height:1.3;font-weight:600;letter-spacing:-.01em}
+.ph .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.subtabs{display:flex;flex-wrap:wrap;gap:var(--space-1);margin:calc(var(--space-2) * -1) 0 var(--space-4);border-bottom:1px solid var(--border)}
+.subtabs a{display:inline-flex;align-items:center;min-height:2rem;padding:0 var(--space-3);margin-bottom:-1px;border-bottom:2px solid transparent;color:var(--muted);text-decoration:none;font-weight:500}
+.subtabs a:hover{color:var(--fg)}
+.subtabs a[aria-current]{color:var(--fg);border-bottom-color:var(--accent)}
+
+.status{display:flex;gap:var(--space-3);align-items:center;padding:.5rem var(--space-4);border:1px solid var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg);border-radius:var(--radius)}
+.status.is-neutral{border-color:var(--border);background:var(--surface);color:var(--fg)}
+.status strong{font-weight:600}
+
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:var(--space-3) 0 var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.metrics.one{grid-template-columns:minmax(0,1fr)}
+.metric{padding:.625rem var(--space-4);border-left:1px solid var(--border);min-width:0}
+.metric:first-child{border-left:0}
+.metric .k{display:block;font-size:var(--text-xs);color:var(--muted)}
+.metric .v{display:block;font-size:var(--text-lg);font-weight:600;line-height:1.4}
+.metric .s{display:block;font-size:var(--text-sm);color:var(--muted)}
+.bar{height:.375rem;border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface-2);overflow:hidden;margin:.25rem 0}
+.bar i{display:block;height:100%;background:var(--accent)}
+
+/* ---------- gruplanmış liste ---------- */
+.list{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:hidden}
+.grp+.grp{border-top:1px solid var(--border)}
+.grp-h{font-size:var(--text-sm)}
+.grp-h button{display:flex;align-items:center;gap:var(--space-2);width:100%;min-height:2.25rem;padding:0 var(--space-4);border:0;background:var(--surface-2);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.grp-h button:focus-visible{outline-offset:-2px}
+.grp-h .chev{color:var(--muted);transition:transform .12s}
+.grp-h button[aria-expanded=false] .chev{transform:rotate(-90deg)}
+.grp-h .tone-warn{color:var(--warn-fg)}
+.grp-h .tone-ok{color:var(--ok-fg)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 11.5rem 6.5rem auto;gap:var(--space-2) var(--space-4);align-items:center;padding:.75rem var(--space-4);border-top:1px solid var(--border)}
+.row:hover{background:var(--surface-2)}
+.row-name{display:inline-flex;align-items:center;min-height:1.5rem;padding:0;border:0;background:none;color:var(--fg);font:inherit;font-weight:500;text-align:left;cursor:pointer}
+.row-name:hover{text-decoration:underline;text-underline-offset:2px}
+.meta{color:var(--muted);font-size:var(--text-sm)}
+.meta .ic{width:.75rem;height:.75rem;vertical-align:-1px}
+.why{font-size:var(--text-sm);margin-top:2px}
+.res,.nxt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}
+.row .acts{display:flex;flex-wrap:wrap;gap:var(--space-1);justify-content:flex-end}
+.nores{margin-top:var(--space-3);padding:var(--space-4);border:1px dashed var(--border-input);border-radius:var(--radius);color:var(--muted)}
+
+/* boş durum: başlangıç adımları da aynı liste dili */
+.row.step{grid-template-columns:1.75rem minmax(0,1fr) auto;border-left:2px solid transparent}
+.row.step.is-now{border-left-color:var(--accent);background:var(--accent-subtle)}
+.row.step .n{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;color:var(--muted)}
+.row.step.is-now .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.row.step b{display:block;font-weight:600}
+.row.step.is-later b{color:var(--muted)}
+.row.step p{color:var(--muted)}
+.list-empty{padding:var(--space-4);color:var(--muted)}
+
+/* ---------- çekmece sihirbaz ---------- */
+.scrim{position:fixed;inset:var(--proto-h) 0 0 0;z-index:55;background:var(--scrim)}
+.drawer{position:fixed;top:var(--proto-h);right:0;bottom:0;z-index:60;width:min(36rem,100%);display:flex;flex-direction:column;border-left:1px solid var(--border);background:var(--raised);box-shadow:var(--shadow-overlay);animation:slide .18s ease-out}
+@keyframes slide{from{transform:translateX(1.5rem);opacity:0}}
+.dr-h{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);padding:var(--space-4) var(--space-5) var(--space-3)}
+.dr-h h2{font-size:var(--text-lg);font-weight:600;line-height:1.3}
+.dr-h p{font-size:var(--text-sm);color:var(--muted)}
+.dr-wiz{display:flex;flex-direction:column;flex:1;min-height:0}
+.stepper{display:flex;padding:0 var(--space-5);border-bottom:1px solid var(--border)}
+.stepper li{flex:1;min-width:0}
+.stepper button{display:flex;align-items:center;justify-content:center;gap:var(--space-2);width:100%;min-height:2.5rem;margin-bottom:-1px;padding:0 var(--space-1);border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);font:inherit;font-size:var(--text-sm);font-weight:500;cursor:pointer}
+.stepper button:hover:not(:disabled){color:var(--fg)}
+.stepper button:disabled{cursor:default;opacity:.8}
+.stepper .n{display:grid;place-items:center;width:1.25rem;height:1.25rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;flex:none}
+.stepper .n .ic{width:.7rem;height:.7rem;stroke-width:3}
+.stepper .is-done .n{background:var(--accent-subtle);border-color:var(--accent);color:var(--accent)}
+.stepper [aria-current]{color:var(--fg);border-bottom-color:var(--accent)}
+.stepper [aria-current] .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.dr-form{display:flex;flex-direction:column;flex:1;min-height:0}
+.dr-b{flex:1;min-height:0;overflow:auto;padding:var(--space-5)}
+.dr-f{display:flex;justify-content:space-between;gap:var(--space-3);padding:var(--space-3) var(--space-5);border-top:1px solid var(--border);background:var(--surface-2)}
+#nextBtn{margin-left:auto}
+.step-h{font-size:var(--text-lg);font-weight:600;letter-spacing:-.005em;margin-bottom:2px}
+.step-h:focus-visible{outline-offset:4px}
+.lead{color:var(--muted);margin-bottom:var(--space-5)}
+.field{display:flex;flex-direction:column;gap:var(--space-1);margin-bottom:var(--space-5);border:0;padding:0;min-width:0}
+.field>label,.field>legend{font-weight:500;padding:0;margin-bottom:2px}
+.hint{font-size:var(--text-sm);color:var(--muted)}
+.err{font-size:var(--text-sm);color:var(--err-fg);font-weight:500;display:flex;align-items:center;gap:.3rem}
+.err:empty{display:none}
+.input,.select{width:100%;min-height:2.25rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit}
+.select{appearance:auto}
+.input::placeholder{color:var(--muted);opacity:1}
+.input[aria-invalid=true],.select[aria-invalid=true]{border-color:var(--err-fg);box-shadow:inset 0 0 0 1px var(--err-fg)}
+.input:focus-visible,.select:focus-visible{outline-offset:0}
+.opts{display:flex;flex-direction:column;gap:var(--space-2)}
+.opt{display:flex;align-items:flex-start;gap:var(--space-3);min-height:2.5rem;padding:.625rem var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);cursor:pointer}
+.opt:hover{background:var(--surface-2)}
+.opt input{margin:.2rem 0 0;width:1rem;height:1rem;accent-color:var(--accent);flex:none}
+.opt .t{display:block;font-weight:500}
+.opt .s{display:block;font-size:var(--text-sm);color:var(--muted)}
+.opt:has(input:checked){border-color:var(--accent);background:var(--accent-subtle);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.chip{position:relative;display:inline-flex;align-items:center;gap:.375rem;min-height:2.25rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-weight:500}
+.chip:hover{background:var(--surface-2)}
+.chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.chip .tick{display:none;color:var(--accent);stroke-width:3}
+.chip:has(input:checked){border-color:var(--accent);background:var(--accent-subtle);box-shadow:inset 0 0 0 1px var(--accent)}
+.chip:has(input:checked) .tick{display:block}
+.chip:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+.note{display:flex;gap:var(--space-2);align-items:flex-start;margin-top:var(--space-2);padding:var(--space-2) var(--space-3);border:1px solid var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg);border-radius:var(--radius);font-size:var(--text-sm)}
+.note .ic{margin-top:2px}
+.review{display:grid;grid-template-columns:10rem minmax(0,1fr);border:1px solid var(--border);border-radius:var(--radius)}
+.review dt,.review dd{padding:.625rem var(--space-3);border-top:1px solid var(--border)}
+.review dt{color:var(--muted)}
+.review dd{font-weight:500;background:var(--surface)}
+.review dt:first-of-type,.review dt:first-of-type+dd{border-top:0}
+.review dt{background:var(--surface)}
+.review ul{display:flex;flex-direction:column;gap:2px}
+.done .ok-ic{display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:var(--radius-full);background:var(--ok-bg);color:var(--ok-fg);border:1px solid var(--ok-bd);margin-bottom:var(--space-3)}
+.done .ok-ic .ic{width:1.25rem;height:1.25rem}
+
+.toast{position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:70;max-width:min(22rem,calc(100vw - 2rem));padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--fg);box-shadow:var(--shadow-overlay);opacity:0;pointer-events:none;transition:opacity .15s}
+.toast.show{opacity:1}
+.toast:empty{display:none}
+
+/* ---------- duyarlı ---------- */
+@media (max-width:60rem){
+  .row{grid-template-columns:minmax(0,1fr) 10rem auto}
+  .row .nxt{display:none}
+}
+@media (max-width:52.5rem){
+  :root{--proto-h:0rem}
+  .proto{position:static;height:auto;flex-wrap:wrap;padding:var(--space-2) var(--space-4);overflow:visible}
+  .proto-label{display:none}
+  .shell{grid-template-columns:minmax(0,1fr);padding-bottom:3.75rem}
+  /* ray alt gezinme çubuğuna dönüşür */
+  .rail,.shell.rail-open .rail{position:fixed;top:auto;left:0;right:0;bottom:0;height:auto;flex-direction:row;gap:0;padding:0 var(--space-1);border-right:0;border-top:1px solid var(--border)}
+  .rail>.brand,.rail>.rail-toggle{display:none}
+  .nav{flex:1;flex-direction:row;margin:0;gap:0}
+  .ri{flex:1;flex-direction:column;justify-content:center;gap:2px;min-height:3.5rem;padding:0 2px;text-align:center;font-size:var(--text-xs)}
+  .rail .lbl,.shell.rail-open .rail .lbl{position:static;transform:none;padding:0;border:0;background:none;box-shadow:none;color:inherit;font-size:var(--text-xs);opacity:1}
+  .topbar .wrap{gap:var(--space-2)}
+  .kbd{display:none}
+  .search input{padding-right:.75rem}
+  .wrap{padding:0 var(--space-4)}
+  .page{padding-top:var(--space-4)}
+  .btn,.switch,.chip{min-height:2.5rem}
+  .btn-sm{min-height:2.25rem}
+  .seg a{min-height:2rem}
+  .menu [role=menuitem]{min-height:2.5rem}
+  .toast{bottom:4.75rem}
+  .dr-h,.dr-b{padding-left:var(--space-4);padding-right:var(--space-4)}
+  .dr-f{padding:var(--space-3) var(--space-4)}
+  .dr-f .btn{flex:1}
+  .stepper{padding:0 var(--space-2)}
+  .review{grid-template-columns:minmax(0,1fr)}
+  .review dt{padding-bottom:0;border-top:1px solid var(--border);font-size:var(--text-sm)}
+  .review dd{border-top:0;padding-top:2px}
+  .review dt:first-of-type{border-top:0}
+}
+@media (max-width:40rem){
+  .metrics{grid-template-columns:minmax(0,1fr)}
+  .metric{border-left:0;border-top:1px solid var(--border)}
+  .metric:first-child{border-top:0}
+  .row,.row.step{grid-template-columns:minmax(0,1fr)}
+  .row.step{grid-template-columns:1.75rem minmax(0,1fr)}
+  .row.step .btn{grid-column:2;justify-self:start}
+  .row .nxt{display:flex}
+  .res,.nxt{flex-direction:row;align-items:center;flex-wrap:wrap;gap:var(--space-2)}
+  .row .acts{justify-content:flex-start}
+  .ph .acts{width:100%}
+  .ph .acts .btn{flex:1}
+  .stepper .st-lbl{display:none}
+  .stepper [aria-current] .st-lbl{display:inline}
+  .stepper [aria-current]{flex:2}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
+
+/* ekran kipleri */
+#home.as-jobs .only-home{display:none!important}
+#home:not(.as-jobs) .only-jobs{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- ikon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-hdd" viewBox="0 0 24 24"><path d="M3 14h18v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M5 14 7.5 5h9L19 14"/><path d="M7 17h.01M11 17h.01"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h.01"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<!-- prototip şeridi: çekmece açıkken de çalışır -->
+<div class="proto">
+  <span class="proto-label" id="protoLbl">Prototip ekranı</span>
+  <nav class="seg" aria-labelledby="protoLbl">
+    <a href="#home" data-route="home">Ana sayfa</a>
+    <a href="#job-new" data-route="job-new">Yedekleme işi oluştur</a>
+  </nav>
+  <span class="grow"></span>
+  <button class="switch" id="emptyBtn" type="button" role="switch" aria-checked="false"><span class="box"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Yeni kullanıcı (boş)</button>
+  <button class="switch theme-btn" id="themeBtn" type="button" aria-pressed="false">
+    <svg class="ic i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="ic i-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+    Koyu tema
+  </button>
+</div>
+
+<div class="shell" id="shell">
+  <!-- ======== dar ray ======== -->
+  <aside class="rail" id="rail">
+    <a class="ri brand" href="#home"><span class="brand-mark"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span><span class="lbl">Yedekleme Platformu</span></a>
+    <nav class="nav" aria-label="Ana gezinme">
+      <a class="ri" href="#home" data-base="home"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-home"/></svg><span class="lbl">Ana sayfa</span></a>
+      <a class="ri" href="#jobs" data-base="jobs"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-db"/></svg><span class="lbl">Yedeklemeler</span></a>
+      <a class="ri" href="#" data-stub><svg class="ic ic-lg" aria-hidden="true"><use href="#i-monitor"/></svg><span class="lbl">Bilgisayarlar</span></a>
+      <a class="ri" href="#" data-stub><svg class="ic ic-lg" aria-hidden="true"><use href="#i-hdd"/></svg><span class="lbl">Depolama</span></a>
+      <a class="ri" href="#" data-stub><svg class="ic ic-lg" aria-hidden="true"><use href="#i-sliders"/></svg><span class="lbl">Ayarlar</span></a>
+    </nav>
+    <button class="ri rail-toggle" id="railToggle" type="button" aria-expanded="false"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-sidebar"/></svg><span class="lbl" id="railToggleLbl">Menüyü genişlet</span></button>
+  </aside>
+
+  <!-- ======== ana alan ======== -->
+  <div class="main" id="mainWrap">
+    <div class="topbar">
+      <div class="wrap">
+        <form class="search" role="search" id="searchForm">
+          <label class="sr-only" for="q">Yedeklemelerde ara</label>
+          <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="q" type="search" autocomplete="off" placeholder="Yedeklemelerde ara…">
+          <span class="kbd" aria-hidden="true">/</span>
+        </form>
+        <span class="grow"></span>
+        <div class="menu-wrap">
+          <button class="btn btn-primary" id="newBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="newMenu"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Yeni<svg class="ic" aria-hidden="true"><use href="#i-chev"/></svg></button>
+          <div class="menu" id="newMenu" role="menu" aria-label="Yeni oluştur" hidden>
+            <a role="menuitem" href="#job-new"><svg class="ic" aria-hidden="true"><use href="#i-db"/></svg>Yedekleme işi oluştur</a>
+            <button role="menuitem" type="button" data-stub="Bilgisayar ekleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg>Yedekleme bilgisayarı ekle</button>
+            <button role="menuitem" type="button" data-stub="Hedef ekleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-hdd"/></svg>Depolama hedefi ekle</button>
+            <button role="menuitem" type="button" data-stub="Geri yükleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-restore"/></svg>Geri yükleme başlat</button>
+          </div>
+        </div>
+        <div class="menu-wrap">
+          <button class="btn btn-quiet btn-icon" id="acctBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="acctMenu" aria-label="Hesap menüsü, Ayşe Demir"><span class="avatar" aria-hidden="true">AD</span></button>
+          <div class="menu" id="acctMenu" role="menu" aria-label="Hesap" hidden>
+            <div class="menu-head" role="presentation"><b>Ayşe Demir</b><span class="muted">Demir Muhasebe Ltd.</span></div>
+            <button role="menuitem" type="button" data-stub="Platform yönetimi bu prototipte yok.">Platform Yönetimi</button>
+            <button role="menuitem" type="button" data-stub="Oturum kapatma bu prototipte yok.">Oturumu kapat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <main id="main" class="wrap page">
+      <!-- ============ ANA SAYFA / İŞLER (aynı liste) ============ -->
+      <section id="home" aria-label="İçerik">
+        <div class="ph">
+          <div>
+            <h1 class="only-home">Ana sayfa</h1>
+            <h1 class="only-jobs">Yedeklemeler</h1>
+          </div>
+          <div class="acts">
+            <button class="btn btn-primary only-home" id="restoreBtn" type="button" data-stub="Geri yükleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-restore"/></svg>Geri yükle</button>
+            <a class="btn btn-primary only-jobs" href="#job-new"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Yedekleme işi oluştur</a>
+          </div>
+        </div>
+        <nav class="subtabs only-jobs" aria-label="Yedeklemeler bölümleri">
+          <a href="#jobs" aria-current="page">İşler</a>
+          <a href="#" data-stub>Çalıştırmalar</a>
+          <a href="#" data-stub>Yedek dosyaları</a>
+          <a href="#" data-stub>Geri yüklemeler</a>
+          <a href="#" data-stub>Paylaşımlar</a>
+        </nav>
+
+        <!-- dolu durum -->
+        <div id="home-full">
+          <div class="status only-home" role="status">
+            <svg class="ic ic-lg" aria-hidden="true"><use href="#i-alert"/></svg>
+            <p><strong>Dikkat gerekiyor.</strong> 3 işten 1’inde sorun var. Son başarılı yedek: bugün 02:31.</p>
+          </div>
+
+          <div class="metrics only-home">
+            <div class="metric"><span class="k">Sıradaki yedek</span><span class="v">Yarın 02:00</span><span class="s">15 Kasım · 3 iş</span></div>
+            <div class="metric"><span class="k">Son başarılı yedek</span><span class="v">Bugün 02:31</span><span class="s">Bordro veritabanı · 38 GB</span></div>
+            <div class="metric">
+              <span class="k">Depolama · <button class="link" type="button" data-stub="Depolama sayfası bu prototipte yok." style="min-height:1rem;font-size:inherit">Yönet</button></span>
+              <span class="v">412 GB <span class="muted" style="font-weight:400;font-size:var(--text-base)">/ 1 TB</span></span>
+              <div class="bar" role="progressbar" aria-label="Depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="41" aria-valuetext="1 TB’ın 412 GB’ı kullanılıyor"><i style="width:41%"></i></div>
+              <span class="s">%41 dolu · 588 GB boş</span>
+            </div>
+          </div>
+
+          <div class="list" style="margin-top:var(--space-3)">
+            <section class="grp">
+              <h2 class="grp-h"><button type="button" aria-expanded="true" aria-controls="g-attn"><svg class="ic chev" aria-hidden="true"><use href="#i-chev"/></svg><svg class="ic tone-warn" aria-hidden="true"><use href="#i-alert"/></svg>Dikkat gerekiyor <span class="badge b-neutral">1</span></button></h2>
+              <ul id="g-attn">
+                <li class="row" data-q="muhasebe veritabanı muhasebe-srv sql server yerel disk zamanında alınmadı dikkat">
+                  <div>
+                    <button class="row-name" type="button" data-stub="İş ayrıntısı bu prototipte yok.">Muhasebe veritabanı</button>
+                    <p class="meta">MUHASEBE-SRV · SQL Server Muhasebe <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg><span class="sr-only">şuraya:</span> Yerel disk</p>
+                    <p class="why">Bugün 02:00’de başlaması gerekiyordu; son başarılı yedek 2 gün önce (12 Kasım).</p>
+                  </div>
+                  <div class="res"><span class="badge b-warn"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>Zamanında alınmadı</span><span class="meta">Bugün 02:00</span></div>
+                  <div class="nxt"><span class="meta">Sıradaki</span><span>Yarın 02:00</span></div>
+                  <div class="acts">
+                    <button class="btn btn-primary btn-sm" type="button" data-stub="Yedekleme başlatma bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Şimdi yedekle</button>
+                    <button class="btn btn-sm" type="button" data-stub="İş ayrıntısı bu prototipte yok.">Ayrıntı<span class="sr-only">: Muhasebe veritabanı</span></button>
+                  </div>
+                </li>
+              </ul>
+            </section>
+            <section class="grp">
+              <h2 class="grp-h"><button type="button" aria-expanded="true" aria-controls="g-ok"><svg class="ic chev" aria-hidden="true"><use href="#i-chev"/></svg><svg class="ic tone-ok" aria-hidden="true"><use href="#i-ok"/></svg>Sağlıklı <span class="badge b-neutral">2</span></button></h2>
+              <ul id="g-ok">
+                <li class="row" data-q="bordro veritabanı muhasebe-srv sql server yerel disk başarılı sağlıklı">
+                  <div>
+                    <button class="row-name" type="button" data-stub="İş ayrıntısı bu prototipte yok.">Bordro veritabanı</button>
+                    <p class="meta">MUHASEBE-SRV · SQL Server Bordro <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg><span class="sr-only">şuraya:</span> Yerel disk</p>
+                  </div>
+                  <div class="res"><span class="badge b-ok"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg>Başarılı</span><span class="meta">Bugün 02:31 · 38 GB</span></div>
+                  <div class="nxt"><span class="meta">Sıradaki</span><span>Yarın 02:00</span></div>
+                  <div class="acts">
+                    <button class="btn btn-quiet btn-sm" type="button" data-stub="Yedekleme başlatma bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Şimdi yedekle<span class="sr-only">: Bordro veritabanı</span></button>
+                    <button class="btn btn-quiet btn-sm" type="button" data-stub="Geri yükleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-restore"/></svg>Geri yükle<span class="sr-only">: Bordro veritabanı</span></button>
+                  </div>
+                </li>
+                <li class="row" data-q="depo stok veritabanı depo-01 postgresql stok google drive başarılı sağlıklı">
+                  <div>
+                    <button class="row-name" type="button" data-stub="İş ayrıntısı bu prototipte yok.">Depo stok veritabanı</button>
+                    <p class="meta">DEPO-01 · PostgreSQL stok <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg><span class="sr-only">şuraya:</span> Google Drive</p>
+                  </div>
+                  <div class="res"><span class="badge b-ok"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg>Başarılı</span><span class="meta">Bugün 02:14 · 126 GB</span></div>
+                  <div class="nxt"><span class="meta">Sıradaki</span><span>Yarın 02:00</span></div>
+                  <div class="acts">
+                    <button class="btn btn-quiet btn-sm" type="button" data-stub="Yedekleme başlatma bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Şimdi yedekle<span class="sr-only">: Depo stok veritabanı</span></button>
+                    <button class="btn btn-quiet btn-sm" type="button" data-stub="Geri yükleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-restore"/></svg>Geri yükle<span class="sr-only">: Depo stok veritabanı</span></button>
+                  </div>
+                </li>
+              </ul>
+            </section>
+            <section class="grp only-home">
+              <h2 class="grp-h"><button type="button" aria-expanded="true" aria-controls="g-recent"><svg class="ic chev" aria-hidden="true"><use href="#i-chev"/></svg><svg class="ic" aria-hidden="true" style="color:var(--muted)"><use href="#i-clock"/></svg>Son yedeklemeler <span class="badge b-neutral">3</span></button></h2>
+              <ul id="g-recent">
+                <li class="row" data-q="bordro veritabanı muhasebe-srv bugün 02:31 38 gb başarılı">
+                  <div><span class="row-name" style="cursor:default">Bordro veritabanı</span><p class="meta">MUHASEBE-SRV</p></div>
+                  <div class="res"><span class="badge b-ok"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg>Başarılı</span><span class="meta">Bugün 02:31</span></div>
+                  <div class="nxt"><span class="meta">Boyut</span><span>38 GB</span></div>
+                  <div class="acts"><button class="btn btn-quiet btn-sm" type="button" data-stub="Yedek listesi bu prototipte yok.">Yedek dosyaları<span class="sr-only">: Bordro veritabanı</span></button></div>
+                </li>
+                <li class="row" data-q="depo stok veritabanı depo-01 bugün 02:14 126 gb başarılı">
+                  <div><span class="row-name" style="cursor:default">Depo stok veritabanı</span><p class="meta">DEPO-01</p></div>
+                  <div class="res"><span class="badge b-ok"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg>Başarılı</span><span class="meta">Bugün 02:14</span></div>
+                  <div class="nxt"><span class="meta">Boyut</span><span>126 GB</span></div>
+                  <div class="acts"><button class="btn btn-quiet btn-sm" type="button" data-stub="Yedek listesi bu prototipte yok.">Yedek dosyaları<span class="sr-only">: Depo stok veritabanı</span></button></div>
+                </li>
+                <li class="row" data-q="muhasebe veritabanı muhasebe-srv bugün 02:00 zamanında alınmadı dikkat">
+                  <div><span class="row-name" style="cursor:default">Muhasebe veritabanı</span><p class="meta">MUHASEBE-SRV</p></div>
+                  <div class="res"><span class="badge b-warn"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>Zamanında alınmadı</span><span class="meta">Bugün 02:00</span></div>
+                  <div class="nxt"><span class="meta">Boyut</span><span>—</span></div>
+                  <div class="acts"></div>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <!-- boş durum -->
+        <div id="home-empty" hidden>
+          <div class="status is-neutral only-home" role="status">
+            <svg class="ic ic-lg" aria-hidden="true" style="color:var(--muted)"><use href="#i-dash"/></svg>
+            <p><strong>Henüz yedekleme yok.</strong> <span class="muted">Verileriniz şu an korunmuyor. Dört adımda ilk yedeğinizi alın.</span></p>
+          </div>
+          <div class="list" style="margin-top:var(--space-3)">
+            <p class="list-empty only-jobs">Henüz yedekleme işi yok. Sağ üstteki “Yeni” menüsünden ya da yukarıdaki düğmeyle ilk işinizi oluşturun.</p>
+            <section class="grp only-home">
+              <h2 class="grp-h"><button type="button" aria-expanded="true" aria-controls="g-start"><svg class="ic chev" aria-hidden="true"><use href="#i-chev"/></svg>Başlangıç adımları <span class="badge b-neutral">0 / 4 tamamlandı</span></button></h2>
+              <ol id="g-start">
+                <li class="row step is-now" data-q="yedekleme bilgisayarı ekle uygulama kurun">
+                  <span class="n" aria-hidden="true">1</span>
+                  <div><b>Yedekleme bilgisayarı ekle</b><p>Yedeği alınacak verilerin bulunduğu bilgisayara küçük bir uygulama kurun.</p></div>
+                  <button class="btn btn-primary btn-sm" type="button" data-stub="Bilgisayar ekleme bu prototipte yok.">Bilgisayar ekle</button>
+                </li>
+                <li class="row step is-later" data-q="yedekleme işi oluştur neyin nereye ne zaman">
+                  <span class="n" aria-hidden="true">2</span>
+                  <div><b>Yedekleme işi oluştur</b><p>Neyin, nereye, ne zaman yedekleneceğini seçin.</p></div>
+                  <a class="btn btn-sm" href="#job-new">İş oluştur</a>
+                </li>
+                <li class="row step is-later" data-q="ilk yedeği al">
+                  <span class="n" aria-hidden="true">3</span>
+                  <div><b>İlk yedeği al</b><p>İş oluşturulunca ilk yedeği hemen başlatabilirsiniz.</p></div>
+                  <button class="btn btn-sm" type="button" disabled>İş oluşturulunca açılır</button>
+                </li>
+                <li class="row step is-later" data-q="geri yüklemeyi deneyin dosya">
+                  <span class="n" aria-hidden="true">4</span>
+                  <div><b>Geri yüklemeyi deneyin</b><p>Yedeğin işe yaradığından emin olmak için bir dosyayı geri getirin.</p></div>
+                  <button class="btn btn-sm" type="button" disabled>İlk yedekten sonra açılır</button>
+                </li>
+              </ol>
+            </section>
+          </div>
+          <div class="metrics one only-home">
+            <div class="metric">
+              <span class="k">Depolama</span>
+              <span class="v">0 GB <span class="muted" style="font-weight:400;font-size:var(--text-base)">/ 1 TB</span></span>
+              <div class="bar" role="progressbar" aria-label="Depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="1 TB’ın 0 GB’ı kullanılıyor"><i style="width:0"></i></div>
+              <span class="s">%0 dolu · Yedekler burada görünecek.</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="nores" id="noRes" role="status" hidden></p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- ======== sihirbaz çekmecesi ======== -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="h-job" hidden>
+  <div class="dr-h">
+    <div>
+      <h2 id="h-job">Yedekleme işi oluştur</h2>
+      <p id="stepText" aria-live="polite">Yedeklemeler · İşler</p>
+    </div>
+    <button class="btn btn-quiet btn-icon" id="closeBtn" type="button" aria-label="Kapat"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+
+  <div class="dr-wiz" id="wiz">
+    <ol class="stepper" id="stepper" aria-label="Adımlar"></ol>
+    <form class="dr-form" id="wizForm" novalidate>
+      <div class="dr-b" id="drBody">
+        <!-- 1 -->
+        <section data-step="1">
+          <h3 class="step-h" tabindex="-1">Neyi yedeklemek istiyorsunuz?</h3>
+          <p class="lead">Önce işe bir ad verin, sonra yedeği alacak bilgisayarı ve verileri seçin.</p>
+          <div class="field">
+            <label for="f-name">İş adı</label>
+            <input class="input" id="f-name" type="text" autocomplete="off" placeholder="Örn. Muhasebe günlük yedeği" aria-describedby="h-name err-name">
+            <span class="hint" id="h-name">Listede bu adla göreceksiniz.</span>
+            <span class="err" id="err-name"></span>
+          </div>
+          <div class="field">
+            <label for="f-pc">Yedekleme bilgisayarı</label>
+            <select class="select" id="f-pc" aria-describedby="h-pc err-pc">
+              <option value="">Bilgisayar seçin…</option>
+              <option value="MUHASEBE-SRV">MUHASEBE-SRV</option>
+              <option value="DEPO-01">DEPO-01</option>
+            </select>
+            <span class="hint" id="h-pc">Yedeklenecek verilerin bulunduğu bilgisayar.</span>
+            <span class="err" id="err-pc"></span>
+          </div>
+          <fieldset class="field" id="src-field" aria-describedby="h-src err-src">
+            <legend>Yedeklenecekler</legend>
+            <span class="hint" id="h-src">Bulunan verilerden bir veya daha fazlasını işaretleyin.</span>
+            <div class="opts" id="src-list"></div>
+            <span class="err" id="err-src"></span>
+            <div><button class="link" type="button" data-stub="Elle yapılandırma bu prototipte yok.">Elle yapılandır</button></div>
+          </fieldset>
+        </section>
+
+        <!-- 2 -->
+        <section data-step="2" hidden>
+          <h3 class="step-h" tabindex="-1">Yedek nereye yazılsın?</h3>
+          <p class="lead">Yedek dosyalarının saklanacağı yeri seçin.</p>
+          <fieldset class="field">
+            <legend class="sr-only">Depolama bağlantısı</legend>
+            <div class="opts" id="storage-list"></div>
+            <div><button class="link" type="button" data-stub="Hedef ekleme bu prototipte yok.">Başka hedef ekle</button></div>
+          </fieldset>
+        </section>
+
+        <!-- 3 -->
+        <section data-step="3" hidden>
+          <h3 class="step-h" tabindex="-1">Zamanlama ve koruma</h3>
+          <p class="lead">Yedeğin ne zaman alınacağını ve ne kadar saklanacağını seçin.</p>
+          <fieldset class="field">
+            <legend>Ne zaman yedek alınsın?</legend>
+            <div class="chips" id="sched-list"></div>
+          </fieldset>
+          <fieldset class="field">
+            <legend>Yedekler ne kadar saklansın?</legend>
+            <div class="chips" id="ret-list"></div>
+            <span class="hint">Süresi dolan yedekler otomatik silinir.</span>
+          </fieldset>
+          <div class="field">
+            <label for="f-enc">Yedek şifreleme</label>
+            <select class="select" id="f-enc" aria-describedby="enc-note">
+              <option value="off">Kapalı</option>
+              <option value="opt" selected>İsteğe bağlı</option>
+              <option value="req">Zorunlu</option>
+            </select>
+            <div id="enc-note" aria-live="polite">
+              <div class="note" id="enc-req" hidden><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><span>Zorunlu şifrelemede yedekleriniz bir <b>Kurtarma anahtarı</b> ile korunur. Anahtarı güvenli bir yerde saklayın; kaybederseniz yedekleri geri yükleyemezsiniz.</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4 -->
+        <section data-step="4" hidden>
+          <h3 class="step-h" tabindex="-1">Gözden geçirin</h3>
+          <p class="lead" id="review-lead"></p>
+          <dl class="review" id="review"></dl>
+        </section>
+      </div>
+      <div class="dr-f">
+        <button class="btn" type="button" id="backBtn"><svg class="ic" aria-hidden="true" style="transform:rotate(180deg)"><use href="#i-play"/></svg>Geri</button>
+        <button class="btn btn-primary" type="submit" id="nextBtn">Devam</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- başarı -->
+  <div class="dr-b done" id="wiz-done" hidden>
+    <div class="ok-ic"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div>
+    <h3 class="step-h" id="done-h" tabindex="-1">Yedekleme işi oluşturuldu</h3>
+    <p class="lead" id="done-p" style="margin-bottom:var(--space-4)"></p>
+    <div style="display:flex;flex-wrap:wrap;gap:var(--space-2)">
+      <button class="btn btn-primary" type="button" id="startBtn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>İlk yedeği şimdi başlat</button>
+      <a class="btn" href="#home">Ana sayfaya dön</a>
+      <button class="btn btn-quiet" type="button" id="againBtn">Başka iş oluştur</button>
+    </div>
+    <p class="badge b-ok" id="startMsg" role="status" hidden style="margin-top:var(--space-4);min-height:2rem;white-space:normal"></p>
+  </div>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)};
+  var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+  var root=document.documentElement;
+  var ic=function(n){return '<svg class="ic" aria-hidden="true"><use href="#i-'+n+'"/></svg>'};
+
+  /* ---- tema (hiçbir şey saklanmaz) ---- */
+  var themeBtn=$('#themeBtn');
+  function setTheme(d){root.classList.toggle('dark',d);themeBtn.setAttribute('aria-pressed',String(d))}
+  setTheme(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+  themeBtn.addEventListener('click',function(){setTheme(!root.classList.contains('dark'))});
+
+  /* ---- bildirim ---- */
+  var tt,toastEl=$('#toast');
+  function toast(m){toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){toastEl.classList.remove('show');toastEl.textContent=''},3500)}
+  $$('[data-stub]').forEach(function(el){el.addEventListener('click',function(e){e.preventDefault();toast(el.getAttribute('data-stub')||'Bu ekran bu prototipte yok.')})});
+
+  /* ---- ray genişlet/daralt ---- */
+  var shell=$('#shell'),railToggle=$('#railToggle');
+  railToggle.addEventListener('click',function(){
+    var o=shell.classList.toggle('rail-open');
+    railToggle.setAttribute('aria-expanded',String(o));
+    $('#railToggleLbl').textContent=o?'Menüyü daralt':'Menüyü genişlet';
+  });
+
+  /* ---- menüler ---- */
+  function menu(btn){
+    var m=document.getElementById(btn.getAttribute('aria-controls'));
+    var items=function(){return $$('[role=menuitem]',m)};
+    function open(){m.hidden=false;btn.setAttribute('aria-expanded','true');items()[0].focus()}
+    function close(refocus){m.hidden=true;btn.setAttribute('aria-expanded','false');if(refocus)btn.focus()}
+    btn.addEventListener('click',function(){m.hidden?open():close(true)});
+    btn.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){e.preventDefault();if(m.hidden)open()}});
+    m.addEventListener('click',function(){close(false)});
+    m.addEventListener('keydown',function(e){
+      var it=items(),i=it.indexOf(document.activeElement);
+      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(true)}
+      else if(e.key==='ArrowDown'){e.preventDefault();it[(i+1)%it.length].focus()}
+      else if(e.key==='ArrowUp'){e.preventDefault();it[(i-1+it.length)%it.length].focus()}
+      else if(e.key==='Home'){e.preventDefault();it[0].focus()}
+      else if(e.key==='End'){e.preventDefault();it[it.length-1].focus()}
+      else if(e.key==='Tab')close(false);
+    });
+    document.addEventListener('click',function(e){if(!m.hidden&&!m.contains(e.target)&&!btn.contains(e.target))close(false)});
+  }
+  menu($('#newBtn'));menu($('#acctBtn'));
+
+  /* ---- grup aç/kapa ---- */
+  function setGrp(btn,open){btn.setAttribute('aria-expanded',String(open));document.getElementById(btn.getAttribute('aria-controls')).hidden=!open}
+  $$('.grp-h button').forEach(function(b){b.addEventListener('click',function(){setGrp(b,b.getAttribute('aria-expanded')!=='true')})});
+
+  /* ---- arama (listeyi süzer) ---- */
+  var qEl=$('#q'),noRes=$('#noRes');
+  function filter(){
+    var q=qEl.value.trim().toLocaleLowerCase('tr'),any=false;
+    var pane=$('#home-empty').hidden?$('#home-full'):$('#home-empty');
+    $$('.grp',pane).forEach(function(g){
+      var n=0;
+      $$('.row',g).forEach(function(r){var hit=!q||(r.getAttribute('data-q')||'').toLocaleLowerCase('tr').indexOf(q)>-1;r.hidden=!hit;if(hit)n++});
+      g.hidden=!n;if(n)any=true;
+      if(q&&n)setGrp($('.grp-h button',g),true);
+    });
+    noRes.hidden=!q||any;
+    if(!noRes.hidden)noRes.textContent='“'+qEl.value.trim()+'” için sonuç yok.';
+  }
+  qEl.addEventListener('input',filter);
+  qEl.addEventListener('keydown',function(e){if(e.key==='Escape'&&qEl.value){qEl.value='';filter()}});
+  $('#searchForm').addEventListener('submit',function(e){e.preventDefault()});
+  document.addEventListener('keydown',function(e){
+    var t=e.target,tag=t&&t.tagName;
+    if(e.key==='/'&&drawer.hidden&&!/^(INPUT|SELECT|TEXTAREA)$/.test(tag)&&!e.ctrlKey&&!e.metaKey){e.preventDefault();qEl.focus()}
+    else if(e.key==='Escape'&&!drawer.hidden){closeDrawer()}
+  });
+
+  /* ---- boş durum anahtarı ---- */
+  var emptyBtn=$('#emptyBtn');
+  emptyBtn.addEventListener('click',function(){
+    var on=emptyBtn.getAttribute('aria-checked')!=='true';
+    emptyBtn.setAttribute('aria-checked',String(on));
+    $('#home-full').hidden=on;$('#home-empty').hidden=!on;
+    var r=$('#restoreBtn');r.disabled=on;if(on)r.title='İlk yedek alındığında açılır';else r.removeAttribute('title');
+    filter();
+  });
+
+  /* ---- yönlendirme: #home, #jobs, #job-new (çekmece) ---- */
+  var drawer=$('#drawer'),scrim=$('#scrim'),base='home',opener=null;
+  function setDrawer(on){
+    drawer.hidden=!on;scrim.hidden=!on;root.classList.toggle('lock',on);
+    $('#rail').inert=on;$('#mainWrap').inert=on;
+  }
+  function closeDrawer(){location.hash='#'+base}
+  scrim.addEventListener('click',closeDrawer);
+  $('#closeBtn').addEventListener('click',closeDrawer);
+  function route(){
+    var r=location.hash==='#job-new'?'job-new':location.hash==='#jobs'?'jobs':'home';
+    var was=!drawer.hidden;
+    if(r!=='job-new')base=r;
+    $('#home').classList.toggle('as-jobs',base==='jobs');
+    $$('[data-route]').forEach(function(a){if(a.getAttribute('data-route')===r)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+    $$('[data-base]').forEach(function(a){if(a.getAttribute('data-base')===base)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+    document.title=(r==='job-new'?'Yedekleme işi oluştur':base==='jobs'?'Yedeklemeler':'Ana sayfa')+' · Variant A3';
+    if(r==='job-new'&&!was){
+      if(S.done)reset();
+      var a=document.activeElement;opener=a&&a!==document.body?a:null;
+      setDrawer(true);go(S.step,true);
+    }else if(r!=='job-new'&&was){
+      setDrawer(false);
+      var o=opener&&opener.offsetParent!==null?opener:$('#newBtn');
+      opener=null;o.focus();
+    }
+  }
+
+  /* ---- sihirbaz verisi ---- */
+  var SOURCES=[
+    {id:'m1',pc:'MUHASEBE-SRV',t:'SQL Server · MUHASEBE-SRV · Muhasebe'},
+    {id:'m2',pc:'MUHASEBE-SRV',t:'SQL Server · MUHASEBE-SRV · Bordro'},
+    {id:'d1',pc:'DEPO-01',t:'PostgreSQL · DEPO-01 · stok'}
+  ];
+  var STORAGE=[
+    ['local','Yerel disk (varsayılan)','Bu sunucudaki disk · 588 GB boş'],
+    ['sftp','Şirket SFTP sunucusu','Ofis dışında ikinci bir kopya için uygun'],
+    ['gdrive','Google Drive – ofis@firma.com','Bulut depolama']
+  ];
+  var SCHED=[['d02','Her gün 02:00','Her gün 02:00'],['d08','Her gün 08:00','Her gün 08:00'],['x2','Günde 2 kez 08:00 ve 20:00','Günde 2 kez, 08:00 ve 20:00'],['man','Elle','Elle başlatılır (otomatik çalışmaz)']];
+  var RET=[['7','7 gün'],['14','14 gün'],['30','30 gün'],['90','90 gün'],['0','Hiç silinmesin']];
+  var ENC={off:'Kapalı',opt:'İsteğe bağlı',req:'Zorunlu (Kurtarma anahtarı gerekir)'};
+  var NAMES=['Kaynak','Depolama','Zamanlama','Gözden geçir'];
+  var S;
+  function fresh(){return {step:1,name:'',pc:'',src:{},storage:'local',sched:'d02',ret:'30',enc:'opt',done:false}}
+  S=fresh();
+
+  function opt(type,name,val,t,s,on){return '<label class="opt"><input type="'+type+'" name="'+name+'" value="'+val+'"'+(on?' checked':'')+'><span><span class="t">'+t+'</span>'+(s?'<span class="s">'+s+'</span>':'')+'</span></label>'}
+  function chip(name,val,t,on){return '<label class="chip"><input type="radio" name="'+name+'" value="'+val+'"'+(on?' checked':'')+'>'+ic('check').replace('class="ic"','class="ic tick"')+'<span>'+t+'</span></label>'}
+
+  function renderSrc(){
+    var box=$('#src-list');
+    if(!S.pc){box.innerHTML='<p class="hint">Önce yedekleme bilgisayarını seçin; o bilgisayarda bulunan veriler burada listelenir.</p>';return}
+    box.innerHTML=SOURCES.filter(function(s){return s.pc===S.pc}).map(function(s){return opt('checkbox','src',s.id,s.t,'',!!S.src[s.id])}).join('');
+  }
+  function renderChoices(){
+    $('#storage-list').innerHTML=STORAGE.map(function(s){return opt('radio','storage',s[0],s[1],s[2],S.storage===s[0])}).join('');
+    $('#sched-list').innerHTML=SCHED.map(function(s){return chip('sched',s[0],s[1],S.sched===s[0])}).join('');
+    $('#ret-list').innerHTML=RET.map(function(s){return chip('ret',s[0],s[1],S.ret===s[0])}).join('');
+    renderSrc();
+  }
+  function syncInputs(){
+    $('#f-name').value=S.name;$('#f-pc').value=S.pc;$('#f-enc').value=S.enc;$('#enc-req').hidden=S.enc!=='req';
+  }
+
+  /* ---- üst adım çubuğu ---- */
+  function renderStepper(){
+    $('#stepper').innerHTML=NAMES.map(function(n,i){
+      var k=i+1,cur=k===S.step,done=k<S.step;
+      return '<li><button type="button" data-goto="'+k+'" class="'+(done?'is-done':'')+'"'+(cur?' aria-current="step"':'')+(k>S.step?' disabled':'')+'><span class="n">'+(done?ic('check'):k)+'</span><span class="st-lbl">'+n+'</span><span class="sr-only">'+(done?' (tamamlandı)':'')+'</span></button></li>';
+    }).join('');
+    $('#stepText').textContent='Adım '+S.step+' / 4 · '+NAMES[S.step-1];
+  }
+  $('#stepper').addEventListener('click',function(e){
+    var b=e.target.closest('[data-goto]');if(!b)return;
+    var k=+b.getAttribute('data-goto');if(k<S.step)go(k,true);
+  });
+
+  function go(n,focus){
+    S.step=n;
+    $$('[data-step]').forEach(function(s){s.hidden=+s.getAttribute('data-step')!==n});
+    $('#backBtn').hidden=n===1;
+    $('#nextBtn').textContent=n===4?'Yedekleme işini oluştur':'Devam';
+    if(n===4)renderReview();
+    renderStepper();
+    $('#drBody').scrollTop=0;
+    if(focus!==false)$('[data-step="'+n+'"] .step-h').focus();
+  }
+
+  /* ---- doğrulama ---- */
+  function setErr(k,msg,ctl){
+    var el=$('#err-'+k);el.textContent=msg||'';
+    if(ctl){if(msg)ctl.setAttribute('aria-invalid','true');else ctl.removeAttribute('aria-invalid')}
+  }
+  function validate(){
+    if(S.step!==1)return true;
+    var n=$('#f-name'),p=$('#f-pc');
+    var eN=S.name.trim()?'':'İş adını yazın.';
+    var eP=S.pc?'':'Bir yedekleme bilgisayarı seçin.';
+    var eS=(S.pc&&!Object.keys(S.src).length)?'Yedeklenecek en az bir veri seçin.':'';
+    setErr('name',eN,n);setErr('pc',eP,p);setErr('src',eS);
+    if(eN){n.focus();return false}
+    if(eP){p.focus();return false}
+    if(eS){var f=$('#src-list input');if(f)f.focus();return false}
+    return true;
+  }
+
+  /* ---- özet ---- */
+  function lbl(arr,id){return arr.filter(function(x){return x[0]===id})[0]}
+  function renderReview(){
+    var srcs=SOURCES.filter(function(s){return S.src[s.id]}).map(function(s){return s.t});
+    var ret=S.ret==='0'?'Hiç silinmez':S.ret+' gün';
+    $('#review-lead').textContent='Bu iş, seçtiğiniz verileri belirlenen zamanda yedekler. '+(S.ret==='0'?'Eski yedekler silinmez; depolama alanı zamanla dolabilir.':'Yedekler '+S.ret+' gün sonra otomatik silinir.')+(S.enc==='req'?' Yedekler şifrelenir; Kurtarma anahtarı olmadan geri yüklenemez.':'');
+    var rows=[['İş adı',S.name.trim()],['Yedekleme bilgisayarı',S.pc],['Yedeklenecekler',srcs],['Yedek nereye yazılacak',lbl(STORAGE,S.storage)[1]],['Ne zaman',lbl(SCHED,S.sched)[2]],['Ne kadar saklanacak',ret],['Şifreleme',ENC[S.enc]]];
+    var dl=$('#review');dl.textContent='';
+    rows.forEach(function(r){
+      var dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=r[0];
+      if(Array.isArray(r[1])){var ul=document.createElement('ul');r[1].forEach(function(t){var li=document.createElement('li');li.textContent=t;ul.appendChild(li)});dd.appendChild(ul)}else dd.textContent=r[1];
+      dl.appendChild(dt);dl.appendChild(dd);
+    });
+  }
+
+  /* ---- olaylar ---- */
+  $('#f-name').addEventListener('input',function(e){S.name=e.target.value;if(S.name.trim())setErr('name','',e.target)});
+  $('#f-pc').addEventListener('change',function(e){S.pc=e.target.value;S.src={};setErr('pc','',e.target);setErr('src','');renderSrc()});
+  $('#src-list').addEventListener('change',function(e){if(e.target.checked)S.src[e.target.value]=1;else delete S.src[e.target.value];if(Object.keys(S.src).length)setErr('src','')});
+  $('#storage-list').addEventListener('change',function(e){S.storage=e.target.value});
+  $('#sched-list').addEventListener('change',function(e){S.sched=e.target.value});
+  $('#ret-list').addEventListener('change',function(e){S.ret=e.target.value});
+  $('#f-enc').addEventListener('change',function(e){S.enc=e.target.value;$('#enc-req').hidden=S.enc!=='req'});
+  $('#backBtn').addEventListener('click',function(){if(S.step>1)go(S.step-1)});
+  $('#wizForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    if(!validate())return;
+    if(S.step<4){go(S.step+1);return}
+    S.done=true;
+    $('#wiz').hidden=true;$('#wiz-done').hidden=false;
+    $('#stepText').textContent='Tamamlandı';
+    $('#done-p').textContent='“'+S.name.trim()+'” işi kaydedildi. İsterseniz ilk yedeği hemen başlatabilirsiniz.';
+    $('#startBtn').disabled=false;$('#startMsg').hidden=true;
+    $('#done-h').focus();
+  });
+  $('#startBtn').addEventListener('click',function(){
+    this.disabled=true;
+    var m=$('#startMsg');m.innerHTML=ic('clock')+'<span>İlk yedek başlatıldı. Bitince Ana sayfada “Son yedeklemeler” listesinde görünür.</span>';m.hidden=false;
+  });
+  $('#againBtn').addEventListener('click',function(){reset();$('[data-step="1"] .step-h').focus()});
+
+  function reset(){
+    S=fresh();
+    ['name','pc','src'].forEach(function(k){setErr(k,'',k==='src'?null:$('#f-'+k))});
+    $('#wiz').hidden=false;$('#wiz-done').hidden=true;
+    renderChoices();syncInputs();go(1,false);
+  }
+
+  reset();
+  window.addEventListener('hashchange',route);
+  route();
+})();
+</script>
+</body>
+</html>
