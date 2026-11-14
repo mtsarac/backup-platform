@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<meta charset="utf-8"><!-- first 1024 bytes: keep before the long comment so file:// decodes UTF-8 -->
+<!--
+  VARIANT C — "Rehberli görev" (GOV.UK / Time Machine inspired)
+
+  Rationale
+  - One question per screen in a single narrow column (max 40rem): a non-technical owner never has to compare
+    several controls at once, and every screen has exactly one primary action.
+  - The dashboard is a short, prioritised to-do list ("Şimdi yapmanız gereken") first, status second; the empty
+    first-run state is the same list with four ordered steps.
+  - Strong 2px borders, 18px body, thick yellow/black focus ring, status always icon + text, navigation hidden
+    behind a "Menü" disclosure so nothing competes with the task.
+
+  Tradeoff
+  - Many short screens: a 3-field job takes 8 screens (slower for experts who create many jobs) and the
+    collapsed menu costs one click for navigation. Fine for novices, poor for power users; a Review screen with
+    "Değiştir" links is the only shortcut.
+
+  Web font I WOULD use: "Atkinson Hyperlegible" (400/700, self-hosted, Latin-Extended for Turkish ı İ ş ğ).
+  This file uses a system stack only (no network).
+
+  Tokens (CSS custom properties at :root and :root.dark below) map 1:1 to Tailwind 4 @theme:
+  --color-*, --radius, --spacing steps (--sp-*), --text-* (type scale), --font-sans.
+-->
+<html lang="tr">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Ana sayfa · Yedekleme Platformu</title>
+<style>
+:root{
+  /* type */
+  --font-sans:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --text-body:1.125rem;   /* 18px */
+  --text-small:1rem;      /* 16px, smallest size used */
+  --text-lead:1.25rem;    /* 20px */
+  --text-h3:1.375rem;     /* 22px */
+  --text-h2:1.75rem;      /* 28px */
+  --text-h1:2.25rem;      /* 36px */
+  --leading:1.5;
+  /* spacing */
+  --sp-1:.25rem; --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem; --sp-5:1.5rem; --sp-6:2rem; --sp-7:3rem;
+  /* shape */
+  --radius:.25rem;
+  --bw:2px; --bw-thick:4px;
+  --target:2.75rem;       /* 44px */
+  --col:40rem;            /* 640px reading column */
+  /* colour — light */
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#f3f2f1;
+  --text:#0b0c0c; --text-muted:#505a5f;
+  --border-strong:#0b0c0c; --border-soft:#b1b4b6;
+  --accent:#0f5e63; --accent-hover:#0a4448; --accent-fg:#ffffff; --accent-soft:#e3f1f2; --link:#0f5e63;
+  --ok:#00703c; --ok-bg:#e6f4ec;
+  --bad:#b32a14; --bad-bg:#fcebe7;
+  --warn:#7a4b00; --warn-bg:#fff3d6;
+  --focus:#ffdd00; --focus-outer:#0b0c0c;
+  --header-bg:#0b0c0c; --header-fg:#ffffff; --header-line:#8cc5c8;
+  --overlay-shadow:0 6px 16px rgb(0 0 0 / .28);
+  color-scheme:light;
+}
+:root.dark{
+  /* dark: elevated surfaces are lighter than the base */
+  --bg:#0e1315; --surface:#182024; --surface-2:#212b30;
+  --text:#eef2f3; --text-muted:#aab7bb;
+  --border-strong:#a9b8bc; --border-soft:#3b494e;
+  --accent:#8cc5c8; --accent-hover:#a9d5d7; --accent-fg:#06191b; --accent-soft:#1b3a3d; --link:#8cc5c8;
+  --ok:#6fd49b; --ok-bg:#143325;
+  --bad:#ff9a8a; --bad-bg:#3d1c18;
+  --warn:#f2c35e; --warn-bg:#3a2d0f;
+  --focus:#ffdd00; --focus-outer:#000000;
+  --header-bg:#080c0d; --header-fg:#ffffff; --header-line:#8cc5c8;
+  --overlay-shadow:0 6px 16px rgb(0 0 0 / .6);
+  color-scheme:dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:400 var(--text-body)/var(--leading) var(--font-sans)}
+.wrap{max-width:var(--col);margin:0 auto;padding:0 var(--sp-4)}
+.vh{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.ic{width:1.5rem;height:1.5rem;flex:none}
+.muted{color:var(--text-muted)}
+
+h1{font-size:var(--text-h1);line-height:1.15;font-weight:700;margin:0 0 var(--sp-5)}
+h2{font-size:var(--text-h2);line-height:1.2;font-weight:700;margin:var(--sp-7) 0 var(--sp-4)}
+h3{font-size:var(--text-h3);line-height:1.25;font-weight:700;margin:var(--sp-5) 0 var(--sp-2)}
+p{margin:0 0 var(--sp-4)}
+.lead{font-size:var(--text-lead)}
+h1:focus{outline:none}
+a{color:var(--link);text-underline-offset:.2em;text-decoration-thickness:1px}
+a:hover{text-decoration-thickness:3px}
+
+/* thick focus ring: yellow inside, high-contrast outer edge */
+:focus-visible{outline:3px solid transparent;outline-offset:0;box-shadow:0 0 0 4px var(--focus),0 0 0 7px var(--focus-outer)}
+a:focus-visible{background:var(--focus);color:#0b0c0c;text-decoration:none;box-shadow:0 -2px var(--focus),0 4px var(--focus-outer)}
+
+.skip{position:absolute;left:var(--sp-2);top:-4rem;z-index:50;padding:var(--sp-3) var(--sp-4);background:var(--focus);color:#0b0c0c;font-weight:700}
+.skip:focus{top:var(--sp-2)}
+
+/* header */
+.site{background:var(--header-bg);color:var(--header-fg);border-bottom:var(--bw-thick) solid var(--header-line)}
+.hdr{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);min-height:4rem;padding-block:var(--sp-2)}
+.brand{display:inline-flex;align-items:center;min-height:var(--target);min-width:0;color:var(--header-fg);font-weight:700;font-size:1.125rem;line-height:1.2;text-decoration:none}
+.hdr-actions{display:flex;gap:var(--sp-2);flex:none}
+.hbtn{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);min-height:var(--target);min-width:var(--target);padding:0 var(--sp-3);font:inherit;font-size:var(--text-small);font-weight:700;color:var(--header-fg);background:transparent;border:var(--bw) solid var(--header-fg);border-radius:var(--radius);cursor:pointer}
+.hbtn:hover{background:rgb(255 255 255 / .16)}
+.hbtn[aria-expanded="true"]{background:#fff;color:#0b0c0c}
+
+/* menu disclosure (in flow, no overlay) */
+#menu{background:var(--surface);border-bottom:var(--bw) solid var(--border-strong)}
+#menu .wrap{padding-block:var(--sp-4)}
+#menu ul{list-style:none;margin:0;padding:0}
+#menu li a{display:flex;align-items:center;min-height:3rem;padding:var(--sp-2) var(--sp-3);border-left:6px solid transparent;color:var(--text);font-size:var(--text-lead);font-weight:700;text-decoration:none}
+#menu li a:hover{text-decoration:underline;text-decoration-thickness:3px}
+#menu li a[aria-current="page"]{border-left-color:var(--accent);background:var(--accent-soft)}
+#menu li a:focus-visible{color:#0b0c0c}
+.menu-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--sp-2) var(--sp-4);margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:var(--bw) solid var(--border-soft);font-size:var(--text-small)}
+.menu-foot p{margin:0}
+.menu-foot .links{display:flex;gap:var(--sp-4);align-items:center;flex-wrap:wrap}
+
+/* prototype controls */
+.proto{background:var(--surface-2);border-bottom:var(--bw) dashed var(--border-soft);font-size:var(--text-small)}
+.proto .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-4);padding-block:var(--sp-2)}
+.proto b{color:var(--text-muted)}
+.tabs{display:flex;gap:var(--sp-1);flex-wrap:wrap}
+.tabs a{display:inline-flex;align-items:center;min-height:var(--target);padding:0 var(--sp-3);border:var(--bw) solid transparent;border-radius:var(--radius);color:var(--text);text-decoration:none}
+.tabs a:hover{text-decoration:underline}
+.tabs a[aria-current="page"]{border-color:var(--accent);background:var(--surface);font-weight:700}
+.tabs a:focus-visible{color:#0b0c0c}
+.switch{display:inline-flex;align-items:center;gap:var(--sp-2);min-height:var(--target);cursor:pointer}
+
+main{padding-block:var(--sp-6) var(--sp-7)}
+main:focus{outline:none}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);min-height:var(--target);padding:var(--sp-2) var(--sp-5);font:inherit;font-weight:700;text-align:center;text-decoration:none;color:var(--accent-fg);background:var(--accent);border:var(--bw) solid var(--accent);border-radius:var(--radius);cursor:pointer}
+.btn:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border-strong)}
+.btn-secondary:hover{background:var(--surface-2);border-color:var(--border-strong)}
+.btn-lg{min-height:3.5rem;font-size:var(--text-lead)}
+a.btn:focus-visible{color:#0b0c0c}
+.btn-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-4)}
+.link-btn{display:inline-flex;align-items:center;gap:var(--sp-2);min-height:var(--target);padding:0;font:inherit;color:var(--link);background:none;border:0;text-decoration:underline;text-underline-offset:.2em;cursor:pointer}
+.link-btn:hover{text-decoration-thickness:3px}
+a.link-btn:focus-visible{color:#0b0c0c}
+.back{margin-bottom:var(--sp-3);font-weight:700}
+
+input[type=radio],input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;display:grid;place-content:center;width:2rem;height:2rem;margin:0;background:var(--surface);border:var(--bw) solid var(--border-strong);cursor:pointer}
+input[type=radio]{border-radius:50%}
+input[type=radio]::before{content:"";width:1rem;height:1rem;border-radius:50%;background:var(--accent);transform:scale(0)}
+input[type=radio]:checked::before{transform:scale(1)}
+input[type=checkbox]{border-radius:var(--radius)}
+input[type=checkbox]::before{content:"";width:.55rem;height:1.05rem;margin-top:-.15rem;border:solid var(--accent-fg);border-width:0 .2rem .2rem 0;transform:rotate(45deg) scale(0)}
+input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+input[type=checkbox]:checked::before{transform:rotate(45deg) scale(1)}
+
+.input{display:block;width:100%;min-height:3rem;padding:var(--sp-2) var(--sp-3);font:inherit;color:var(--text);background:var(--surface);border:var(--bw) solid var(--border-strong);border-radius:var(--radius)}
+.input[aria-invalid="true"]{border-color:var(--bad);border-width:var(--bw-thick)}
+select.input{padding-right:var(--sp-2)}
+
+/* badges + status */
+.badge{display:inline-flex;align-items:center;gap:var(--sp-1);padding:.125rem var(--sp-2);font-size:var(--text-small);font-weight:700;line-height:1.4;border:var(--bw) solid;border-radius:var(--radius)}
+.badge .ic{width:1.125rem;height:1.125rem}
+.badge.ok{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}
+.badge.bad{color:var(--bad);background:var(--bad-bg);border-color:var(--bad)}
+.badge.warn{color:var(--warn);background:var(--warn-bg);border-color:var(--warn)}
+.badge.now{color:var(--accent);background:var(--surface);border-color:var(--accent)}
+.badge.later{color:var(--text-muted);border-color:var(--border-soft)}
+.status{display:flex;gap:var(--sp-3);padding:var(--sp-4);border:var(--bw-thick) solid;border-radius:var(--radius)}
+.status .ic{width:2rem;height:2rem;margin-top:.125rem}
+.status p{margin:0}
+.status .st-title{font-size:var(--text-h3);font-weight:700;line-height:1.25;margin-bottom:var(--sp-1)}
+.status.ok{color:var(--text);background:var(--ok-bg);border-color:var(--ok)}
+.status.ok .ic,.status.ok .st-title{color:var(--ok)}
+.status.bad{background:var(--bad-bg);border-color:var(--bad)}
+.status.bad .ic,.status.bad .st-title{color:var(--bad)}
+.status.warn{background:var(--warn-bg);border-color:var(--warn)}
+.status.warn .ic,.status.warn .st-title{color:var(--warn)}
+
+/* task list */
+.tasks{list-style:none;margin:0;padding:0;display:grid;gap:var(--sp-4)}
+.task{display:grid;grid-template-columns:2.5rem 1fr;gap:var(--sp-4);padding:var(--sp-5);background:var(--surface);border:var(--bw) solid var(--border-strong);border-radius:var(--radius)}
+.task>div>:last-child{margin-bottom:0}
+.task h3{margin:0 0 var(--sp-2)}
+.task .bd{margin-bottom:var(--sp-2)}
+.num{display:grid;place-content:center;width:2.5rem;height:2.5rem;border-radius:50%;background:var(--text);color:var(--bg);font-weight:700}
+.task.bad{border:var(--bw-thick) solid var(--bad)}
+.task.hl,.task.now{border:var(--bw-thick) solid var(--accent);background:var(--accent-soft)}
+.task.done{background:var(--surface-2);border-color:var(--border-soft)}
+.task.done .num{background:var(--ok);color:var(--surface)}
+.task.next{border-style:dashed;border-color:var(--border-soft)}
+.task.next .num{background:var(--text-muted);color:var(--surface)}
+
+.runs{list-style:none;margin:0;padding:0;background:var(--surface);border:var(--bw) solid var(--border-strong);border-radius:var(--radius)}
+.runs li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--sp-2) var(--sp-4);padding:var(--sp-4)}
+.runs li+li{border-top:var(--bw) solid var(--border-soft)}
+.runs .meta{display:block;color:var(--text-muted)}
+.card{padding:var(--sp-4);background:var(--surface);border:var(--bw) solid var(--border-strong);border-radius:var(--radius)}
+.card p{margin:0}
+.big{font-size:var(--text-h3);font-weight:700}
+.meter{height:1.5rem;margin:var(--sp-2) 0;background:var(--surface-2);border:var(--bw) solid var(--border-strong);border-radius:var(--radius)}
+.meter span{display:block;height:100%;background:var(--accent)}
+
+/* wizard */
+.cap{display:flex;flex-wrap:wrap;gap:0 var(--sp-2);margin:0 0 var(--sp-2);font-weight:700}
+.cap .muted{font-weight:400}
+.bar{display:flex;gap:var(--sp-1);margin:0 0 var(--sp-5)}
+.bar i{flex:1;height:.5rem;background:var(--border-soft);border-radius:1px}
+.bar i.on{background:var(--accent)}
+.field{margin:0 0 var(--sp-5);padding:0;border:0;min-width:0}
+.field legend{padding:0}
+.field.has-error{padding-left:var(--sp-4);border-left:6px solid var(--bad)}
+.field h1{margin-bottom:var(--sp-3)}
+.hint{color:var(--text-muted);margin:0 0 var(--sp-3)}
+.error{display:flex;gap:var(--sp-2);margin:0 0 var(--sp-3);color:var(--bad);font-weight:700}
+.choices{display:grid;gap:var(--sp-3)}
+.choice{display:flex;align-items:flex-start;gap:var(--sp-4);min-height:var(--target);padding:var(--sp-4);background:var(--surface);border:var(--bw) solid var(--border-strong);border-radius:var(--radius);cursor:pointer}
+.choice:has(input:checked){border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent);background:var(--accent-soft)}
+.choice .t{display:block;font-weight:700}
+.choice .d{display:block;color:var(--text-muted);font-size:var(--text-small)}
+.tag{display:inline-block;margin-left:var(--sp-2);padding:0 var(--sp-2);font-size:var(--text-small);font-weight:700;color:var(--accent);border:var(--bw) solid var(--accent);border-radius:var(--radius)}
+.note{display:flex;gap:var(--sp-3);margin:var(--sp-4) 0 0;padding:var(--sp-4);background:var(--accent-soft);border:var(--bw) solid var(--accent);border-radius:var(--radius)}
+.note .ic{color:var(--accent)}
+.nav-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-5);margin-top:var(--sp-6)}
+.summary{margin:0 0 var(--sp-4);border-top:var(--bw) solid var(--border-strong)}
+.summary .row{display:grid;gap:var(--sp-1) var(--sp-4);padding:var(--sp-3) 0;border-bottom:var(--bw) solid var(--border-soft)}
+.summary dt{font-weight:700}
+.summary dd{margin:0}
+.summary ul{margin:0;padding-left:var(--sp-5)}
+.summary .row .link-btn{justify-self:start}
+@media (min-width:36rem){.summary .row{grid-template-columns:11rem 1fr auto;align-items:start}.summary .row .link-btn{min-height:auto}}
+.done-panel{margin-bottom:var(--sp-5)}
+.done-panel h1{margin:0 0 var(--sp-2);font-size:var(--text-h2)}
+
+.toast{position:fixed;left:50%;bottom:var(--sp-4);z-index:60;width:max-content;max-width:calc(100% - 2rem);transform:translateX(-50%);padding:var(--sp-3) var(--sp-4);background:var(--surface-2);color:var(--text);border:var(--bw) solid var(--border-strong);border-radius:var(--radius);box-shadow:var(--overlay-shadow)}
+.toast:empty{display:none}
+footer{padding:var(--sp-4) 0 var(--sp-6);border-top:var(--bw) solid var(--border-soft);color:var(--text-muted);font-size:var(--text-small)}
+footer p{margin:0}
+
+@media (max-width:30rem){
+  :root{--text-h1:1.875rem;--text-h2:1.5rem;--text-h3:1.25rem}
+  .hbtn .lbl.opt{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .task{padding:var(--sp-4);gap:var(--sp-3)}
+  .status{padding:var(--sp-3)}
+  .btn-row .btn,.nav-row .btn{width:100%}
+}
+@media (prefers-reduced-motion:no-preference){
+  .btn,.hbtn,.choice,input[type=radio]::before,input[type=checkbox]::before{transition:background-color .12s,border-color .12s,transform .12s}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media (forced-colors:active){input[type=radio]:checked::before{background:Highlight}input[type=checkbox]:checked{background:Highlight}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3L22 20H2L12 3z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 9.5v5M12 17.4v.1" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 11v6M12 7.6v.1" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#main">İçeriğe geç</a>
+
+<header class="site">
+  <div class="wrap hdr">
+    <a class="brand" href="#home">Yedekleme Platformu</a>
+    <div class="hdr-actions">
+      <button type="button" class="hbtn" id="theme"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg><span class="lbl opt">Koyu tema</span></button>
+      <button type="button" class="hbtn" id="menu-btn" aria-expanded="false" aria-controls="menu"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-menu"/></svg><span class="lbl">Menü</span></button>
+    </div>
+  </div>
+</header>
+
+<div id="menu" hidden>
+  <div class="wrap">
+    <nav aria-label="Ana menü">
+      <ul>
+        <li><a href="#home" data-nav="home">Ana sayfa</a></li>
+        <li><a href="#yedeklemeler" data-nav="yedeklemeler">Yedeklemeler</a></li>
+        <li><a href="#bilgisayarlar" data-nav="bilgisayarlar">Bilgisayarlar</a></li>
+        <li><a href="#depolama" data-nav="depolama">Depolama</a></li>
+        <li><a href="#ayarlar" data-nav="ayarlar">Ayarlar</a></li>
+      </ul>
+    </nav>
+    <div class="menu-foot">
+      <p><strong>Ayşe Yılmaz</strong><br><span class="muted">Örnek Ticaret Ltd. Şti.</span></p>
+      <div class="links">
+        <a href="#" data-msg="Platform Yönetimi bu prototipte yok.">Platform Yönetimi</a>
+        <button type="button" class="link-btn" data-msg="Çıkış yapma bu prototipte yok.">Çıkış yap</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="proto">
+  <div class="wrap">
+    <b>Prototip:</b>
+    <nav class="tabs" aria-label="Prototip ekranları">
+      <a href="#home" data-tab="home">Ana sayfa</a>
+      <a href="#job-new" data-tab="job-new">Yedekleme işi oluştur</a>
+    </nav>
+    <label class="switch"><input type="checkbox" id="empty"> Yeni kullanıcı (boş)</label>
+  </div>
+</div>
+
+<main id="main" class="wrap" tabindex="-1">
+
+  <!-- ANA SAYFA -->
+  <section id="s-home">
+    <div id="home-full">
+      <h1 tabindex="-1">Ana sayfa</h1>
+      <p class="lead">Merhaba Ayşe. Şu an yapmanız gereken 1 önemli iş var.</p>
+
+      <h2 style="margin-top:var(--sp-6)">Şimdi yapmanız gereken</h2>
+      <ol class="tasks" role="list">
+        <li class="task bad">
+          <span class="num" aria-hidden="true">1</span>
+          <div>
+            <p class="bd"><span class="badge bad"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg>Dikkat gerekiyor</span></p>
+            <h3>Muhasebe gece yedeği zamanında alınmadı</h3>
+            <p>Son başarılı yedek 2 gün önce alındı (12 Kasım, 02:00). MUHASEBE-SRV bilgisayarı kapalı veya internete bağlı değil olabilir.</p>
+            <div class="btn-row">
+              <button type="button" class="btn" data-msg="Yedekleme başlatıldı (örnek). Bu prototipte gerçek işlem yapılmaz.">Şimdi yedekle</button>
+              <button type="button" class="link-btn" data-msg="Ayrıntı ekranı bu prototipte yok.">Ayrıntıyı gör</button>
+            </div>
+          </div>
+        </li>
+        <li class="task hl">
+          <span class="num" aria-hidden="true">2</span>
+          <div>
+            <h3>Bir şeyi geri mi yüklemek istiyorsunuz?</h3>
+            <p>Silinen ya da bozulan bir veritabanını yedek dosyasından geri getirin.</p>
+            <button type="button" class="btn btn-lg" data-msg="Geri yükleme bu prototipte yok.">Geri yükle</button>
+          </div>
+        </li>
+        <li class="task">
+          <span class="num" aria-hidden="true">3</span>
+          <div>
+            <h3>Yeni bir şeyi yedeklemek mi istiyorsunuz?</h3>
+            <p>Neyin, nereye ve ne zaman yedekleneceğini birkaç soruda seçin.</p>
+            <a class="btn btn-secondary" href="#job-new">Yedekleme işi oluştur</a>
+          </div>
+        </li>
+      </ol>
+
+      <h2>Genel durum</h2>
+      <div class="status bad">
+        <svg class="ic" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg>
+        <div>
+          <p class="st-title">Dikkat gerekiyor</p>
+          <p>3 yedekleme işinden 2’si düzenli çalışıyor, 1 işte sorun var.</p>
+          <p class="muted" style="margin-top:var(--sp-2)">Son başarılı yedek: Bugün 02:00, Depo stok yedeği.</p>
+        </div>
+      </div>
+
+      <h3>Sıradaki yedek</h3>
+      <div class="card">
+        <p class="big">Yarın 02:00</p>
+        <p class="muted">Bordro gece yedeği</p>
+      </div>
+
+      <h3>Son 3 yedek</h3>
+      <ul class="runs">
+        <li><div><strong>Depo stok yedeği</strong><span class="meta">Bugün 02:00 · 12,4 GB</span></div><span class="badge ok"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>Başarılı</span></li>
+        <li><div><strong>Bordro gece yedeği</strong><span class="meta">Bugün 02:00 · 8,1 GB</span></div><span class="badge ok"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>Başarılı</span></li>
+        <li><div><strong>Muhasebe gece yedeği</strong><span class="meta">12 Kasım 02:00 · 74 GB</span></div><span class="badge ok"><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>Başarılı</span></li>
+      </ul>
+
+      <h3>Depolama</h3>
+      <div class="card">
+        <p><strong>412 GB</strong> / 1 TB kullanılıyor (%41)</p>
+        <div class="meter" role="progressbar" aria-label="Depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="41" aria-valuetext="412 GB / 1 TB, yüzde 41"><span style="width:41%"></span></div>
+        <p class="muted">588 GB boş alan kaldı.</p>
+      </div>
+    </div>
+
+    <div id="home-empty" hidden>
+      <h1 tabindex="-1">Hoş geldiniz</h1>
+      <p class="lead">Yedeklemeye başlamak için dört kısa adım var. Hepsi birkaç dakika sürer.</p>
+      <div id="e-status"></div>
+      <h2>Şimdi yapmanız gereken</h2>
+      <ol class="tasks" role="list" id="e-steps"></ol>
+    </div>
+  </section>
+
+  <!-- YEDEKLEME İŞİ OLUŞTUR -->
+  <section id="s-job" hidden><div id="wiz"></div></section>
+
+  <!-- DİĞER MENÜ ÖĞELERİ (prototipte yok) -->
+  <section id="s-other" hidden>
+    <h1 tabindex="-1" id="o-h1">Sayfa</h1>
+    <p>Bu ekran bu prototipte yok. “Ana sayfa” ve “Yedekleme işi oluştur” ekranlarını deneyin.</p>
+    <a class="btn btn-secondary" href="#home">Ana sayfaya dön</a>
+  </section>
+</main>
+
+<footer><div class="wrap"><p>Tasarım denemesi · Varyant C, Rehberli görev. Veriler örnektir.</p></div></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const root=document.documentElement;
+const ic=n=>`<svg class="ic" aria-hidden="true" focusable="false"><use href="#i-${n}"/></svg>`;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- theme ---------- */
+const themeBtn=$('#theme');
+function setTheme(dark){
+  root.classList.toggle('dark',dark);
+  themeBtn.querySelector('use').setAttribute('href',dark?'#i-sun':'#i-moon');
+  themeBtn.querySelector('.lbl').textContent=dark?'Açık tema':'Koyu tema';
+}
+themeBtn.addEventListener('click',()=>setTheme(!root.classList.contains('dark')));
+setTheme(matchMedia('(prefers-color-scheme: dark)').matches);
+
+/* ---------- toast ---------- */
+let tt;
+function toast(msg){const t=$('#toast');t.textContent=msg;clearTimeout(tt);tt=setTimeout(()=>{t.textContent=''},5000)}
+
+/* ---------- menu disclosure ---------- */
+const menuBtn=$('#menu-btn'),menu=$('#menu');
+function setMenu(open,refocus){
+  menu.hidden=!open;menuBtn.setAttribute('aria-expanded',String(open));
+  if(!open&&refocus)menuBtn.focus();
+}
+menuBtn.addEventListener('click',()=>setMenu(menu.hidden));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!menu.hidden)setMenu(false,true)});
+
+/* ---------- empty (first-run) state ---------- */
+let empty=false,E=0; // E = number of completed first-run steps (0..4)
+const E_STEPS=[
+  ['Yedekleme bilgisayarı ekle','Yedeği alınacak verilerin bulunduğu bilgisayarı ekleyin.','Yedekleme bilgisayarı ekle'],
+  ['Yedekleme işi oluştur','Neyin, nereye ve ne zaman yedekleneceğini seçin.','Yedekleme işi oluştur'],
+  ['İlk yedeği alın','İş hazır olunca ilk yedeği başlatın.','İlk yedeği başlat'],
+  ['Geri yüklemeyi deneyin','Yedeğinizin işe yaradığını görmek için bir şeyi geri yükleyin.','Geri yükle']
+];
+function renderEmpty(){
+  $('#e-status').innerHTML=E<3
+    ?`<div class="status warn">${ic('warn')}<div><p class="st-title">Verileriniz henüz korunmuyor</p><p>Henüz hiç yedek alınmadı. Aşağıdaki adımları sırayla tamamlayın.</p></div></div>`
+    :`<div class="status ok">${ic('check')}<div><p class="st-title">${E===4?'Kurulum tamamlandı':'İlk yedek alındı'}</p><p>${E===4?'Verileriniz korunuyor.':'Verileriniz korunuyor. Son adım: geri yüklemeyi deneyin.'}</p></div></div>`;
+  $('#e-steps').innerHTML=E_STEPS.map((s,i)=>{
+    const st=i<E?'done':i===E?'now':'next';
+    const badge=st==='done'?`<span class="badge ok">${ic('check')}Tamamlandı</span>`
+      :st==='now'?`<span class="badge now">${ic('info')}Sıradaki adım</span>`
+      :`<span class="badge later">Sonra</span>`;
+    const btn=st!=='now'?'':i===1
+      ?`<a class="btn btn-lg" href="#job-new">${s[2]}</a>`
+      :`<button type="button" class="btn btn-lg" data-e="${i}">${s[2]}</button>`;
+    return `<li class="task ${st}"><span class="num" aria-hidden="true">${i+1}</span><div><p class="bd">${badge}</p><h3>${s[0]}</h3><p>${s[1]}</p>${btn}</div></li>`;
+  }).join('');
+}
+function renderHome(){
+  $('#home-full').hidden=empty;$('#home-empty').hidden=!empty;
+  if(empty)renderEmpty();
+}
+$('#empty').addEventListener('change',e=>{empty=e.target.checked;if(empty)E=0;renderHome()});
+$('#e-steps').addEventListener('click',e=>{
+  const b=e.target.closest('[data-e]');if(!b)return;
+  const i=+b.dataset.e;
+  E=i+1;
+  toast(['Bilgisayar eklendi (örnek).','','İlk yedek alındı (örnek).','Geri yükleme tamamlandı (örnek).'][i]);
+  renderEmpty();
+  const n=$('#e-steps .now button,#e-steps .now a');if(n)n.focus();
+});
+
+/* ---------- wizard ---------- */
+const PCS=['MUHASEBE-SRV','DEPO-01'];
+const SRC=[
+  {id:'muh',pc:'MUHASEBE-SRV',t:'SQL Server · MUHASEBE-SRV · Muhasebe'},
+  {id:'bor',pc:'MUHASEBE-SRV',t:'SQL Server · MUHASEBE-SRV · Bordro'},
+  {id:'stk',pc:'DEPO-01',t:'PostgreSQL · DEPO-01 · stok'}
+];
+const STORES=[
+  ['Yerel disk (varsayılan)','Hızlı; ek ayar gerekmez.'],
+  ['Şirket SFTP sunucusu','Şirketinizin kendi sunucusunda saklanır.'],
+  ['Google Drive – ofis@firma.com','Google hesabınızda saklanır.']
+];
+const SCHEDS=[
+  ['Her gün 02:00','Gece, çalışma saatleri dışında.','Önerilen'],
+  ['Her gün 08:00'],
+  ['Günde 2 kez 08:00 ve 20:00'],
+  ['Elle','Yedek yalnızca siz başlatınca alınır.']
+];
+const RETS=[['7 gün'],['14 gün'],['30 gün','','Önerilen'],['90 gün'],['Hiç silinmesin','Depolama alanı zamanla dolabilir.']];
+const ENCS=['Kapalı','İsteğe bağlı','Zorunlu'];
+const KEY_NOTE=`<p class="note">${ic('info')}<span>Zorunlu şifrelemede, yedeklerinizi geri yüklemek için bir <strong>Kurtarma anahtarı</strong> gerekir. İşi oluşturduktan sonra anahtarınızı ekleyin ve güvenli bir yerde saklayın.</span></p>`;
+const TOTAL=8;
+const fresh=()=>({step:0,name:'',pc:PCS[0],src:[],store:0,sched:0,ret:2,enc:1,err:null,fromReview:false,done:false,started:false});
+let S=fresh();
+
+const errHtml=id=>S.err?`<p class="error" id="${id}">${ic('warn')}<span>Hata: ${S.err}</span></p>`:'';
+const radios=(name,items,sel)=>`<div class="choices">${items.map((it,i)=>`<label class="choice"><input type="radio" name="${name}" value="${i}"${i===sel?' checked':''}><span><span class="t">${it[0]}${it[2]?`<span class="tag">${it[2]}</span>`:''}</span>${it[1]?`<span class="d">${it[1]}</span>`:''}</span></label>`).join('')}</div>`;
+const group=(q,hint,body,extra='')=>`<fieldset class="field${S.err?' has-error':''}" aria-describedby="hint${S.err?' err':''}"><legend><h1 id="q" tabindex="-1">${q}</h1></legend><p class="hint" id="hint">${hint}</p>${errHtml('err')}${body}${extra}</fieldset>`;
+
+const STEPS=[
+  {sec:'Kaynak',html:()=>`<div class="field${S.err?' has-error':''}"><h1 id="q" tabindex="-1"><label for="f-name">İş adı</label></h1><p class="hint" id="hint">Bu işi sonra kolay tanımak için bir ad verin. Örnek: Muhasebe gece yedeği</p>${errHtml('err')}<input class="input" id="f-name" data-first type="text" autocomplete="off" value="${esc(S.name)}" aria-describedby="hint${S.err?' err':''}"${S.err?' aria-invalid="true"':''}></div>`},
+  {sec:'Kaynak',html:()=>`<div class="field"><h1 id="q" tabindex="-1"><label for="f-pc">Hangi yedekleme bilgisayarı?</label></h1><p class="hint" id="hint">Yedeği alınacak verilerin bulunduğu bilgisayarı seçin.</p><select class="input" id="f-pc" aria-describedby="hint">${PCS.map(p=>`<option${p===S.pc?' selected':''}>${p}</option>`).join('')}</select></div>`},
+  {sec:'Kaynak',html:()=>{
+    const list=SRC.filter(s=>s.pc===S.pc);
+    return group('Neyi yedeklemek istiyorsunuz?',`${S.pc} bilgisayarında bulunan kaynaklar. Birden fazla seçebilirsiniz.`,
+      `<div class="choices">${list.map((s,i)=>`<label class="choice"><input type="checkbox" name="src" value="${s.id}"${S.src.includes(s.id)?' checked':''}${i===0?' data-first':''}><span class="t">${s.t}</span></label>`).join('')}</div>`,
+      `<p style="margin:var(--sp-4) 0 0">Aradığınız listede yok mu? <button type="button" class="link-btn" data-msg="Elle yapılandırma bu prototipte yok.">Elle yapılandır</button></p>`);
+  }},
+  {sec:'Depolama',html:()=>group('Yedek nereye yazılsın?','Yedek dosyalarının saklanacağı yeri seçin.',radios('store',STORES,S.store),
+      `<p style="margin:var(--sp-4) 0 0"><button type="button" class="link-btn" data-msg="Yeni hedef ekleme bu prototipte yok.">Başka hedef ekle</button></p>`)},
+  {sec:'Zamanlama ve koruma',html:()=>group('Yedek ne zaman alınsın?','Seçtiğiniz zamanda yedek kendiliğinden alınır.',radios('sched',SCHEDS,S.sched))},
+  {sec:'Zamanlama ve koruma',html:()=>group('Yedekler ne kadar süre saklansın?','Süre dolunca eski yedek dosyaları otomatik silinir.',radios('ret',RETS,S.ret))},
+  {sec:'Zamanlama ve koruma',html:()=>`<div class="field"><h1 id="q" tabindex="-1"><label for="f-enc">Yedekler şifrelensin mi?</label></h1><p class="hint" id="hint">Şifreleme, yedek dosyalarınızı başkalarının okumasını engeller.</p><select class="input" id="f-enc" aria-describedby="hint">${ENCS.map((e,i)=>`<option value="${i}"${i===S.enc?' selected':''}>${e}</option>`).join('')}</select><div id="enc-note" role="status">${S.enc===2?KEY_NOTE:''}</div></div>`},
+  {sec:'Gözden geçir',last:true,html:()=>{
+    const src=SRC.filter(s=>S.src.includes(s.id));
+    const rows=[
+      ['İş adı',esc(S.name.trim()),0],
+      ['Yedekleme bilgisayarı',S.pc,1],
+      ['Yedeklenecekler',`<ul>${src.map(s=>`<li>${s.t}</li>`).join('')}</ul>`,2],
+      ['Depolama',STORES[S.store][0],3],
+      ['Zamanlama',SCHEDS[S.sched][0],4],
+      ['Saklama süresi',RETS[S.ret][0],5],
+      ['Yedek şifreleme',ENCS[S.enc],6]
+    ];
+    return `<h1 id="q" tabindex="-1">Gözden geçirin</h1><p class="hint" id="hint">Seçimleriniz aşağıda. Bir şeyi değiştirmek için “Değiştir”e basın.</p><dl class="summary">${rows.map(r=>`<div class="row"><dt>${r[0]}</dt><dd>${r[1]}</dd><dd><button type="button" class="link-btn" data-go="${r[2]}">Değiştir<span class="vh">: ${r[0]}</span></button></dd></div>`).join('')}</dl>${S.enc===2?KEY_NOTE:''}<p>Her şey doğruysa işi oluşturun. Sonra ilk yedeği hemen başlatabilirsiniz.</p>`;
+  }}
+];
+
+function doneHtml(){
+  return `<div class="status ok done-panel">${ic('check')}<div><h1 id="q" tabindex="-1">Yedekleme işi oluşturuldu</h1><p>“${esc(S.name.trim())}” işi hazır. Zamanı geldiğinde yedek kendiliğinden alınır.</p></div></div>`
+  +(S.started
+    ?`<div class="status ok" role="status">${ic('info')}<div><p class="st-title">İlk yedek başlatıldı</p><p>Bitince Ana sayfa’da görünecek.</p></div></div><div class="nav-row"><a class="btn btn-lg" href="#home">Ana sayfaya git</a></div>`
+    :`<h2 style="margin-top:var(--sp-6)">Sırada ne var?</h2><p>Beklemeden ilk yedeği şimdi alıp her şeyin çalıştığını görebilirsiniz.</p><div class="nav-row" style="margin-top:var(--sp-4)"><button type="button" class="btn btn-lg" data-act="start">İlk yedeği şimdi başlat</button><a class="link-btn" href="#home">Ana sayfaya dön</a></div>`);
+}
+
+function focusH1(){const h=[...document.querySelectorAll('main h1')].find(x=>x.offsetParent);if(h)h.focus()}
+
+function wizard(focus){
+  const w=$('#wiz');
+  if(S.done){w.innerHTML=doneHtml()}
+  else{
+    const st=STEPS[S.step];
+    const backEl=(S.step===0&&!S.fromReview)
+      ?`<a class="link-btn back" href="#home">${ic('back')}Ana sayfaya dön</a>`
+      :`<button type="button" class="link-btn back" data-act="back">${ic('back')}Geri</button>`;
+    w.innerHTML=`${backEl}<p class="cap"><span>Adım ${S.step+1} / ${TOTAL}</span><span class="muted">· ${st.sec}</span></p><div class="bar" aria-hidden="true">${Array.from({length:TOTAL},(_,i)=>`<i${i<=S.step?' class="on"':''}></i>`).join('')}</div><form novalidate>${st.html()}<div class="nav-row"><button type="submit" class="btn btn-lg">${st.last?'Yedekleme işini oluştur':'Devam'}</button><a class="link-btn" href="#home">İptal</a></div></form>`;
+  }
+  if(focus==='field'){const f=w.querySelector('[data-first]');if(f){f.focus();return}}
+  if(focus)focusH1();
+}
+
+function next(){
+  S.err=null;
+  if(S.step===0&&!S.name.trim())S.err='İş adı yazın.';
+  else if(S.step===2&&!S.src.length)S.err='Yedeklenecek en az bir kaynak seçin.';
+  if(S.err)return wizard('field');
+  if(S.step===TOTAL-1){S.done=true;E=Math.max(E,2);return wizard(true)}
+  if(S.fromReview){S.fromReview=false;S.step=TOTAL-1}else S.step++;
+  wizard(true);
+}
+
+const wiz=$('#wiz');
+wiz.addEventListener('submit',e=>{e.preventDefault();next()});
+wiz.addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]');
+  if(g){S.fromReview=true;S.err=null;S.step=+g.dataset.go;return wizard(true)}
+  const a=e.target.closest('[data-act]');
+  if(!a)return;
+  if(a.dataset.act==='back'){
+    S.err=null;
+    if(S.fromReview){S.fromReview=false;S.step=TOTAL-1}else S.step--;
+    wizard(true);
+  }else if(a.dataset.act==='start'){
+    S.started=true;E=Math.max(E,3);wizard(false);
+    wiz.querySelector('.nav-row .btn').focus();
+  }
+});
+wiz.addEventListener('input',e=>{if(e.target.id==='f-name')S.name=e.target.value});
+wiz.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='f-pc'){S.pc=t.value;S.src=[]}
+  else if(t.id==='f-enc'){S.enc=+t.value;$('#enc-note').innerHTML=S.enc===2?KEY_NOTE:''}
+  else if(t.name==='src')S.src=[...wiz.querySelectorAll('input[name=src]:checked')].map(i=>i.value);
+  else if(t.type==='radio')S[t.name]=+t.value;
+});
+
+/* ---------- mock buttons ---------- */
+document.addEventListener('click',e=>{
+  const m=e.target.closest('[data-msg]');
+  if(m){e.preventDefault();toast(m.dataset.msg)}
+});
+
+/* ---------- router ---------- */
+const PAGES={home:'Ana sayfa','job-new':'Yedekleme işi oluştur',yedeklemeler:'Yedeklemeler',bilgisayarlar:'Bilgisayarlar',depolama:'Depolama',ayarlar:'Ayarlar'};
+let cur=null,firstLoad=true;
+function route(){
+  let h=location.hash.slice(1);if(!PAGES[h])h='home';
+  const prev=cur;cur=h;
+  $('#s-home').hidden=h!=='home';
+  $('#s-job').hidden=h!=='job-new';
+  $('#s-other').hidden=h==='home'||h==='job-new';
+  if(h==='home')renderHome();
+  else if(h==='job-new'){if(prev!=='job-new')S=fresh();wizard(false)}
+  else $('#o-h1').textContent=PAGES[h];
+  document.querySelectorAll('[data-tab]').forEach(a=>{if(a.dataset.tab===h)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  const navId=h==='job-new'?'yedeklemeler':h;
+  document.querySelectorAll('[data-nav]').forEach(a=>{if(a.dataset.nav===navId)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  document.title=PAGES[h]+' · Yedekleme Platformu';
+  setMenu(false);
+  if(!firstLoad){window.scrollTo(0,0);focusH1()}
+  firstLoad=false;
+}
+addEventListener('hashchange',route);
+route();
+})();
+</script>
+</body>
+</html>
