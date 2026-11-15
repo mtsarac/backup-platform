@@ -12,7 +12,7 @@ Amaç: sahibinin verdiği kararları tek dosyada canlı görmek. Dış kaynak yo
 Karar → kaynak
 - Taban dil A "Sessiz operasyon konsolu": düz yüzeyler, hairline kenarlık, .375rem yarıçap, tek teal vurgu, gölge yalnız bindirmelerde, 14 px, zinc nötrler, açık + koyu. (variant-a4.html belirteçleri)
 - Kabuk: solda 5 öğeli kenar çubuğu (grup başlığı yok) + Platform Yönetimi + hesap. (variant-a4.html)
-- Ana sayfa (#home): home-2.html "Koruma haritası" (Yedekleme bilgisayarına göre gruplu, 14 günlük tazelik şeridi, Geri yüklenebilirlik satırı).
+- Ana sayfa (#home): home-2.html "Koruma haritası" (Yedekleme bilgisayarına göre gruplu, 14 günlük tazelik şeridi).
 - Yedeklemeler > İşler (#jobs): variant-a4.html usta-detay (solda iş listesi, sağda seçili iş; dar ekranda liste → ayrıntı). Diğer 4 alt sekme "bu prototipte yok" paneli gösterir.
 - Sihirbaz (#job-new): variant-a4.html sihirbazı (üstte adım çubuğu, solda form, sağda canlı Özet, 4 adım, başarı durumu). Başarıda "İlk yedeği şimdi başlat" kısa bir sahte ilerleme çalıştırır; yeni iş İşler listesinde (seçili) ve Ana sayfa haritasında görünür.
 - Elenenler: B, C, B'nin kaynak→hedef→son sonuç akışı, sıcak paletler.
@@ -367,7 +367,7 @@ h2.sec{font-size:var(--text-base);font-weight:600}
 .band-run{border-color:var(--border);background:var(--accent-subtle);color:var(--fg)}
 .band-run .bar{width:12rem;max-width:100%;margin:0;background:var(--surface)}
 
-.counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
 .counts>li{padding:var(--space-3) var(--space-4);border-left:1px solid var(--border)}
 .counts>li:first-child{border-left:0}
 .counts .n{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-xl);font-weight:600;line-height:1.25}
@@ -385,7 +385,7 @@ h2.sec{font-size:var(--text-base);font-weight:600}
 .grp-h h3{font-size:var(--text-base);font-weight:600}
 .grp-h .muted{font-size:var(--text-sm)}
 
-.src{display:grid;grid-template-columns:minmax(11rem,1fr) minmax(0,20rem) minmax(10rem,13rem);grid-template-areas:"main fresh last" "rest rest rest";gap:var(--space-2) var(--space-4);align-items:start;padding:var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) - 3px);border-top:1px solid var(--border);border-left:3px solid transparent}
+.src{display:grid;grid-template-columns:minmax(11rem,1fr) minmax(0,20rem) minmax(10rem,13rem);grid-template-areas:"main fresh last";gap:var(--space-2) var(--space-4);align-items:start;padding:var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) - 3px);border-top:1px solid var(--border);border-left:3px solid transparent}
 .src:first-child{border-top:0}
 .src.is-warn{border-left-color:var(--warn-fg)}
 .s-main{grid-area:main;display:flex;flex-direction:column;min-width:0}
@@ -438,18 +438,16 @@ h2.sec{font-size:var(--text-base);font-weight:600}
 @media (min-width:80rem){.three{grid-template-columns:repeat(3,minmax(0,1fr))}.three .act-p{grid-column:auto}}
 
 @media (max-width:64rem){
-  .src{grid-template-columns:minmax(0,1fr) minmax(9rem,13rem);grid-template-areas:"main last" "fresh fresh" "rest rest"}
+  .src{grid-template-columns:minmax(0,1fr) minmax(9rem,13rem);grid-template-areas:"main last" "fresh fresh"}
 }
 @media (max-width:40rem){
-  .counts{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .counts>li:nth-child(odd){border-left:0}
-  .counts>li:nth-child(n+3){border-top:1px solid var(--border)}
-  .src{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "last" "fresh" "rest"}
+  .counts>li{padding:var(--space-2) var(--space-3)}
+  .src{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "last" "fresh"}
   .s-last{flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3)}
   .s-last .bar{flex-basis:100%}
   .band .acts{width:100%}
   .band .acts .btn{flex:1}
-  .s-rest .btn{width:100%}
+  .s-last .btn{width:100%}
 }
 @media (max-width:52.5rem){.seg button{min-height:2.25rem}}
 /* ---------- birleşik prototip ---------- */
@@ -815,18 +813,15 @@ dialog::backdrop{background:rgb(0 0 0/.45)}
            '<p class="cap" id="cap-'+s.id+'" aria-live="polite" data-def="Son 14 gün: '+c+'">Son 14 gün: '+c+'</p>';
   }
   function row(s){
-    var k=kind(s),b=stb(s),r=s.rest,rest;
-    var rb=function(l){return '<button class="btn btn-sm" type="button" data-stub="Geri yükleme bu prototipte yok.">'+ic('restore')+l+'</button>'};
-    if(r)rest='<span class="r-ok">'+ic('ok')+'<span><b>Geri yüklenebilirlik</b> · Son geri yükleme denemesi: '+r.t+'.'+r.x+'</span></span>'+rb('Geri yükle');
-    else if(k==='new')rest='<span class="r-never">'+ic('info')+'<span><b>Geri yüklenebilirlik</b> · <em>Henüz yedek yok.</em> İlk yedek alınınca geri yükleme denenebilir.</span></span>';
-    else rest='<span class="r-never">'+ic('info')+'<span><b>Geri yüklenebilirlik</b> · <em>Hiç denenmedi.</em> Yedeğin işe yaradığını görmek için küçük bir dosyayı geri yüklemeyi deneyin.</span></span>'+rb('Geri yüklemeyi dene');
+    var k=kind(s),b=stb(s);
+    var rb='<button class="btn btn-sm" type="button" data-stub="Geri yükleme bu prototipte yok.">'+ic('restore')+'Geri yükle</button>';
     return '<li class="src'+(k==='warn'?' is-warn':'')+'">'+
       '<div class="s-main"><b class="nm">'+s.name+'</b><span class="muted">'+s.meta+'</span></div>'+
       '<div class="s-fresh">'+strip(s)+'</div>'+
       '<div class="s-last">'+badge(b[0],b[1],b[2])+'<span class="muted">Son başarılı: '+s.last+s.lastAgo+'</span>'+
         (k==='run'?'<div class="bar" role="progressbar" aria-label="'+s.name+' yedeği ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+s.pct+'" aria-valuetext="%'+s.pct+'"><i style="width:'+s.pct+'%"></i></div>':'')+
-      '</div>'+
-      '<div class="s-rest">'+rest+'</div></li>';
+        (k==='new'?'':rb)+
+      '</div></li>';
   }
   var KEY='<div class="key" aria-label="Şerit işaretleri">'+
     '<span><span class="cell c-ok">'+ic('check')+'</span>Yedek alındı</span>'+
@@ -867,15 +862,15 @@ dialog::backdrop{background:rgb(0 0 0/.45)}
       h+='<section class="panel" aria-labelledby="h-start"><div class="panel-h"><h2 id="h-start">Başlangıç adımları</h2><span class="muted">0 / 4 tamamlandı</span></div>'+stepsList()+'</section>'+
         '<section class="panel dashed" aria-labelledby="h-ghost"><div class="panel-h"><h2 id="h-ghost">Korunan veriler</h2><span class="muted">Henüz boş</span></div><div class="ghost">'+
         '<div class="strip" aria-hidden="true">'+'<span class="cell c-none"></span>'.repeat(14)+'</div>'+
-        '<p>Yedekleme bilgisayarı ve iş ekleyince her veri burada, son 14 günlük durumu ve “Geri yüklenebilirlik” satırıyla görünür.</p></div></section>'+
+        '<p>Yedekleme bilgisayarı ve iş ekleyince her veri burada, son 14 günlük durumuyla görünür.</p></div></section>'+
         '<section class="panel" aria-labelledby="p-st"><div class="panel-h"><h2 id="p-st">Depolama</h2></div><div class="panel-b">'+storageBlock()+'</div></section>';
     }else{
       var w=J.filter(function(j){return kind(j)==='warn'})[0],r=J.filter(function(j){return kind(j)==='run'})[0];
       if(w)h+='<div class="band" role="alert"><div class="txt">'+ic('alert')+'<div><b>'+w.band[0]+'</b>'+w.band[1]+'</div></div>'+
         '<div class="acts"><button class="btn btn-primary" type="button" data-stub="Yedekleme başlatma bu prototipte yok.">'+ic('play')+'Şimdi yedekle</button><a class="btn" href="#jobs" data-open="'+w.id+'">Ayrıntıyı gör</a></div></div>';
       else if(r)h+='<div class="band band-run" role="status"><div class="txt">'+ic('clock')+'<div><b>'+r.name+' yedeği çalışıyor %'+r.pct+'</b>'+r.started+'’de başladı. Bitince satır kendiliğinden güncellenir.</div></div><div class="bar" role="progressbar" aria-label="'+r.name+' yedeği ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+r.pct+'" aria-valuetext="%'+r.pct+'"><i style="width:'+r.pct+'%"></i></div></div>';
-      var warnN=J.filter(function(j){return kind(j)==='warn'}).length,never=J.filter(function(j){return !j.rest}).length;
-      var cells=[[J.length,'veri korunuyor',''],[J.length-warnN,'güncel',''],[warnN,'dikkat gerekiyor',warnN?'warn':''],[never,'verinin geri yüklemesi hiç denenmedi','']];
+      var warnN=J.filter(function(j){return kind(j)==='warn'}).length;
+      var cells=[[J.length,'veri korunuyor',''],[J.length-warnN,'güncel',''],[warnN,'dikkat gerekiyor',warnN?'warn':'']];
       h+='<ul class="counts" aria-label="Özet">'+cells.map(function(c){return '<li'+(c[2]?' class="is-warn"':'')+'><div class="n">'+(c[2]?ic('alert'):'')+c[0]+'</div><div class="l">'+c[1]+'</div></li>'}).join('')+'</ul>';
       var pcs=[];J.forEach(function(j){if(pcs.indexOf(j.pc)<0)pcs.push(j.pc)});
       h+='<section aria-labelledby="h-map"><div class="map-h"><h2 class="sec" id="h-map">Korunan veriler</h2>'+KEY+'</div>'+
