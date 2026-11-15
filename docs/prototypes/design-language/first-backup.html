@@ -11,7 +11,9 @@ Soru: boş bir çalışma alanından gelen yeni kullanıcı, en az ekran ve soru
 
 Akış (#first-backup; Ana sayfa "İlk yedeğinizi alın" paneli ve Yedeklemeler > İşler boş durumu buraya bağlanır):
 - 4 ekran, üstte ince adım çubuğu: 1 Bilgisayar ekle · 2 Ne yedeklensin · 3 Özet ve başla · 4 İlk yedek (+ deneme geri yükleme bindirmesi).
-- Sorulan 3 şey: bilgisayarın adı, işletim sistemi (Windows hazır), hangi veriler (bulunanların hepsi işaretli hazır). Geri kalan her şey sabit: Her gün 02:00, 30 gün, Yerel disk, otomatik şifreleme, otomatik iş adı, "Tek komutla kurulum".
+- Sorulan 3 şey: bilgisayarın adı, işletim sistemi (Windows hazır), hangi veriler (bulunanların hepsi işaretli hazır). Geri kalan her şey sabit: Her gün 02:00, 30 gün, Yerel disk, otomatik şifreleme, otomatik iş adı.
+- Kurulum (1. ekran): birincil yol adresten çalışan betik; tek kopyalanabilir komut (Windows yönetici PowerShell "irm ... | iex", Linux "curl ... | sudo sh"), tek kullanımlık anahtar komutun içinde, kurar+kaydeder+bağlar, ek soru yok; bilgisayar adı zorunlu. Kapalı "Başka yollarla kur": (a) Yükleyiciyi indir (.exe) / Linux'ta paket, anahtar ayrıca gösterilir; (b) Adım adım kurulum. Adım adım/Tek komutla anahtarı yok.
+- Onaylanan: özet ekranı ayrı; iş adı otomatik ("Adı değiştir"); deneme geri yüklemesi 4. aşamada, atlanabilir, Ana sayfada hatırlatma; birincil eylem "Yedeklemeyi oluştur ve ilk yedeği başlat", ikincil "Sadece oluştur".
 - Bağlantıyı gerçekten kuramadığımız için prototip çubuğundaki "bağlantıyı simüle et" durumu ilerletir (otomatik ilerleme yok). "Bilgisayar zaten ekli" yolu 1. ekranı atlar.
 - Yedek ilerlemesi Ana sayfa bandında da görünür; "yedeği hızlı bitir" ilerlemeyi bitirir. Deneme geri yüklemesi atlanırsa Ana sayfada hatırlatma kalır.
 - Mevcut A4 sihirbaz (#job-new), bilgisayar varken "Yedekleme işi oluştur" için durur. Bu prototipte sihirbaz açılış listesine yeni bilgisayar eklenmez (bilinen sınır).
@@ -489,6 +491,14 @@ dialog::backdrop{background:rgb(0 0 0/.45)}
 .sub-h{font-size:var(--text-sm);font-weight:600;margin:var(--space-4) 0 var(--space-2)}
 .cmd-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2);margin-top:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border)}
 .cmd-h .sub-h{margin:0}
+.alt{margin-top:var(--space-4);border:1px solid var(--border);border-radius:var(--radius)}
+.alt>summary{display:flex;align-items:center;min-height:2.5rem;padding:0 var(--space-3);font-weight:500;cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.alt[open]>summary{border-bottom:1px solid var(--border)}
+.alt>ul{padding:0 var(--space-3)}
+.alt>ul>li{padding:var(--space-3) 0}
+.alt>ul>li+li{border-top:1px solid var(--border)}
+.alt h4{margin:0 0 var(--space-1);font-size:var(--text-base);font-weight:600}
+.alt-acts{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);margin-top:var(--space-2)}
 .cmd-l{margin-top:var(--space-3);color:var(--muted);font-size:var(--text-sm)}
 .cmd-row{display:flex;gap:var(--space-2);align-items:flex-start;margin-top:var(--space-2)}
 .cmd{flex:1;min-width:0;display:block;padding:var(--space-2) var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:var(--text-sm);line-height:1.5;overflow-wrap:anywhere;user-select:all}
@@ -618,8 +628,11 @@ dialog::backdrop{background:rgb(0 0 0/.45)}
     <li><b>Bu prototip</b><span>#177 İlk yedek akışı: boş çalışma alanından ilk doğrulanmış yedeğe</span></li>
     <li><b>Ekran sayısı</b><span>4 — Bilgisayar ekle · Ne yedeklensin · Özet ve başla · İlk yedek. Ek olarak 1 küçük bindirme: deneme geri yüklemesi</span></li>
     <li><b>Sorulan soru</b><span>3 yanıt (varsayılan yol): bilgisayarın adı, işletim sistemi (Windows hazır), hangi veriler (bulunanların hepsi hazır işaretli). “Bilgisayar zaten ekli” yolunda: bilgisayar seçimi + hangi veriler = 2</span></li>
-    <li><b>Sabit tutulanlar</b><span>Her gün 02:00 · 30 gün saklama · Yerel disk · otomatik şifreleme (anahtar kullanıcıdan istenmez) · otomatik iş adı · Tek komutla kurulum</span></li>
+    <li><b>Sabit tutulanlar</b><span>Her gün 02:00 · 30 gün saklama · Yerel disk · otomatik şifreleme (anahtar kullanıcıdan istenmez) · otomatik iş adı</span></li>
     <li><b>İsteğe bağlı değişir</b><span>Özet ekranında satır içi: nereye, ne zaman, ne kadar saklanacak; 2. ekranda “Adı değiştir”</span></li>
+    <li><b>Kurulum (karar)</b><span>Birincil yol: adresten çalışan betik. Tek kopyalanabilir komut (Windows: yönetici PowerShell “irm … | iex”; Linux: “curl … | sudo sh”), tek kullanımlık anahtar komutun içinde, kurar-kaydeder-bağlar, ek soru yok. Bilgisayar adı komut için zorunlu. “Adım adım / Tek komutla” anahtarı kaldırıldı</span></li>
+    <li><b>Kurulum (yedek yollar)</b><span>Kapalı “Başka yollarla kur”: (a) Windows’ta Yükleyiciyi indir (.exe), Linux’ta paket/betik; anahtar ayrıca gösterilir ve kopyalanır. (b) Adım adım kurulum: yükleyici eksik bilgileri sorar</span></li>
+    <li><b>Onaylanan kararlar</b><span>Özet ekranı ayrı kalır · iş adı otomatik, yalnız “Adı değiştir” · deneme geri yüklemesi 4. aşamada, atlanabilir, Ana sayfada hatırlatma · birincil eylem “Yedeklemeyi oluştur ve ilk yedeği başlat”, ikincil “Sadece oluştur”</span></li>
     <li><b>Elle yapılacak tek şey</b><span>Komutu yedeklenecek bilgisayarda çalıştırmak (kaçınılamaz). Bu prototipte bağlantı çubuktaki düğmeyle simüle edilir</span></li>
     <li><b>Yedek sihirbazı</b><span>A4 (#job-new) bilgisayar varken “Yedekleme işi oluştur” için durur</span></li>
     <li><b>Elenenler</b><span>B, C, B akışı, sıcak paletler, tek soruluk ekranlar</span></li>
@@ -1326,7 +1339,7 @@ dialog::backdrop{background:rgb(0 0 0/.45)}
   var KEYV='ek_4f9a-81c2-d7e0';
   var FOUND={'DEPO-01':[{id:'f1',n:'stok',type:'PostgreSQL',gb:126}],def:[{id:'f1',n:'Muhasebe',type:'SQL Server',gb:94},{id:'f2',n:'Bordro',type:'SQL Server',gb:38}]};
   function esc(s){return String(s).replace(/[&<>"']/g,function(c){return '&#'+c.charCodeAt(0)+';'})}
-  function fbFresh(){return {stage:1,name:'',os:'win',mode:'one',conn:0,scan:'idle',pc:'',items:[],sel:{},names:{},ren:'',storage:'local',sched:'d02',ret:'30',jobs:[],phase:'',restore:''}}
+  function fbFresh(){return {stage:1,name:'',os:'win',alt:false,dl:false,conn:0,scan:'idle',pc:'',items:[],sel:{},names:{},ren:'',storage:'local',sched:'d02',ret:'30',jobs:[],phase:'',restore:''}}
   function fbSel(){return FB.items.filter(function(i){return FB.sel[i.id]})}
   function nm(i){return FB.names[i.id]||i.n+' veritabanı yedeği'}
   function stIdx(p){return p<8?0:p<85?1:p<100?2:3}
@@ -1370,22 +1383,31 @@ dialog::backdrop{background:rgb(0 0 0/.45)}
 
   /* --- 1. Bilgisayar ekle --- */
   function cmdText(){
-    var n=FB.name.trim().replace(/'/g,''),one=FB.mode==='one';
-    if(FB.os==='win')return 'irm https://yedekleme.ornek.com/kur.ps1 | iex'+(one?"; Kur-Yedekleme -Ad '"+n+"' -Anahtar '"+KEYV+"'":'');
-    return 'curl -fsSL https://yedekleme.ornek.com/kur.sh | sudo sh'+(one?" -s -- --ad '"+n+"' --anahtar '"+KEYV+"'":'');
+    var n=encodeURIComponent(FB.name.trim().replace(/'/g,'')),q="'https://yedekleme.ornek.com/kur"+(FB.os==='win'?'.ps1':'.sh')+'?ad='+n+'&anahtar='+KEYV+"'";
+    return FB.os==='win'?'irm '+q+' | iex':'curl -fsSL '+q+' | sudo sh';
   }
   function cmdRow(id,t,aria){return '<div class="cmd-row"><code class="cmd" id="'+id+'">'+esc(t)+'</code><button class="btn" type="button" data-act="copy" data-src="'+id+'" aria-label="'+aria+'">'+ic('copy')+'Kopyala</button></div>'}
+  function altHtml(lock){
+    var win=FB.os==='win',dis=lock?' disabled':'',dl=FB.dl,k=cmdRow('fb-key',KEYV,'Kurulum anahtarını kopyala');
+    var a=win?
+      '<li><h4>Yükleyiciyi indir (.exe)</h4><p class="hint">Yükleyiciyi yedeklenecek bilgisayara indirip çift tıklayarak çalıştırın (yönetici izni isteyebilir). Kurulum anahtar isteyince aşağıdakini yapıştırın.</p><div class="alt-acts"><button class="btn" type="button" data-act="dl"'+dis+'>'+ic('plus')+'Yükleyiciyi indir (.exe)</button>'+(dl?'<span class="hint hl" role="status">'+ic('ok')+'<span>YedeklemeKurulum.exe indirildi (örnek).</span></span>':'')+'</div>'+k+'</li>':
+      '<li><h4>Paketi indir (.deb / .rpm)</h4><p class="hint">Paketi yedeklenecek bilgisayara indirip kurun, ardından <span class="rt-name">sudo yedekleme-kur</span> komutunu çalıştırın. Kurulum anahtar isteyince aşağıdakini yapıştırın.</p><div class="alt-acts"><button class="btn" type="button" data-act="dl"'+dis+'>'+ic('plus')+'Paketi indir (.deb / .rpm)</button>'+(dl?'<span class="hint hl" role="status">'+ic('ok')+'<span>yedekleme-bilgisayari.deb indirildi (örnek).</span></span>':'')+'</div>'+k+'</li>';
+    var b=win?
+      '<li><h4>Adım adım kurulum</h4><p class="hint">Yükleyiciyi çalıştırın; adı ve diğer eksik bilgileri kendisi sorar. Anahtar ayrıca verilir:</p>'+cmdRow('fb-key2',KEYV,'Kurulum anahtarını kopyala')+'</li>':
+      '<li><h4>Adım adım kurulum</h4><p class="hint">Betiği indirip çalıştırın; eksik bilgileri kendisi sorar. Anahtar ayrıca verilir:</p>'+cmdRow('fb-cmd2','curl -fsSL https://yedekleme.ornek.com/kur.sh -o kur.sh && sudo sh kur.sh','Komutu kopyala')+cmdRow('fb-key2',KEYV,'Kurulum anahtarını kopyala')+'</li>';
+    return '<details class="alt" id="fb-alt"'+(FB.alt?' open':'')+'><summary>Başka yollarla kur</summary><ul>'+a+b+'</ul></details>';
+  }
   function renderS1(){
-    var n=FB.name.trim(),box=$('#fb-cmdbox'),lock=FB.conn>0,win=FB.os==='win',one=FB.mode==='one';
+    var n=FB.name.trim(),box=$('#fb-cmdbox'),lock=FB.conn>0,win=FB.os==='win';
     $('#fb-name').disabled=lock;$$('#fb-os input').forEach(function(i){i.disabled=lock});
     $('#fb-conn').hidden=!n;
     if(!n)box.innerHTML='<p class="hint" style="margin-top:var(--space-2)">Bilgisayarın adını yazın; kurulum komutu burada görünür.</p>';
-    else box.innerHTML='<div class="cmd-h"><h3 class="sub-h">Kurulum komutu</h3><div class="seg" role="group" aria-label="Kurulum şekli">'+
-      [['one','Tek komutla kurulum'],['step','Adım adım kurulum']].map(function(m){return '<button type="button" data-act="mode" data-v="'+m[0]+'" aria-pressed="'+(FB.mode===m[0])+'"'+(lock?' disabled':'')+'>'+m[1]+'</button>'}).join('')+'</div></div>'+
-      '<p class="cmd-l">Bu komutu yedeklenecek bilgisayarda <b>yönetici olarak</b> çalıştırın. '+(win?'Başlat menüsünde PowerShell’e sağ tıklayıp “Yönetici olarak çalıştır”ı seçin, komutu yapıştırıp Enter’a basın.':'Bir terminal açın, komutu yapıştırıp Enter’a basın; sudo parolanız istenebilir.')+'</p>'+
+    else box.innerHTML='<div class="cmd-h"><h3 class="sub-h">Kurulum komutu</h3></div>'+
+      '<p class="cmd-l">Bu komutu <b>yedeklenecek bilgisayarda</b> çalıştırın. '+(win?'Başlat menüsünde PowerShell’e sağ tıklayıp “Yönetici olarak çalıştır”ı seçin, komutu yapıştırıp Enter’a basın.':'Bir terminal açın, komutu yapıştırıp Enter’a basın; sudo parolanız istenebilir.')+'</p>'+
       cmdRow('fb-cmd',cmdText(),'Komutu kopyala')+
-      (one?'':'<p class="cmd-l">Kurulum anahtar isteyince bunu yapıştırın:</p>'+cmdRow('fb-key',KEYV,'Anahtarı kopyala'))+
-      '<p class="hint hl" style="margin-top:var(--space-3)">'+ic('lock')+'<span>Kurulum anahtarı yalnızca bir kez gösterilir ve bir kez kullanılabilir; süresi dolarsa yenisini üretirsiniz. Komutu başkalarıyla paylaşmayın.</span></p>';
+      '<p class="hint hl" style="margin-top:var(--space-3)">'+ic('check')+'<span>Komut programı kurar, kaydeder ve bağlar; size başka soru sormaz.</span></p>'+
+      '<p class="hint hl" style="margin-top:var(--space-2)">'+ic('lock')+'<span>Komuttaki kurulum anahtarı yalnızca bir kez gösterilir ve bir kez kullanılabilir; süresi dolarsa yenisini üretirsiniz. Komutu başkalarıyla paylaşmayın.</span></p>'+
+      altHtml(lock);
     renderConn();fbNav();
   }
   function renderConn(){
@@ -1553,11 +1575,12 @@ dialog::backdrop{background:rgb(0 0 0/.45)}
     else if(n==='fbret'){FB.ret=t.value;updS3()}
   });
   fb.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.id==='fb-ren'){e.preventDefault();doRenamed(e.target.getAttribute('data-id'))}});
+  fb.addEventListener('toggle',function(e){if(e.target.id==='fb-alt')FB.alt=e.target.open},true);
   fb.addEventListener('click',function(e){
     var b=e.target.closest('[data-act]');if(!b||b.disabled)return;
     var a=b.getAttribute('data-act'),id=b.getAttribute('data-id');
     if(a==='go'){var k=+b.getAttribute('data-k');if(k<FB.stage&&!FB.phase)fbGo(k)}
-    else if(a==='mode'){FB.mode=b.getAttribute('data-v');renderS1()}
+    else if(a==='dl'){FB.dl=true;renderS1();toast('İndirme başladı (örnek).')}
     else if(a==='copy'){
       var el=$('#'+b.getAttribute('data-src'));
       var fail=function(){var r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r);toast('Otomatik kopyalanamadı; seçili metni Ctrl+C ile kopyalayın.')};
