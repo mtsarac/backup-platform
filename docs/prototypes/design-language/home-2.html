@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ana sayfa · H2 Koruma haritası</title>
+<!--
+H2 — "Koruma haritası" (A dilinde Ana sayfa)
+
+Gerekçe
+- Sayfa tek soruya cevap verir: "Neler korunuyor?". Yedekleme bilgisayarına göre gruplanmış düz satırlarda her veri, son 14 günün tazelik şeridiyle (şekil + ipucu metni; renk tek başına değil) ve son başarılı yedek zamanıyla görünür. Sorun varsa tek satırlık bir uyarı üstte, ilgili satır haritada işaretli.
+- Her satırın altında "Geri yüklenebilirlik" satırı var: yedeğin gerçekten geri yüklenip yüklenemediği ("3 gün önce, başarılı" / "Hiç denenmedi") yedek almak kadar görünür; "Geri yükle" ana işlem olarak sayfa başlığında da duruyor.
+- Sıradaki yedek, depolama ve son etkinlik haritanın altında üç küçük panelde; boş durumda aynı harita gölge (kesik çizgili) halde başlangıç adımlarının yanında görünür, ilk yedek alındıkça dolar.
+
+Ödünleşim
+- Harita "ne korunuyor" sorusunu çok iyi cevaplar ama "ne oldu" (zaman sırası) ve "yer yetiyor mu" (depolama ayrıntısı) ikinci planda kalır. Onlarca kaynakta satır sayısı uzar; arama/süzme ve bilgisayar grubunu daraltma gerekir. 14 günlük şerit küçük kareler olduğundan klavye ve dokunmatikte tek bir odak noktası olarak çalışır (ok tuşları / dokunma ile gün seçilir, ipucu metni şeridin altında yazılır).
+
+Kullanılacak web fontları (burada yalnızca sistem yığını var): Inter (arayüz, tabular-nums açık) — Geist Sans da olur.
+Tema geçişi <html class="dark"> ile yapılır; hiçbir şey saklanmaz.
+-->
+<style>
+:root{
+  /* renk — açık */
+  --bg:#fafafa; --side-bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --raised:#ffffff;
+  --border:#e4e4e7; --border-input:#8e8e98;
+  --fg:#18181b; --muted:#52525b;
+  --accent:#0f5e63; --accent-hover:#0b4a4e; --accent-fg:#ffffff; --accent-subtle:#e6f1f1;
+  --focus:#0f5e63;
+  --ok-fg:#166534; --ok-bg:#dcfce7; --ok-bd:#86d9a2;
+  --warn-fg:#854d0e; --warn-bg:#fef9c3; --warn-bd:#e5c64f;
+  --err-fg:#b91c1c; --err-bg:#fee2e2; --err-bd:#f1a1a1;
+  --neutral-fg:#3f3f46; --neutral-bg:#e4e4e7;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .14);
+  /* radius */
+  --radius:.375rem; --radius-sm:.25rem; --radius-full:9999px;
+  /* boşluk (4px ızgara) */
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.5rem; --space-6:2rem;
+  /* tipografi — kompakt 14px */
+  --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --text-xs:.75rem; --text-sm:.8125rem; --text-base:.875rem; --text-lg:1rem; --text-xl:1.25rem;
+  --leading:1.45; --control-h:2rem;
+}
+:root.dark{
+  /* koyu: yükseltilmiş yüzeyler tabandan açık */
+  --bg:#09090b; --side-bg:#0f0f12; --surface:#18181b; --surface-2:#232328; --raised:#27272c;
+  --border:#2e2e34; --border-input:#71717a;
+  --fg:#fafafa; --muted:#a1a1aa;
+  --accent:#8cc5c8; --accent-hover:#a6d3d5; --accent-fg:#052a2c; --accent-subtle:#14302f;
+  --focus:#8cc5c8;
+  --ok-fg:#86efac; --ok-bg:#12301d; --ok-bd:#235f37;
+  --warn-fg:#fcd34d; --warn-bg:#33270a; --warn-bd:#6b5314;
+  --err-fg:#fca5a5; --err-bg:#3d1414; --err-bd:#7a2b2b;
+  --neutral-fg:#d4d4d8; --neutral-bg:#2e2e34;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .6);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light}
+html.dark{color-scheme:dark}
+body{margin:0;font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--leading);background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,ol,dl,dd{margin:0}
+ul,ol{padding:0;list-style:none}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--radius-sm)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic-lg{width:1.25rem;height:1.25rem}
+.muted{color:var(--muted)}
+
+/* ---------- kabuk ---------- */
+.shell{display:grid;grid-template-columns:12rem minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--side-bg);border-right:1px solid var(--border)}
+.side-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-3) var(--space-3) var(--space-2)}
+.brand{display:flex;align-items:center;gap:var(--space-2);font-weight:600;font-size:var(--text-base);text-decoration:none;color:var(--fg);min-height:2rem}
+.brand-mark{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-fg);flex:none}
+.brand-mark .ic{width:.875rem;height:.875rem}
+.btn.menu-btn{display:none}
+.side-body{display:flex;flex-direction:column;flex:1;min-height:0;padding:0 var(--space-2) var(--space-3)}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:var(--space-1)}
+.nav a{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-weight:500;transition:background .12s}
+.nav a:hover{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current]{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current] .ic{color:var(--accent)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;padding-top:var(--space-3);border-top:1px solid var(--border)}
+.side-foot a,.account{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-size:var(--text-sm)}
+.side-foot a:hover,.account:hover{background:var(--surface-2);color:var(--fg)}
+.account{width:100%;border:0;background:none;font:inherit;font-size:var(--text-sm);text-align:left;cursor:pointer;min-height:2.5rem;margin-top:var(--space-1)}
+.avatar{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-full);background:var(--accent-subtle);color:var(--accent);font-size:var(--text-xs);font-weight:600;flex:none}
+.account b{display:block;color:var(--fg);font-weight:500;line-height:1.2}
+.account small{display:block;font-size:var(--text-xs);line-height:1.2}
+
+.main{min-width:0;padding:0 var(--space-5) 2.5rem;width:100%;max-width:96rem}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--border)}
+.topbar .grow{flex:1}
+.seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface)}
+.seg a{display:inline-flex;align-items:center;min-height:1.75rem;padding:0 var(--space-3);border-radius:var(--radius-sm);color:var(--muted);text-decoration:none;font-weight:500;font-size:var(--text-sm)}
+.seg a:hover{color:var(--fg)}
+.seg a[aria-current]{background:var(--accent);color:var(--accent-fg)}
+.proto-label{font-size:var(--text-xs);color:var(--muted)}
+
+/* ---------- bileşenler ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s}
+.btn:hover{background:var(--surface-2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn[disabled],.btn[aria-disabled=true]{opacity:.55;cursor:not-allowed}
+.btn-quiet{border-color:transparent;background:none;color:var(--muted)}
+.link{display:inline-flex;align-items:center;min-height:1.5rem;padding:0;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.link:hover{color:var(--accent-hover)}
+.switch{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-size:var(--text-sm);font-weight:500;cursor:pointer}
+.switch:hover{background:var(--surface-2)}
+.switch .box{display:grid;place-items:center;width:1rem;height:1rem;border:1px solid var(--border-input);border-radius:var(--radius-sm);color:transparent}
+.switch[aria-checked=true] .box,.switch[aria-pressed=true] .box{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.switch .box .ic{width:.75rem;height:.75rem;stroke-width:3}
+.theme-btn .i-sun{display:none}
+.dark .theme-btn .i-sun{display:block}
+.dark .theme-btn .i-moon{display:none}
+
+.badge{display:inline-flex;align-items:center;gap:.3rem;min-height:1.375rem;padding:0 .5rem;border:1px solid transparent;border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:500;white-space:nowrap}
+.badge .ic{width:.8125rem;height:.8125rem}
+.b-ok{color:var(--ok-fg);background:var(--ok-bg);border-color:var(--ok-bd)}
+.b-warn{color:var(--warn-fg);background:var(--warn-bg);border-color:var(--warn-bd)}
+.b-err{color:var(--err-fg);background:var(--err-bg);border-color:var(--err-bd)}
+.b-neutral{color:var(--neutral-fg);background:var(--neutral-bg)}
+
+/* sayfa başlığı: tek satır durum özeti */
+.hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-4);margin:var(--space-4) 0 var(--space-3)}
+.hd h1{font-size:var(--text-xl);line-height:1.3;font-weight:600;letter-spacing:-.01em}
+.hd .sum{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin-top:var(--space-1);color:var(--muted)}
+.hd .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-4);min-height:2.5rem;border-bottom:1px solid var(--border)}
+.panel-h h2{font-size:var(--text-base);font-weight:600}
+.panel-b{padding:var(--space-3) var(--space-4)}
+
+.bar{height:.5rem;border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface-2);overflow:hidden;margin:var(--space-2) 0}
+.bar i{display:block;height:100%;background:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--muted)}
+
+/* boş durum: başlangıç adımları sağ bölmede */
+.steps{counter-reset:s}
+.steps li{display:grid;grid-template-columns:1.5rem minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);border-top:1px solid var(--border)}
+.steps li:first-child{border-top:0}
+.steps .n{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;color:var(--muted)}
+.steps .is-now{background:var(--accent-subtle)}
+.steps .is-now .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.steps b{font-weight:600;display:block}
+.steps p{color:var(--muted)}
+.steps .is-later b{color:var(--muted)}
+.toast{position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:50;max-width:min(22rem,calc(100vw - 2rem));padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--fg);box-shadow:var(--shadow-overlay);opacity:0;pointer-events:none;transition:opacity .15s}
+.toast.show{opacity:1}
+.toast:empty{display:none}
+
+
+/* ---------- H2: koruma haritası ---------- */
+.seg button{display:inline-flex;align-items:center;min-height:1.75rem;padding:0 var(--space-3);border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);font:inherit;font-weight:500;font-size:var(--text-sm);cursor:pointer}
+.seg button:hover{color:var(--fg)}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg)}
+.btn-sm{min-height:1.75rem;padding:0 var(--space-2);font-size:var(--text-sm)}
+.b-run{color:var(--accent);background:var(--accent-subtle);border-color:var(--accent)}
+.stack>*+*{margin-top:var(--space-4)}
+h2.sec{font-size:var(--text-base);font-weight:600}
+
+.band{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--warn-bd);border-radius:var(--radius);background:var(--warn-bg);color:var(--warn-fg)}
+.band .txt{display:flex;gap:var(--space-2);align-items:flex-start;flex:1 1 20rem;min-width:0}
+.band .txt .ic{margin-top:2px}
+.band .txt b{display:block;font-weight:600}
+.band .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.band-run{border-color:var(--border);background:var(--accent-subtle);color:var(--fg)}
+.band-run .bar{width:12rem;max-width:100%;margin:0;background:var(--surface)}
+
+.counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.counts>li{padding:var(--space-3) var(--space-4);border-left:1px solid var(--border)}
+.counts>li:first-child{border-left:0}
+.counts .n{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-xl);font-weight:600;line-height:1.25}
+.counts .l{color:var(--muted);font-size:var(--text-sm)}
+.counts .is-warn .n,.counts .is-warn .l{color:var(--warn-fg)}
+.counts{margin:0;padding:0;list-style:none}
+
+.map-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-1) var(--space-4)}
+.key{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-4);font-size:var(--text-sm);color:var(--muted)}
+.key span{display:inline-flex;align-items:center;gap:.375rem}
+.key .cell{width:1.125rem;height:1.125rem;flex:none}
+.grp{margin-top:var(--space-3)}
+.grp-h{align-items:center}
+.grp-h .who{display:flex;align-items:center;gap:var(--space-2);min-width:0;flex-wrap:wrap}
+.grp-h h3{font-size:var(--text-base);font-weight:600}
+.grp-h .muted{font-size:var(--text-sm)}
+
+.src{display:grid;grid-template-columns:minmax(11rem,1fr) minmax(0,20rem) minmax(10rem,13rem);grid-template-areas:"main fresh last" "rest rest rest";gap:var(--space-2) var(--space-4);align-items:start;padding:var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) - 3px);border-top:1px solid var(--border);border-left:3px solid transparent}
+.src:first-child{border-top:0}
+.src.is-warn{border-left-color:var(--warn-fg)}
+.s-main{grid-area:main;display:flex;flex-direction:column;min-width:0}
+.s-main .nm{font-weight:600}
+.s-main .muted{font-size:var(--text-sm)}
+.s-fresh{grid-area:fresh;min-width:0}
+.s-last{grid-area:last;display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-1)}
+.s-last .muted{font-size:var(--text-sm)}
+.s-last .bar{width:100%;margin:0}
+.s-rest{grid-area:rest;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--border);color:var(--muted);font-size:var(--text-sm)}
+.s-rest>span{display:inline-flex;align-items:flex-start;gap:var(--space-2);flex:1 1 16rem;min-width:0}
+.s-rest>span .ic{margin-top:2px}
+.s-rest b{color:var(--fg);font-weight:600}
+.s-rest .r-ok .ic{color:var(--ok-fg)}
+.s-rest .r-never .ic{color:var(--warn-fg)}
+.s-rest .r-never em{font-style:normal;color:var(--warn-fg);font-weight:600}
+
+.strip{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:2px;max-width:20rem;padding:2px;border-radius:var(--radius-sm)}
+.strip:focus-visible{outline-offset:1px}
+.cell{aspect-ratio:1/1;display:grid;place-items:center;border:1px solid transparent;border-radius:2px}
+.cell .ic{width:.75rem;height:.75rem;stroke-width:3}
+.c-ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok-fg)}
+.c-fail{background:var(--err-bg);border-color:var(--err-fg);color:var(--err-fg)}
+.c-run{background:var(--accent-subtle);border-color:var(--accent);color:var(--accent)}
+.c-none{border:1px dashed var(--border-input);color:var(--muted)}
+.cell:hover{filter:brightness(.94)}
+.dark .cell:hover{filter:brightness(1.2)}
+.strip:focus .cell.is-cur{outline:2px solid var(--fg);outline-offset:1px}
+.cap{margin-top:var(--space-1);font-size:var(--text-xs);color:var(--muted);min-height:1.1em}
+
+.three{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-3);margin-top:var(--space-3)}
+.facts2{display:flex;flex-direction:column;gap:var(--space-3)}
+.facts2 dt{font-size:var(--text-sm);color:var(--muted)}
+.facts2 dd{font-weight:600}
+.facts2 dd small{display:block;font-size:var(--text-sm);font-weight:400;color:var(--muted)}
+.big{font-size:var(--text-lg);font-weight:600}
+.act li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--space-3);align-items:center;padding:var(--space-2) var(--space-4);border-top:1px solid var(--border)}
+.act li:first-child{border-top:0}
+.act .t{font-size:var(--text-sm);color:var(--muted)}
+.act .sz{font-size:var(--text-sm);color:var(--muted);text-align:right}
+.act .r{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.act .nm{font-weight:500}
+
+.ghost{padding:var(--space-3) var(--space-4)}
+.ghost .strip{opacity:.9}
+.ghost p{color:var(--muted);margin-top:var(--space-2)}
+.panel.dashed{border-style:dashed;border-color:var(--border-input)}
+
+@media (min-width:40rem){.three{grid-template-columns:repeat(2,minmax(0,1fr))}.three .act-p{grid-column:1/-1}}
+@media (min-width:80rem){.three{grid-template-columns:repeat(3,minmax(0,1fr))}.three .act-p{grid-column:auto}}
+
+/* ---------- duyarlı ---------- */
+@media (max-width:64rem){
+  .src{grid-template-columns:minmax(0,1fr) minmax(9rem,13rem);grid-template-areas:"main last" "fresh fresh" "rest rest"}
+}
+@media (max-width:52.5rem){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{height:auto;z-index:30;border-right:0;border-bottom:1px solid var(--border)}
+  .side-head{padding:var(--space-2) var(--space-4)}
+  .btn.menu-btn{display:inline-flex;min-height:2.5rem}
+  .side-body{display:none;max-height:calc(100vh - 3.5rem);overflow:auto;padding:0 var(--space-3) var(--space-3)}
+  .side.open .side-body{display:flex}
+  .nav a,.side-foot a{min-height:2.5rem}
+  .main{padding:0 var(--space-4) 2rem}
+  .btn,.switch{min-height:2.5rem}
+  .btn-sm{min-height:2rem}
+  .seg button{min-height:2.25rem}
+}
+@media (max-width:40rem){
+  .counts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .counts>li:nth-child(odd){border-left:0}
+  .counts>li:nth-child(n+3){border-top:1px solid var(--border)}
+  .src{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "last" "fresh" "rest"}
+  .s-last{flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3)}
+  .s-last .bar{flex-basis:100%}
+  .steps li{grid-template-columns:1.5rem minmax(0,1fr)}
+  .steps li .btn{grid-column:2;justify-self:start}
+  .hd .acts{width:100%}
+  .hd .acts .btn{flex:1}
+  .band .acts{width:100%}
+  .band .acts .btn{flex:1}
+  .s-rest .btn{width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ikon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-hdd" viewBox="0 0 24 24"><path d="M3 14h18v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M5 14 7.5 5h9L19 14"/><path d="M7 17h.01M11 17h.01"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h.01"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></symbol>
+</svg>
+
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="side-head">
+      <a class="brand" href="#"><span class="brand-mark"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span>Yedekleme Platformu</a>
+      <button class="btn btn-quiet menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="sideBody"><svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg>Menü</button>
+    </div>
+    <div class="side-body" id="sideBody">
+      <nav class="nav" aria-label="Ana gezinme">
+        <a href="#" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Ana sayfa</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-db"/></svg>Yedeklemeler</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg>Bilgisayarlar</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-hdd"/></svg>Depolama</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Ayarlar</a>
+      </nav>
+      <div class="side-foot">
+        <a href="#" data-stub>Platform Yönetimi</a>
+        <button class="account" type="button" data-stub="Hesap menüsü bu prototipte yok.">
+          <span class="avatar" aria-hidden="true">AD</span>
+          <span><b>Ayşe Demir</b><small class="muted">Demir Muhasebe Ltd.</small></span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="proto-label" id="protoLbl">Prototip durumu</span>
+      <div class="seg" role="group" aria-labelledby="protoLbl" id="states">
+        <button type="button" data-state="attn" aria-pressed="true">Dikkat gerekiyor</button>
+        <button type="button" data-state="ok" aria-pressed="false">Hepsi sağlıklı</button>
+        <button type="button" data-state="empty" aria-pressed="false">Yeni kullanıcı (boş)</button>
+      </div>
+      <span class="grow"></span>
+      <button class="switch theme-btn" id="themeBtn" type="button" aria-pressed="false">
+        <svg class="ic i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="ic i-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+        Koyu tema
+      </button>
+    </div>
+
+    <main id="main">
+      <div class="hd">
+        <div>
+          <h1 id="h-home">Ana sayfa</h1>
+          <p class="sum" role="status" id="sum"></p>
+        </div>
+        <div class="acts">
+          <button class="btn btn-primary" id="restoreBtn" type="button" data-stub="Geri yükleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-restore"/></svg>Geri yükle</button>
+          <button class="btn" id="createBtn" type="button" data-stub="Yedekleme işi sihirbazı bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Yedekleme işi oluştur</button>
+        </div>
+      </div>
+      <div class="stack" id="view"></div>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)};
+  var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+  var root=document.documentElement;
+  var ic=function(n){return '<svg class="ic" aria-hidden="true"><use href="#i-'+n+'"/></svg>'};
+
+  /* ---- tema (hiçbir şey saklanmaz) ---- */
+  var themeBtn=$('#themeBtn');
+  function setTheme(d){root.classList.toggle('dark',d);themeBtn.setAttribute('aria-pressed',String(d))}
+  setTheme(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+  themeBtn.addEventListener('click',function(){setTheme(!root.classList.contains('dark'))});
+
+  /* ---- bildirim ---- */
+  var tt,toastEl=$('#toast');
+  function toast(m){toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){toastEl.classList.remove('show');toastEl.textContent=''},3500)}
+  document.addEventListener('click',function(e){
+    var el=e.target.closest('[data-stub]');if(!el)return;
+    e.preventDefault();toast(el.getAttribute('data-stub')||'Bu ekran bu prototipte yok.');
+  });
+
+  /* ---- mobil menü ---- */
+  var side=$('#side'),menuBtn=$('#menuBtn');
+  function closeMenu(){side.classList.remove('open');menuBtn.setAttribute('aria-expanded','false')}
+  menuBtn.addEventListener('click',function(){var o=side.classList.toggle('open');menuBtn.setAttribute('aria-expanded',String(o))});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&side.classList.contains('open')){closeMenu();menuBtn.focus()}});
+
+  /* ---- veri (bugün = 14 Kasım; şerit 1–14 Kasım) ---- */
+  /* şerit kodu: o başarılı · f alınamadı · r çalışıyor · n iş henüz yoktu */
+  var DAY={o:['ok','check','yedek alındı'],f:['fail','x','yedek alınamadı'],r:['run','clock','yedekleme çalışıyor, %62'],n:['none','','iş henüz oluşturulmamıştı']};
+  function sources(st){
+    var ok=st==='ok';
+    return [
+      {id:'muh',pc:'MUHASEBE-SRV',name:'Muhasebe veritabanı',meta:'SQL Server · Yerel disk',days:ok?'oooooooooooooo':'ooooooooooooff',
+       last:ok?'bugün 02:18':'12 Kasım 02:18',lastAgo:ok?'':' (2 gün önce)',
+       rest:{ok:true,t:'3 gün önce, başarılı',x:ok?'':' · Geri yüklenebilecek en yeni yedek: 12 Kasım'}},
+      {id:'bor',pc:'MUHASEBE-SRV',name:'Bordro veritabanı',meta:'SQL Server · Google Drive',days:ok?'ooooooooooooor':'oooooooooooooo',
+       last:'bugün 02:31',lastAgo:'',rest:{ok:true,t:'21 gün önce, başarılı',x:''}},
+      {id:'dep',pc:'DEPO-01',name:'Depo stok veritabanı',meta:'PostgreSQL · Yerel disk',days:'nnoooooooooooo',note:'iş 3 Kasım’da oluşturuldu',
+       last:'bugün 02:14',lastAgo:'',rest:null}
+    ];
+  }
+  function cnt(s,c){return s.days.split(c).length-1}
+  function status(s){var l=s.days.charAt(13);return l==='f'?'warn':l==='r'?'run':'ok'}
+  function cap(s){
+    var o=cnt(s,'o'),f=cnt(s,'f'),r=cnt(s,'r'),n=cnt(s,'n'),t=14-n;
+    return o+' / '+t+' gün yedek alındı'+(f?' · '+f+' gün alınamadı':'')+(r?' · bugün çalışıyor':'')+(n?' · '+s.note:'');
+  }
+  function badge(k,ico,txt){return '<span class="badge b-'+k+'">'+ic(ico)+txt+'</span>'}
+  var STB={ok:['ok','ok','Güncel'],warn:['warn','alert','Dikkat gerekiyor'],run:['run','clock','Çalışıyor %62']};
+
+  function strip(s){
+    var c=cap(s),h='';
+    s.days.split('').forEach(function(ch,i){
+      var d=DAY[ch],t=(i+1)+' Kasım'+(i===13?' (bugün)':'')+': '+d[2];
+      h+='<span class="cell c-'+d[0]+'" title="'+t+'">'+(d[1]?ic(d[1]):'')+'</span>';
+    });
+    return '<div class="strip" tabindex="0" role="group" aria-label="'+s.name+', son 14 gün: '+c+'. Günleri gezmek için sol ve sağ ok tuşlarını kullanın." aria-describedby="cap-'+s.id+'">'+h+'</div>'+
+           '<p class="cap" id="cap-'+s.id+'" aria-live="polite" data-def="Son 14 gün: '+c+'">Son 14 gün: '+c+'</p>';
+  }
+
+  function row(s){
+    var st=status(s),b=STB[st],r=s.rest,rest;
+    if(r)rest='<span class="r-ok">'+ic('ok')+'<span><b>Geri yüklenebilirlik</b> · Son geri yükleme denemesi: '+r.t+'.'+r.x+'</span></span>'+
+      '<button class="btn btn-sm" type="button" data-stub="Geri yükleme bu prototipte yok.">'+ic('restore')+'Geri yükle</button>';
+    else rest='<span class="r-never">'+ic('info')+'<span><b>Geri yüklenebilirlik</b> · <em>Hiç denenmedi.</em> Yedeğin işe yaradığını görmek için küçük bir dosyayı geri yüklemeyi deneyin.</span></span>'+
+      '<button class="btn btn-sm" type="button" data-stub="Geri yükleme bu prototipte yok.">'+ic('restore')+'Geri yüklemeyi dene</button>';
+    return '<li class="src'+(st==='warn'?' is-warn':'')+'">'+
+      '<div class="s-main"><b class="nm">'+s.name+'</b><span class="muted">'+s.meta+'</span></div>'+
+      '<div class="s-fresh">'+strip(s)+'</div>'+
+      '<div class="s-last">'+badge(b[0],b[1],b[2])+'<span class="muted">Son başarılı: '+s.last+s.lastAgo+'</span>'+
+        (st==='run'?'<div class="bar" role="progressbar" aria-label="Bordro yedeği ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" aria-valuetext="%62"><i style="width:62%"></i></div>':'')+
+      '</div>'+
+      '<div class="s-rest">'+rest+'</div></li>';
+  }
+
+  var KEY='<div class="key" aria-label="Şerit işaretleri">'+
+    '<span><span class="cell c-ok">'+ic('check')+'</span>Yedek alındı</span>'+
+    '<span><span class="cell c-fail">'+ic('x')+'</span>Alınamadı</span>'+
+    '<span><span class="cell c-run">'+ic('clock')+'</span>Çalışıyor</span>'+
+    '<span><span class="cell c-none"></span>İş henüz yoktu</span></div>';
+
+  function storage(zero){
+    var gb=zero?'0 GB':'412 GB';
+    return '<section class="panel" aria-labelledby="p-st"><div class="panel-h"><h2 id="p-st">Depolama</h2><button class="link" type="button" data-stub="Depolama sayfası bu prototipte yok.">Yönet</button></div><div class="panel-b">'+
+      '<div class="big">'+gb+' <span class="muted" style="font-size:var(--text-base);font-weight:400">/ 1 TB · %'+(zero?'0':'41')+' dolu</span></div>'+
+      '<div class="bar" role="progressbar" aria-label="Depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+(zero?0:41)+'" aria-valuetext="1 TB’ın '+gb+'’ı kullanılıyor"><i style="width:'+(zero?0:41)+'%"></i></div>'+
+      (zero?'<div class="legend"><span>Yedekler burada görünecek.</span></div>':'<div class="legend"><span>Yerel disk 296 GB</span><span>Google Drive 116 GB</span></div>')+
+      '</div></section>';
+  }
+
+  function activity(st){
+    var A=st==='ok'?[
+      ['Bordro veritabanı','Bugün 14:12','run','Çalışıyor %62','—'],
+      ['Bordro veritabanı','Bugün 02:31','ok','Başarılı','38 GB'],
+      ['Muhasebe veritabanı','Bugün 02:18','ok','Başarılı','94 GB'],
+      ['Depo stok veritabanı','Bugün 02:14','ok','Başarılı','126 GB']
+    ]:[
+      ['Bordro veritabanı','Bugün 02:31','ok','Başarılı','38 GB'],
+      ['Depo stok veritabanı','Bugün 02:14','ok','Başarılı','126 GB'],
+      ['Muhasebe veritabanı','Bugün 02:00','warn','Alınamadı','—'],
+      ['Muhasebe veritabanı','13 Kasım 02:00','warn','Alınamadı','—']
+    ];
+    var ico={ok:'ok',warn:'alert',run:'clock'};
+    return '<section class="panel act-p" aria-labelledby="p-ac"><div class="panel-h"><h2 id="p-ac">Son etkinlik</h2></div><ul class="act">'+
+      A.map(function(a){return '<li><div><div class="nm">'+a[0]+'</div><div class="t">'+a[1]+'</div></div><div class="r">'+badge(a[2],ico[a[2]],a[3])+'<span class="sz">'+a[4]+'</span></div></li>'}).join('')+
+      '</ul></section>';
+  }
+
+  function renderFull(st){
+    var S=sources(st),ok=st==='ok';
+    var warnN=S.filter(function(s){return status(s)==='warn'}).length;
+    var never=S.filter(function(s){return !s.rest}).length;
+    var h='';
+    if(ok)h+='<div class="band band-run" role="status"><div class="txt">'+ic('clock')+'<div><b>Bordro yedeği çalışıyor %62</b>14:12’de başladı. Bitince Bordro satırı kendiliğinden güncellenir.</div></div><div class="bar" role="progressbar" aria-label="Bordro yedeği ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" aria-valuetext="%62"><i style="width:62%"></i></div></div>';
+    else h+='<div class="band" role="alert"><div class="txt">'+ic('alert')+'<div><b>Muhasebe veritabanı yedeği 02:00’de alınamadı.</b>Son başarılı yedek 12 Kasım 02:18; bu veri 2 gündür korunmuyor.</div></div>'+
+      '<div class="acts"><button class="btn btn-primary" type="button" data-stub="Yedekleme başlatma bu prototipte yok.">'+ic('play')+'Şimdi yedekle</button><button class="btn" type="button" data-stub="Ayrıntı sayfası bu prototipte yok.">Ayrıntıyı gör</button></div></div>';
+
+    var cells=[[S.length,'veri korunuyor',''],[S.length-warnN,'güncel',''],[warnN,'dikkat gerekiyor',warnN?'warn':''],[never,'verinin geri yüklemesi hiç denenmedi','']];
+    h+='<ul class="counts" aria-label="Özet">'+cells.map(function(c){return '<li'+(c[2]?' class="is-warn"':'')+'><div class="n">'+(c[2]?ic('alert'):'')+c[0]+'</div><div class="l">'+c[1]+'</div></li>'}).join('')+'</ul>';
+
+    var pcs=[];S.forEach(function(s){if(pcs.indexOf(s.pc)<0)pcs.push(s.pc)});
+    h+='<section aria-labelledby="h-map"><div class="map-h"><h2 class="sec" id="h-map">Korunan veriler</h2>'+KEY+'</div>'+
+      pcs.map(function(pc){
+        var rows=S.filter(function(s){return s.pc===pc});
+        return '<div class="panel grp"><div class="panel-h grp-h"><div class="who">'+ic('monitor')+'<h3>'+pc+'</h3><span class="muted">Yedekleme bilgisayarı · '+rows.length+' veri</span></div>'+badge('ok','ok','Çevrimiçi')+'</div><ul>'+rows.map(row).join('')+'</ul></div>';
+      }).join('')+'</section>';
+
+    h+='<div class="three">'+
+      '<section class="panel" aria-labelledby="p-sc"><div class="panel-h"><h2 id="p-sc">Sıradaki ve son yedek</h2></div><div class="panel-b"><dl class="facts2">'+
+        '<div><dt>Sıradaki yedek</dt><dd>Yarın 02:00<small>15 Kasım · 3 veri</small></dd></div>'+
+        '<div><dt>Son başarılı yedek</dt><dd>Bugün 02:31<small>Bordro veritabanı · 38 GB</small></dd></div>'+
+      '</dl></div></section>'+storage(false)+activity(st)+'</div>';
+    return h;
+  }
+
+  function renderEmpty(){
+    var g=sources('attn')[0];g.days='nnnnnnnnnnnnnn';
+    return '<section class="panel" aria-labelledby="h-start"><div class="panel-h"><h2 id="h-start">Başlangıç adımları</h2><span class="muted">0 / 4 tamamlandı</span></div>'+
+      '<ol class="steps">'+
+      '<li class="is-now"><span class="n">1</span><div><b>Yedekleme bilgisayarı ekle</b><p>Yedeği alınacak verilerin bulunduğu bilgisayara küçük bir uygulama kurun.</p></div><button class="btn btn-primary" type="button" data-stub="Bilgisayar ekleme bu prototipte yok.">Bilgisayar ekle</button></li>'+
+      '<li class="is-later"><span class="n">2</span><div><b>Yedekleme işi oluştur</b><p>Neyin, nereye, ne zaman yedekleneceğini seçin.</p></div><button class="btn" type="button" data-stub="Yedekleme işi sihirbazı bu prototipte yok.">İş oluştur</button></li>'+
+      '<li class="is-later"><span class="n">3</span><div><b>İlk yedeği al</b><p>İş oluşturulunca ilk yedeği hemen başlatabilirsiniz.</p></div><button class="btn" type="button" disabled>İş oluşturulunca açılır</button></li>'+
+      '<li class="is-later"><span class="n">4</span><div><b>Geri yüklemeyi deneyin</b><p>Yedeğin işe yaradığından emin olmak için bir dosyayı geri getirin.</p></div><button class="btn" type="button" disabled>İlk yedekten sonra açılır</button></li>'+
+      '</ol></section>'+
+      '<section class="panel dashed" aria-labelledby="h-ghost"><div class="panel-h"><h2 id="h-ghost">Korunan veriler</h2><span class="muted">Henüz boş</span></div><div class="ghost">'+
+        '<div class="strip" aria-hidden="true">'+g.days.split('').map(function(){return '<span class="cell c-none"></span>'}).join('')+'</div>'+
+        '<p>Yedekleme bilgisayarı ve iş ekleyince her veri burada, son 14 günlük durumu ve “Geri yüklenebilirlik” satırıyla görünür.</p></div></section>'+
+      storage(true);
+  }
+
+  /* ---- şerit: fare, dokunma ve klavye ---- */
+  var view=$('#view');
+  function capOf(st){return st.nextElementSibling}
+  function mark(st,i){
+    var cs=$$('.cell',st);cs.forEach(function(c){c.classList.remove('is-cur')});
+    cs[i].classList.add('is-cur');st.setAttribute('data-cur',i);capOf(st).textContent=cs[i].title;
+  }
+  function unmark(st){$$('.cell',st).forEach(function(c){c.classList.remove('is-cur')});capOf(st).textContent=capOf(st).getAttribute('data-def')}
+  function hit(e){var c=e.target.closest('.strip .cell');return c?{st:c.parentNode,i:$$('.cell',c.parentNode).indexOf(c)}:null}
+  ['mouseover','click'].forEach(function(t){view.addEventListener(t,function(e){var h=hit(e);if(h)mark(h.st,h.i)})});
+  view.addEventListener('mouseout',function(e){var st=e.target.closest('.strip[tabindex]');if(st&&document.activeElement!==st&&!st.contains(e.relatedTarget))unmark(st)});
+  view.addEventListener('focusin',function(e){var st=e.target;if(st.matches&&st.matches('.strip[tabindex]'))mark(st,+st.getAttribute('data-cur')||13)});
+  view.addEventListener('focusout',function(e){var st=e.target;if(st.matches&&st.matches('.strip[tabindex]'))unmark(st)});
+  view.addEventListener('keydown',function(e){
+    var st=e.target;if(!st.matches||!st.matches('.strip[tabindex]'))return;
+    var i=+st.getAttribute('data-cur')||13,k=e.key;
+    if(k==='ArrowLeft')i=Math.max(0,i-1);else if(k==='ArrowRight')i=Math.min(13,i+1);else if(k==='Home')i=0;else if(k==='End')i=13;else return;
+    e.preventDefault();mark(st,i);
+  });
+
+  /* ---- durum anahtarı ---- */
+  var SUM={
+    attn:['warn','alert','Dikkat gerekiyor','3 verinin 2’si güncel; Muhasebe veritabanı 2 gündür yedeklenemiyor.'],
+    ok:['ok','ok','Hepsi sağlıklı','3 verinin tamamı güncel. Son başarılı yedek: bugün 02:31.'],
+    empty:['neutral','dash','Henüz yedekleme yok','Verileriniz şu an korunmuyor. Dört adımda ilk yedeğinizi alın.']
+  };
+  function setState(st){
+    $$('#states button').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-state')===st))});
+    var s=SUM[st],empty=st==='empty';
+    $('#sum').innerHTML=badge(s[0],s[1],s[2])+'<span>'+s[3]+'</span>';
+    view.innerHTML=empty?renderEmpty():renderFull(st);
+    var r=$('#restoreBtn'),c=$('#createBtn');
+    r.disabled=empty;r.title=empty?'İlk yedek alındığında açılır':'';
+    r.classList.toggle('btn-primary',!empty);c.classList.toggle('btn-primary',empty);
+  }
+  $('#states').addEventListener('click',function(e){var b=e.target.closest('button[data-state]');if(b)setState(b.getAttribute('data-state'))});
+  setState('attn');
+})();
+</script>
+</body>
+</html>

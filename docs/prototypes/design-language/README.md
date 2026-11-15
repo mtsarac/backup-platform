@@ -13,3 +13,9 @@ Her dosyada: `#home`, `#job-new`, açık/koyu anahtarı, "Yeni kullanıcı (boş
 - `variant-a2.html` İş satırı akışı: kaynak→hedef→son sonuç satırları, ince durum çubuğu, tek sayfa sihirbaz + yapışkan Özet
 - `variant-a3.html` Dar ray + liste: ikon rayı, ortalanmış sütun, gruplu liste, arama/"Yeni", sihirbaz sağ çekmece
 - `variant-a4.html` Çalışma alanı: sol iş listesi + sağ ayrıntı, üst adım çubuğu + canlı Özet
+
+## Ana sayfa alternatifleri (A dili; A4'ün ana düzeni Yedeklemeler>İşler'e ayrıldı)
+- `home-1.html` Yapılacaklar: eylem kuyruğu + ince şerit + son etkinlik
+- `home-2.html` Koruma haritası: bilgisayara göre gruplu kaynaklar, 14 günlük tazelik şeridi, geri yüklenebilirlik
+- `home-3.html` Etkinlik akışı: Bugün/Dün/Bu hafta zaman çizelgesi + dar sağ sütun
+- `home-4.html` Üç soru: güvende mi / geri yükle (arama) / yer yetiyor mu

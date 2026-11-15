@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ana sayfa · Üç soru</title>
+<!--
+ANA SAYFA H4 — "Üç soru" (A dilinin Ana sayfa alt yönü)
+
+Gerekçe
+- Sayfa, sahibin aklındaki üç soruyu yan yana, eşit ağırlıkta yanıtlar: "Yedeklerim güvende mi?", "Bir şeyi geri yüklemek istiyorum", "Yer yetiyor mu?". Her panel kendi başına bir yanıt ve bir eylem taşır; liste ya da tablo yok, iş ayrıntısı Yedeklemeler sayfasına bırakılır.
+- Geri yükleme, durumdan bağımsız olarak ortadaki panelde sabit durur: ad yaz, son yedeklerden birini seç, Geri yükle. Dikkat gerektiren durumda bile ilk bakışta "dosyamı nasıl geri getiririm" sorusu cevapsız kalmaz.
+- Yeni kullanıcıda ilk panel dört adımlık yolu gösterir (Yedekleme bilgisayarı ekle → iş oluştur → ilk yedek → geri yükle); diğer paneller boş ama dürüst kalır. Altta tek satırlık son etkinlik şeridi var; düz yüzeyler, hairline kenarlıklar, gölge yok.
+
+Ödünleşim
+- Üç eşit panel, aynı anda birden fazla sorun ya da çok sayıda iş olduğunda ölçeklenmez: ilk panel tek bir "dikkat" kaydını öne çıkarır, geri kalanı Yedeklemeler sayfasına yönlendirmek gerekir. Soru başlıkları ilk kez gelen kullanıcıya iyi gelir, deneyimli yönetici için bilgi yoğunluğu düşüktür.
+
+Tema geçişi <html class="dark"> ile yapılır; hiçbir şey saklanmaz. Belirteçler variant-a4 ile aynıdır.
+-->
+<style>
+:root{
+  --bg:#fafafa; --side-bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --raised:#ffffff;
+  --border:#e4e4e7; --border-input:#8e8e98;
+  --fg:#18181b; --muted:#52525b;
+  --accent:#0f5e63; --accent-hover:#0b4a4e; --accent-fg:#ffffff; --accent-subtle:#e6f1f1;
+  --focus:#0f5e63;
+  --ok-fg:#166534; --ok-bg:#dcfce7; --ok-bd:#86d9a2;
+  --warn-fg:#854d0e; --warn-bg:#fef9c3; --warn-bd:#e5c64f;
+  --err-fg:#b91c1c; --err-bg:#fee2e2; --err-bd:#f1a1a1;
+  --neutral-fg:#3f3f46; --neutral-bg:#e4e4e7;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .14);
+  --radius:.375rem; --radius-sm:.25rem; --radius-full:9999px;
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.5rem; --space-6:2rem;
+  --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --text-xs:.75rem; --text-sm:.8125rem; --text-base:.875rem; --text-lg:1rem; --text-xl:1.25rem;
+  --leading:1.45; --control-h:2rem;
+}
+:root.dark{
+  --bg:#09090b; --side-bg:#0f0f12; --surface:#18181b; --surface-2:#232328; --raised:#27272c;
+  --border:#2e2e34; --border-input:#71717a;
+  --fg:#fafafa; --muted:#a1a1aa;
+  --accent:#8cc5c8; --accent-hover:#a6d3d5; --accent-fg:#052a2c; --accent-subtle:#14302f;
+  --focus:#8cc5c8;
+  --ok-fg:#86efac; --ok-bg:#12301d; --ok-bd:#235f37;
+  --warn-fg:#fcd34d; --warn-bg:#33270a; --warn-bd:#6b5314;
+  --err-fg:#fca5a5; --err-bg:#3d1414; --err-bd:#7a2b2b;
+  --neutral-fg:#d4d4d8; --neutral-bg:#2e2e34;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .6);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light}
+html.dark{color-scheme:dark}
+body{margin:0;font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--leading);background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,ol,dl,dd{margin:0}
+ul,ol{padding:0;list-style:none}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--radius-sm)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.muted{color:var(--muted)}
+
+/* ---------- kabuk ---------- */
+.shell{display:grid;grid-template-columns:12rem minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--side-bg);border-right:1px solid var(--border)}
+.side-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-3) var(--space-3) var(--space-2)}
+.brand{display:flex;align-items:center;gap:var(--space-2);font-weight:600;font-size:var(--text-base);text-decoration:none;color:var(--fg);min-height:2rem}
+.brand-mark{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-fg);flex:none}
+.brand-mark .ic{width:.875rem;height:.875rem}
+.side .menu-btn{display:none}
+.side-body{display:flex;flex-direction:column;flex:1;min-height:0;padding:0 var(--space-2) var(--space-3)}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:var(--space-1)}
+.nav a{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-weight:500;transition:background .12s}
+.nav a:hover{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current]{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current] .ic{color:var(--accent)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;padding-top:var(--space-3);border-top:1px solid var(--border)}
+.side-foot a,.account{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-size:var(--text-sm)}
+.side-foot a:hover,.account:hover{background:var(--surface-2);color:var(--fg)}
+.account{width:100%;border:0;background:none;font:inherit;font-size:var(--text-sm);text-align:left;cursor:pointer;min-height:2.5rem;margin-top:var(--space-1)}
+.avatar{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-full);background:var(--accent-subtle);color:var(--accent);font-size:var(--text-xs);font-weight:600;flex:none}
+.account b{display:block;color:var(--fg);font-weight:500;line-height:1.2}
+.account small{display:block;font-size:var(--text-xs);line-height:1.2}
+
+.main{min-width:0;padding:0 var(--space-5) 2.5rem;width:100%;max-width:96rem}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--border)}
+.topbar .grow{flex:1}
+.proto-label{font-size:var(--text-xs);color:var(--muted)}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:2px;border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface)}
+.seg button{display:inline-flex;align-items:center;min-height:1.75rem;padding:0 var(--space-3);border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);font:inherit;font-weight:500;font-size:var(--text-sm);cursor:pointer}
+.seg button:hover{color:var(--fg)}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg)}
+
+/* ---------- bileşenler ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s}
+.btn:hover{background:var(--surface-2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+.link{display:inline-flex;align-items:center;min-height:1.5rem;padding:0;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.link:hover{color:var(--accent-hover)}
+.switch{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-size:var(--text-sm);font-weight:500;cursor:pointer}
+.switch:hover{background:var(--surface-2)}
+.theme-btn .i-sun{display:none}
+.dark .theme-btn .i-sun{display:block}
+.dark .theme-btn .i-moon{display:none}
+
+.badge{display:inline-flex;align-items:center;gap:.3rem;min-height:1.375rem;padding:0 .5rem;border:1px solid transparent;border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:500;white-space:nowrap}
+.badge .ic{width:.8125rem;height:.8125rem}
+.b-ok{color:var(--ok-fg);background:var(--ok-bg);border-color:var(--ok-bd)}
+.b-warn{color:var(--warn-fg);background:var(--warn-bg);border-color:var(--warn-bd)}
+.b-err{color:var(--err-fg);background:var(--err-bg);border-color:var(--err-bd)}
+.b-neutral{color:var(--neutral-fg);background:var(--neutral-bg)}
+
+.hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-4);margin:var(--space-4) 0 var(--space-3)}
+.hd h1{font-size:var(--text-xl);line-height:1.3;font-weight:600;letter-spacing:-.01em}
+.hd .sum{margin-top:var(--space-1);color:var(--muted)}
+.hd .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.panel-h{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);min-height:2.75rem;border-bottom:1px solid var(--border)}
+.panel-h h2{font-size:var(--text-lg);font-weight:600;letter-spacing:-.005em}
+.panel-h .ic{color:var(--accent)}
+.panel-b{padding:var(--space-4)}
+
+.bar{height:.5rem;border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface-2);overflow:hidden;margin:var(--space-1) 0 0}
+.bar i{display:block;height:100%;background:var(--accent)}
+.field{display:flex;flex-direction:column;gap:var(--space-1);margin:0;min-width:0}
+.field>label{font-weight:500}
+.input{width:100%;min-height:2rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit}
+.input::placeholder{color:var(--muted);opacity:1}
+.input:focus-visible{outline-offset:0}
+.input:disabled{opacity:.55;cursor:not-allowed}
+
+/* ---------- Üç soru ---------- */
+.qs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4);align-items:stretch}
+.q{display:flex;flex-direction:column;min-width:0}
+.q .panel-b{flex:1;display:flex;flex-direction:column;gap:var(--space-3)}
+.q .foot{margin-top:auto;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3)}
+.acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.state{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.lead{font-size:var(--text-lg);font-weight:600;line-height:1.35}
+
+.alert{display:flex;gap:var(--space-2);align-items:flex-start;padding:var(--space-2) var(--space-3);border:1px solid var(--warn-bd);border-radius:var(--radius);background:var(--warn-bg);color:var(--warn-fg)}
+.alert .ic{margin-top:2px}
+.alert b{font-weight:600}
+.running{padding:var(--space-2) var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--accent-subtle)}
+.running .row{display:flex;align-items:center;gap:var(--space-2);font-weight:500}
+.running .ic{color:var(--accent)}
+.facts{margin-top:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border)}
+.facts dt{font-size:var(--text-sm);color:var(--muted)}
+.facts dd{font-weight:500}
+.facts dd small{display:block;font-size:var(--text-sm);font-weight:400;color:var(--muted)}
+
+.steps li{display:grid;grid-template-columns:1.5rem minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--border)}
+.steps li:first-child{border-top:0}
+.steps .n{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;color:var(--muted)}
+.steps .is-now .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.steps b{font-weight:600}
+.steps p{color:var(--muted);font-size:var(--text-sm)}
+.steps .is-later b{color:var(--muted)}
+.steps .btn{grid-column:2;justify-self:start;margin-top:var(--space-1)}
+
+.rl-h{font-size:var(--text-sm);color:var(--muted)}
+.rl{border-top:1px solid var(--border)}
+.rl li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--border)}
+.rl .nm{display:block;font-weight:500}
+.rl .mt{display:block;font-size:var(--text-sm);color:var(--muted)}
+.rl .btn{flex:none}
+
+.est{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border)}
+.est b{font-size:var(--text-xl);font-weight:600}
+.dest{display:flex;flex-direction:column;gap:var(--space-3)}
+.dest .row,.tot .row{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
+.dest .row span:first-child{font-weight:500}
+.big{font-size:var(--text-lg);font-weight:600}
+.big small{font-size:var(--text-base);font-weight:400;color:var(--muted)}
+
+.strip{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);margin-top:var(--space-4);padding:var(--space-2) var(--space-4);min-height:2.75rem}
+.strip h2{font-size:var(--text-base);font-weight:600}
+.strip ul{display:flex;flex-wrap:wrap;align-items:center;flex:1;gap:var(--space-1) 0;min-width:0}
+.strip li{display:inline-flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-2);padding:0 var(--space-4);border-left:1px solid var(--border)}
+.strip li:first-child{border-left:0;padding-left:0}
+.strip .nm{font-weight:500}
+
+.toast{position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:50;max-width:min(22rem,calc(100vw - 2rem));padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--fg);box-shadow:var(--shadow-overlay);opacity:0;pointer-events:none;transition:opacity .15s}
+.toast.show{opacity:1}
+.toast:empty{display:none}
+
+/* ---------- duyarlı ---------- */
+@media (max-width:72rem){
+  .qs{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:52.5rem){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{height:auto;z-index:30;border-right:0;border-bottom:1px solid var(--border)}
+  .side-head{padding:var(--space-2) var(--space-4)}
+  .side .menu-btn{display:inline-flex;min-height:2.5rem}
+  .side-body{display:none;max-height:calc(100vh - 3.5rem);overflow:auto;padding:0 var(--space-3) var(--space-3)}
+  .side.open .side-body{display:flex}
+  .nav a,.side-foot a{min-height:2.5rem}
+  .main{padding:0 var(--space-4) 2rem}
+  .btn,.switch,.input{min-height:2.5rem}
+  .seg{width:100%}
+  .seg button{flex:1 1 auto;justify-content:center;min-height:2.25rem}
+  .topbar .grow{display:none}
+}
+@media (max-width:40rem){
+  .hd .acts{width:100%}
+  .hd .acts .btn{flex:1}
+  .rl li{flex-wrap:wrap}
+  .rl li>span{flex:1 1 100%}
+  .rl .btn{width:100%}
+  .q .foot .btn{flex:1}
+  .strip{align-items:flex-start;flex-direction:column}
+  .strip ul{flex-direction:column;align-items:flex-start;width:100%;gap:var(--space-2)}
+  .strip li{padding:0;border-left:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ikon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-hdd" viewBox="0 0 24 24"><path d="M3 14h18v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M5 14 7.5 5h9L19 14"/><path d="M7 17h.01M11 17h.01"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h.01"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></symbol>
+</svg>
+
+<div class="shell">
+  <!-- ======== kenar çubuğu ======== -->
+  <aside class="side" id="side">
+    <div class="side-head">
+      <a class="brand" href="#home"><span class="brand-mark"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span>Yedekleme Platformu</a>
+      <button class="btn menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="sideBody" style="border-color:transparent;background:none;color:var(--muted)"><svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg>Menü</button>
+    </div>
+    <div class="side-body" id="sideBody">
+      <nav class="nav" aria-label="Ana gezinme">
+        <a href="#home" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Ana sayfa</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-db"/></svg>Yedeklemeler</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg>Bilgisayarlar</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-hdd"/></svg>Depolama</a>
+        <a href="#" data-stub><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Ayarlar</a>
+      </nav>
+      <div class="side-foot">
+        <a href="#" data-stub>Platform Yönetimi</a>
+        <button class="account" type="button" data-stub="Hesap menüsü bu prototipte yok.">
+          <span class="avatar" aria-hidden="true">AD</span>
+          <span><b>Ayşe Demir</b><small class="muted">Demir Muhasebe Ltd.</small></span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ======== ana alan ======== -->
+  <div class="main">
+    <div class="topbar">
+      <span class="proto-label" id="stLbl">Prototip durumu</span>
+      <div class="seg" id="stateSeg" role="group" aria-labelledby="stLbl">
+        <button type="button" data-state="attn" aria-pressed="true">Dikkat gerekiyor</button>
+        <button type="button" data-state="ok" aria-pressed="false">Hepsi sağlıklı</button>
+        <button type="button" data-state="empty" aria-pressed="false">Yeni kullanıcı (boş)</button>
+      </div>
+      <span class="grow"></span>
+      <button class="switch theme-btn" id="themeBtn" type="button" aria-pressed="false">
+        <svg class="ic i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="ic i-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+        Koyu tema
+      </button>
+    </div>
+
+    <main id="main">
+      <section id="home" aria-labelledby="h-home">
+        <div class="hd">
+          <div>
+            <h1 id="h-home">Ana sayfa</h1>
+            <p class="sum" id="sumLine"></p>
+          </div>
+          <div class="acts">
+            <button class="btn" id="hdRestore" type="button" data-stub="Geri yükleme bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-restore"/></svg>Geri yükle</button>
+            <button class="btn btn-primary" type="button" data-stub="Yedekleme işi oluşturma bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Yedekleme işi oluştur</button>
+          </div>
+        </div>
+        <p class="sr-only" id="stateLive" role="status"></p>
+
+        <div class="qs">
+          <!-- 1 · güvende mi -->
+          <section class="panel q" aria-labelledby="q1">
+            <div class="panel-h"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><h2 id="q1">Yedeklerim güvende mi?</h2></div>
+            <div class="panel-b" id="p1"></div>
+          </section>
+
+          <!-- 2 · geri yükleme -->
+          <section class="panel q" aria-labelledby="q2">
+            <div class="panel-h"><svg class="ic" aria-hidden="true"><use href="#i-restore"/></svg><h2 id="q2">Bir şeyi geri yüklemek istiyorum</h2></div>
+            <div class="panel-b">
+              <div class="field">
+                <label for="rq">Veritabanı veya dosya adı</label>
+                <input class="input" id="rq" type="search" autocomplete="off" placeholder="Örn. Muhasebe" aria-controls="rl">
+              </div>
+              <p class="rl-h" id="rlh" aria-live="polite"></p>
+              <ul class="rl" id="rl" aria-label="Geri yüklenebilir yedekler"></ul>
+              <p class="muted" id="rnone" hidden></p>
+              <div class="foot" id="rfoot"><button class="link" type="button" data-stub="Yedek dosyaları sayfası bu prototipte yok.">Tüm yedek dosyalarına göz at</button></div>
+            </div>
+          </section>
+
+          <!-- 3 · yer yetiyor mu -->
+          <section class="panel q" aria-labelledby="q3">
+            <div class="panel-h"><svg class="ic" aria-hidden="true"><use href="#i-hdd"/></svg><h2 id="q3">Yer yetiyor mu?</h2></div>
+            <div class="panel-b" id="p3"></div>
+          </section>
+        </div>
+
+        <!-- son etkinlik şeridi -->
+        <section class="panel strip" aria-labelledby="h-act" id="strip"></section>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)};
+  var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+  var root=document.documentElement;
+  var ic=function(n){return '<svg class="ic" aria-hidden="true"><use href="#i-'+n+'"/></svg>'};
+  function badge(k,ico,txt){return '<span class="badge b-'+k+'">'+ic(ico)+txt+'</span>'}
+  var STUB='data-stub="Bu ekran bu prototipte yok."';
+
+  /* ---- tema (hiçbir şey saklanmaz) ---- */
+  var themeBtn=$('#themeBtn');
+  function setTheme(d){root.classList.toggle('dark',d);themeBtn.setAttribute('aria-pressed',String(d))}
+  setTheme(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+  themeBtn.addEventListener('click',function(){setTheme(!root.classList.contains('dark'))});
+
+  /* ---- bildirim ---- */
+  var tt,toastEl=$('#toast');
+  function toast(m){toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){toastEl.classList.remove('show');toastEl.textContent=''},3500)}
+  document.addEventListener('click',function(e){
+    var el=e.target.closest('[data-stub]');if(!el)return;
+    e.preventDefault();toast(el.getAttribute('data-stub')||'Bu ekran bu prototipte yok.');
+  });
+
+  /* ---- mobil menü ---- */
+  var side=$('#side'),menuBtn=$('#menuBtn');
+  function closeMenu(){side.classList.remove('open');menuBtn.setAttribute('aria-expanded','false')}
+  menuBtn.addEventListener('click',function(){var o=side.classList.toggle('open');menuBtn.setAttribute('aria-expanded',String(o))});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&side.classList.contains('open')){closeMenu();menuBtn.focus()}});
+  $$('.nav a, .brand').forEach(function(a){a.addEventListener('click',closeMenu)});
+
+  /* ---- veri (sahte) ---- */
+  var NAMES={
+    attn:'Dikkat gerekiyor — Muhasebe veritabanı yedeği alınamadı.',
+    ok:'Hepsi sağlıklı — Bordro yedeği çalışıyor.',
+    empty:'Yeni kullanıcı — henüz yedekleme yok.'
+  };
+  var SUM={
+    attn:'Demir Muhasebe Ltd. · 3 yedekleme işi · 2 Yedekleme bilgisayarı',
+    ok:'Demir Muhasebe Ltd. · 3 yedekleme işi · 2 Yedekleme bilgisayarı',
+    empty:'Demir Muhasebe Ltd. · Henüz yedekleme işi yok'
+  };
+  /* her işin en son yedeği önce gelir; arama daha eski yedekleri de bulur */
+  var BACKUPS=[
+    {n:'Bordro veritabanı',pc:'MUHASEBE-SRV',t:'Bugün 02:31',sz:'38 GB'},
+    {n:'Depo stok veritabanı',pc:'DEPO-01',t:'Bugün 02:14',sz:'126 GB'},
+    {n:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',t:'12 Kasım 02:18',sz:'94 GB',skipOk:true},
+    {n:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',t:'Bugün 02:00',sz:'94 GB',okOnly:true,first:true},
+    {n:'Bordro veritabanı',pc:'MUHASEBE-SRV',t:'13 Kasım 02:30',sz:'38 GB'},
+    {n:'Depo stok veritabanı',pc:'DEPO-01',t:'13 Kasım 02:13',sz:'125 GB'},
+    {n:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',t:'11 Kasım 02:17',sz:'93 GB'}
+  ];
+  function backupsFor(s){
+    var l=BACKUPS.filter(function(b){return s==='ok'?!b.skipOk:!b.okOnly});
+    if(s==='ok'){ /* Muhasebe'nin bugünkü yedeği 3. sıraya */
+      var m=l.filter(function(b){return b.okOnly})[0];
+      l=l.filter(function(b){return b!==m});l.splice(2,0,m);
+    }
+    return l;
+  }
+  var ACT={
+    attn:[
+      ['Muhasebe','Bugün 02:00','','warn','alert','Alınamadı'],
+      ['Bordro','Bugün 02:31','38 GB','ok','ok','Başarılı'],
+      ['Depo stok','Bugün 02:14','126 GB','ok','ok','Başarılı']
+    ],
+    ok:[
+      ['Bordro','Şimdi','','neutral','clock','Çalışıyor %62'],
+      ['Bordro','Bugün 02:31','38 GB','ok','ok','Başarılı'],
+      ['Depo stok','Bugün 02:14','126 GB','ok','ok','Başarılı']
+    ],
+    empty:[]
+  };
+
+  /* ---- panel 1 ---- */
+  function factsHtml(next,last){
+    return '<dl class="facts"><div><dt>Sıradaki yedek</dt><dd>Yarın 02:00<small>'+next+'</small></dd></div>'+
+      '<div><dt>Son başarılı yedek</dt><dd>Bugün 02:31<small>'+last+'</small></dd></div></dl>';
+  }
+  var P1={
+    attn:function(){return ''+
+      '<p class="state">'+badge('warn','alert','Dikkat gerekiyor')+'</p>'+
+      '<p class="lead">Yedeklerinizin çoğu güncel, ama bir işte sorun var.</p>'+
+      '<div class="alert" role="group" aria-label="Dikkat gerektiren iş">'+ic('alert')+'<div><b>Muhasebe veritabanı yedeği 02:00’de alınamadı.</b><p>Son başarılı yedek: 12 Kasım.</p></div></div>'+
+      '<div class="acts"><button class="btn btn-primary" type="button" data-stub="Yedekleme başlatma bu prototipte yok.">'+ic('play')+'Şimdi yedekle</button>'+
+      '<button class="btn" type="button" data-stub="İş ayrıntısı Yedeklemeler sayfasında olacak.">Ayrıntıyı gör</button></div>'+
+      factsHtml('Muhasebe veritabanı','Bordro veritabanı');},
+    ok:function(){return ''+
+      '<p class="state">'+badge('ok','ok','Hepsi sağlıklı')+'</p>'+
+      '<p class="lead">3 işin 3’ü güncel. Verileriniz korunuyor.</p>'+
+      '<div class="running" role="group" aria-label="Çalışan yedek"><div class="row">'+ic('clock')+'<span>Bordro yedeği çalışıyor %62</span></div>'+
+      '<div class="bar" role="progressbar" aria-label="Bordro yedeği ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" aria-valuetext="%62 tamamlandı"><i style="width:62%"></i></div></div>'+
+      '<div class="acts"><button class="btn" type="button" data-stub="İş ayrıntısı Yedeklemeler sayfasında olacak.">Ayrıntıyı gör</button></div>'+
+      factsHtml('Muhasebe veritabanı','Bordro veritabanı');},
+    empty:function(){
+      function li(n,t,d,body,now){return '<li class="'+(now?'is-now':'is-later')+'"><span class="n" aria-hidden="true">'+n+'</span><div><b>'+t+'</b><p>'+d+'</p></div>'+(body||'')+'</li>'}
+      return ''+
+      '<p class="state">'+badge('neutral','dash','Henüz yedekleme yok')+'</p>'+
+      '<p class="lead">Verileriniz şu an korunmuyor. Dört adımda ilk yedeğinizi alın.</p>'+
+      '<ol class="steps" aria-label="İlk yedek için adımlar">'+
+        li(1,'Yedekleme bilgisayarı ekle','Verilerin bulunduğu bilgisayara küçük bir uygulama kurun.','<button class="btn btn-primary" type="button" data-stub="Bilgisayar ekleme bu prototipte yok.">'+ic('plus')+'Bilgisayar ekle</button>',true)+
+        li(2,'Yedekleme işi oluştur','Neyin, nereye, ne zaman yedekleneceğini seçin.')+
+        li(3,'İlk yedeği al','İş oluşturulunca hemen başlatabilirsiniz.')+
+        li(4,'Geri yüklemeyi deneyin','Bir dosyayı geri getirerek yedeğin çalıştığını görün.')+
+      '</ol>';}
+  };
+
+  /* ---- panel 3 ---- */
+  function destHtml(name,gb,pct){
+    return '<li><div class="row"><span>'+name+'</span><span>'+gb+' GB</span></div>'+
+      '<div class="bar" role="progressbar" aria-label="'+name+' kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+pct+'" aria-valuetext="1 TB’ın %'+pct+'’i, '+gb+' GB"><i style="width:'+pct+'%"></i></div></li>';
+  }
+  var P3={
+    full:function(){return ''+
+      '<div class="tot"><p class="big">412 GB <small>/ 1 TB · %41 dolu</small></p>'+
+      '<div class="bar" role="progressbar" aria-label="Toplam depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="41" aria-valuetext="1 TB’ın 412 GB’ı kullanılıyor"><i style="width:41%"></i></div></div>'+
+      '<ul class="dest" aria-label="Depolama hedefleri">'+destHtml('Yerel disk',296,30)+destHtml('Google Drive',116,12)+'</ul>'+
+      '<div class="est"><b>~140 gün</b><span>sonra dolabilir</span><p class="muted" style="flex:1 1 100%">Günde ortalama ~4 GB artıyor; 588 GB boş. Yer şimdilik yetiyor.</p></div>'+
+      '<div class="foot"><button class="link" type="button" data-stub="Depolama sayfası bu prototipte yok.">Depolama</button></div>';},
+    empty:function(){return ''+
+      '<div class="tot"><p class="big">0 GB <small>/ 1 TB · %0 dolu</small></p>'+
+      '<div class="bar" role="progressbar" aria-label="Toplam depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="1 TB’ın 0 GB’ı kullanılıyor"><i style="width:0"></i></div></div>'+
+      '<p>Evet. 1 TB’ın tamamı boş; yedekler burada görünecek.</p>'+
+      '<div class="est"><b>—</b><span>dolma tahmini yok</span><p class="muted" style="flex:1 1 100%">Tahmin için birkaç yedeğin alınması gerekir.</p></div>'+
+      '<div class="foot"><button class="link" type="button" data-stub="Depolama sayfası bu prototipte yok.">Depolama</button></div>';}
+  };
+
+  /* ---- panel 2: geri yükleme bulucu ---- */
+  var cur='attn',rq=$('#rq'),rl=$('#rl'),rlh=$('#rlh'),rnone=$('#rnone');
+  function renderRestore(){
+    var empty=cur==='empty',q=rq.value.trim().toLocaleLowerCase('tr');
+    rq.disabled=empty;$('#rfoot').hidden=empty;
+    rl.hidden=empty;rlh.hidden=empty;rnone.hidden=!empty;
+    if(empty){rnone.textContent='Henüz geri yüklenecek yedek yok. İlk yedek alınınca ad yazarak burada bulabilirsiniz.';rl.innerHTML='';return}
+    var all=backupsFor(cur),hits=q?all.filter(function(b){return (b.n+' '+b.pc).toLocaleLowerCase('tr').indexOf(q)>-1}):all;
+    var shown=hits.slice(0,3);
+    rlh.textContent=q?(hits.length?hits.length+' yedek bulundu'+(hits.length>3?' (ilk 3 gösteriliyor)':'')+'.':''):'Her işin en son yedeği';
+    rl.innerHTML=shown.map(function(b){
+      return '<li><span><span class="nm">'+b.n+'</span><span class="mt">'+b.t+' · '+b.sz+'</span><span class="mt">'+b.pc+'</span></span>'+
+        '<button class="btn" type="button" data-stub="Geri yükleme bu prototipte yok." aria-label="Geri yükle: '+b.n+', '+b.t+'">'+ic('restore')+'Geri yükle</button></li>';
+    }).join('');
+    rnone.hidden=hits.length>0;rl.hidden=!hits.length;
+    if(!hits.length)rnone.textContent='“'+rq.value.trim()+'” için yedek bulunamadı. Başka bir ad deneyin.';
+  }
+  rq.addEventListener('input',renderRestore);
+
+  /* ---- son etkinlik şeridi ---- */
+  function renderStrip(){
+    var a=ACT[cur];
+    $('#strip').innerHTML='<h2 id="h-act">Son etkinlik</h2>'+
+      (a.length?'<ul>'+a.map(function(r){
+        return '<li><span class="nm">'+r[0]+'</span><span class="muted">'+r[1]+(r[2]?' · '+r[2]:'')+'</span>'+badge(r[3],r[4],r[5])+'</li>';
+      }).join('')+'</ul><button class="link" type="button" data-stub="Etkinlik geçmişi bu prototipte yok.">Tümünü gör</button>'
+      :'<ul><li><span class="muted">Henüz etkinlik yok. İlk yedek alınınca burada görünür.</span></li></ul>');
+  }
+
+  /* ---- durum anahtarı ---- */
+  function setState(s,user){
+    cur=s;
+    $$('#stateSeg button').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-state')===s))});
+    $('#sumLine').textContent=SUM[s];
+    $('#p1').innerHTML=P1[s]();
+    $('#p3').innerHTML=(s==='empty'?P3.empty:P3.full)();
+    $('#hdRestore').disabled=s==='empty';
+    $('#hdRestore').title=s==='empty'?'İlk yedek alındığında açılır':'';
+    rq.value='';renderRestore();renderStrip();
+    $('#stateLive').textContent=user?'Gösterilen durum: '+NAMES[s]:'';
+    document.title='Ana sayfa · Üç soru';
+  }
+  $('#stateSeg').addEventListener('click',function(e){var b=e.target.closest('[data-state]');if(b)setState(b.getAttribute('data-state'),true)});
+  setState('attn',false);
+})();
+</script>
+</body>
+</html>
+
