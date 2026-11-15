@@ -19,3 +19,6 @@ Her dosyada: `#home`, `#job-new`, açık/koyu anahtarı, "Yeni kullanıcı (boş
 - `home-2.html` Koruma haritası: bilgisayara göre gruplu kaynaklar, 14 günlük tazelik şeridi, geri yüklenebilirlik
 - `home-3.html` Etkinlik akışı: Bugün/Dün/Bu hafta zaman çizelgesi + dar sağ sütun
 - `home-4.html` Üç soru: güvende mi / geri yükle (arama) / yer yetiyor mu
+
+## Seçimlerin birleşimi
+- `chosen.html`: A dili + Ana sayfa home-2 + Yedeklemeler>İşler A4 ana-detay + A4 sihirbaz. Rotalar `#home`, `#jobs`, `#job-new`; "Seçimlerim" paneli.
