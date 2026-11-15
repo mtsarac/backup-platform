@@ -1,0 +1,1634 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yedekleme Platformu · Seçilmiş tasarım prototipi</title>
+<!--
+İLK YEDEK AKIŞI (wayfinder #177) — chosen.html üzerine kurulu tek tıklanabilir prototip
+
+Soru: boş bir çalışma alanından gelen yeni kullanıcı, en az ekran ve soruyla İLK DOĞRULANMIŞ YEDEĞE nasıl ulaşır? Tasarım dili sabit (düz yüzey, hairline, .375rem, tek teal vurgu, 14 px, açık + koyu). Dış kaynak yok, file:// ile açılır, hiçbir şey saklanmaz.
+
+Akış (#first-backup; Ana sayfa "İlk yedeğinizi alın" paneli ve Yedeklemeler > İşler boş durumu buraya bağlanır):
+- 4 ekran, üstte ince adım çubuğu: 1 Bilgisayar ekle · 2 Ne yedeklensin · 3 Özet ve başla · 4 İlk yedek (+ deneme geri yükleme bindirmesi).
+- Sorulan 3 şey: bilgisayarın adı, işletim sistemi (Windows hazır), hangi veriler (bulunanların hepsi işaretli hazır). Geri kalan her şey sabit: Her gün 02:00, 30 gün, Yerel disk, otomatik şifreleme, otomatik iş adı, "Tek komutla kurulum".
+- Bağlantıyı gerçekten kuramadığımız için prototip çubuğundaki "bağlantıyı simüle et" durumu ilerletir (otomatik ilerleme yok). "Bilgisayar zaten ekli" yolu 1. ekranı atlar.
+- Yedek ilerlemesi Ana sayfa bandında da görünür; "yedeği hızlı bitir" ilerlemeyi bitirir. Deneme geri yüklemesi atlanırsa Ana sayfada hatırlatma kalır.
+- Mevcut A4 sihirbaz (#job-new), bilgisayar varken "Yedekleme işi oluştur" için durur. Bu prototipte sihirbaz açılış listesine yeni bilgisayar eklenmez (bilinen sınır).
+
+Karar → kaynak
+- Taban dil A, kabuk, Ana sayfa home-2 (Koruma haritası), Yedeklemeler > İşler usta-detay, sihirbaz A4: chosen.html'den aynen.
+- Elenenler: B, C, B'nin kaynak→hedef→son sonuç akışı, sıcak paletler, hero afişleri, tek soruluk ekranlar.
+
+Prototip çubuğu (üstte, kesik çizgili) tasarımın parçası değildir: durum anahtarı (Dikkat gerekiyor / Hepsi sağlıklı / Yeni kullanıcı) Ana sayfayı ve iş listesini sürer; açılış durumu "Yeni kullanıcı (boş)". Tema <html class="dark"> ile değişir.
+Yönlendirme: #home, #jobs, #job-new, #first-backup (+ #runs #files #restores #shares #computers #storage #settings #platform = yok paneli).
+-->
+<style>
+:root{
+  /* renk — açık */
+  --bg:#fafafa; --side-bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --raised:#ffffff;
+  --border:#e4e4e7; --border-input:#8e8e98;
+  --fg:#18181b; --muted:#52525b;
+  --accent:#0f5e63; --accent-hover:#0b4a4e; --accent-fg:#ffffff; --accent-subtle:#e6f1f1;
+  --focus:#0f5e63;
+  --ok-fg:#166534; --ok-bg:#dcfce7; --ok-bd:#86d9a2;
+  --warn-fg:#854d0e; --warn-bg:#fef9c3; --warn-bd:#e5c64f;
+  --err-fg:#b91c1c; --err-bg:#fee2e2; --err-bd:#f1a1a1;
+  --neutral-fg:#3f3f46; --neutral-bg:#e4e4e7;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .14);
+  /* radius */
+  --radius:.375rem; --radius-sm:.25rem; --radius-full:9999px;
+  /* boşluk (4px ızgara) */
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.5rem; --space-6:2rem;
+  /* tipografi — kompakt 14px */
+  --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --text-xs:.75rem; --text-sm:.8125rem; --text-base:.875rem; --text-lg:1rem; --text-xl:1.25rem;
+  --leading:1.45; --control-h:2rem;
+}
+:root.dark{
+  /* koyu: yükseltilmiş yüzeyler tabandan açık */
+  --bg:#09090b; --side-bg:#0f0f12; --surface:#18181b; --surface-2:#232328; --raised:#27272c;
+  --border:#2e2e34; --border-input:#71717a;
+  --fg:#fafafa; --muted:#a1a1aa;
+  --accent:#8cc5c8; --accent-hover:#a6d3d5; --accent-fg:#052a2c; --accent-subtle:#14302f;
+  --focus:#8cc5c8;
+  --ok-fg:#86efac; --ok-bg:#12301d; --ok-bd:#235f37;
+  --warn-fg:#fcd34d; --warn-bg:#33270a; --warn-bd:#6b5314;
+  --err-fg:#fca5a5; --err-bg:#3d1414; --err-bd:#7a2b2b;
+  --neutral-fg:#d4d4d8; --neutral-bg:#2e2e34;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .6);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light}
+html.dark{color-scheme:dark}
+body{margin:0;font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--leading);background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,ol,dl,dd{margin:0}
+ul,ol{padding:0;list-style:none}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--radius-sm)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic-lg{width:1.25rem;height:1.25rem}
+.muted{color:var(--muted)}
+
+/* ---------- kabuk ---------- */
+.shell{display:grid;grid-template-columns:12rem minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--side-bg);border-right:1px solid var(--border)}
+.side-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-3) var(--space-3) var(--space-2)}
+.brand{display:flex;align-items:center;gap:var(--space-2);font-weight:600;font-size:var(--text-base);text-decoration:none;color:var(--fg);min-height:2rem}
+.brand-mark{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-fg);flex:none}
+.brand-mark .ic{width:.875rem;height:.875rem}
+.btn.menu-btn{display:none}
+.side-body{display:flex;flex-direction:column;flex:1;min-height:0;padding:0 var(--space-2) var(--space-3)}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:var(--space-1)}
+.nav a{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-weight:500;transition:background .12s}
+.nav a:hover{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current]{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current] .ic{color:var(--accent)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;padding-top:var(--space-3);border-top:1px solid var(--border)}
+.side-foot a,.account{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-size:var(--text-sm)}
+.side-foot a:hover,.account:hover{background:var(--surface-2);color:var(--fg)}
+.account{width:100%;border:0;background:none;font:inherit;font-size:var(--text-sm);text-align:left;cursor:pointer;min-height:2.5rem;margin-top:var(--space-1)}
+.avatar{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-full);background:var(--accent-subtle);color:var(--accent);font-size:var(--text-xs);font-weight:600;flex:none}
+.account b{display:block;color:var(--fg);font-weight:500;line-height:1.2}
+.account small{display:block;font-size:var(--text-xs);line-height:1.2}
+
+.main{min-width:0;padding:0 var(--space-5) 2.5rem;width:100%;max-width:96rem}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--border)}
+.topbar .grow{flex:1}
+.seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface)}
+.seg a{display:inline-flex;align-items:center;min-height:1.75rem;padding:0 var(--space-3);border-radius:var(--radius-sm);color:var(--muted);text-decoration:none;font-weight:500;font-size:var(--text-sm)}
+.seg a:hover{color:var(--fg)}
+.seg a[aria-current]{background:var(--accent);color:var(--accent-fg)}
+.proto-label{font-size:var(--text-xs);color:var(--muted)}
+
+/* ---------- bileşenler ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s}
+.btn:hover{background:var(--surface-2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn[disabled],.btn[aria-disabled=true]{opacity:.55;cursor:not-allowed}
+.btn-quiet{border-color:transparent;background:none;color:var(--muted)}
+.link{display:inline-flex;align-items:center;min-height:1.5rem;padding:0;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.link:hover{color:var(--accent-hover)}
+.switch{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-size:var(--text-sm);font-weight:500;cursor:pointer}
+.switch:hover{background:var(--surface-2)}
+.switch .box{display:grid;place-items:center;width:1rem;height:1rem;border:1px solid var(--border-input);border-radius:var(--radius-sm);color:transparent}
+.switch[aria-checked=true] .box,.switch[aria-pressed=true] .box{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.switch .box .ic{width:.75rem;height:.75rem;stroke-width:3}
+.theme-btn .i-sun{display:none}
+.dark .theme-btn .i-sun{display:block}
+.dark .theme-btn .i-moon{display:none}
+
+.badge{display:inline-flex;align-items:center;gap:.3rem;min-height:1.375rem;padding:0 .5rem;border:1px solid transparent;border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:500;white-space:nowrap}
+.badge .ic{width:.8125rem;height:.8125rem}
+.b-ok{color:var(--ok-fg);background:var(--ok-bg);border-color:var(--ok-bd)}
+.b-warn{color:var(--warn-fg);background:var(--warn-bg);border-color:var(--warn-bd)}
+.b-err{color:var(--err-fg);background:var(--err-bg);border-color:var(--err-bd)}
+.b-neutral{color:var(--neutral-fg);background:var(--neutral-bg)}
+
+/* sayfa başlığı: tek satır durum özeti */
+.hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-4);margin:var(--space-4) 0 var(--space-3)}
+.hd h1{font-size:var(--text-xl);line-height:1.3;font-weight:600;letter-spacing:-.01em}
+.hd .sum{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin-top:var(--space-1);color:var(--muted)}
+.hd .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-4);min-height:2.5rem;border-bottom:1px solid var(--border)}
+.panel-h h2{font-size:var(--text-base);font-weight:600}
+.panel-b{padding:var(--space-3) var(--space-4)}
+
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{padding:var(--space-2) var(--space-4);text-align:left;font-size:var(--text-xs);font-weight:500;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.tbl td{padding:.5rem var(--space-4);border-top:1px solid var(--border);vertical-align:middle}
+.tbl tbody tr:first-child td{border-top:0}
+.tbl .num{text-align:right}
+.tbl .name{font-weight:500}
+
+.bar{height:.5rem;border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface-2);overflow:hidden;margin:var(--space-2) 0}
+.bar i{display:block;height:100%;background:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--muted)}
+
+/* ---------- çalışma alanı (usta-detay) ---------- */
+.ws{display:grid;grid-template-columns:20rem minmax(0,1fr);min-height:max(30rem,calc(100vh - 11rem));background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.master{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border)}
+.m-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:2.75rem;border-bottom:1px solid var(--border)}
+.m-h h2{font-size:var(--text-base);font-weight:600}
+.m-h .btn{min-height:1.75rem;padding:0 var(--space-2);font-size:var(--text-sm)}
+.jobs li+li{border-top:1px solid var(--border)}
+.job-btn{display:flex;flex-direction:column;gap:.25rem;width:100%;min-height:3.5rem;padding:.5rem var(--space-3);border:0;border-left:3px solid transparent;border-radius:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.job-btn:hover{background:var(--surface-2)}
+.job-btn[aria-current=true]{background:var(--accent-subtle);border-left-color:var(--accent)}
+.job-btn:focus-visible{outline-offset:-2px}
+.job-btn .nm{font-weight:500}
+.job-btn .mt{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--muted)}
+.m-empty{padding:var(--space-4) var(--space-3);color:var(--muted)}
+.m-empty p+p,.m-empty p+.btn{margin-top:var(--space-3)}
+.m-foot{margin-top:auto;padding:var(--space-3);border-top:1px solid var(--border);background:var(--surface-2)}
+.m-foot .row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
+.m-foot b{font-weight:600}
+.m-foot .big{font-size:var(--text-lg);font-weight:600;margin-top:2px}
+
+.detail{display:flex;flex-direction:column;min-width:0}
+.d-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border)}
+.d-title{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);min-width:0}
+.d-title h2{font-size:var(--text-lg);font-weight:600;letter-spacing:-.005em}
+.d-title h2:focus-visible{outline-offset:4px}
+.d-h .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.back{display:none}
+.d-alert{display:flex;gap:var(--space-2);align-items:flex-start;padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg)}
+.d-alert .ic{margin-top:2px}
+.d-sec{border-bottom:1px solid var(--border)}
+.d-sec:last-child{border-bottom:0}
+.d-sec>h3{padding:var(--space-3) var(--space-4) 0;font-size:var(--text-sm);font-weight:600}
+.d-sec .facts{padding:var(--space-2) var(--space-4) var(--space-3)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:var(--space-3) var(--space-4)}
+.facts dt{font-size:var(--text-sm);color:var(--muted)}
+.facts dd{font-weight:500}
+.facts dd small{display:block;font-size:var(--text-sm);font-weight:400;color:var(--muted)}
+.d-sec .tbl{margin-top:var(--space-2);border-top:1px solid var(--border)}
+.d-sec .tbl th{padding-top:.25rem;padding-bottom:.25rem;background:var(--surface-2)}
+
+/* boş durum: başlangıç adımları sağ bölmede */
+.steps{counter-reset:s}
+.steps li{display:grid;grid-template-columns:1.5rem minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);border-top:1px solid var(--border)}
+.steps li:first-child{border-top:0}
+.steps .n{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;color:var(--muted)}
+.steps .is-now{background:var(--accent-subtle)}
+.steps .is-now .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.steps b{font-weight:600;display:block}
+.steps p{color:var(--muted)}
+.steps .is-later b{color:var(--muted)}
+
+/* alt sekmeler */
+.subtabs{display:flex;flex-wrap:wrap;gap:var(--space-1);margin:var(--space-3) 0 0;border-bottom:1px solid var(--border)}
+.subtabs a{display:inline-flex;align-items:center;min-height:2rem;padding:0 var(--space-3);margin-bottom:-1px;border-bottom:2px solid transparent;color:var(--muted);text-decoration:none;font-weight:500}
+.subtabs a:hover{color:var(--fg)}
+.subtabs a[aria-current]{color:var(--fg);border-bottom-color:var(--accent)}
+.crumb{font-size:var(--text-sm);color:var(--muted);margin-top:var(--space-3)}
+
+/* ---------- sihirbaz: üstte yatay adım çubuğu, altta iki sütun ---------- */
+.stepper{display:flex;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.stepper li{flex:1;min-width:0;border-left:1px solid var(--border)}
+.stepper li:first-child{border-left:0}
+.stepper button{display:flex;align-items:center;gap:var(--space-2);width:100%;min-height:2.5rem;padding:0 var(--space-3);border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted);font:inherit;font-weight:500;text-align:left;cursor:pointer}
+.stepper button:hover:not(:disabled){background:var(--surface-2);color:var(--fg)}
+.stepper button:disabled{cursor:default;opacity:.8}
+.stepper button:focus-visible{outline-offset:-2px}
+.stepper .n{display:grid;place-items:center;width:1.375rem;height:1.375rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;flex:none}
+.stepper .n .ic{width:.75rem;height:.75rem;stroke-width:3}
+.stepper .is-done .n{background:var(--accent-subtle);border-color:var(--accent);color:var(--accent)}
+.stepper [aria-current]{color:var(--fg);background:var(--surface-2);border-bottom-color:var(--accent)}
+.stepper [aria-current] .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.stepper .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.wb{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:var(--space-4);margin-top:var(--space-3);align-items:start}
+.wb[data-wstep="4"]{grid-template-columns:minmax(0,1fr)}
+.wb[data-wstep="4"] .sumbox{display:none}
+.wb[data-wstep="4"] .card{max-width:48rem}
+#nextBtn{margin-left:auto}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.card-b{padding:var(--space-4)}
+.card-f{display:flex;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-4);border-top:1px solid var(--border);background:var(--surface-2);border-radius:0 0 var(--radius) var(--radius)}
+.step-h{font-size:var(--text-lg);font-weight:600;letter-spacing:-.005em;margin-bottom:2px}
+.step-h:focus-visible{outline-offset:4px}
+.lead{color:var(--muted);margin-bottom:var(--space-4)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--space-4)}
+.field{display:flex;flex-direction:column;gap:var(--space-1);margin-bottom:var(--space-4);border:0;padding:0;min-width:0}
+.field>label,.field>legend{font-weight:500;padding:0;margin-bottom:2px}
+.hint{font-size:var(--text-sm);color:var(--muted)}
+.err{font-size:var(--text-sm);color:var(--err-fg);font-weight:500;display:flex;align-items:center;gap:.3rem}
+.err:empty{display:none}
+.input,.select{width:100%;min-height:2rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit}
+.select{appearance:auto}
+.input::placeholder{color:var(--muted);opacity:1}
+.input[aria-invalid=true],.select[aria-invalid=true]{border-color:var(--err-fg);box-shadow:inset 0 0 0 1px var(--err-fg)}
+.input:focus-visible,.select:focus-visible{outline-offset:0}
+.opts{display:flex;flex-direction:column;gap:var(--space-1)}
+.opt{display:flex;align-items:flex-start;gap:var(--space-3);min-height:2rem;padding:.4375rem var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);cursor:pointer}
+.opt:hover{background:var(--surface-2)}
+.opt input{margin:.1875rem 0 0;width:1rem;height:1rem;accent-color:var(--accent);flex:none}
+.opt .t{display:block;font-weight:500}
+.opt .s{display:block;font-size:var(--text-sm);color:var(--muted)}
+.opt:has(input:checked){border-color:var(--accent);background:var(--accent-subtle);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.chip{position:relative;display:inline-flex;align-items:center;gap:.375rem;min-height:2rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-weight:500}
+.chip:hover{background:var(--surface-2)}
+.chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.chip .tick{display:none;color:var(--accent);stroke-width:3}
+.chip:has(input:checked){border-color:var(--accent);background:var(--accent-subtle);box-shadow:inset 0 0 0 1px var(--accent)}
+.chip:has(input:checked) .tick{display:block}
+.chip:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+.note{display:flex;gap:var(--space-2);align-items:flex-start;margin-top:var(--space-2);padding:var(--space-2) var(--space-3);border:1px solid var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg);border-radius:var(--radius);font-size:var(--text-sm)}
+.note .ic{margin-top:2px}
+
+/* canlı özet */
+.sumbox{position:sticky;top:var(--space-4);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.sumbox>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);min-height:2.5rem;padding:var(--space-2) var(--space-4);font-weight:600;cursor:pointer;list-style:none}
+.sumbox>summary::-webkit-details-marker{display:none}
+.sumbox>summary .muted{font-weight:400;font-size:var(--text-sm)}
+.sumbox[open]>summary{border-bottom:1px solid var(--border)}
+.sum-list{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) var(--space-4)}
+.sum-list li{display:flex;gap:var(--space-2);align-items:flex-start;color:var(--muted)}
+.sum-list li .ic{margin-top:3px;color:var(--muted)}
+.sum-list li.is-set{color:var(--fg)}
+.sum-list li.is-set .ic{color:var(--ok-fg)}
+
+.review{display:grid;grid-template-columns:11rem minmax(0,1fr);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--space-3)}
+.review dt,.review dd{padding:.5rem var(--space-3);border-top:1px solid var(--border)}
+.review dt{color:var(--muted)}
+.review dd{font-weight:500;display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-3)}
+.review dd .link{font-weight:400;font-size:var(--text-sm);flex:none}
+.review dt:first-of-type,.review dt:first-of-type+dd{border-top:0}
+.review ul{display:flex;flex-direction:column;gap:2px}
+.done{max-width:44rem;margin-top:var(--space-4)}
+.done .ok-ic{display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:var(--radius-full);background:var(--ok-bg);color:var(--ok-fg);border:1px solid var(--ok-bd);margin-bottom:var(--space-3)}
+.done .ok-ic .ic{width:1.25rem;height:1.25rem}
+
+.toast{position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:50;max-width:min(22rem,calc(100vw - 2rem));padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--fg);box-shadow:var(--shadow-overlay);opacity:0;pointer-events:none;transition:opacity .15s}
+.toast.show{opacity:1}
+.toast:empty{display:none}
+
+/* ---------- duyarlı ---------- */
+@media (max-width:60rem){
+  /* usta-detay: liste → ayrıntı gezinmesi */
+  .ws{grid-template-columns:minmax(0,1fr);min-height:0}
+  .master{border-right:0}
+  .ws[data-view="list"] .detail{display:none}
+  .ws[data-view="detail"] .master{display:none}
+  .job-btn[aria-current=true]{background:none;border-left-color:transparent}
+  .job-btn{min-height:3.5rem}
+  .back{display:inline-flex}
+  .ws-empty .detail{order:-1;border-bottom:1px solid var(--border)}
+  .wb{grid-template-columns:minmax(0,1fr)}
+  .sumbox{position:static;order:-1}
+}
+@media (max-width:52.5rem){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{height:auto;z-index:30;border-right:0;border-bottom:1px solid var(--border)}
+  .side-head{padding:var(--space-2) var(--space-4)}
+  .btn.menu-btn{display:inline-flex;min-height:2.5rem}
+  .side-body{display:none;max-height:calc(100vh - 3.5rem);overflow:auto;padding:0 var(--space-3) var(--space-3)}
+  .side.open .side-body{display:flex}
+  .nav a,.side-foot a{min-height:2.5rem}
+  .main{padding:0 var(--space-4) 2rem}
+  .btn,.switch,.chip,.input,.select{min-height:2.5rem}
+  .m-h .btn{min-height:2rem}
+  .stepper li{flex:1}
+  .stepper li:has([aria-current]){flex:3}
+  .stepper button{padding:0;justify-content:center;gap:var(--space-1)}
+  .stepper li:has([aria-current]) button{padding:0 var(--space-2)}
+  .stepper li:not(:has([aria-current])) .lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .card-f{padding:var(--space-2) var(--space-3)}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+  .review{grid-template-columns:minmax(0,1fr)}
+  .review dt{padding-bottom:0;border-top:1px solid var(--border);font-size:var(--text-sm)}
+  .review dd{border-top:0;padding-top:2px}
+  .review dt:first-of-type{border-top:0}
+}
+@media (max-width:40rem){
+  .tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .tbl,.tbl tbody,.tbl tr,.tbl td{display:block}
+  .tbl tr{padding:var(--space-2) var(--space-4);border-top:1px solid var(--border)}
+  .tbl tbody tr:first-child{border-top:0}
+  .tbl td{padding:1px 0;border:0}
+  .tbl td::before{content:attr(data-label);display:inline-block;min-width:4.5rem;color:var(--muted);font-size:var(--text-sm)}
+  .tbl td.name::before{display:none}
+  .tbl .num{text-align:left}
+  .d-sec .tbl tbody tr:first-child{border-top:0}
+  .steps li{grid-template-columns:1.5rem minmax(0,1fr)}
+  .steps li .btn{grid-column:2;justify-self:start}
+  .hd .acts{width:100%}
+  .hd .acts .btn{flex:1}
+  .d-h .acts{width:100%}
+  .d-h .acts .btn{flex:1}
+  .card-f .btn{flex:1}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
+/* ---------- home-2 (koruma haritası) ---------- */
+/* ---------- H2: koruma haritası ---------- */
+.seg button{display:inline-flex;align-items:center;min-height:1.75rem;padding:0 var(--space-3);border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);font:inherit;font-weight:500;font-size:var(--text-sm);cursor:pointer}
+.seg button:hover{color:var(--fg)}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg)}
+.btn-sm{min-height:1.75rem;padding:0 var(--space-2);font-size:var(--text-sm)}
+.b-run{color:var(--accent);background:var(--accent-subtle);border-color:var(--accent)}
+.stack>*+*{margin-top:var(--space-4)}
+h2.sec{font-size:var(--text-base);font-weight:600}
+
+.band{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--warn-bd);border-radius:var(--radius);background:var(--warn-bg);color:var(--warn-fg)}
+.band .txt{display:flex;gap:var(--space-2);align-items:flex-start;flex:1 1 20rem;min-width:0}
+.band .txt .ic{margin-top:2px}
+.band .txt b{display:block;font-weight:600}
+.band .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.band-run{border-color:var(--border);background:var(--accent-subtle);color:var(--fg)}
+.band-run .bar{width:12rem;max-width:100%;margin:0;background:var(--surface)}
+
+.counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.counts>li{padding:var(--space-3) var(--space-4);border-left:1px solid var(--border)}
+.counts>li:first-child{border-left:0}
+.counts .n{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-xl);font-weight:600;line-height:1.25}
+.counts .l{color:var(--muted);font-size:var(--text-sm)}
+.counts .is-warn .n,.counts .is-warn .l{color:var(--warn-fg)}
+.counts{margin:0;padding:0;list-style:none}
+
+.map-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-1) var(--space-4)}
+.key{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-4);font-size:var(--text-sm);color:var(--muted)}
+.key span{display:inline-flex;align-items:center;gap:.375rem}
+.key .cell{width:1.125rem;height:1.125rem;flex:none}
+.grp{margin-top:var(--space-3)}
+.grp-h{align-items:center}
+.grp-h .who{display:flex;align-items:center;gap:var(--space-2);min-width:0;flex-wrap:wrap}
+.grp-h h3{font-size:var(--text-base);font-weight:600}
+.grp-h .muted{font-size:var(--text-sm)}
+
+.src{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,23rem) minmax(0,1fr);grid-template-areas:"main fresh last";gap:var(--space-2) var(--space-4);align-items:start;padding:var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) - 3px);border-top:1px solid var(--border);border-left:3px solid transparent}
+.src:first-child{border-top:0}
+.src.is-warn{border-left-color:var(--warn-fg)}
+.s-main{grid-area:main;display:flex;flex-direction:column;min-width:0}
+.s-main .nm{font-weight:600}
+.s-main .muted{font-size:var(--text-sm)}
+.s-fresh{grid-area:fresh;min-width:0;align-self:center;display:flex;flex-direction:column;align-items:center}
+.s-fresh .strip{width:100%}
+.s-fresh .cap{text-align:center}
+.s-last{grid-area:last;display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:var(--space-1)}
+.s-last .muted{font-size:var(--text-sm)}
+.s-last .bar{width:100%;margin:0}
+.s-rest{grid-area:rest;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--border);color:var(--muted);font-size:var(--text-sm)}
+.s-rest>span{display:inline-flex;align-items:flex-start;gap:var(--space-2);flex:1 1 16rem;min-width:0}
+.s-rest>span .ic{margin-top:2px}
+.s-rest b{color:var(--fg);font-weight:600}
+.s-rest .r-ok .ic{color:var(--ok-fg)}
+.s-rest .r-never .ic{color:var(--warn-fg)}
+.s-rest .r-never em{font-style:normal;color:var(--warn-fg);font-weight:600}
+
+.strip{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:2px;max-width:20rem;padding:2px;border-radius:var(--radius-sm)}
+.strip:focus-visible{outline-offset:1px}
+.cell{aspect-ratio:1/1;display:grid;place-items:center;border:1px solid transparent;border-radius:2px}
+.cell .ic{width:.75rem;height:.75rem;stroke-width:3}
+.c-ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok-fg)}
+.c-fail{background:var(--err-bg);border-color:var(--err-fg);color:var(--err-fg)}
+.c-run{background:var(--accent-subtle);border-color:var(--accent);color:var(--accent)}
+.c-none{border:1px dashed var(--border-input);color:var(--muted)}
+.cell:hover{filter:brightness(.94)}
+.dark .cell:hover{filter:brightness(1.2)}
+.strip:focus .cell.is-cur{outline:2px solid var(--fg);outline-offset:1px}
+.cap{margin-top:var(--space-1);font-size:var(--text-xs);color:var(--muted);min-height:1.1em}
+
+.three{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-3);margin-top:var(--space-3)}
+.facts2{display:flex;flex-direction:column;gap:var(--space-3)}
+.facts2 dt{font-size:var(--text-sm);color:var(--muted)}
+.facts2 dd{font-weight:600}
+.facts2 dd small{display:block;font-size:var(--text-sm);font-weight:400;color:var(--muted)}
+.big{font-size:var(--text-lg);font-weight:600}
+.act li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--space-3);align-items:center;padding:var(--space-2) var(--space-4);border-top:1px solid var(--border)}
+.act li:first-child{border-top:0}
+.act .t{font-size:var(--text-sm);color:var(--muted)}
+.act .sz{font-size:var(--text-sm);color:var(--muted);text-align:right}
+.act .r{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.act .nm{font-weight:500}
+
+.ghost{padding:var(--space-3) var(--space-4)}
+.ghost .strip{opacity:.9}
+.ghost p{color:var(--muted);margin-top:var(--space-2)}
+.panel.dashed{border-style:dashed;border-color:var(--border-input)}
+
+@media (min-width:40rem){.three{grid-template-columns:repeat(2,minmax(0,1fr))}.three .act-p{grid-column:1/-1}}
+@media (min-width:80rem){.three{grid-template-columns:repeat(3,minmax(0,1fr))}.three .act-p{grid-column:auto}}
+
+@media (max-width:64rem){
+  .src{grid-template-columns:minmax(0,1fr) minmax(9rem,13rem);grid-template-areas:"main last" "fresh fresh"}
+}
+@media (max-width:40rem){
+  .counts>li{padding:var(--space-2) var(--space-3)}
+  .src{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "last" "fresh"}
+  .s-last{flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3)}
+  .s-last .bar{flex-basis:100%}
+  .band .acts{width:100%}
+  .band .acts .btn{flex:1}
+  .s-last .btn{width:100%}
+}
+@media (max-width:52.5rem){.seg button{min-height:2.25rem}}
+/* ---------- birleşik prototip ---------- */
+.ws{min-height:max(30rem,calc(100vh - 14rem))}
+.strip{max-width:23rem}
+.hd .sum .badge{flex:none}
+.hd h1:focus-visible{outline:0}
+.done-acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+#startProg,#startOk{margin-top:var(--space-4)}
+#startProg .bar{max-width:24rem}
+.pb{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);padding:.375rem var(--space-4);background:var(--neutral-bg);border-bottom:1px dashed var(--border-input);font-size:var(--text-sm)}
+.pb .grow{flex:1}
+.pb .tag{padding:0 .375rem;border:1px dashed var(--border-input);border-radius:var(--radius-sm);font-size:var(--text-xs);font-weight:600;color:var(--neutral-fg);text-transform:uppercase;letter-spacing:.04em}
+.pb-l{color:var(--neutral-fg);font-size:var(--text-xs)}
+.pb .switch,.pb .seg{font-size:var(--text-sm)}
+dialog{width:min(32rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--fg);box-shadow:var(--shadow-overlay)}
+dialog::backdrop{background:rgb(0 0 0/.45)}
+.dec-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-4);min-height:2.75rem;border-bottom:1px solid var(--border)}
+.dec-h h2{font-size:var(--text-lg);font-weight:600}
+.dec-l li{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:var(--space-3);align-items:center;padding:var(--space-2) var(--space-4);border-top:1px solid var(--border)}
+.dec-l li:first-child{border-top:0}
+.dec-l b{font-weight:600}
+@media (max-width:40rem){.dec-l li{grid-template-columns:minmax(0,1fr);gap:2px}}
+
+/* ---------- ilk yedek akışı ---------- */
+.fbw{max-width:56rem}
+.fbw .card{margin-top:var(--space-3)}
+.fbw .card-f{flex-wrap:wrap;align-items:center}
+.fbw .card-f .push{margin-left:auto;display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.fbw .btn{white-space:normal;text-align:center}
+.fbw .ok-ic{display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:var(--radius-full);background:var(--ok-bg);color:var(--ok-fg);border:1px solid var(--ok-bd);margin-bottom:var(--space-3)}
+.fbw .ok-ic .ic{width:1.25rem;height:1.25rem}
+.hl{display:flex;gap:.375rem;align-items:flex-start}
+.hl .ic{margin-top:2px}
+.sub-h{font-size:var(--text-sm);font-weight:600;margin:var(--space-4) 0 var(--space-2)}
+.cmd-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2);margin-top:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border)}
+.cmd-h .sub-h{margin:0}
+.cmd-l{margin-top:var(--space-3);color:var(--muted);font-size:var(--text-sm)}
+.cmd-row{display:flex;gap:var(--space-2);align-items:flex-start;margin-top:var(--space-2)}
+.cmd{flex:1;min-width:0;display:block;padding:var(--space-2) var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:var(--text-sm);line-height:1.5;overflow-wrap:anywhere;user-select:all}
+.conn{border:1px solid var(--border);border-radius:var(--radius)}
+.conn li{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:.25rem var(--space-3);color:var(--muted)}
+.conn li+li{border-top:1px solid var(--border)}
+.conn .is-done{color:var(--fg)}
+.conn .is-done .ic{color:var(--ok-fg)}
+.conn .is-cur{color:var(--fg);font-weight:500;background:var(--accent-subtle)}
+.conn .is-cur .ic{color:var(--accent)}
+#fb-conn{margin-top:var(--space-3)}
+#fb-conn .hint{margin-top:var(--space-2)}
+.exist{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-3);align-items:flex-end;margin-top:var(--space-4);padding:var(--space-3);border:1px dashed var(--border-input);border-radius:var(--radius)}
+.exist .field{margin:0;flex:1 1 12rem}
+.scan{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2)}
+.emp{padding:var(--space-4);border:1px dashed var(--border-input);border-radius:var(--radius)}
+.emp p{margin:var(--space-1) 0 var(--space-3);color:var(--muted)}
+.emp .row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
+.named li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2);min-height:2.25rem;padding:.25rem 0;border-top:1px solid var(--border)}
+.named li:first-child{border-top:0}
+.named .nm{font-weight:500}
+.named .input{flex:1 1 12rem;width:auto}
+.rv-lead{margin-bottom:var(--space-3)}
+.rv{border:1px solid var(--border);border-radius:var(--radius);padding:0 var(--space-3)}
+.rv>li{border-top:1px solid var(--border)}
+.rv>li:first-child{border-top:0}
+.rv-r{display:grid;grid-template-columns:10rem minmax(0,1fr) auto;gap:var(--space-3);align-items:center;min-height:2.75rem;padding:.25rem 0}
+.rv-k{color:var(--muted)}
+.rv-v{font-weight:500}
+.rv-x{padding:var(--space-1) 0 var(--space-3)}
+.stg{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);font-size:var(--text-sm);color:var(--muted)}
+.stg li{display:inline-flex;align-items:center;gap:.25rem}
+.stg .is-done{color:var(--ok-fg)}
+.stg .is-cur{color:var(--accent);font-weight:600}
+.jr{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius)}
+.jr .bar{margin:0}
+.jr .facts{margin-top:var(--space-1)}
+.jr-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-1) var(--space-3)}
+.next-card{margin-top:var(--space-4);padding:var(--space-4);border:1px solid var(--accent);border-radius:var(--radius);background:var(--accent-subtle)}
+.next-card h3{font-size:var(--text-lg);font-weight:600;margin-bottom:var(--space-1)}
+.next-card p{margin-bottom:var(--space-3)}
+.next-card.is-quiet{border-color:var(--border);background:var(--surface-2)}
+.fr-f{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);padding:var(--space-3) var(--space-4);border-top:1px solid var(--border)}
+.steps .is-done .n{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok-fg)}
+.steps .n .ic{width:.75rem;height:.75rem;stroke-width:3}
+.band-note{border-color:var(--border-input);background:var(--surface);color:var(--fg)}
+.band-note .txt .ic{color:var(--accent)}
+.seg button[disabled]{opacity:.55;cursor:not-allowed}
+.switch[disabled]{opacity:.55;cursor:not-allowed}
+.chip:has(input:disabled){opacity:.6;cursor:not-allowed}
+.chip input:disabled{cursor:not-allowed}
+.rt-b{padding:var(--space-4)}
+.rt-b h3{font-size:var(--text-lg);font-weight:600;margin-bottom:var(--space-2)}
+.rt-b ul{display:flex;flex-direction:column;gap:var(--space-2);margin:var(--space-3) 0 0}
+.rt-b li{display:flex;gap:var(--space-2)}
+.rt-b li .ic{margin-top:3px;color:var(--ok-fg)}
+.rt-b .bar{margin:var(--space-3) 0 0}
+.rt-f{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-2);padding:var(--space-2) var(--space-4);border-top:1px solid var(--border);background:var(--surface-2)}
+.rt-name{display:inline-block;padding:0 .375rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:var(--text-sm)}
+@media (max-width:40rem){
+  .rv-r{grid-template-columns:minmax(0,1fr) auto}
+  .rv-k{grid-column:1/-1}
+  .cmd-row{flex-direction:column}
+  .cmd-row .btn{width:100%}
+  .steps li .badge{grid-column:2;justify-self:start}
+  .fbw .card-f .push{margin-left:0;width:100%}
+  .fbw .card-f .push .btn{flex:1 1 100%}
+  .fr-f .btn{width:100%}
+  .rt-f .btn{flex:1}
+}
+</style>
+</head>
+<body>
+
+<!-- ikon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-hdd" viewBox="0 0 24 24"><path d="M3 14h18v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M5 14 7.5 5h9L19 14"/><path d="M7 17h.01M11 17h.01"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h.01"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
+</svg>
+
+<!-- prototip çubuğu: tasarımın parçası değil -->
+<div class="pb" role="region" aria-label="Prototip denetimleri">
+  <span class="tag">Prototip</span>
+  <span class="pb-l" id="stLbl">Durum</span>
+  <div class="seg" role="group" aria-labelledby="stLbl" id="states">
+    <button type="button" data-state="attn" aria-pressed="false">Dikkat gerekiyor</button>
+    <button type="button" data-state="ok" aria-pressed="false">Hepsi sağlıklı</button>
+    <button type="button" data-state="empty" aria-pressed="true">Yeni kullanıcı (boş)</button>
+  </div>
+  <button class="switch" id="simConn" type="button" hidden title="Bilgisayar adı yazılınca etkinleşir; her tıklama bağlantı durumunu bir adım ilerletir">Prototip: bağlantıyı simüle et</button>
+  <button class="switch" id="simScan" type="button" aria-pressed="false" hidden><span class="box"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>Prototip: taramada veri bulunamasın</button>
+  <button class="switch" id="simFast" type="button" hidden>Prototip: yedeği hızlı bitir</button>
+  <button class="switch" id="fbReset" type="button">Akışı sıfırla</button>
+  <span class="grow"></span>
+  <button class="switch" id="decBtn" type="button" aria-haspopup="dialog"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg>Seçimlerim</button>
+  <button class="switch theme-btn" id="themeBtn" type="button" aria-pressed="false">
+    <svg class="ic i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="ic i-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+    Koyu tema
+  </button>
+</div>
+
+<dialog id="dec" aria-labelledby="dec-h">
+  <div class="dec-h"><h2 id="dec-h">Seçimlerim</h2><button class="btn btn-quiet" id="decClose" type="button" aria-label="Kapat"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+  <ul class="dec-l">
+    <li><b>Taban dil</b><span>A — Sessiz operasyon konsolu; Ana sayfa home-2 Koruma haritası</span></li>
+    <li><b>Bu prototip</b><span>#177 İlk yedek akışı: boş çalışma alanından ilk doğrulanmış yedeğe</span></li>
+    <li><b>Ekran sayısı</b><span>4 — Bilgisayar ekle · Ne yedeklensin · Özet ve başla · İlk yedek. Ek olarak 1 küçük bindirme: deneme geri yüklemesi</span></li>
+    <li><b>Sorulan soru</b><span>3 yanıt (varsayılan yol): bilgisayarın adı, işletim sistemi (Windows hazır), hangi veriler (bulunanların hepsi hazır işaretli). “Bilgisayar zaten ekli” yolunda: bilgisayar seçimi + hangi veriler = 2</span></li>
+    <li><b>Sabit tutulanlar</b><span>Her gün 02:00 · 30 gün saklama · Yerel disk · otomatik şifreleme (anahtar kullanıcıdan istenmez) · otomatik iş adı · Tek komutla kurulum</span></li>
+    <li><b>İsteğe bağlı değişir</b><span>Özet ekranında satır içi: nereye, ne zaman, ne kadar saklanacak; 2. ekranda “Adı değiştir”</span></li>
+    <li><b>Elle yapılacak tek şey</b><span>Komutu yedeklenecek bilgisayarda çalıştırmak (kaçınılamaz). Bu prototipte bağlantı çubuktaki düğmeyle simüle edilir</span></li>
+    <li><b>Yedek sihirbazı</b><span>A4 (#job-new) bilgisayar varken “Yedekleme işi oluştur” için durur</span></li>
+    <li><b>Elenenler</b><span>B, C, B akışı, sıcak paletler, tek soruluk ekranlar</span></li>
+    <li><b>Gövde 14 px</b><span><span class="badge b-warn"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Onaysız varsayım</span></span></li>
+  </ul>
+</dialog>
+
+<dialog id="rdlg" aria-labelledby="rt-h">
+  <div class="dec-h"><h2 id="rt-h">Deneme geri yüklemesi</h2><button class="btn btn-quiet" id="rtX" type="button" aria-label="Kapat"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+  <div class="rt-b" id="rt-body"></div>
+  <div class="rt-f" id="rt-foot"></div>
+</dialog>
+
+<div class="shell">
+  <!-- ======== kenar çubuğu ======== -->
+  <aside class="side" id="side">
+    <div class="side-head">
+      <a class="brand" href="#home"><span class="brand-mark"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span>Yedekleme Platformu</a>
+      <button class="btn btn-quiet menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="sideBody"><svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg>Menü</button>
+    </div>
+    <div class="side-body" id="sideBody">
+      <nav class="nav" aria-label="Ana gezinme">
+        <a href="#home" data-nav="home"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Ana sayfa</a>
+        <a href="#jobs" data-nav="yed"><svg class="ic" aria-hidden="true"><use href="#i-db"/></svg>Yedeklemeler</a>
+        <a href="#computers" data-nav="computers"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg>Bilgisayarlar</a>
+        <a href="#storage" data-nav="storage"><svg class="ic" aria-hidden="true"><use href="#i-hdd"/></svg>Depolama</a>
+        <a href="#settings" data-nav="settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Ayarlar</a>
+      </nav>
+      <div class="side-foot">
+        <a href="#platform" data-nav="platform">Platform Yönetimi</a>
+        <button class="account" type="button" data-stub="Hesap menüsü bu prototipte yok.">
+          <span class="avatar" aria-hidden="true">AD</span>
+          <span><b>Ayşe Demir</b><small class="muted">Demir Muhasebe Ltd.</small></span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ======== ana alan ======== -->
+  <div class="main">
+    <main id="main">
+      <!-- ============ ANA SAYFA (home-2) ============ -->
+      <section id="home" aria-label="Ana sayfa"></section>
+
+      <!-- ============ YEDEKLEMELER ============ -->
+      <section id="yed" aria-label="Yedeklemeler" hidden>
+        <p class="crumb">Yedeklemeler</p>
+        <nav class="subtabs" id="subtabs" aria-label="Yedeklemeler bölümleri">
+          <a href="#jobs" data-tab="jobs">İşler</a>
+          <a href="#runs" data-tab="runs">Çalıştırmalar</a>
+          <a href="#files" data-tab="files">Yedek dosyaları</a>
+          <a href="#restores" data-tab="restores">Geri yüklemeler</a>
+          <a href="#shares" data-tab="shares">Paylaşımlar</a>
+        </nav>
+
+        <!-- İşler: usta-detay (A4) -->
+        <div id="pane-jobs"><div id="jobsView"></div></div>
+
+        <!-- diğer alt sekmeler -->
+        <div id="pane-tab" hidden>
+          <div class="hd"><h1 id="tab-h" tabindex="-1"></h1></div>
+          <div class="panel"><div class="panel-b m-empty"><p><b>Bu ekran bu prototipte yok.</b></p><p>Yalnızca Yedeklemeler &gt; İşler ve iş oluşturma sihirbazı yapıldı.</p><a class="btn" href="#jobs">İşler’e dön</a></div></div>
+        </div>
+
+        <!-- sihirbaz (A4) -->
+        <div id="pane-wiz" hidden>
+          <div class="hd"><h1 id="h-job" tabindex="-1">Yedekleme işi oluştur</h1></div>
+          <div id="wiz">
+            <ol class="stepper" id="rail" aria-label="Adımlar"></ol>
+            <div class="wb" id="wb" data-wstep="1">
+              <form class="card" id="wizForm" novalidate>
+                <div class="card-b">
+                  <section data-step="1">
+                    <h2 class="step-h" tabindex="-1">Neyi yedeklemek istiyorsunuz?</h2>
+                    <p class="lead">Önce işe bir ad verin, sonra yedeği alacak bilgisayarı ve verileri seçin.</p>
+                    <div class="grid2">
+                      <div class="field">
+                        <label for="f-name">İş adı</label>
+                        <input class="input" id="f-name" type="text" autocomplete="off" placeholder="Örn. Muhasebe günlük yedeği" aria-describedby="h-name err-name">
+                        <span class="hint" id="h-name">Listede bu adla göreceksiniz.</span>
+                        <span class="err" id="err-name"></span>
+                      </div>
+                      <div class="field">
+                        <label for="f-pc">Yedekleme bilgisayarı</label>
+                        <select class="select" id="f-pc" aria-describedby="h-pc err-pc">
+                          <option value="">Bilgisayar seçin…</option>
+                          <option value="MUHASEBE-SRV">MUHASEBE-SRV</option>
+                          <option value="DEPO-01">DEPO-01</option>
+                        </select>
+                        <span class="hint" id="h-pc">Yedeklenecek verilerin bulunduğu bilgisayar.</span>
+                        <span class="err" id="err-pc"></span>
+                      </div>
+                    </div>
+                    <fieldset class="field" id="src-field" aria-describedby="h-src err-src">
+                      <legend>Yedeklenecekler</legend>
+                      <span class="hint" id="h-src">Bulunan verilerden bir veya daha fazlasını işaretleyin.</span>
+                      <div class="opts" id="src-list"></div>
+                      <span class="err" id="err-src"></span>
+                      <div><button class="link" type="button" data-stub="Elle yapılandırma bu prototipte yok.">Elle yapılandır</button></div>
+                    </fieldset>
+                  </section>
+
+                  <section data-step="2" hidden>
+                    <h2 class="step-h" tabindex="-1">Yedek nereye yazılsın?</h2>
+                    <p class="lead">Yedek dosyalarının saklanacağı yeri seçin.</p>
+                    <fieldset class="field">
+                      <legend class="sr-only">Depolama bağlantısı</legend>
+                      <div class="opts" id="storage-list"></div>
+                      <div><button class="link" type="button" data-stub="Hedef ekleme bu prototipte yok.">Başka hedef ekle</button></div>
+                    </fieldset>
+                  </section>
+
+                  <section data-step="3" hidden>
+                    <h2 class="step-h" tabindex="-1">Zamanlama ve koruma</h2>
+                    <p class="lead">Yedeğin ne zaman alınacağını ve ne kadar saklanacağını seçin.</p>
+                    <fieldset class="field">
+                      <legend>Ne zaman yedek alınsın?</legend>
+                      <div class="chips" id="sched-list"></div>
+                    </fieldset>
+                    <fieldset class="field">
+                      <legend>Yedekler ne kadar saklansın?</legend>
+                      <div class="chips" id="ret-list"></div>
+                      <span class="hint">Süresi dolan yedekler otomatik silinir.</span>
+                    </fieldset>
+                    <div class="field">
+                      <label for="f-enc">Yedek şifreleme</label>
+                      <select class="select" id="f-enc" aria-describedby="enc-note">
+                        <option value="off">Kapalı</option>
+                        <option value="opt" selected>İsteğe bağlı</option>
+                        <option value="req">Zorunlu</option>
+                      </select>
+                      <div id="enc-note" aria-live="polite">
+                        <div class="note" id="enc-req" hidden><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg><span>Zorunlu şifrelemede yedekleriniz bir <b>Kurtarma anahtarı</b> ile korunur. Anahtarı güvenli bir yerde saklayın; kaybederseniz yedekleri geri yükleyemezsiniz.</span></div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section data-step="4" hidden>
+                    <h2 class="step-h" tabindex="-1">Gözden geçirin</h2>
+                    <p class="lead" id="review-lead"></p>
+                    <dl class="review" id="review"></dl>
+                  </section>
+                </div>
+                <div class="card-f">
+                  <button class="btn" type="button" id="backBtn"><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg>Geri</button>
+                  <button class="btn btn-primary" type="submit" id="nextBtn">Devam</button>
+                </div>
+              </form>
+
+              <details class="sumbox" id="sumbox" open>
+                <summary><span>Özet</span><span class="muted">Seçtikçe dolar</span></summary>
+                <ul class="sum-list" id="sum-list"></ul>
+              </details>
+            </div>
+          </div>
+
+          <div class="panel done" id="wiz-done" hidden>
+            <div class="card-b">
+              <div class="ok-ic"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div>
+              <h2 class="step-h" id="done-h" tabindex="-1">Yedekleme işi oluşturuldu</h2>
+              <p class="lead" id="done-p" style="margin-bottom:var(--space-4)"></p>
+              <div class="done-acts">
+                <button class="btn btn-primary" type="button" id="startBtn"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>İlk yedeği şimdi başlat</button>
+                <a class="btn" href="#home">Ana sayfaya dön</a>
+                <button class="btn btn-quiet" type="button" id="againBtn">Başka iş oluştur</button>
+              </div>
+              <div id="startProg" hidden>
+                <p id="progTxt">İlk yedek alınıyor…</p>
+                <div class="bar" role="progressbar" aria-label="İlk yedek ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><i style="width:0"></i></div>
+              </div>
+              <div id="startOk" hidden>
+                <p class="badge b-ok" role="status" style="min-height:2rem;white-space:normal"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg><span>İlk yedek tamamlandı. İş artık Yedeklemeler listesinde ve Ana sayfadaki koruma haritasında.</span></p>
+                <div style="margin-top:var(--space-3)"><button class="btn btn-primary" type="button" id="seeBtn">İşler’de göster</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ İLK YEDEK AKIŞI (#first-backup) ============ -->
+      <section id="first" aria-label="İlk yedek" hidden>
+        <div class="hd"><div><h1 id="h-first" tabindex="-1">İlk yedeğinizi alın</h1><p class="sum"><span>Dört kısa aşama. Bilgisayarı bağladıktan sonra çoğu seçim hazır gelir.</span></p></div></div>
+        <div class="fbw">
+          <ol class="stepper" id="fb-rail" aria-label="Aşamalar"></ol>
+
+          <section class="card" data-fs="1" aria-labelledby="fs1">
+            <div class="card-b">
+              <h2 class="step-h" id="fs1" tabindex="-1">Yedeklenecek bilgisayarı ekleyin</h2>
+              <p class="lead">Verilerin bulunduğu bilgisayarı (örneğin muhasebe programının çalıştığı bilgisayar) bağlayın. Bu işlem bir kez yapılır.</p>
+              <div class="grid2">
+                <div class="field">
+                  <label for="fb-name">Bilgisayarın adı</label>
+                  <input class="input" id="fb-name" type="text" autocomplete="off" placeholder="Örn. MUHASEBE-SRV" aria-describedby="fb-name-h">
+                  <span class="hint" id="fb-name-h">Listede bu adla göreceksiniz.</span>
+                </div>
+                <fieldset class="field">
+                  <legend>İşletim sistemi</legend>
+                  <div class="chips" id="fb-os"></div>
+                  <span class="hint">Bu bilgisayarda çalışan sistem.</span>
+                </fieldset>
+              </div>
+              <div id="fb-cmdbox"></div>
+              <div id="fb-conn" aria-live="polite" hidden></div>
+              <div class="exist" id="fb-exist" hidden>
+                <div class="field"><label for="fb-ex-sel">Eklenmiş bilgisayar</label><select class="select" id="fb-ex-sel"><option>MUHASEBE-SRV</option><option>DEPO-01</option></select></div>
+                <button class="btn btn-primary" type="button" data-act="exgo">Bu bilgisayarı kullan</button>
+              </div>
+            </div>
+            <div class="card-f">
+              <button class="link" type="button" id="fb-exbtn" data-act="exist" aria-expanded="false" aria-controls="fb-exist">Bilgisayar zaten ekli</button>
+              <button class="btn btn-primary" type="button" id="fb-next1" data-act="next1" disabled>Devam</button>
+            </div>
+          </section>
+
+          <section class="card" data-fs="2" aria-labelledby="fs2" hidden>
+            <div class="card-b">
+              <h2 class="step-h" id="fs2" tabindex="-1">Ne yedeklensin?</h2>
+              <p class="lead" id="fb-lead2"></p>
+              <div id="fb-find" aria-live="polite"></div>
+              <div id="fb-named"></div>
+            </div>
+            <div class="card-f">
+              <button class="btn" type="button" data-act="back2"><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg>Geri</button>
+              <button class="btn btn-primary" type="button" id="fb-next2" data-act="next2" disabled>Devam</button>
+            </div>
+          </section>
+
+          <section class="card" data-fs="3" aria-labelledby="fs3" hidden>
+            <div class="card-b">
+              <h2 class="step-h" id="fs3" tabindex="-1">Özet ve başla</h2>
+              <p class="lead">Güvenli varsayılanlar hazır; değiştirmeniz gerekmez.</p>
+              <div id="fb-sum"></div>
+            </div>
+            <div class="card-f">
+              <button class="btn" type="button" data-act="back3"><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg>Geri</button>
+              <div class="push">
+                <button class="btn" type="button" data-act="create" data-run="0">Sadece oluştur, sonra başlat</button>
+                <button class="btn btn-primary" type="button" data-act="create" data-run="1"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Yedeklemeyi oluştur ve ilk yedeği başlat</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" data-fs="4" aria-label="İlk yedek" hidden>
+            <div class="card-b" id="fb-run"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ============ DİĞER MENÜ ÖĞELERİ ============ -->
+      <section id="stub" aria-label="Bu prototipte yok" hidden>
+        <div class="hd"><h1 id="stub-h" tabindex="-1"></h1></div>
+        <div class="panel"><div class="panel-b m-empty"><p><b>Bu ekran bu prototipte yok.</b></p><p>Yalnızca Ana sayfa, Yedeklemeler &gt; İşler ve iş oluşturma sihirbazı yapıldı.</p><a class="btn" href="#home">Ana sayfaya dön</a></div></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)};
+  var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+  var root=document.documentElement;
+  var ic=function(n){return '<svg class="ic" aria-hidden="true"><use href="#i-'+n+'"/></svg>'};
+  var narrow=window.matchMedia('(max-width:60rem)');
+
+  /* ---- tema (hiçbir şey saklanmaz) ---- */
+  var themeBtn=$('#themeBtn');
+  function setTheme(d){root.classList.toggle('dark',d);themeBtn.setAttribute('aria-pressed',String(d))}
+  setTheme(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+  themeBtn.addEventListener('click',function(){setTheme(!root.classList.contains('dark'))});
+
+  /* ---- bildirim + "yok" düğmeleri ---- */
+  var tt,toastEl=$('#toast');
+  function toast(m){toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){toastEl.classList.remove('show');toastEl.textContent=''},3500)}
+  document.addEventListener('click',function(e){
+    var el=e.target.closest('[data-stub]');if(!el)return;
+    e.preventDefault();toast(el.getAttribute('data-stub')||'Bu ekran bu prototipte yok.');
+  });
+
+  /* ---- Seçimlerim ---- */
+  var dec=$('#dec');
+  $('#decBtn').addEventListener('click',function(){if(dec.showModal)dec.showModal();else dec.setAttribute('open','')});
+  $('#decClose').addEventListener('click',function(){dec.close()});
+  dec.addEventListener('click',function(e){if(e.target===dec)dec.close()});
+
+  /* ---- mobil menü ---- */
+  var side=$('#side'),menuBtn=$('#menuBtn');
+  function closeMenu(){side.classList.remove('open');menuBtn.setAttribute('aria-expanded','false')}
+  menuBtn.addEventListener('click',function(){var o=side.classList.toggle('open');menuBtn.setAttribute('aria-expanded',String(o))});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&side.classList.contains('open')){closeMenu();menuBtn.focus()}});
+
+  /* ======== ortak sahte veri (bugün = 14 Kasım; şerit 1–14 Kasım) ======== */
+  /* şerit kodu: o başarılı · f alınamadı · r çalışıyor · n iş henüz yoktu */
+  var DAY={o:['ok','check','yedek alındı'],f:['fail','x','yedek alınamadı'],r:['run','clock','yedekleme çalışıyor'],n:['none','','iş henüz oluşturulmamıştı']};
+  var STATE='attn',BASE=[],made=[],sel=null,pendingDetail=false,seq=0;
+
+  function baseJobs(st){
+    var ok=st==='ok';
+    return [
+      {id:'muh',name:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',src:'SQL Server · Muhasebe',meta:'SQL Server · Yerel disk',dst:'Yerel disk',dstSub:'Bu sunucudaki disk',sched:'Her gün 02:00',ret:'30 gün',next:'Yarın 02:00',nextSub:'15 Kasım',
+       days:ok?'oooooooooooooo':'ooooooooooooff',last:ok?'bugün 02:18':'12 Kasım 02:18',lastAgo:ok?'':' (2 gün önce)',
+       rest:{t:'3 gün önce, başarılı',x:ok?'':' · Geri yüklenebilecek en yeni yedek: 12 Kasım'},
+       band:ok?null:['Muhasebe veritabanı yedeği 02:00’de alınamadı.','Son başarılı yedek 12 Kasım 02:18; bu veri 2 gündür korunmuyor.'],
+       alert:ok?'':'Yedek zamanında alınmadı. Bugün 02:00’de başlaması gerekiyordu; son başarılı yedek 2 gün önce (12 Kasım).',
+       runs:ok?[['Bugün 02:18','94 GB','ok','Başarılı'],['13 Kasım 02:17','94 GB','ok','Başarılı'],['12 Kasım 02:18','94 GB','ok','Başarılı'],['11 Kasım 02:17','93 GB','ok','Başarılı']]
+              :[['Bugün 02:00','—','warn','Alınamadı'],['13 Kasım 02:00','—','warn','Alınamadı'],['12 Kasım 02:18','94 GB','ok','Başarılı'],['11 Kasım 02:17','93 GB','ok','Başarılı']]},
+      {id:'bor',name:'Bordro veritabanı',pc:'MUHASEBE-SRV',src:'SQL Server · Bordro',meta:'SQL Server · Google Drive',dst:'Google Drive',dstSub:'ofis@firma.com',sched:'Her gün 02:00',ret:'30 gün',next:'Yarın 02:00',nextSub:'15 Kasım',
+       days:ok?'ooooooooooooor':'oooooooooooooo',last:'bugün 02:31',lastAgo:'',pct:62,started:'14:12',
+       rest:{t:'21 gün önce, başarılı',x:''},
+       runs:(ok?[['Bugün 14:12','—','run','Çalışıyor %62']]:[]).concat([['Bugün 02:31','38 GB','ok','Başarılı'],['13 Kasım 02:30','38 GB','ok','Başarılı'],['12 Kasım 02:31','37 GB','ok','Başarılı'],['11 Kasım 02:29','37 GB','ok','Başarılı']])},
+      {id:'dep',name:'Depo stok veritabanı',pc:'DEPO-01',src:'PostgreSQL · stok',meta:'PostgreSQL · Yerel disk',dst:'Yerel disk',dstSub:'Bu sunucudaki disk',sched:'Her gün 02:00',ret:'30 gün',next:'Yarın 02:00',nextSub:'15 Kasım',
+       days:'nnoooooooooooo',note:'iş 3 Kasım’da oluşturuldu',last:'bugün 02:14',lastAgo:'',rest:null,
+       runs:[['Bugün 02:14','126 GB','ok','Başarılı'],['13 Kasım 02:13','125 GB','ok','Başarılı'],['12 Kasım 02:15','125 GB','ok','Başarılı'],['11 Kasım 02:14','124 GB','ok','Başarılı']]}
+    ];
+  }
+  function jobs(){return BASE.concat(made)}
+  function jobById(id){return jobs().filter(function(j){return j.id===id})[0]}
+  function kind(j){var l=j.days.charAt(13);return l==='f'?'warn':l==='r'?'run':l==='n'?'new':'ok'}
+  function stb(j){var k=kind(j);return k==='ok'?['ok','ok','Sağlıklı']:k==='warn'?['warn','alert','Dikkat gerekiyor']:k==='run'?['run','clock','<span>Çalışıyor %<span data-pct="'+j.id+'">'+j.pct+'</span></span>']:['neutral','dash','İlk yedek bekleniyor']}
+  function badge(k,ico,txt){return '<span class="badge b-'+k+'">'+ic(ico)+txt+'</span>'}
+  function jbadge(j){var b=stb(j);return badge(b[0],b[1],b[2])}
+  function gbUsed(){return (STATE==='empty'?0:412)+made.filter(function(j){return j.done}).reduce(function(a,j){return a+(j.gb||12)},0)}
+  function lastOk(){
+    var m=made.filter(function(j){return j.done}).pop();
+    if(m)return {t:'Bugün '+m.started,n:m.name+' · '+(m.gb||12)+' GB'};
+    return STATE==='empty'?null:{t:'Bugün 02:31',n:'Bordro veritabanı · 38 GB'};
+  }
+  function storageHtml(){
+    var gb=gbUsed(),pct=Math.round(gb/10);
+    return {gb:gb,pct:pct,txt:gb+' GB',legend:STATE==='empty'?(gb?'<span>Yerel disk '+gb+' GB</span>':'<span>Yedekler burada görünecek.</span>'):'<span>Yerel disk 296 GB</span><span>Google Drive 116 GB</span>'};
+  }
+  function storageBlock(){
+    var s=storageHtml();
+    return '<div class="big">'+s.txt+' <span class="muted" style="font-size:var(--text-base);font-weight:400">/ 1 TB · %'+s.pct+' dolu</span></div>'+
+      '<div class="bar" role="progressbar" aria-label="Depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+s.pct+'" aria-valuetext="1 TB’ın '+s.txt+'’ı kullanılıyor"><i style="width:'+s.pct+'%"></i></div>'+
+      '<div class="legend">'+s.legend+'</div>';
+  }
+  /* ilk-yedek paneli: Ana sayfa ve İşler boş durumunda ortak */
+  function fbSteps(){
+    var c=!!FB.pc,d2=c&&FB.stage>=3,now=!c?0:!d2?1:2;
+    var T=[['Bilgisayar ekle','Yedeği alınacak verilerin bulunduğu bilgisayarı bağlayın.'],['Ne yedeklensin','Bilgisayardaki veriler otomatik bulunur; yedeklenecekleri işaretlersiniz.'],['Özet ve başla','Varsayılanlara göz atın ve ilk yedeği başlatın.'],['İlk yedek ve deneme geri yükleme','İlk yedek alınır ve doğrulanır; isterseniz bir kopyayı geri yükleyip denersiniz.']];
+    return '<ol class="steps">'+T.map(function(t,i){
+      var done=(i===0&&c)||(i===1&&d2),cls=done?'is-done':i===now?'is-now':'is-later';
+      return '<li class="'+cls+'"><span class="n">'+(done?ic('check'):i+1)+'</span><div><b>'+t[0]+(done?'<span class="sr-only"> (tamamlandı)</span>':'')+'</b><p>'+t[1]+'</p></div>'+(done?badge('ok','ok','Tamam'):'')+'</li>';
+    }).join('')+'</ol>';
+  }
+  function fbPanel(id,cls){
+    var n=(FB.pc?1:0)+(FB.pc&&FB.stage>=3?1:0),ttl='<h2'+(cls==='detail'?'':'')+' id="'+id+'">İlk yedeğinizi alın</h2>',cnt='<span class="muted">'+n+' / 4 tamamlandı</span>';
+    var head=cls==='detail'?'<div class="d-h"><div class="d-title">'+ttl+'</div>'+cnt+'</div>':'<div class="panel-h">'+ttl+cnt+'</div>';
+    return '<section class="'+cls+'" aria-labelledby="'+id+'">'+head+fbSteps()+'<div class="fr-f"><a class="btn btn-primary" href="#first-backup">'+ic('play')+(FB.pc?'Devam et':'Başla')+'</a><span class="muted">3 kısa soru. Bilgisayarı bağladıktan sonra ilk yedek başlar.</span></div></section>';
+  }
+
+  /* ======== ANA SAYFA (home-2) ======== */
+  function cnt(s,c){return s.days.split(c).length-1}
+  function cap(s){
+    var o=cnt(s,'o'),f=cnt(s,'f'),r=cnt(s,'r'),n=cnt(s,'n'),t=14-n;
+    if(!o&&!f&&!r)return 'Henüz yedek alınmadı'+(n?' · '+s.note:'');
+    return o+' / '+t+' gün yedek alındı'+(f?' · '+f+' gün alınamadı':'')+(r?' · bugün çalışıyor':'')+(n?' · '+s.note:'');
+  }
+  function strip(s){
+    var c=cap(s),h='';
+    s.days.split('').forEach(function(ch,i){
+      var d=DAY[ch],t=(i+1)+' Kasım'+(i===13?' (bugün)':'')+': '+d[2];
+      h+='<span class="cell c-'+d[0]+'" title="'+t+'">'+(d[1]?ic(d[1]):'')+'</span>';
+    });
+    return '<div class="strip" tabindex="0" role="group" aria-label="'+s.name+', son 14 gün: '+c+'. Günleri gezmek için sol ve sağ ok tuşlarını kullanın." aria-describedby="cap-'+s.id+'">'+h+'</div>'+
+           '<p class="cap" id="cap-'+s.id+'" aria-live="polite" data-def="Son 14 gün: '+c+'">Son 14 gün: '+c+'</p>';
+  }
+  function row(s){
+    var k=kind(s),b=stb(s);
+    var rb='<button class="btn btn-sm" type="button" data-stub="Geri yükleme bu prototipte yok.">'+ic('restore')+'Geri yükle</button>';
+    return '<li class="src'+(k==='warn'?' is-warn':'')+'">'+
+      '<div class="s-main"><b class="nm">'+s.name+'</b><span class="muted">'+s.meta+'</span></div>'+
+      '<div class="s-fresh">'+strip(s)+'</div>'+
+      '<div class="s-last">'+badge(b[0],b[1],b[2])+'<span class="muted">Son başarılı: '+s.last+s.lastAgo+'</span>'+
+        (k==='run'?'<div class="bar" role="progressbar" data-prog="'+s.id+'" aria-label="'+s.name+' yedeği ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+s.pct+'" aria-valuetext="%'+s.pct+'"><i style="width:'+s.pct+'%"></i></div>':'')+
+        (k==='new'?'':rb)+
+      '</div></li>';
+  }
+  var KEY='<div class="key" aria-label="Şerit işaretleri">'+
+    '<span><span class="cell c-ok">'+ic('check')+'</span>Yedek alındı</span>'+
+    '<span><span class="cell c-fail">'+ic('x')+'</span>Alınamadı</span>'+
+    '<span><span class="cell c-run">'+ic('clock')+'</span>Çalışıyor</span>'+
+    '<span><span class="cell c-none"></span>İş henüz yoktu</span></div>';
+
+  function activity(){
+    var ico={ok:'ok',warn:'alert',run:'clock'},A=[];
+    if(STATE==='ok')A=[['Bordro veritabanı','Bugün 14:12','run','Çalışıyor %62','—'],['Bordro veritabanı','Bugün 02:31','ok','Başarılı','38 GB'],['Muhasebe veritabanı','Bugün 02:18','ok','Başarılı','94 GB'],['Depo stok veritabanı','Bugün 02:14','ok','Başarılı','126 GB']];
+    else if(STATE==='attn')A=[['Bordro veritabanı','Bugün 02:31','ok','Başarılı','38 GB'],['Depo stok veritabanı','Bugün 02:14','ok','Başarılı','126 GB'],['Muhasebe veritabanı','Bugün 02:00','warn','Alınamadı','—'],['Muhasebe veritabanı','13 Kasım 02:00','warn','Alınamadı','—']];
+    made.filter(function(j){return j.done}).forEach(function(j){A.unshift([j.name,'Bugün '+j.started,'ok','Başarılı',(j.gb||12)+' GB'])});
+    if(!A.length)return '';
+    return '<section class="panel act-p" aria-labelledby="p-ac"><div class="panel-h"><h2 id="p-ac">Son etkinlik</h2></div><ul class="act">'+
+      A.slice(0,4).map(function(a){return '<li><div><div class="nm">'+a[0]+'</div><div class="t">'+a[1]+'</div></div><div class="r">'+badge(a[2],ico[a[2]],a[3])+'<span class="sz">'+a[4]+'</span></div></li>'}).join('')+
+      '</ul></section>';
+  }
+  function storagePanel(){
+    return '<section class="panel" aria-labelledby="p-st"><div class="panel-h"><h2 id="p-st">Depolama</h2><a class="link" href="#storage">Yönet</a></div><div class="panel-b">'+storageBlock()+'</div></section>';
+  }
+
+  function homeSummary(J){
+    var warn=J.filter(function(j){return kind(j)==='warn'});
+    if(!J.length)return ['neutral','dash','Henüz yedekleme yok','Verileriniz şu an korunmuyor. Dört adımda ilk yedeğinizi alın.'];
+    if(warn.length)return ['warn','alert','Dikkat gerekiyor','Güncel veri: '+(J.length-warn.length)+' / '+J.length+'. '+warn[0].name+' 2 gündür yedeklenemiyor.'];
+    var lo=lastOk();
+    if(!lo)return ['neutral','dash','İlk yedek bekleniyor','İş oluşturuldu; ilk yedek alınınca veri korunmuş olur.'];
+    return ['ok','ok','Hepsi sağlıklı','Güncel veri: '+J.length+' / '+J.length+'. Son başarılı yedek: '+lo.t.toLowerCase()+'.'];
+  }
+
+  var homeEl=$('#home');
+  function renderHome(){
+    var J=jobs(),empty=!J.length,s=homeSummary(J),h='';
+    h+='<div class="hd"><div><h1 id="h-home" tabindex="-1">Ana sayfa</h1><p class="sum" role="status">'+badge(s[0],s[1],s[2])+'<span>'+s[3]+'</span></p></div>'+
+      '<div class="acts"><button class="btn'+(empty?'':' btn-primary')+'" type="button"'+(empty?' disabled title="İlk yedek alındığında açılır"':' data-stub="Geri yükleme bu prototipte yok."')+'>'+ic('restore')+'Geri yükle</button>'+
+      '<a class="btn" href="'+newHref()+'">'+ic('plus')+'Yedekleme işi oluştur</a></div></div><div class="stack">';
+    if(empty){
+      h+=fbPanel('h-start','panel')+
+        '<section class="panel dashed" aria-labelledby="h-ghost"><div class="panel-h"><h2 id="h-ghost">Korunan veriler</h2><span class="muted">Henüz boş</span></div><div class="ghost">'+
+        '<div class="strip" aria-hidden="true">'+'<span class="cell c-none"></span>'.repeat(14)+'</div>'+
+        '<p>Yedekleme bilgisayarı ve iş ekleyince her veri burada, son 14 günlük durumuyla görünür.</p></div></section>'+
+        '<section class="panel" aria-labelledby="p-st"><div class="panel-h"><h2 id="p-st">Depolama</h2></div><div class="panel-b">'+storageBlock()+'</div></section>';
+    }else{
+      var w=J.filter(function(j){return kind(j)==='warn'})[0],r=J.filter(function(j){return kind(j)==='run'})[0];
+      if(w)h+='<div class="band" role="alert"><div class="txt">'+ic('alert')+'<div><b>'+w.band[0]+'</b>'+w.band[1]+'</div></div>'+
+        '<div class="acts"><button class="btn btn-primary" type="button" data-stub="Yedekleme başlatma bu prototipte yok.">'+ic('play')+'Şimdi yedekle</button><a class="btn" href="#jobs" data-open="'+w.id+'">Ayrıntıyı gör</a></div></div>';
+      else if(r)h+='<div class="band band-run" role="status"><div class="txt">'+ic('clock')+'<div><b>'+r.name+(/yedeği$/.test(r.name)?'':' yedeği')+' çalışıyor %<span data-pct="'+r.id+'">'+r.pct+'</span></b>'+r.started+'’de başladı. Büyük veriler uzun sürebilir; beklemeniz gerekmez.</div></div><div class="bar" role="progressbar" data-prog="'+r.id+'" aria-label="'+r.name+' ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+r.pct+'" aria-valuetext="%'+r.pct+'"><i style="width:'+r.pct+'%"></i></div></div>';
+      if(FB.restore==='skipped'&&FB.phase==='done')h+='<div class="band band-note" role="status"><div class="txt">'+ic('info')+'<div><b>Yedeğiniz henüz geri yükleme ile denenmedi.</b>Küçük bir deneme geri yüklemesi yedeğin işe yaradığını gösterir; asıl verinize dokunulmaz.</div></div><div class="acts"><button class="btn btn-primary" type="button" data-rt>'+ic('restore')+'Deneme geri yüklemesi yap</button></div></div>';
+      var warnN=J.filter(function(j){return kind(j)==='warn'}).length;
+      var cells=[[J.length,'veri korunuyor',''],[J.length-warnN,'güncel',''],[warnN,'dikkat gerekiyor',warnN?'warn':'']];
+      h+='<ul class="counts" aria-label="Özet">'+cells.map(function(c){return '<li'+(c[2]?' class="is-warn"':'')+'><div class="n">'+(c[2]?ic('alert'):'')+c[0]+'</div><div class="l">'+c[1]+'</div></li>'}).join('')+'</ul>';
+      var pcs=[];J.forEach(function(j){if(pcs.indexOf(j.pc)<0)pcs.push(j.pc)});
+      h+='<section aria-labelledby="h-map"><div class="map-h"><h2 class="sec" id="h-map">Korunan veriler</h2>'+KEY+'</div>'+
+        pcs.map(function(pc){
+          var rows=J.filter(function(j){return j.pc===pc});
+          return '<div class="panel grp"><div class="panel-h grp-h"><div class="who">'+ic('monitor')+'<h3>'+pc+'</h3><span class="muted">Yedekleme bilgisayarı · '+rows.length+' veri</span></div>'+badge('ok','ok','Çevrimiçi')+'</div><ul>'+rows.map(row).join('')+'</ul></div>';
+        }).join('')+'</section>';
+      var lo=lastOk();
+      h+='<div class="three"><section class="panel" aria-labelledby="p-sc"><div class="panel-h"><h2 id="p-sc">Sıradaki ve son yedek</h2></div><div class="panel-b"><dl class="facts2">'+
+        '<div><dt>Sıradaki yedek</dt><dd>Yarın 02:00<small>15 Kasım · '+J.length+' veri</small></dd></div>'+
+        '<div><dt>Son başarılı yedek</dt><dd>'+(lo?lo.t+'<small>'+lo.n+'</small>':'Henüz yok')+'</dd></div>'+
+      '</dl></div></section>'+storagePanel()+activity()+'</div>';
+    }
+    homeEl.innerHTML=h+'</div>';
+  }
+
+  /* şerit: fare, dokunma ve klavye */
+  function capOf(st){return st.nextElementSibling}
+  function mark(st,i){
+    var cs=$$('.cell',st);cs.forEach(function(c){c.classList.remove('is-cur')});
+    cs[i].classList.add('is-cur');st.setAttribute('data-cur',i);capOf(st).textContent=cs[i].title;
+  }
+  function unmark(st){$$('.cell',st).forEach(function(c){c.classList.remove('is-cur')});capOf(st).textContent=capOf(st).getAttribute('data-def')}
+  function hit(e){var c=e.target.closest('.strip .cell');return c&&c.parentNode.hasAttribute('tabindex')?{st:c.parentNode,i:$$('.cell',c.parentNode).indexOf(c)}:null}
+  ['mouseover','click'].forEach(function(t){homeEl.addEventListener(t,function(e){var h=hit(e);if(h)mark(h.st,h.i)})});
+  homeEl.addEventListener('mouseout',function(e){var st=e.target.closest('.strip[tabindex]');if(st&&document.activeElement!==st&&!st.contains(e.relatedTarget))unmark(st)});
+  homeEl.addEventListener('focusin',function(e){var st=e.target;if(st.matches&&st.matches('.strip[tabindex]'))mark(st,+st.getAttribute('data-cur')||13)});
+  homeEl.addEventListener('focusout',function(e){var st=e.target;if(st.matches&&st.matches('.strip[tabindex]'))unmark(st)});
+  homeEl.addEventListener('keydown',function(e){
+    var st=e.target;if(!st.matches||!st.matches('.strip[tabindex]'))return;
+    var i=+st.getAttribute('data-cur')||13,k=e.key;
+    if(k==='ArrowLeft')i=Math.max(0,i-1);else if(k==='ArrowRight')i=Math.min(13,i+1);else if(k==='Home')i=0;else if(k==='End')i=13;else return;
+    e.preventDefault();mark(st,i);
+  });
+  document.addEventListener('click',function(e){var o=e.target.closest('[data-open]');if(o){sel=o.getAttribute('data-open');pendingDetail=true}});
+
+  /* ======== YEDEKLEMELER > İŞLER (A4 usta-detay) ======== */
+  var jobsEl=$('#jobsView');
+  function renderJobs(){
+    var J=jobs(),h,warnN=J.filter(function(j){return kind(j)==='warn'}).length;
+    var sb=!J.length?badge('neutral','dash','Henüz iş yok'):warnN?badge('warn','alert','Dikkat gerekiyor'):kind(J[0])&&J.every(function(j){return kind(j)==='new'})?badge('neutral','dash','İlk yedek bekleniyor'):badge('ok','ok','Hepsi sağlıklı');
+    var st=!J.length?'Oluşturduğunuz işler burada listelenir.':'Sorunlu iş: '+warnN+' / '+J.length+'.';
+    h='<div class="hd"><div><h1 id="h-jobs" tabindex="-1">İşler</h1><p class="sum" role="status">'+sb+'<span>'+st+'</span></p></div></div>';
+    if(!J.length){
+      h+='<div class="ws ws-empty"><div class="master"><div class="m-h"><h2>Yedekleme işleri</h2></div>'+
+        '<div class="m-empty"><p><b>Henüz iş yok.</b></p><p>Oluşturduğunuz işler burada listelenir; birini seçince ayrıntısı sağda açılır.</p><a class="btn" href="'+newHref()+'">Yedekleme işi oluştur</a></div>'+
+        '<div class="m-foot"><div class="row"><b>Depolama</b></div>'+storageBlock()+'</div></div>'+
+        fbPanel('h-start2','detail')+'</div>';
+      jobsEl.innerHTML=h;return;
+    }
+    h+='<div class="ws" id="ws" data-view="list"><div class="master" id="master"><div class="m-h"><h2 id="jobs-h">Yedekleme işleri</h2><a class="btn" href="#job-new">'+ic('plus')+'Yeni iş</a></div>'+
+      '<ul class="jobs" id="jobs" aria-labelledby="jobs-h">'+J.map(function(j){
+        return '<li><button type="button" class="job-btn" data-id="'+j.id+'" aria-controls="detail"><span class="nm">'+j.name+'</span><span class="mt">'+jbadge(j)+'<span>'+j.pc+' · '+j.next+'</span></span></button></li>';
+      }).join('')+'</ul>'+
+      '<div class="m-foot"><div class="row"><b>Depolama</b><a class="link" href="#storage">Yönet</a></div>'+storageBlock()+'</div></div>'+
+      '<section class="detail" id="detail" aria-labelledby="d-h"></section></div>';
+    jobsEl.innerHTML=h;
+    if(!jobById(sel))sel=J[0].id;
+    select(sel,false);
+    $('#ws').setAttribute('data-view',pendingDetail?'detail':'list');pendingDetail=false;
+  }
+  function renderDetail(){
+    var j=jobById(sel),k=kind(j),warn=k==='warn',nw=k==='new';
+    var rows=j.runs.map(function(r){
+      var rk={ok:['ok','ok'],warn:['warn','alert'],run:['run','clock']}[r[2]];
+      return '<tr><td class="name" data-label="Zaman">'+r[0]+'</td><td class="num" data-label="Boyut">'+r[1]+'</td><td data-label="Durum">'+badge(rk[0],rk[1],r[3])+'</td></tr>';
+    }).join('');
+    $('#detail').innerHTML=
+      '<div class="d-h"><div class="d-title"><button class="btn btn-quiet back" type="button" id="backList">'+ic('left')+'İşler</button>'+
+        '<h2 id="d-h" tabindex="-1">'+j.name+'</h2>'+jbadge(j)+'</div>'+
+        '<div class="acts"><button class="btn'+(warn||nw?' btn-primary':'')+'" type="button" data-stub="Yedekleme başlatma bu prototipte yok.">'+ic('play')+'Şimdi yedekle</button>'+
+        '<button class="btn'+(warn||nw?'':' btn-primary')+'" type="button"'+(nw?' disabled title="İlk yedekten sonra açılır"':' data-stub="Geri yükleme bu prototipte yok."')+'>'+ic('restore')+'Geri yükle</button></div></div>'+
+      (j.alert?'<div class="d-alert">'+ic('alert')+'<p>'+j.alert+'</p></div>':'')+
+      '<div class="d-sec"><h3>Ayrıntılar</h3><dl class="facts">'+
+        '<div><dt>Sıradaki yedek</dt><dd>'+j.next+'<small>'+j.nextSub+'</small></dd></div>'+
+        '<div><dt>Yedekleme bilgisayarı</dt><dd>'+j.pc+'</dd></div>'+
+        '<div><dt>Yedeklenen</dt><dd>'+j.src+'</dd></div>'+
+        '<div><dt>Depolama</dt><dd>'+j.dst+'<small>'+j.dstSub+'</small></dd></div>'+
+        '<div><dt>Zamanlama</dt><dd>'+j.sched+'</dd></div>'+
+        '<div><dt>Saklama</dt><dd>'+j.ret+'</dd></div>'+
+      '</dl></div>'+
+      '<div class="d-sec"><h3>Son yedekler</h3>'+(rows?'<table class="tbl"><thead><tr><th scope="col">Zaman</th><th scope="col" class="num">Boyut</th><th scope="col">Durum</th></tr></thead><tbody>'+rows+'</tbody></table>':'<p class="facts" style="padding-top:var(--space-2);color:var(--muted)">Henüz yedek alınmadı. İlk yedek alınınca burada listelenir.</p>')+'</div>';
+  }
+  function select(id,user){
+    sel=id;
+    $$('.job-btn').forEach(function(b){if(b.getAttribute('data-id')===id)b.setAttribute('aria-current','true');else b.removeAttribute('aria-current')});
+    renderDetail();
+    if(user){$('#ws').setAttribute('data-view','detail');if(narrow.matches){window.scrollTo(0,0);$('#d-h').focus()}}
+  }
+  jobsEl.addEventListener('click',function(e){
+    var b=e.target.closest('.job-btn');if(b){select(b.getAttribute('data-id'),true);return}
+    if(e.target.closest('#backList')){$('#ws').setAttribute('data-view','list');window.scrollTo(0,0);var c=$('.job-btn[data-id="'+sel+'"]');if(c)c.focus()}
+  });
+
+  /* ======== SİHİRBAZ (A4) ======== */
+  var SOURCES=[
+    {id:'m1',pc:'MUHASEBE-SRV',n:'Muhasebe',type:'SQL Server',t:'SQL Server · MUHASEBE-SRV · Muhasebe'},
+    {id:'m2',pc:'MUHASEBE-SRV',n:'Bordro',type:'SQL Server',t:'SQL Server · MUHASEBE-SRV · Bordro'},
+    {id:'d1',pc:'DEPO-01',n:'stok',type:'PostgreSQL',t:'PostgreSQL · DEPO-01 · stok'}
+  ];
+  /* [id, etiket, alt metin, kısa ad, ayrıntı] */
+  var STORAGE=[
+    ['local','Yerel disk (varsayılan)','Bu sunucudaki disk · 588 GB boş','Yerel disk','Bu sunucudaki disk'],
+    ['sftp','Şirket SFTP sunucusu','Ofis dışında ikinci bir kopya için uygun','Şirket SFTP','Ofis dışı kopya'],
+    ['gdrive','Google Drive – ofis@firma.com','Bulut depolama','Google Drive','ofis@firma.com']
+  ];
+  var SCHED=[['d02','Her gün 02:00','Her gün 02:00'],['d08','Her gün 08:00','Her gün 08:00'],['x2','Günde 2 kez 08:00 ve 20:00','Günde 2 kez, 08:00 ve 20:00'],['man','Elle','Elle başlatılır (otomatik çalışmaz)']];
+  var NEXT={d02:['Yarın 02:00','15 Kasım'],d08:['Yarın 08:00','15 Kasım'],x2:['Bugün 20:00','14 Kasım'],man:['Elle','Otomatik çalışmaz']};
+  var RET=[['7','7 gün'],['14','14 gün'],['30','30 gün'],['90','90 gün'],['0','Hiç silinmesin']];
+  var ENC={off:'Kapalı',opt:'İsteğe bağlı',req:'Zorunlu (Kurtarma anahtarı gerekir)'};
+  var NAMES=['Kaynak','Depolama','Zamanlama','Gözden geçir'];
+  var REVIEW_STEP={name:1,pc:1,src:1,storage:2,sched:3,ret:3,enc:3};
+  var S;
+  function fresh(){return {step:1,name:'',pc:'',src:{},storage:'local',sched:'d02',ret:'30',enc:'opt',done:false}}
+  S=fresh();
+
+  function opt(type,name,val,t,s,on){return '<label class="opt"><input type="'+type+'" name="'+name+'" value="'+val+'"'+(on?' checked':'')+'><span><span class="t">'+t+'</span>'+(s?'<span class="s">'+s+'</span>':'')+'</span></label>'}
+  function chip(name,val,t,on){return '<label class="chip"><input type="radio" name="'+name+'" value="'+val+'"'+(on?' checked':'')+'>'+ic('check').replace('class="ic"','class="ic tick"')+'<span>'+t+'</span></label>'}
+  function renderSrc(){
+    var box=$('#src-list');
+    if(!S.pc){box.innerHTML='<p class="hint">Önce yedekleme bilgisayarını seçin; o bilgisayarda bulunan veriler burada listelenir.</p>';return}
+    box.innerHTML=SOURCES.filter(function(s){return s.pc===S.pc}).map(function(s){return opt('checkbox','src',s.id,s.t,'',!!S.src[s.id])}).join('');
+  }
+  function renderChoices(){
+    $('#storage-list').innerHTML=STORAGE.map(function(s){return opt('radio','storage',s[0],s[1],s[2],S.storage===s[0])}).join('');
+    $('#sched-list').innerHTML=SCHED.map(function(s){return chip('sched',s[0],s[1],S.sched===s[0])}).join('');
+    $('#ret-list').innerHTML=RET.map(function(s){return chip('ret',s[0],s[1],S.ret===s[0])}).join('');
+    renderSrc();
+  }
+  function syncInputs(){$('#f-name').value=S.name;$('#f-pc').value=S.pc;$('#f-enc').value=S.enc;$('#enc-req').hidden=S.enc!=='req'}
+
+  function renderRail(){
+    $('#rail').innerHTML=NAMES.map(function(n,i){
+      var k=i+1,cur=k===S.step,done=k<S.step;
+      return '<li><button type="button" data-goto="'+k+'" class="'+(done?'is-done':'')+'"'+(cur?' aria-current="step"':'')+(k>S.step?' disabled':'')+'><span class="n">'+(done?ic('check'):k)+'</span><span class="lbl">'+n+'</span><span class="sr-only">'+(done?' (tamamlandı)':'')+'</span></button></li>';
+    }).join('');
+  }
+  $('#rail').addEventListener('click',function(e){
+    var b=e.target.closest('[data-goto]');if(!b)return;
+    var k=+b.getAttribute('data-goto');if(k<S.step)go(k,true);
+  });
+  function go(n,focus){
+    S.step=n;
+    $('#wb').setAttribute('data-wstep',n);
+    $$('[data-step]',$('#wizForm')).forEach(function(s){s.hidden=+s.getAttribute('data-step')!==n});
+    $('#backBtn').hidden=n===1;
+    $('#nextBtn').textContent=n===4?'Yedekleme işini oluştur':'Devam';
+    if(n===4)renderReview();
+    renderRail();
+    if(focus!==false)$('[data-step="'+n+'"] .step-h').focus();
+  }
+
+  function setErr(k,msg,ctl){
+    var el=$('#err-'+k);el.textContent=msg||'';
+    if(ctl){if(msg)ctl.setAttribute('aria-invalid','true');else ctl.removeAttribute('aria-invalid')}
+  }
+  function validate(){
+    if(S.step!==1)return true;
+    var n=$('#f-name'),p=$('#f-pc');
+    var eN=S.name.trim()?'':'İş adını yazın.';
+    var eP=S.pc?'':'Bir yedekleme bilgisayarı seçin.';
+    var eS=(S.pc&&!Object.keys(S.src).length)?'Yedeklenecek en az bir veri seçin.':'';
+    setErr('name',eN,n);setErr('pc',eP,p);setErr('src',eS);
+    if(eN){n.focus();return false}
+    if(eP){p.focus();return false}
+    if(eS){var f=$('#src-list input');if(f)f.focus();return false}
+    return true;
+  }
+
+  function lbl(arr,id){return arr.filter(function(x){return x[0]===id})[0]}
+  function retText(){return S.ret==='0'?'Eski yedekler silinmez; depolama alanı zamanla dolabilir.':'Yedekler '+S.ret+' gün sonra otomatik silinir.'}
+  function renderSum(){
+    var nm=S.name.trim(),names=SOURCES.filter(function(s){return S.src[s.id]}).map(function(s){return s.n});
+    var L=[
+      [!!nm,nm?'“'+nm+'” işi.':'İşe henüz ad verilmedi.'],
+      [!!(S.pc&&names.length),!S.pc?'Yedekleme bilgisayarı ve veriler henüz seçilmedi.':names.length?S.pc+' bilgisayarındaki '+names.join(', ')+' yedeklenecek.':S.pc+' seçildi; yedeklenecek veri henüz seçilmedi.'],
+      [true,'Yedek dosyaları '+lbl(STORAGE,S.storage)[1]+' hedefine yazılacak.'],
+      [true,'Zamanlama: '+lbl(SCHED,S.sched)[2]+'.'],
+      [true,retText()],
+      [true,'Şifreleme: '+ENC[S.enc]+'.']
+    ];
+    var ul=$('#sum-list');ul.textContent='';
+    L.forEach(function(l){
+      var li=document.createElement('li'),sp=document.createElement('span');
+      li.className=l[0]?'is-set':'';li.innerHTML=ic(l[0]?'check':'dash');
+      sp.textContent=l[1];li.appendChild(sp);ul.appendChild(li);
+    });
+  }
+  function renderReview(){
+    var srcs=SOURCES.filter(function(s){return S.src[s.id]}).map(function(s){return s.t});
+    var ret=S.ret==='0'?'Hiç silinmez':S.ret+' gün';
+    $('#review-lead').textContent='Bu iş, seçtiğiniz verileri belirlenen zamanda yedekler. '+retText()+(S.enc==='req'?' Yedekler şifrelenir; Kurtarma anahtarı olmadan geri yüklenemez.':'');
+    var rows=[['name','İş adı',S.name.trim()],['pc','Yedekleme bilgisayarı',S.pc],['src','Yedeklenecekler',srcs],['storage','Yedek nereye yazılacak',lbl(STORAGE,S.storage)[1]],['sched','Ne zaman',lbl(SCHED,S.sched)[2]],['ret','Ne kadar saklanacak',ret],['enc','Şifreleme',ENC[S.enc]]];
+    var dl=$('#review');dl.textContent='';
+    rows.forEach(function(r){
+      var dt=document.createElement('dt'),dd=document.createElement('dd'),v=document.createElement('div');dt.textContent=r[1];
+      if(Array.isArray(r[2])){var ul=document.createElement('ul');r[2].forEach(function(t){var li=document.createElement('li');li.textContent=t;ul.appendChild(li)});v.appendChild(ul)}else v.textContent=r[2];
+      var b=document.createElement('button');b.type='button';b.className='link';b.textContent='Değiştir';
+      b.setAttribute('data-edit',REVIEW_STEP[r[0]]);b.setAttribute('aria-label','Değiştir: '+r[1]);
+      dd.appendChild(v);dd.appendChild(b);dl.appendChild(dt);dl.appendChild(dd);
+    });
+  }
+  $('#review').addEventListener('click',function(e){var b=e.target.closest('[data-edit]');if(b)go(+b.getAttribute('data-edit'),true)});
+
+  $('#f-name').addEventListener('input',function(e){S.name=e.target.value;if(S.name.trim())setErr('name','',e.target)});
+  $('#f-pc').addEventListener('change',function(e){S.pc=e.target.value;S.src={};setErr('pc','',e.target);setErr('src','');renderSrc()});
+  $('#src-list').addEventListener('change',function(e){if(e.target.checked)S.src[e.target.value]=1;else delete S.src[e.target.value];if(Object.keys(S.src).length)setErr('src','')});
+  $('#storage-list').addEventListener('change',function(e){S.storage=e.target.value});
+  $('#sched-list').addEventListener('change',function(e){S.sched=e.target.value});
+  $('#ret-list').addEventListener('change',function(e){S.ret=e.target.value});
+  $('#f-enc').addEventListener('change',function(e){S.enc=e.target.value;$('#enc-req').hidden=S.enc!=='req'});
+  ['input','change'].forEach(function(t){$('#wizForm').addEventListener(t,renderSum)});
+  $('#backBtn').addEventListener('click',function(){if(S.step>1)go(S.step-1)});
+
+  function hhmm(){var d=new Date();return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}
+  function makeJob(){
+    var picked=SOURCES.filter(function(s){return S.src[s.id]}),st=lbl(STORAGE,S.storage),types=[],nx=NEXT[S.sched];
+    picked.forEach(function(p){if(types.indexOf(p.type)<0)types.push(p.type)});
+    return {id:'new'+(++seq),name:S.name.trim(),pc:S.pc,
+      src:picked.map(function(p){return p.type+' · '+p.n}).join(', '),meta:types.join(', ')+' · '+st[3],dst:st[3],dstSub:st[4],
+      sched:lbl(SCHED,S.sched)[1],ret:S.ret==='0'?'Hiç silinmez':S.ret+' gün',next:nx[0],nextSub:nx[1],
+      days:'nnnnnnnnnnnnnn',note:'iş bugün oluşturuldu',last:'Henüz yedek yok',lastAgo:'',rest:null,runs:[],pct:0};
+  }
+  var timer=0,first=null;
+  function finishFirst(){
+    clearInterval(timer);timer=0;
+    var j=first;first=null;if(!j)return;
+    j.days='nnnnnnnnnnnnno';j.pct=100;j.done=true;j.last='bugün '+j.started;j.runs=[['Bugün '+j.started,'12 GB','ok','Başarılı']];
+    $('#startProg').hidden=true;$('#startOk').hidden=false;
+  }
+  function stopFirst(){if(timer)finishFirst()}
+
+  $('#wizForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    if(!validate())return;
+    if(S.step<4){go(S.step+1);return}
+    S.done=true;
+    var j=makeJob();made.push(j);sel=j.id;first=null;
+    $('#wiz').hidden=true;$('#wiz-done').hidden=false;
+    $('#done-p').textContent='“'+j.name+'” işi kaydedildi. Yedeklemeler listesinde ve Ana sayfadaki koruma haritasında görünür; isterseniz ilk yedeği hemen başlatabilirsiniz.';
+    $('#startBtn').disabled=false;$('#startProg').hidden=true;$('#startOk').hidden=true;
+    $('#done-h').focus();
+  });
+  $('#startBtn').addEventListener('click',function(){
+    var j=made[made.length-1];if(!j||timer)return;
+    this.disabled=true;first=j;j.started=hhmm();j.days='nnnnnnnnnnnnnr';j.pct=0;
+    var bar=$('#progBar');bar.setAttribute('aria-valuenow','0');$('i',bar).style.width='0';
+    $('#progTxt').textContent='İlk yedek alınıyor… %0';$('#startProg').hidden=false;
+    timer=setInterval(function(){
+      j.pct=Math.min(100,j.pct+5+Math.floor(Math.random()*5));
+      bar.setAttribute('aria-valuenow',j.pct);$('i',bar).style.width=j.pct+'%';$('#progTxt').textContent='İlk yedek alınıyor… %'+j.pct;
+      if(j.pct>=100)finishFirst();
+    },150);
+  });
+  $('#seeBtn').addEventListener('click',function(){pendingDetail=true;location.hash='#jobs'});
+  $('#againBtn').addEventListener('click',function(){reset();$('[data-step="1"] .step-h').focus()});
+
+  function reset(){
+    stopFirst();
+    S=fresh();
+    ['name','pc','src'].forEach(function(k){setErr(k,'',k==='src'?null:$('#f-'+k))});
+    $('#wiz').hidden=false;$('#wiz-done').hidden=true;
+    renderChoices();syncInputs();renderSum();go(1,false);
+  }
+  function syncSum(){$('#sumbox').open=!narrow.matches}
+  if(narrow.addEventListener)narrow.addEventListener('change',syncSum);else narrow.addListener(syncSum);
+  syncSum();
+
+  /* ======== İLK YEDEK AKIŞI (#first-backup) ======== */
+  var fb=$('#first'),rdlg=$('#rdlg'),FB,fbTimer=0,fbScan=0,noData=false,rt={p:'',t:0};
+  var FBN=['Bilgisayar ekle','Ne yedeklensin','Özet ve başla','İlk yedek'];
+  var CONN=['Komutun çalıştırılması bekleniyor','Kayıt tamamlandı','Bilgisayar bağlanıyor','Çevrimiçi'];
+  var STG=['Hazırlanıyor','Yedek alınıyor','Yedek doğrulanıyor','Tamamlandı'];
+  var KEYV='ek_4f9a-81c2-d7e0';
+  var FOUND={'DEPO-01':[{id:'f1',n:'stok',type:'PostgreSQL',gb:126}],def:[{id:'f1',n:'Muhasebe',type:'SQL Server',gb:94},{id:'f2',n:'Bordro',type:'SQL Server',gb:38}]};
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return '&#'+c.charCodeAt(0)+';'})}
+  function fbFresh(){return {stage:1,name:'',os:'win',mode:'one',conn:0,scan:'idle',pc:'',items:[],sel:{},names:{},ren:'',storage:'local',sched:'d02',ret:'30',jobs:[],phase:'',restore:''}}
+  function fbSel(){return FB.items.filter(function(i){return FB.sel[i.id]})}
+  function nm(i){return FB.names[i.id]||i.n+' veritabanı yedeği'}
+  function stIdx(p){return p<8?0:p<85?1:p<100?2:3}
+  function newHref(){return STATE!=='empty'||made.length?'#job-new':'#first-backup'}
+  function showDlg(d){if(d.showModal)d.showModal();else d.setAttribute('open','')}
+
+  function fbReset(){
+    clearTimeout(fbScan);clearInterval(fbTimer);fbTimer=0;clearInterval(rt.t);rt.p='';
+    if(rdlg.open)rdlg.close();
+    FB=fbFresh();noData=false;
+    $('#simScan').setAttribute('aria-pressed','false');
+    $('#fb-name').value='';
+    $('#fb-os').innerHTML=chip('fbos','win','Windows',true)+chip('fbos','linux','Linux',false);
+    $('#fb-exist').hidden=true;$('#fb-exbtn').setAttribute('aria-expanded','false');
+  }
+  function fbNav(){
+    $('#fb-next1').disabled=FB.conn<3;
+    $('#fb-next2').disabled=!(FB.scan==='done'&&fbSel().length);
+  }
+  function fbRail(){
+    var lock=!!FB.phase;
+    $('#fb-rail').innerHTML=FBN.map(function(n,i){
+      var k=i+1,cur=k===FB.stage,done=k<FB.stage||(k===4&&FB.phase==='done');
+      return '<li><button type="button" data-act="go" data-k="'+k+'" class="'+(done?'is-done':'')+'"'+(cur?' aria-current="step"':'')+((k>FB.stage||(lock&&!cur))?' disabled':'')+'><span class="n">'+(done?ic('check'):k)+'</span><span class="lbl">'+n+'</span>'+(done?'<span class="sr-only"> (tamamlandı)</span>':'')+'</button></li>';
+    }).join('');
+  }
+  function fbRender(){
+    var s=FB.stage;
+    $$('[data-fs]',fb).forEach(function(e){e.hidden=+e.getAttribute('data-fs')!==s});
+    fbRail();
+    if(s===1)renderS1();else if(s===2)renderS2();else if(s===3)renderS3();else renderS4();
+    updatePb();
+  }
+  function fbGo(n){FB.stage=n;fbRender();var h=$('[data-fs="'+n+'"] .step-h',fb);if(h)h.focus();window.scrollTo(0,0)}
+  function updatePb(){
+    var on=cur()==='first-backup';
+    $('#simConn').hidden=!(on&&FB.stage===1&&FB.conn<3);$('#simConn').disabled=!FB.name.trim();
+    $('#simScan').hidden=!(on&&FB.stage<=2);
+    $('#simFast').hidden=FB.phase!=='running';
+  }
+
+  /* --- 1. Bilgisayar ekle --- */
+  function cmdText(){
+    var n=FB.name.trim().replace(/'/g,''),one=FB.mode==='one';
+    if(FB.os==='win')return 'irm https://yedekleme.ornek.com/kur.ps1 | iex'+(one?"; Kur-Yedekleme -Ad '"+n+"' -Anahtar '"+KEYV+"'":'');
+    return 'curl -fsSL https://yedekleme.ornek.com/kur.sh | sudo sh'+(one?" -s -- --ad '"+n+"' --anahtar '"+KEYV+"'":'');
+  }
+  function cmdRow(id,t,aria){return '<div class="cmd-row"><code class="cmd" id="'+id+'">'+esc(t)+'</code><button class="btn" type="button" data-act="copy" data-src="'+id+'" aria-label="'+aria+'">'+ic('copy')+'Kopyala</button></div>'}
+  function renderS1(){
+    var n=FB.name.trim(),box=$('#fb-cmdbox'),lock=FB.conn>0,win=FB.os==='win',one=FB.mode==='one';
+    $('#fb-name').disabled=lock;$$('#fb-os input').forEach(function(i){i.disabled=lock});
+    $('#fb-conn').hidden=!n;
+    if(!n)box.innerHTML='<p class="hint" style="margin-top:var(--space-2)">Bilgisayarın adını yazın; kurulum komutu burada görünür.</p>';
+    else box.innerHTML='<div class="cmd-h"><h3 class="sub-h">Kurulum komutu</h3><div class="seg" role="group" aria-label="Kurulum şekli">'+
+      [['one','Tek komutla kurulum'],['step','Adım adım kurulum']].map(function(m){return '<button type="button" data-act="mode" data-v="'+m[0]+'" aria-pressed="'+(FB.mode===m[0])+'"'+(lock?' disabled':'')+'>'+m[1]+'</button>'}).join('')+'</div></div>'+
+      '<p class="cmd-l">Bu komutu yedeklenecek bilgisayarda <b>yönetici olarak</b> çalıştırın. '+(win?'Başlat menüsünde PowerShell’e sağ tıklayıp “Yönetici olarak çalıştır”ı seçin, komutu yapıştırıp Enter’a basın.':'Bir terminal açın, komutu yapıştırıp Enter’a basın; sudo parolanız istenebilir.')+'</p>'+
+      cmdRow('fb-cmd',cmdText(),'Komutu kopyala')+
+      (one?'':'<p class="cmd-l">Kurulum anahtar isteyince bunu yapıştırın:</p>'+cmdRow('fb-key',KEYV,'Anahtarı kopyala'))+
+      '<p class="hint hl" style="margin-top:var(--space-3)">'+ic('lock')+'<span>Kurulum anahtarı yalnızca bir kez gösterilir ve bir kez kullanılabilir; süresi dolarsa yenisini üretirsiniz. Komutu başkalarıyla paylaşmayın.</span></p>';
+    renderConn();fbNav();
+  }
+  function renderConn(){
+    $('#fb-conn').innerHTML='<h3 class="sub-h" style="margin-top:0">Bağlantı durumu</h3><ol class="conn">'+CONN.map(function(t,i){
+      var done=i<FB.conn||FB.conn===3,c=i===FB.conn&&FB.conn<3;
+      return '<li class="'+(done?'is-done':c?'is-cur':'')+'"'+(c?' aria-current="step"':'')+'>'+ic(done?'ok':c?'clock':'dash')+'<span>'+t+(done?'<span class="sr-only"> (tamamlandı)</span>':c?'<span class="sr-only"> (şu an)</span>':'')+'</span></li>';
+    }).join('')+'</ol>'+(FB.conn===3?'<p class="hint hl">'+ic('ok')+'<span>Bilgisayar bağlandı. Devam edebilirsiniz.</span></p>':'<p class="hint">Komut çalıştırılınca durum kendiliğinden güncellenir.</p>');
+  }
+
+  /* --- 2. Ne yedeklensin --- */
+  function startScan(){
+    clearTimeout(fbScan);FB.scan='scanning';FB.items=[];FB.sel={};FB.names={};FB.ren='';
+    fbScan=setTimeout(function(){
+      FB.items=noData?[]:(FOUND[FB.pc.toUpperCase()]||FOUND.def).slice();
+      FB.items.forEach(function(i){FB.sel[i.id]=1});
+      FB.scan=FB.items.length?'done':'empty';
+      if(FB.stage===2&&cur()==='first-backup')renderS2();
+    },1400);
+  }
+  function renderS2(){
+    var f=$('#fb-find');
+    $('#fb-lead2').innerHTML='Bilgisayar: <b>'+esc(FB.pc)+'</b>. Verileri sizin yerinize arıyoruz; yalnızca işaretlediklerinizin yedeği alınır.';
+    if(FB.scan==='scanning')f.innerHTML='<p class="scan" role="status">'+ic('clock')+'<span><b>Bilgisayar taranıyor…</b><span class="hint" style="display:block">Veritabanları otomatik aranıyor; bu birkaç saniye sürer.</span></span></p>';
+    else if(FB.scan==='empty')f.innerHTML='<div class="emp"><b>Veri bulunamadı</b><p><b>'+esc(FB.pc)+'</b> bilgisayarında desteklenen bir veritabanı görmedik. Veri programının kurulu ve çalışıyor olduğundan emin olup yeniden tarayın.</p><div class="row"><button class="btn" type="button" data-act="rescan">Yeniden tara</button><button class="link" type="button" data-stub="Elle yapılandırma bu prototipte yok.">Elle yapılandır</button></div></div>';
+    else f.innerHTML='<fieldset class="field" style="margin-bottom:0"><legend>Bulduğumuz veriler</legend><span class="hint">Yedeklenmesini istediklerinizi işaretleyin.</span><div class="opts">'+
+      FB.items.map(function(i){return opt('checkbox','fbsrc',i.id,esc(i.n),i.type+' veritabanı · '+i.gb+' GB',!!FB.sel[i.id])}).join('')+'</div></fieldset>';
+    renderNamed();fbNav();
+  }
+  function renderNamed(){
+    var s=fbSel(),b=$('#fb-named');
+    if(FB.scan!=='done'){b.innerHTML='';return}
+    if(!s.length){b.innerHTML='<p class="hint hl" role="status" style="margin-top:var(--space-3)">'+ic('info')+'<span>Devam etmek için en az bir veri işaretleyin.</span></p>';return}
+    b.innerHTML='<h3 class="sub-h">Oluşturulacak yedeklemeler</h3><p class="hint">Seçtiğiniz her veri için ayrı bir yedekleme oluşturulur ('+s.length+' yedekleme). Adlar otomatik verildi.</p><ul class="named">'+s.map(function(i){
+      return FB.ren===i.id?'<li><label class="sr-only" for="fb-ren">Yedekleme adı</label><input class="input" id="fb-ren" data-id="'+i.id+'" maxlength="60" value="'+esc(nm(i))+'"><button class="btn btn-sm" type="button" data-act="renamed" data-id="'+i.id+'">Tamam</button></li>'
+        :'<li><span class="nm">'+esc(nm(i))+'</span><button class="link" type="button" data-act="rename" data-id="'+i.id+'" aria-label="Adı değiştir: '+esc(nm(i))+'">Adı değiştir</button></li>';
+    }).join('')+'</ul>';
+  }
+  function doRenamed(id){FB.ren='';renderNamed();var b=$('[data-act="rename"][data-id="'+id+'"]',fb);if(b)b.focus()}
+
+  /* --- 3. Özet ve başla --- */
+  function whereTxt(){var s=lbl(STORAGE,FB.storage);return s[3]+' · '+(s[0]==='local'?'588 GB boş':s[4])}
+  function updS3(){
+    var v={where:whereTxt(),when:lbl(SCHED,FB.sched)[1],keep:lbl(RET,FB.ret)[1]};
+    $$('[data-v]',$('#fb-sum')).forEach(function(e){e.textContent=v[e.getAttribute('data-v')]});
+  }
+  function renderS3(){
+    var s=fbSel(),ST=STATE==='empty'?[STORAGE[0]]:STORAGE;
+    function row(k,l,x){return '<li><div class="rv-r"><span class="rv-k">'+l+'</span><span class="rv-v" data-v="'+k+'"></span><button class="link" type="button" data-act="chg" data-k="'+k+'" aria-expanded="false" aria-controls="rx-'+k+'" aria-label="Değiştir: '+l+'">Değiştir</button></div><div class="rv-x" id="rx-'+k+'" hidden>'+x+'</div></li>'}
+    $('#fb-sum').innerHTML='<p class="rv-lead"><b>'+esc(FB.pc)+'</b> bilgisayarındaki <b>'+s.map(function(i){return esc(i.n)}).join(', ')+'</b> yedeklenecek: <b>'+s.length+' yedekleme</b> oluşturulacak. <button class="link" type="button" data-act="back3" aria-label="Yedeklenecek verileri değiştir">Değiştir</button></p><ul class="rv">'+
+      row('where','Nereye yazılacak','<div class="opts">'+ST.map(function(x){return opt('radio','fbwhere',x[0],x[1],x[2],FB.storage===x[0])}).join('')+'</div><div><button class="link" type="button" data-stub="Hedef ekleme bu prototipte yok.">Başka hedef ekle</button></div>')+
+      row('when','Ne zaman','<div class="chips" role="radiogroup" aria-label="Ne zaman yedek alınsın?">'+SCHED.map(function(x){return chip('fbsched',x[0],x[1],FB.sched===x[0])}).join('')+'</div>')+
+      row('keep','Ne kadar saklanacak','<div class="chips" role="radiogroup" aria-label="Yedekler ne kadar saklansın?">'+RET.map(function(x){return chip('fbret',x[0],x[1],FB.ret===x[0])}).join('')+'</div><p class="hint" style="margin-top:var(--space-2)">Süresi dolan yedekler otomatik silinir.</p>')+
+      '</ul><p class="hint hl" style="margin-top:var(--space-3)">'+ic('lock')+'<span>Yedekler otomatik şifrelenir.</span></p>';
+    updS3();
+  }
+  function fbCreate(run){
+    var st=lbl(STORAGE,FB.storage),nx=NEXT[FB.sched];
+    FB.jobs=fbSel().map(function(i){return {id:'fb'+(++seq),fi:i,gb:i.gb,name:esc(nm(i)),pc:esc(FB.pc),src:i.type+' · '+i.n,meta:i.type+' · '+st[3],dst:st[3],dstSub:st[4],sched:lbl(SCHED,FB.sched)[1],ret:FB.ret==='0'?'Hiç silinmez':FB.ret+' gün',next:nx[0],nextSub:nx[1],days:'nnnnnnnnnnnnnn',note:'iş bugün oluşturuldu',last:'Henüz yedek yok',lastAgo:'',rest:null,runs:[],pct:0}});
+    made=made.concat(FB.jobs);sel=FB.jobs[0].id;FB.phase='ready';
+    if(run)fbStart();
+    fbGo(4);
+  }
+
+  /* --- 4. İlk yedek --- */
+  function fbStart(){
+    var t=hhmm();FB.phase='running';
+    FB.jobs.forEach(function(j){j.started=t;j.days='nnnnnnnnnnnnnr';j.pct=0;j.f=0});
+    clearInterval(fbTimer);fbTimer=setInterval(fbTick,250);
+  }
+  function fbPaint(j){
+    var ix=stIdx(j.pct);
+    $$('[data-pct="'+j.id+'"]').forEach(function(e){e.textContent=j.pct});
+    $$('[data-prog="'+j.id+'"]').forEach(function(e){e.setAttribute('aria-valuenow',j.pct);e.setAttribute('aria-valuetext','%'+j.pct);$('i',e).style.width=j.pct+'%'});
+    $$('[data-stgt="'+j.id+'"]').forEach(function(e){e.textContent=STG[ix]});
+    $$('[data-stg="'+j.id+'"]').forEach(function(e){if(+e.getAttribute('data-i')!==ix)e.outerHTML=stgList(j.id,ix)});
+  }
+  function fbTick(){
+    var left=0,fin=false;
+    FB.jobs.forEach(function(j){
+      if(j.pct>=100)return;
+      j.f+=.35+12/j.gb;j.pct=Math.min(100,Math.floor(j.f));
+      if(j.pct>=100){j.days='nnnnnnnnnnnnno';j.done=true;j.last='bugün '+j.started;j.runs=[['Bugün '+j.started,j.gb+' GB','ok','Başarılı']];fin=true}
+      else left++;
+      fbPaint(j);
+    });
+    if(!left){clearInterval(fbTimer);fbTimer=0;FB.phase='done'}
+    if(fin){fbRefresh();if(!left&&cur()==='first-backup'){var h=$('#fb-run .step-h');if(h)h.focus()}}
+  }
+  function fbRefresh(){
+    var h=cur();
+    if(h==='home')renderHome();else if(h==='jobs')renderJobs();else if(h==='first-backup'&&FB.stage===4){renderS4();fbRail()}
+    updatePb();
+  }
+  function stgList(id,ix){return '<ol class="stg" data-stg="'+id+'" data-i="'+ix+'">'+STG.map(function(s,i){var d=i<ix||ix===3,c=i===ix&&ix<3;return '<li class="'+(d?'is-done':c?'is-cur':'')+'">'+ic(d?'check':c?'clock':'dash')+s+'</li>'}).join('')+'</ol>'}
+  function jrow(j){
+    var ix=stIdx(j.pct);
+    return '<li class="jr"><div class="jr-h"><b>'+j.name+'</b><span class="muted">'+j.fi.type+' · '+j.gb+' GB</span></div>'+stgList(j.id,ix)+
+      '<div class="bar" role="progressbar" data-prog="'+j.id+'" aria-label="'+j.name+' ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+j.pct+'" aria-valuetext="%'+j.pct+'"><i style="width:'+j.pct+'%"></i></div>'+
+      '<p class="hint"><span data-stgt="'+j.id+'">'+STG[ix]+'</span> · %<span data-pct="'+j.id+'">'+j.pct+'</span></p></li>';
+  }
+  function renderS4(){
+    var b=$('#fb-run'),J=FB.jobs,n=J.length,h;
+    if(FB.phase==='ready'){
+      h='<div class="ok-ic">'+ic('check')+'</div><h2 class="step-h" tabindex="-1">Yedekleme oluşturuldu</h2><p class="lead">'+n+' yedekleme hazır. İlk yedek zamanlanan saatte ('+esc(J[0].next.toLowerCase())+') alınır; beklemek istemezseniz şimdi başlatın.</p><ul class="named">'+J.map(function(j){return '<li><span class="nm">'+j.name+'</span><span class="muted">'+j.fi.type+' · '+j.gb+' GB</span></li>'}).join('')+'</ul>'+
+        '<div class="done-acts" style="margin-top:var(--space-4)"><button class="btn btn-primary" type="button" data-act="start">'+ic('play')+'İlk yedeği şimdi başlat</button><a class="btn" href="#home">Ana sayfaya dön</a></div>';
+    }else if(FB.phase==='running'){
+      h='<h2 class="step-h" tabindex="-1">İlk yedek alınıyor</h2><p class="lead" role="status">Her veri sırayla hazırlanır, yedeği alınır ve doğrulanır. Büyük veritabanlarında bu birkaç saat sürebilir; bu sayfayı açık tutmanız gerekmez.</p><ul>'+J.map(jrow).join('')+'</ul>'+
+        '<div class="done-acts" style="margin-top:var(--space-4)"><a class="btn btn-primary" href="#home">Arka planda devam etsin, Ana sayfaya git</a></div>';
+    }else{
+      var one=n===1,r=FB.restore,nx;
+      if(r==='done')nx='<div class="next-card is-quiet"><h3>'+ic('ok')+' Deneme geri yüklemesi başarılı</h3><p>“<b>'+esc(J[0].fi.n)+'_deneme</b>” oluşturuldu ve açılabiliyor. Yedeğiniz işe yarıyor; kopyayı artık silebilirsiniz.</p></div>';
+      else nx='<section class="next-card'+(r==='skipped'?' is-quiet':'')+'" aria-labelledby="nx-h"><h3 id="nx-h">Yedeğinizin işe yaradığından emin olun</h3><p>'+(r==='skipped'?'Deneme atlandı. Ana sayfada bir hatırlatma göreceksiniz; istediğiniz zaman deneyebilirsiniz.':'Bir yedeğe güvenmenin en iyi yolu onu bir kez denemektir. Yedeğin bir kopyasını yeni bir veritabanı olarak geri yükleriz; asıl verinize dokunulmaz.')+'</p><div class="done-acts"><button class="btn btn-primary" type="button" data-act="rtopen">'+ic('restore')+(r==='skipped'?'Şimdi dene':'Deneme geri yüklemesi yap')+'</button>'+(r==='skipped'?'':'<button class="btn" type="button" data-act="rtskip">Şimdilik atla</button>')+'</div></section>';
+      h='<div class="ok-ic">'+ic('check')+'</div><h2 class="step-h" tabindex="-1">'+(one?'İlk yedeğiniz alındı ve doğrulandı':'İlk yedekleriniz alındı ve doğrulandı')+'</h2><p class="lead">Yedek dosyası bütünlük kontrolünden geçti.</p><ul>'+J.map(function(j){
+        return '<li class="jr"><div class="jr-h"><b>'+j.name+'</b>'+badge('ok','ok','Doğrulandı')+'</div><dl class="facts"><div><dt>Boyut</dt><dd>'+j.gb+' GB</dd></div><div><dt>Süre</dt><dd>Bugün '+j.started+'<small>'+Math.max(2,Math.round(j.gb*.22))+' dk sürdü</small></dd></div><div><dt>Nerede saklanıyor</dt><dd>'+j.dst+'<small>'+j.dstSub+'</small></dd></div></dl></li>';
+      }).join('')+'</ul>'+nx+'<div class="done-acts" style="margin-top:var(--space-4)"><a class="btn'+(r?' btn-primary':'')+'" href="#home">Ana sayfaya dön</a></div>';
+    }
+    b.innerHTML=h;
+  }
+
+  /* --- deneme geri yüklemesi (bindirme) --- */
+  function openRT(){if(!FB.jobs.length)return;rt.p='confirm';renderRT();showDlg(rdlg)}
+  function renderRT(){
+    var j=FB.jobs[0],n=esc(j.fi.n),cp='<span class="rt-name">'+n+'_deneme</span>',b=$('#rt-body'),f=$('#rt-foot');
+    if(rt.p==='confirm'){
+      b.innerHTML='<p>“<b>'+n+'</b>” yedeğinin bir <b>kopyası</b> yeni bir veritabanı olarak geri yüklenecek: '+cp+'</p><ul><li>'+ic('check')+'<span>Asıl “'+n+'” veritabanınıza dokunulmaz.</span></li><li>'+ic('check')+'<span>Kopya <b>'+j.pc+'</b> bilgisayarında yeni adla oluşur; yaklaşık '+j.gb+' GB boş alan gerekir.</span></li><li>'+ic('check')+'<span>Deneme bitince kopyayı silebilirsiniz.</span></li></ul>';
+      f.innerHTML='<button class="btn" type="button" data-rta="cancel">Vazgeç</button><button class="btn btn-primary" type="button" data-rta="go">Geri yüklemeyi başlat</button>';
+    }else if(rt.p==='run'){
+      b.innerHTML='<p role="status">'+cp+' geri yükleniyor…</p><div class="bar" role="progressbar" id="rt-bar" aria-label="Geri yükleme ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i style="width:0"></i></div>';
+      f.innerHTML='<button class="btn" type="button" data-rta="cancel">İptal</button>';
+    }else{
+      b.innerHTML='<h3 tabindex="-1" id="rt-ok">'+ic('ok')+' Geri yükleme başarılı</h3><p>'+cp+' oluşturuldu ve açılabiliyor. Yedeğiniz işe yarıyor; asıl verinize dokunulmadı.</p>';
+      f.innerHTML='<button class="btn btn-primary" type="button" data-rta="close">Tamam</button>';
+    }
+  }
+  rdlg.addEventListener('click',function(e){
+    if(e.target===rdlg){rdlg.close();return}
+    var b=e.target.closest('[data-rta]'),a=b&&b.getAttribute('data-rta');
+    if(!a)return;
+    if(a==='cancel'||a==='close')rdlg.close();
+    else if(a==='go'){
+      rt.p='run';renderRT();var v=0;
+      rt.t=setInterval(function(){
+        v+=8;var bar=$('#rt-bar');
+        if(bar){bar.setAttribute('aria-valuenow',Math.min(v,100));$('i',bar).style.width=Math.min(v,100)+'%'}
+        if(v>=100){clearInterval(rt.t);rt.p='ok';FB.restore='done';renderRT();var o=$('#rt-ok');if(o)o.focus()}
+      },120);
+    }
+  });
+  $('#rtX').addEventListener('click',function(){rdlg.close()});
+  rdlg.addEventListener('close',function(){clearInterval(rt.t);rt.p='';fbRefresh()});
+  document.addEventListener('click',function(e){if(e.target.closest('[data-rt]'))openRT()});
+
+  /* --- olaylar --- */
+  fb.addEventListener('input',function(e){
+    var t=e.target;
+    if(t.id==='fb-name'){FB.name=t.value;renderS1();updatePb()}
+    else if(t.id==='fb-ren')FB.names[t.getAttribute('data-id')]=t.value.trim();
+  });
+  fb.addEventListener('change',function(e){
+    var t=e.target,n=t.name;
+    if(n==='fbos'){FB.os=t.value;renderS1()}
+    else if(n==='fbsrc'){if(t.checked)FB.sel[t.value]=1;else delete FB.sel[t.value];renderNamed();fbNav()}
+    else if(n==='fbwhere'){FB.storage=t.value;updS3()}
+    else if(n==='fbsched'){FB.sched=t.value;updS3()}
+    else if(n==='fbret'){FB.ret=t.value;updS3()}
+  });
+  fb.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.id==='fb-ren'){e.preventDefault();doRenamed(e.target.getAttribute('data-id'))}});
+  fb.addEventListener('click',function(e){
+    var b=e.target.closest('[data-act]');if(!b||b.disabled)return;
+    var a=b.getAttribute('data-act'),id=b.getAttribute('data-id');
+    if(a==='go'){var k=+b.getAttribute('data-k');if(k<FB.stage&&!FB.phase)fbGo(k)}
+    else if(a==='mode'){FB.mode=b.getAttribute('data-v');renderS1()}
+    else if(a==='copy'){
+      var el=$('#'+b.getAttribute('data-src'));
+      var fail=function(){var r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r);toast('Otomatik kopyalanamadı; seçili metni Ctrl+C ile kopyalayın.')};
+      try{navigator.clipboard.writeText(el.textContent).then(function(){toast('Kopyalandı.')},fail)}catch(x){fail()}
+    }
+    else if(a==='exist'){var x=$('#fb-exist');x.hidden=!x.hidden;b.setAttribute('aria-expanded',String(!x.hidden));if(!x.hidden)$('#fb-ex-sel').focus()}
+    else if(a==='exgo'){FB.pc=$('#fb-ex-sel').value;FB.conn=3;startScan();fbGo(2)}
+    else if(a==='next1'){FB.pc=FB.pc||FB.name.trim();startScan();fbGo(2)}
+    else if(a==='back2')fbGo(1);
+    else if(a==='next2')fbGo(3);
+    else if(a==='back3')fbGo(2);
+    else if(a==='rescan'){startScan();renderS2()}
+    else if(a==='rename'){FB.ren=id;renderNamed();var i=$('#fb-ren');i.focus();i.select()}
+    else if(a==='renamed')doRenamed(id);
+    else if(a==='chg'){
+      var k2=b.getAttribute('data-k'),p=$('#rx-'+k2),open=p.hidden;
+      p.hidden=!open;b.setAttribute('aria-expanded',String(open));b.textContent=open?'Tamam':'Değiştir';
+      if(open){var f=$('input:checked',p)||$('input',p);if(f)f.focus()}
+    }
+    else if(a==='create')fbCreate(b.getAttribute('data-run')==='1');
+    else if(a==='start'){fbStart();renderS4();fbRail();updatePb();var h=$('#fb-run .step-h');if(h)h.focus()}
+    else if(a==='rtopen')openRT();
+    else if(a==='rtskip'){FB.restore='skipped';renderS4();toast('Ana sayfada bir hatırlatma görünecek.')}
+  });
+  $('#simConn').addEventListener('click',function(){
+    if(FB.stage!==1||!FB.name.trim()||FB.conn>=3)return;
+    FB.conn++;if(FB.conn===3)FB.pc=FB.name.trim();
+    renderS1();updatePb();
+  });
+  $('#simScan').addEventListener('click',function(){
+    noData=!noData;this.setAttribute('aria-pressed',String(noData));
+    if(FB.stage===2&&FB.scan!=='scanning'){startScan();renderS2()}
+  });
+  $('#simFast').addEventListener('click',function(){FB.jobs.forEach(function(j){j.f=100});fbTick()});
+  $('#fbReset').addEventListener('click',function(){
+    setState('empty');
+    if(location.hash==='#first-backup')route(false);else location.hash='#first-backup';
+  });
+
+  /* ======== yönlendirme + durum anahtarı ======== */
+  var TABS={jobs:'İşler',runs:'Çalıştırmalar',files:'Yedek dosyaları',restores:'Geri yüklemeler',shares:'Paylaşımlar'};
+  var NAVS={computers:'Bilgisayarlar',storage:'Depolama',settings:'Ayarlar',platform:'Platform Yönetimi'};
+  function cur(){var h=location.hash.slice(1)||'home';return (h==='home'||h==='job-new'||h==='first-backup'||TABS[h]||NAVS[h])?h:'home'}
+  function paint(h){if(h==='home')renderHome();else if(h==='jobs')renderJobs();else if(h==='first-backup')fbRender()}
+  function route(initial){
+    var h=cur(),yed=h==='job-new'||!!TABS[h];
+    $('#home').hidden=h!=='home';$('#yed').hidden=!yed;$('#stub').hidden=!NAVS[h];$('#first').hidden=h!=='first-backup';
+    $('#pane-jobs').hidden=h!=='jobs';$('#pane-wiz').hidden=h!=='job-new';$('#pane-tab').hidden=!(TABS[h]&&h!=='jobs');
+    var nav=h==='home'||h==='first-backup'?'home':yed?'yed':h;
+    $$('[data-nav]').forEach(function(a){if(a.getAttribute('data-nav')===nav)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+    var tab=h==='job-new'?'jobs':h;
+    $$('#subtabs a').forEach(function(a){if(a.getAttribute('data-tab')===tab)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+    if(NAVS[h])$('#stub-h').textContent=NAVS[h];
+    if(TABS[h]&&h!=='jobs')$('#tab-h').textContent=TABS[h];
+    if(h==='job-new'&&S.done)reset();
+    paint(h);
+    document.title=(h==='home'?'Ana sayfa':h==='first-backup'?'İlk yedeğinizi alın':h==='job-new'?'Yedekleme işi oluştur':TABS[h]?'Yedeklemeler · '+TABS[h]:NAVS[h])+' · Seçilmiş tasarım';
+    closeMenu();window.scrollTo(0,0);updatePb();
+    if(!initial){var t=$$('main h1').filter(function(x){return !x.closest('[hidden]')})[0];if(t)t.focus({preventScroll:true})}
+  }
+  function setState(st){
+    STATE=st;BASE=st==='empty'?[]:baseJobs(st);made=[];sel=BASE.length?BASE[0].id:null;pendingDetail=false;
+    $$('#states button').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-state')===st))});
+    reset();fbReset();paint(cur());updatePb();
+  }
+  $('#states').addEventListener('click',function(e){var b=e.target.closest('button[data-state]');if(b)setState(b.getAttribute('data-state'))});
+  $$('.nav a, .brand, .side-foot a').forEach(function(a){a.addEventListener('click',closeMenu)});
+  window.addEventListener('hashchange',function(){route(false)});
+  setState('empty');
+  route(true);
+})();
+</script>
+</body>
+</html>
