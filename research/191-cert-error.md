@@ -1,0 +1,28 @@
+# #191: certificate/TLS failure vs generic connection failure
+
+Paths relative to `backup-backend/src` (BE) and `backup-frontend/src` (FE). Working tree has user deletions only under docs/; code read as-is.
+
+## 1. Separate code for TLS/certificate failure?
+**No, on every reported surface.**
+- Discovery: `agent/core/Discovery/DiscoveryScanner.cs:336-351` maps `DatabaseFailureKind` to reason codes: `authentication_failed`, `unreachable`, `timeout`, `permission_denied`, `invalid_configuration`, `unexpected`, and `connection_failed` (Unreachable/Timeout on a server whose handshake answered, l.344). There is no TLS code. The l.339 comment itself says "typically TLS on a server without it". Any non-provider exception becomes `unexpected` (l.358-362).
+- FE text for `connection_failed`: "Sunucu yanıt veriyor ancak oturum açılamadı (şifreleme ayarını kontrol edin)" (`FE features/discovery/status.ts:37`). A generic hint, not a certificate message.
+- Backup: `core/domain/Backups/BackupFailureCodes.cs:8-35` has no TLS/certificate code. Connection failures end as `DatabaseUnavailable` ("The database server could not be reached.", `core/application/Backups/BackupOrchestrator.cs:462`; agent mapping `agent/core/Tasks/BackupTaskResultMapper.cs:97`).
+- Restore: same. `RestoreFailureMapping.cs:28,141` and `core/application/Restores/RestoreService.cs:310`. `RestoreTaskRequestFactory.cs:48,105,136` only passes `Encrypt`/`TrustServerCertificate` into `DatabaseConnectionOptions`.
+- `BackupOrchestrator.cs:155` / `:482` only copies `Encrypt`/`TrustServerCertificate` from the job configuration into the agent task. It does not classify anything.
+
+## 2. Can the agent tell them apart?
+- **PostgreSQL: partly, internally.** `providers/backup/postgresql/Connectivity/PostgreSqlSession.cs:128-134` (`IsTlsFailure`: `AuthenticationException` anywhere in the inner chain, or `NpgsqlException` whose message contains "SSL/TLS") is checked at l.156 with a TLS-specific message. But it is mapped to `DatabaseFailureKind.InvalidConfiguration`, which is shared with "database does not exist" (l.152-153). The kind enum (`providers/backup/abstractions/Database/DatabaseProviderException.cs:4`) has no TLS member, so the distinction is lost at `DiscoveryScanner` (`invalid_configuration`). The distinct TLS text lives only in `UserMessage`. [INFERENCE: whether that message reaches the backend/FE was not traced.] The message-substring match is fragile.
+- **SQL Server: no.** `providers/backup/mssql/Connectivity/SqlServerFailureClassifier.cs:28-45,58-83`: a `SqlException` is classified by `Number` only. During Connect, every unlisted number becomes `Unreachable` (l.76-80; comment names "TLS negotiation" as lumped in). `IOException`/`SocketException` also become `Unreachable` (l.38-39). No `AuthenticationException` or message inspection exists. Missing info: a reliable discriminator. The SqlClient TLS validation failure carries error number -2146893019 / `AuthenticationException` as inner exception, but the classifier does not look at either. [INFERENCE: exact SqlClient number/inner type not verified in this repo.]
+- The scanner's `answered` flag (`DiscoveryScanner.cs:340,344`) is the only signal: "port answered the pre-login handshake, yet connect failed". It narrows to "not unreachable", not "certificate".
+
+## 3. Wizard default and discovery prefill
+- Wizard default `false`: `FE features/backup-jobs/job-form-values.ts:19`; engine switch resets to `encrypt: true, trustServerCertificate: false` (l.54). Same `false` in restore wizards (`FE features/restores/file-restore-wizard.tsx:17`, `verification.tsx:57`).
+- Discovery prefill copies the stored binding: `FE features/discovery/job-prefill.ts:18` (`trustServerCertificate: credential.trustServerCertificate`). It is not computed from any scan result; the scanner never writes it.
+- The binding value is `true` only if a user ticks "Sunucu sertifikasına güven" on the instance page (`FE pages/discovery/instance-detail-page.tsx:41,56,49`). Backend request default is `false` (`core/application/Discovery/DiscoveryService.cs:13`), persisted by `BindCredentialAsync` (`core/application/Discovery/IDiscoveryStore.cs:68`).
+- Note: the checkbox is still present today in the manual wizard (`FE features/backup-jobs/steps/source-step.tsx:154`, manual mode only) and in the restore target steps (`restores/restore-target-step.tsx:86`), so #174's removal is not reflected in this tree. [INFERENCE: removal may be on another branch/in progress.]
+- Engine effect: MSSQL passes it to the connection string (`providers/backup/mssql/Connectivity/SqlServerConnectionStringFactory.cs:29`). PostgreSQL: `Encrypt && Trust` is `sslmode=require` (no cert check), `Encrypt && !Trust` is `verify-full`, `!Encrypt` is `prefer` (`postgresql/Connectivity/PostgreSqlConnectionTarget.cs:52`).
+
+## 4. Can the FE show "trust this server's certificate anyway" only on TLS errors?
+Not today for MSSQL. The FE only sees `connection_failed` (discovery) or `DatabaseUnavailable` (jobs/restores). Both also cover wrong port, firewall, and a server without TLS. So it must either (a) show the exception on every such code, which can mislead, or (b) wait for a backend/agent change that adds a TLS discriminator. The issue states backend/API stay unchanged, so only (a) is possible within that constraint. Narrowing it with `connection_failed` helps only for discovery (server answered pre-login).
+
+**Bottom line: partly. PostgreSQL detects TLS internally but folds it into `InvalidConfiguration`; SQL Server and all reported codes cannot distinguish a TLS/certificate failure from a generic connection failure today.**
