@@ -22,3 +22,6 @@ Her dosyada: `#home`, `#job-new`, açık/koyu anahtarı, "Yeni kullanıcı (boş
 
 ## Seçimlerin birleşimi
 - `chosen.html`: A dili + Ana sayfa home-2 + Yedeklemeler>İşler A4 ana-detay + A4 sihirbaz. Rotalar `#home`, `#jobs`, `#job-new`; "Seçimlerim" paneli.
+
+## Yedeklemeler > Geçmiş (#182)
+- `history.html`: Çalıştırmalar + Yedek dosyaları tek "Geçmiş" sekmesi; ayrıntı yerleşimi çubuktan "Yan panel (A4)" / "Ayrı sayfa" seçilir; rol anahtarı (Kullanıcı Yöneticisi / Operatör); Geri yüklemeler, Paylaşımlar ve Depolama > Silinemeyen yedek dosyaları örnekleri. Tarih filtresi etkisiz.

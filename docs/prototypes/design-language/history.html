@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yedekleme Platformu · Geçmiş prototipi (#182)</title>
+<!--
+GEÇMİŞ PROTOTİPİ (ATILABİLİR) — issue #182 "Yedeklemeler sekmeleri"
+Soru: Çalıştırmalar + Yedek dosyaları tek "Geçmiş" sekmesi olunca liste, ayrıntı ve eylemler nasıl görünür?
+Karar kaynağı (kullanıcı onayı, grilling Q1-Q5):
+- 4 sekme: İşler, Geçmiş, Geri yüklemeler, Paylaşımlar. Satır = yedekleme denemesi; yedek dosyası bilgisi satırda.
+- Tek ayrıntı sayfası (backup-runs/:id): başarılıda birincil Geri yükle, "Diğer" menüsünde İndir/Paylaş/Sil (yönetici); başarısızda neden+çözüm ve Yeniden dene; çalışırken Duraklat/İptal.
+- Filtreler: Durum, İş görünür; "Diğer filtreler": bilgisayar, tarih (tarih bu prototipte etkisiz). Tetikleyici kalktı.
+- Silinemeyen yedek dosyaları Depolama sayfasında (yalnızca sayı > 0 iken).
+- Geri yüklemeler tek liste ("Deneme" rozeti); Paylaşımlar liste + uzat/iptal, düz Türkçe açıklama.
+AÇIK (bu prototip bunu sorar): ayrıntı yerleşimi. Prototip çubuğundan "Yan panel (A4)" ile "Ayrı sayfa" arasında geçin. Rol anahtarı yönetici/operatör farkını gösterir.
+Veriler uydurmadır; hiçbir şey saklanmaz. file:// ile açılır.
+-->
+<style>
+:root{
+  /* renk — açık */
+  --bg:#fafafa; --side-bg:#f4f4f5; --surface:#ffffff; --surface-2:#f4f4f5; --raised:#ffffff;
+  --border:#e4e4e7; --border-input:#8e8e98;
+  --fg:#18181b; --muted:#52525b;
+  --accent:#0f5e63; --accent-hover:#0b4a4e; --accent-fg:#ffffff; --accent-subtle:#e6f1f1;
+  --focus:#0f5e63;
+  --ok-fg:#166534; --ok-bg:#dcfce7; --ok-bd:#86d9a2;
+  --warn-fg:#854d0e; --warn-bg:#fef9c3; --warn-bd:#e5c64f;
+  --err-fg:#b91c1c; --err-bg:#fee2e2; --err-bd:#f1a1a1;
+  --neutral-fg:#3f3f46; --neutral-bg:#e4e4e7;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .14);
+  /* radius */
+  --radius:.375rem; --radius-sm:.25rem; --radius-full:9999px;
+  /* boşluk (4px ızgara) */
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.5rem; --space-6:2rem;
+  /* tipografi — kompakt 14px */
+  --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --text-xs:.75rem; --text-sm:.8125rem; --text-base:.875rem; --text-lg:1rem; --text-xl:1.25rem;
+  --leading:1.45; --control-h:2rem;
+}
+:root.dark{
+  /* koyu: yükseltilmiş yüzeyler tabandan açık */
+  --bg:#09090b; --side-bg:#0f0f12; --surface:#18181b; --surface-2:#232328; --raised:#27272c;
+  --border:#2e2e34; --border-input:#71717a;
+  --fg:#fafafa; --muted:#a1a1aa;
+  --accent:#8cc5c8; --accent-hover:#a6d3d5; --accent-fg:#052a2c; --accent-subtle:#14302f;
+  --focus:#8cc5c8;
+  --ok-fg:#86efac; --ok-bg:#12301d; --ok-bd:#235f37;
+  --warn-fg:#fcd34d; --warn-bg:#33270a; --warn-bd:#6b5314;
+  --err-fg:#fca5a5; --err-bg:#3d1414; --err-bd:#7a2b2b;
+  --neutral-fg:#d4d4d8; --neutral-bg:#2e2e34;
+  --shadow-overlay:0 8px 24px rgb(0 0 0 / .6);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light}
+html.dark{color-scheme:dark}
+body{margin:0;font-family:var(--font-sans);font-size:var(--text-base);line-height:var(--leading);background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,ol,dl,dd{margin:0}
+ul,ol{padding:0;list-style:none}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--radius-sm)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic-lg{width:1.25rem;height:1.25rem}
+.muted{color:var(--muted)}
+
+/* ---------- kabuk ---------- */
+.shell{display:grid;grid-template-columns:12rem minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--side-bg);border-right:1px solid var(--border)}
+.side-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-3) var(--space-3) var(--space-2)}
+.brand{display:flex;align-items:center;gap:var(--space-2);font-weight:600;font-size:var(--text-base);text-decoration:none;color:var(--fg);min-height:2rem}
+.brand-mark{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-fg);flex:none}
+.brand-mark .ic{width:.875rem;height:.875rem}
+.btn.menu-btn{display:none}
+.side-body{display:flex;flex-direction:column;flex:1;min-height:0;padding:0 var(--space-2) var(--space-3)}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:var(--space-1)}
+.nav a{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-weight:500;transition:background .12s}
+.nav a:hover{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current]{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current] .ic{color:var(--accent)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;padding-top:var(--space-3);border-top:1px solid var(--border)}
+.side-foot a,.account{display:flex;align-items:center;gap:var(--space-2);min-height:2rem;padding:0 var(--space-2);border-radius:var(--radius);color:var(--muted);text-decoration:none;font-size:var(--text-sm)}
+.side-foot a:hover,.account:hover{background:var(--surface-2);color:var(--fg)}
+.account{width:100%;border:0;background:none;font:inherit;font-size:var(--text-sm);text-align:left;cursor:pointer;min-height:2.5rem;margin-top:var(--space-1)}
+.avatar{display:grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:var(--radius-full);background:var(--accent-subtle);color:var(--accent);font-size:var(--text-xs);font-weight:600;flex:none}
+.account b{display:block;color:var(--fg);font-weight:500;line-height:1.2}
+.account small{display:block;font-size:var(--text-xs);line-height:1.2}
+
+.main{min-width:0;padding:0 var(--space-5) 2.5rem;width:100%;max-width:96rem}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--border)}
+.topbar .grow{flex:1}
+.seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface)}
+.seg a{display:inline-flex;align-items:center;min-height:1.75rem;padding:0 var(--space-3);border-radius:var(--radius-sm);color:var(--muted);text-decoration:none;font-weight:500;font-size:var(--text-sm)}
+.seg a:hover{color:var(--fg)}
+.seg a[aria-current]{background:var(--accent);color:var(--accent-fg)}
+.proto-label{font-size:var(--text-xs);color:var(--muted)}
+
+/* ---------- bileşenler ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s}
+.btn:hover{background:var(--surface-2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn[disabled],.btn[aria-disabled=true]{opacity:.55;cursor:not-allowed}
+.btn-quiet{border-color:transparent;background:none;color:var(--muted)}
+.link{display:inline-flex;align-items:center;min-height:1.5rem;padding:0;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.link:hover{color:var(--accent-hover)}
+.switch{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit;font-size:var(--text-sm);font-weight:500;cursor:pointer}
+.switch:hover{background:var(--surface-2)}
+.switch .box{display:grid;place-items:center;width:1rem;height:1rem;border:1px solid var(--border-input);border-radius:var(--radius-sm);color:transparent}
+.switch[aria-checked=true] .box,.switch[aria-pressed=true] .box{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.switch .box .ic{width:.75rem;height:.75rem;stroke-width:3}
+.theme-btn .i-sun{display:none}
+.dark .theme-btn .i-sun{display:block}
+.dark .theme-btn .i-moon{display:none}
+
+.badge{display:inline-flex;align-items:center;gap:.3rem;min-height:1.375rem;padding:0 .5rem;border:1px solid transparent;border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:500;white-space:nowrap}
+.badge .ic{width:.8125rem;height:.8125rem}
+.b-ok{color:var(--ok-fg);background:var(--ok-bg);border-color:var(--ok-bd)}
+.b-warn{color:var(--warn-fg);background:var(--warn-bg);border-color:var(--warn-bd)}
+.b-err{color:var(--err-fg);background:var(--err-bg);border-color:var(--err-bd)}
+.b-neutral{color:var(--neutral-fg);background:var(--neutral-bg)}
+
+/* sayfa başlığı: tek satır durum özeti */
+.hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-4);margin:var(--space-4) 0 var(--space-3)}
+.hd h1{font-size:var(--text-xl);line-height:1.3;font-weight:600;letter-spacing:-.01em}
+.hd .sum{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin-top:var(--space-1);color:var(--muted)}
+.hd .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-4);min-height:2.5rem;border-bottom:1px solid var(--border)}
+.panel-h h2{font-size:var(--text-base);font-weight:600}
+.panel-b{padding:var(--space-3) var(--space-4)}
+
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{padding:var(--space-2) var(--space-4);text-align:left;font-size:var(--text-xs);font-weight:500;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.tbl td{padding:.5rem var(--space-4);border-top:1px solid var(--border);vertical-align:middle}
+.tbl tbody tr:first-child td{border-top:0}
+.tbl .num{text-align:right}
+.tbl .name{font-weight:500}
+
+.bar{height:.5rem;border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface-2);overflow:hidden;margin:var(--space-2) 0}
+.bar i{display:block;height:100%;background:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--muted)}
+
+/* ---------- çalışma alanı (usta-detay) ---------- */
+.ws{display:grid;grid-template-columns:20rem minmax(0,1fr);min-height:max(30rem,calc(100vh - 11rem));background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.master{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border)}
+.m-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-height:2.75rem;border-bottom:1px solid var(--border)}
+.m-h h2{font-size:var(--text-base);font-weight:600}
+.m-h .btn{min-height:1.75rem;padding:0 var(--space-2);font-size:var(--text-sm)}
+.jobs li+li{border-top:1px solid var(--border)}
+.job-btn{display:flex;flex-direction:column;gap:.25rem;width:100%;min-height:3.5rem;padding:.5rem var(--space-3);border:0;border-left:3px solid transparent;border-radius:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.job-btn:hover{background:var(--surface-2)}
+.job-btn[aria-current=true]{background:var(--accent-subtle);border-left-color:var(--accent)}
+.job-btn:focus-visible{outline-offset:-2px}
+.job-btn .nm{font-weight:500}
+.job-btn .mt{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--muted)}
+.m-empty{padding:var(--space-4) var(--space-3);color:var(--muted)}
+.m-empty p+p,.m-empty p+.btn{margin-top:var(--space-3)}
+.m-foot{margin-top:auto;padding:var(--space-3);border-top:1px solid var(--border);background:var(--surface-2)}
+.m-foot .row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
+.m-foot b{font-weight:600}
+.m-foot .big{font-size:var(--text-lg);font-weight:600;margin-top:2px}
+
+.detail{display:flex;flex-direction:column;min-width:0}
+.d-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border)}
+.d-title{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);min-width:0}
+.d-title h2{font-size:var(--text-lg);font-weight:600;letter-spacing:-.005em}
+.d-title h2:focus-visible{outline-offset:4px}
+.d-h .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.back{display:none}
+.d-alert{display:flex;gap:var(--space-2);align-items:flex-start;padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg)}
+.d-alert .ic{margin-top:2px}
+.d-sec{border-bottom:1px solid var(--border)}
+.d-sec:last-child{border-bottom:0}
+.d-sec>h3{padding:var(--space-3) var(--space-4) 0;font-size:var(--text-sm);font-weight:600}
+.d-sec .facts{padding:var(--space-2) var(--space-4) var(--space-3)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:var(--space-3) var(--space-4)}
+.facts dt{font-size:var(--text-sm);color:var(--muted)}
+.facts dd{font-weight:500}
+.facts dd small{display:block;font-size:var(--text-sm);font-weight:400;color:var(--muted)}
+.d-sec .tbl{margin-top:var(--space-2);border-top:1px solid var(--border)}
+.d-sec .tbl th{padding-top:.25rem;padding-bottom:.25rem;background:var(--surface-2)}
+
+/* boş durum: başlangıç adımları sağ bölmede */
+.steps{counter-reset:s}
+.steps li{display:grid;grid-template-columns:1.5rem minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);border-top:1px solid var(--border)}
+.steps li:first-child{border-top:0}
+.steps .n{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;color:var(--muted)}
+.steps .is-now{background:var(--accent-subtle)}
+.steps .is-now .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.steps b{font-weight:600;display:block}
+.steps p{color:var(--muted)}
+.steps .is-later b{color:var(--muted)}
+
+/* alt sekmeler */
+.subtabs{display:flex;flex-wrap:wrap;gap:var(--space-1);margin:var(--space-3) 0 0;border-bottom:1px solid var(--border)}
+.subtabs a{display:inline-flex;align-items:center;min-height:2rem;padding:0 var(--space-3);margin-bottom:-1px;border-bottom:2px solid transparent;color:var(--muted);text-decoration:none;font-weight:500}
+.subtabs a:hover{color:var(--fg)}
+.subtabs a[aria-current]{color:var(--fg);border-bottom-color:var(--accent)}
+.crumb{font-size:var(--text-sm);color:var(--muted);margin-top:var(--space-3)}
+
+/* ---------- sihirbaz: üstte yatay adım çubuğu, altta iki sütun ---------- */
+.stepper{display:flex;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.stepper li{flex:1;min-width:0;border-left:1px solid var(--border)}
+.stepper li:first-child{border-left:0}
+.stepper button{display:flex;align-items:center;gap:var(--space-2);width:100%;min-height:2.5rem;padding:0 var(--space-3);border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted);font:inherit;font-weight:500;text-align:left;cursor:pointer}
+.stepper button:hover:not(:disabled){background:var(--surface-2);color:var(--fg)}
+.stepper button:disabled{cursor:default;opacity:.8}
+.stepper button:focus-visible{outline-offset:-2px}
+.stepper .n{display:grid;place-items:center;width:1.375rem;height:1.375rem;border:1px solid var(--border-input);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:600;flex:none}
+.stepper .n .ic{width:.75rem;height:.75rem;stroke-width:3}
+.stepper .is-done .n{background:var(--accent-subtle);border-color:var(--accent);color:var(--accent)}
+.stepper [aria-current]{color:var(--fg);background:var(--surface-2);border-bottom-color:var(--accent)}
+.stepper [aria-current] .n{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.stepper .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.wb{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:var(--space-4);margin-top:var(--space-3);align-items:start}
+.wb[data-wstep="4"]{grid-template-columns:minmax(0,1fr)}
+.wb[data-wstep="4"] .sumbox{display:none}
+.wb[data-wstep="4"] .card{max-width:48rem}
+#nextBtn{margin-left:auto}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.card-b{padding:var(--space-4)}
+.card-f{display:flex;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-4);border-top:1px solid var(--border);background:var(--surface-2);border-radius:0 0 var(--radius) var(--radius)}
+.step-h{font-size:var(--text-lg);font-weight:600;letter-spacing:-.005em;margin-bottom:2px}
+.step-h:focus-visible{outline-offset:4px}
+.lead{color:var(--muted);margin-bottom:var(--space-4)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--space-4)}
+.field{display:flex;flex-direction:column;gap:var(--space-1);margin-bottom:var(--space-4);border:0;padding:0;min-width:0}
+.field>label,.field>legend{font-weight:500;padding:0;margin-bottom:2px}
+.hint{font-size:var(--text-sm);color:var(--muted)}
+.err{font-size:var(--text-sm);color:var(--err-fg);font-weight:500;display:flex;align-items:center;gap:.3rem}
+.err:empty{display:none}
+.input,.select{width:100%;min-height:2rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);color:var(--fg);font:inherit}
+.select{appearance:auto}
+.input::placeholder{color:var(--muted);opacity:1}
+.input[aria-invalid=true],.select[aria-invalid=true]{border-color:var(--err-fg);box-shadow:inset 0 0 0 1px var(--err-fg)}
+.input:focus-visible,.select:focus-visible{outline-offset:0}
+.opts{display:flex;flex-direction:column;gap:var(--space-1)}
+.opt{display:flex;align-items:flex-start;gap:var(--space-3);min-height:2rem;padding:.4375rem var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);cursor:pointer}
+.opt:hover{background:var(--surface-2)}
+.opt input{margin:.1875rem 0 0;width:1rem;height:1rem;accent-color:var(--accent);flex:none}
+.opt .t{display:block;font-weight:500}
+.opt .s{display:block;font-size:var(--text-sm);color:var(--muted)}
+.opt:has(input:checked){border-color:var(--accent);background:var(--accent-subtle);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.chip{position:relative;display:inline-flex;align-items:center;gap:.375rem;min-height:2rem;padding:0 var(--space-3);border:1px solid var(--border-input);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-weight:500}
+.chip:hover{background:var(--surface-2)}
+.chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.chip .tick{display:none;color:var(--accent);stroke-width:3}
+.chip:has(input:checked){border-color:var(--accent);background:var(--accent-subtle);box-shadow:inset 0 0 0 1px var(--accent)}
+.chip:has(input:checked) .tick{display:block}
+.chip:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+.note{display:flex;gap:var(--space-2);align-items:flex-start;margin-top:var(--space-2);padding:var(--space-2) var(--space-3);border:1px solid var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg);border-radius:var(--radius);font-size:var(--text-sm)}
+.note .ic{margin-top:2px}
+
+/* canlı özet */
+.sumbox{position:sticky;top:var(--space-4);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.sumbox>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);min-height:2.5rem;padding:var(--space-2) var(--space-4);font-weight:600;cursor:pointer;list-style:none}
+.sumbox>summary::-webkit-details-marker{display:none}
+.sumbox>summary .muted{font-weight:400;font-size:var(--text-sm)}
+.sumbox[open]>summary{border-bottom:1px solid var(--border)}
+.sum-list{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) var(--space-4)}
+.sum-list li{display:flex;gap:var(--space-2);align-items:flex-start;color:var(--muted)}
+.sum-list li .ic{margin-top:3px;color:var(--muted)}
+.sum-list li.is-set{color:var(--fg)}
+.sum-list li.is-set .ic{color:var(--ok-fg)}
+
+.review{display:grid;grid-template-columns:11rem minmax(0,1fr);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--space-3)}
+.review dt,.review dd{padding:.5rem var(--space-3);border-top:1px solid var(--border)}
+.review dt{color:var(--muted)}
+.review dd{font-weight:500;display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-3)}
+.review dd .link{font-weight:400;font-size:var(--text-sm);flex:none}
+.review dt:first-of-type,.review dt:first-of-type+dd{border-top:0}
+.review ul{display:flex;flex-direction:column;gap:2px}
+.done{max-width:44rem;margin-top:var(--space-4)}
+.done .ok-ic{display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:var(--radius-full);background:var(--ok-bg);color:var(--ok-fg);border:1px solid var(--ok-bd);margin-bottom:var(--space-3)}
+.done .ok-ic .ic{width:1.25rem;height:1.25rem}
+
+.toast{position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:50;max-width:min(22rem,calc(100vw - 2rem));padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--fg);box-shadow:var(--shadow-overlay);opacity:0;pointer-events:none;transition:opacity .15s}
+.toast.show{opacity:1}
+.toast:empty{display:none}
+
+/* ---------- duyarlı ---------- */
+@media (max-width:60rem){
+  /* usta-detay: liste → ayrıntı gezinmesi */
+  .ws{grid-template-columns:minmax(0,1fr);min-height:0}
+  .master{border-right:0}
+  .ws[data-view="list"] .detail{display:none}
+  .ws[data-view="detail"] .master{display:none}
+  .job-btn[aria-current=true]{background:none;border-left-color:transparent}
+  .job-btn{min-height:3.5rem}
+  .back{display:inline-flex}
+  .ws-empty .detail{order:-1;border-bottom:1px solid var(--border)}
+  .wb{grid-template-columns:minmax(0,1fr)}
+  .sumbox{position:static;order:-1}
+}
+@media (max-width:52.5rem){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{height:auto;z-index:30;border-right:0;border-bottom:1px solid var(--border)}
+  .side-head{padding:var(--space-2) var(--space-4)}
+  .btn.menu-btn{display:inline-flex;min-height:2.5rem}
+  .side-body{display:none;max-height:calc(100vh - 3.5rem);overflow:auto;padding:0 var(--space-3) var(--space-3)}
+  .side.open .side-body{display:flex}
+  .nav a,.side-foot a{min-height:2.5rem}
+  .main{padding:0 var(--space-4) 2rem}
+  .btn,.switch,.chip,.input,.select{min-height:2.5rem}
+  .m-h .btn{min-height:2rem}
+  .stepper li{flex:1}
+  .stepper li:has([aria-current]){flex:3}
+  .stepper button{padding:0;justify-content:center;gap:var(--space-1)}
+  .stepper li:has([aria-current]) button{padding:0 var(--space-2)}
+  .stepper li:not(:has([aria-current])) .lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .card-f{padding:var(--space-2) var(--space-3)}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+  .review{grid-template-columns:minmax(0,1fr)}
+  .review dt{padding-bottom:0;border-top:1px solid var(--border);font-size:var(--text-sm)}
+  .review dd{border-top:0;padding-top:2px}
+  .review dt:first-of-type{border-top:0}
+}
+@media (max-width:40rem){
+  .tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .tbl,.tbl tbody,.tbl tr,.tbl td{display:block}
+  .tbl tr{padding:var(--space-2) var(--space-4);border-top:1px solid var(--border)}
+  .tbl tbody tr:first-child{border-top:0}
+  .tbl td{padding:1px 0;border:0}
+  .tbl td::before{content:attr(data-label);display:inline-block;min-width:4.5rem;color:var(--muted);font-size:var(--text-sm)}
+  .tbl td.name::before{display:none}
+  .tbl .num{text-align:left}
+  .d-sec .tbl tbody tr:first-child{border-top:0}
+  .steps li{grid-template-columns:1.5rem minmax(0,1fr)}
+  .steps li .btn{grid-column:2;justify-self:start}
+  .hd .acts{width:100%}
+  .hd .acts .btn{flex:1}
+  .d-h .acts{width:100%}
+  .d-h .acts .btn{flex:1}
+  .card-f .btn{flex:1}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
+/* ---------- home-2 (koruma haritası) ---------- */
+/* ---------- H2: koruma haritası ---------- */
+.seg button{display:inline-flex;align-items:center;min-height:1.75rem;padding:0 var(--space-3);border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);font:inherit;font-weight:500;font-size:var(--text-sm);cursor:pointer}
+.seg button:hover{color:var(--fg)}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg)}
+.btn-sm{min-height:1.75rem;padding:0 var(--space-2);font-size:var(--text-sm)}
+.b-run{color:var(--accent);background:var(--accent-subtle);border-color:var(--accent)}
+.stack>*+*{margin-top:var(--space-4)}
+h2.sec{font-size:var(--text-base);font-weight:600}
+
+.band{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--warn-bd);border-radius:var(--radius);background:var(--warn-bg);color:var(--warn-fg)}
+.band .txt{display:flex;gap:var(--space-2);align-items:flex-start;flex:1 1 20rem;min-width:0}
+.band .txt .ic{margin-top:2px}
+.band .txt b{display:block;font-weight:600}
+.band .acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.band-run{border-color:var(--border);background:var(--accent-subtle);color:var(--fg)}
+.band-run .bar{width:12rem;max-width:100%;margin:0;background:var(--surface)}
+
+.counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.counts>li{padding:var(--space-3) var(--space-4);border-left:1px solid var(--border)}
+.counts>li:first-child{border-left:0}
+.counts .n{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-xl);font-weight:600;line-height:1.25}
+.counts .l{color:var(--muted);font-size:var(--text-sm)}
+.counts .is-warn .n,.counts .is-warn .l{color:var(--warn-fg)}
+.counts{margin:0;padding:0;list-style:none}
+
+.map-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-1) var(--space-4)}
+.key{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-4);font-size:var(--text-sm);color:var(--muted)}
+.key span{display:inline-flex;align-items:center;gap:.375rem}
+.key .cell{width:1.125rem;height:1.125rem;flex:none}
+.grp{margin-top:var(--space-3)}
+.grp-h{align-items:center}
+.grp-h .who{display:flex;align-items:center;gap:var(--space-2);min-width:0;flex-wrap:wrap}
+.grp-h h3{font-size:var(--text-base);font-weight:600}
+.grp-h .muted{font-size:var(--text-sm)}
+
+.src{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,23rem) minmax(0,1fr);grid-template-areas:"main fresh last";gap:var(--space-2) var(--space-4);align-items:start;padding:var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) - 3px);border-top:1px solid var(--border);border-left:3px solid transparent}
+.src:first-child{border-top:0}
+.src.is-warn{border-left-color:var(--warn-fg)}
+.s-main{grid-area:main;display:flex;flex-direction:column;min-width:0}
+.s-main .nm{font-weight:600}
+.s-main .muted{font-size:var(--text-sm)}
+.s-fresh{grid-area:fresh;min-width:0;align-self:center;display:flex;flex-direction:column;align-items:center}
+.s-fresh .strip{width:100%}
+.s-fresh .cap{text-align:center}
+.s-last{grid-area:last;display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:var(--space-1)}
+.s-last .muted{font-size:var(--text-sm)}
+.s-last .bar{width:100%;margin:0}
+.s-rest{grid-area:rest;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--border);color:var(--muted);font-size:var(--text-sm)}
+.s-rest>span{display:inline-flex;align-items:flex-start;gap:var(--space-2);flex:1 1 16rem;min-width:0}
+.s-rest>span .ic{margin-top:2px}
+.s-rest b{color:var(--fg);font-weight:600}
+.s-rest .r-ok .ic{color:var(--ok-fg)}
+.s-rest .r-never .ic{color:var(--warn-fg)}
+.s-rest .r-never em{font-style:normal;color:var(--warn-fg);font-weight:600}
+
+.strip{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:2px;max-width:20rem;padding:2px;border-radius:var(--radius-sm)}
+.strip:focus-visible{outline-offset:1px}
+.cell{aspect-ratio:1/1;display:grid;place-items:center;border:1px solid transparent;border-radius:2px}
+.cell .ic{width:.75rem;height:.75rem;stroke-width:3}
+.c-ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok-fg)}
+.c-fail{background:var(--err-bg);border-color:var(--err-fg);color:var(--err-fg)}
+.c-run{background:var(--accent-subtle);border-color:var(--accent);color:var(--accent)}
+.c-none{border:1px dashed var(--border-input);color:var(--muted)}
+.cell:hover{filter:brightness(.94)}
+.dark .cell:hover{filter:brightness(1.2)}
+.strip:focus .cell.is-cur{outline:2px solid var(--fg);outline-offset:1px}
+.cap{margin-top:var(--space-1);font-size:var(--text-xs);color:var(--muted);min-height:1.1em}
+
+.three{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-3);margin-top:var(--space-3)}
+.facts2{display:flex;flex-direction:column;gap:var(--space-3)}
+.facts2 dt{font-size:var(--text-sm);color:var(--muted)}
+.facts2 dd{font-weight:600}
+.facts2 dd small{display:block;font-size:var(--text-sm);font-weight:400;color:var(--muted)}
+.big{font-size:var(--text-lg);font-weight:600}
+.act li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--space-3);align-items:center;padding:var(--space-2) var(--space-4);border-top:1px solid var(--border)}
+.act li:first-child{border-top:0}
+.act .t{font-size:var(--text-sm);color:var(--muted)}
+.act .sz{font-size:var(--text-sm);color:var(--muted);text-align:right}
+.act .r{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.act .nm{font-weight:500}
+
+.ghost{padding:var(--space-3) var(--space-4)}
+.ghost .strip{opacity:.9}
+.ghost p{color:var(--muted);margin-top:var(--space-2)}
+.panel.dashed{border-style:dashed;border-color:var(--border-input)}
+
+@media (min-width:40rem){.three{grid-template-columns:repeat(2,minmax(0,1fr))}.three .act-p{grid-column:1/-1}}
+@media (min-width:80rem){.three{grid-template-columns:repeat(3,minmax(0,1fr))}.three .act-p{grid-column:auto}}
+
+@media (max-width:64rem){
+  .src{grid-template-columns:minmax(0,1fr) minmax(9rem,13rem);grid-template-areas:"main last" "fresh fresh"}
+}
+@media (max-width:40rem){
+  .counts>li{padding:var(--space-2) var(--space-3)}
+  .src{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "last" "fresh"}
+  .s-last{flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3)}
+  .s-last .bar{flex-basis:100%}
+  .band .acts{width:100%}
+  .band .acts .btn{flex:1}
+  .s-last .btn{width:100%}
+}
+@media (max-width:52.5rem){.seg button{min-height:2.25rem}}
+/* ---------- birleşik prototip ---------- */
+.ws{min-height:max(30rem,calc(100vh - 14rem))}
+.strip{max-width:23rem}
+.hd .sum .badge{flex:none}
+.hd h1:focus-visible{outline:0}
+.done-acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+#startProg,#startOk{margin-top:var(--space-4)}
+#startProg .bar{max-width:24rem}
+.pb{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);padding:.375rem var(--space-4);background:var(--neutral-bg);border-bottom:1px dashed var(--border-input);font-size:var(--text-sm)}
+.pb .grow{flex:1}
+.pb .tag{padding:0 .375rem;border:1px dashed var(--border-input);border-radius:var(--radius-sm);font-size:var(--text-xs);font-weight:600;color:var(--neutral-fg);text-transform:uppercase;letter-spacing:.04em}
+.pb-l{color:var(--neutral-fg);font-size:var(--text-xs)}
+.pb .switch,.pb .seg{font-size:var(--text-sm)}
+dialog{width:min(32rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--fg);box-shadow:var(--shadow-overlay)}
+dialog::backdrop{background:rgb(0 0 0/.45)}
+.dec-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-4);min-height:2.75rem;border-bottom:1px solid var(--border)}
+.dec-h h2{font-size:var(--text-lg);font-weight:600}
+.dec-l li{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:var(--space-3);align-items:center;padding:var(--space-2) var(--space-4);border-top:1px solid var(--border)}
+.dec-l li:first-child{border-top:0}
+.dec-l b{font-weight:600}
+@media (max-width:40rem){.dec-l li{grid-template-columns:minmax(0,1fr);gap:2px}}
+/* ---------- geçmiş prototipi ---------- */
+.hist-tools{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:end;margin:var(--space-3) 0}
+.hist-tools .field{margin:0;min-width:11rem}
+.hist-tools .more-f{margin-left:auto}
+.xf{display:flex;flex-wrap:wrap;gap:var(--space-3);margin:0 0 var(--space-3);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.xf .field{margin:0;min-width:11rem}
+.rown{display:block;font-weight:500}
+.sub{display:block;color:var(--muted);font-size:var(--text-sm)}
+.tbl tr[data-go]{cursor:pointer}
+.tbl tr[data-go]:hover td{background:var(--surface-2)}
+.tbl a.rl{color:var(--fg);font-weight:500;text-decoration:none}
+.tbl a.rl:hover{text-decoration:underline}
+.page-d{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-top:var(--space-3)}
+.more{position:relative}
+.more>summary{list-style:none}
+.more>summary::-webkit-details-marker{display:none}
+.more[open]>summary{background:var(--surface-2)}
+.menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:15rem;padding:var(--space-1);border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);box-shadow:var(--shadow-overlay)}
+.menu button,.menu .mi{display:flex;align-items:center;gap:var(--space-2);width:100%;min-height:2rem;padding:0 var(--space-2);border:0;border-radius:var(--radius-sm);background:none;color:var(--fg);font:inherit;text-align:left;cursor:pointer}
+.menu button:hover{background:var(--surface-2)}
+.menu .danger{color:var(--err-fg)}
+.menu .mi{color:var(--muted);font-size:var(--text-sm);min-height:0;padding:var(--space-2);cursor:default;align-items:flex-start}
+.d-note{padding:var(--space-3) var(--space-4);color:var(--muted)}
+.d-alert.err{border-bottom-color:var(--err-bd);background:var(--err-bg);color:var(--err-fg)}
+.d-alert b{display:block;font-weight:600}
+.d-alert .acts{margin-left:auto;display:flex;gap:var(--space-2);flex-wrap:wrap}
+.disc{border-bottom:1px solid var(--border)}
+.disc>summary{display:flex;align-items:center;min-height:2.5rem;padding:0 var(--space-4);font-weight:600;font-size:var(--text-sm);cursor:pointer}
+.disc[open]>summary{border-bottom:1px solid var(--border)}
+.disc .facts{padding:var(--space-3) var(--space-4)}
+.prog{padding:var(--space-3) var(--space-4)}
+.cap{font-size:var(--text-sm);color:var(--muted)}
+.subtabs a .cnt{margin-left:var(--space-2)}
+.dlg-b{padding:var(--space-4)}
+.dlg-f{display:flex;justify-content:flex-end;gap:var(--space-2);padding:var(--space-2) var(--space-4);border-top:1px solid var(--border);background:var(--surface-2)}
+.btn-danger{background:var(--err-fg);border-color:var(--err-fg);color:var(--bg)}
+.btn-danger[disabled]{opacity:.45}
+.stor-grid{display:grid;gap:var(--space-4);grid-template-columns:minmax(0,1fr);margin-top:var(--space-3)}
+.opt-row{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.opt-row label{display:inline-flex;gap:var(--space-2);align-items:center}
+.empty-h{padding:var(--space-5) var(--space-4);text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-hdd" viewBox="0 0 24 24"><path d="M3 14h18v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M5 14 7.5 5h9L19 14"/><path d="M7 17h.01M11 17h.01"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h.01"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+</svg>
+
+<div class="pb" role="region" aria-label="Prototip denetimleri">
+  <span class="tag">Prototip · #182</span>
+  <span class="pb-l" id="lyLbl">Ayrıntı yerleşimi</span>
+  <div class="seg" role="group" aria-labelledby="lyLbl" id="layouts">
+    <button type="button" data-ly="pane" aria-pressed="true">Yan panel (A4)</button>
+    <button type="button" data-ly="page" aria-pressed="false">Ayrı sayfa</button>
+  </div>
+  <span class="pb-l" id="roleLbl">Rol</span>
+  <div class="seg" role="group" aria-labelledby="roleLbl" id="roles">
+    <button type="button" data-role="admin" aria-pressed="true">Kullanıcı Yöneticisi</button>
+    <button type="button" data-role="op" aria-pressed="false">Operatör</button>
+  </div>
+  <span class="grow"></span>
+  <button class="switch theme-btn" id="themeBtn" type="button" aria-pressed="false">
+    <svg class="ic i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="ic i-sun" aria-hidden="true"><use href="#i-sun"/></svg>Koyu tema
+  </button>
+</div>
+
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="side-head">
+      <a class="brand" href="#hist"><span class="brand-mark"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span>Yedekleme Platformu</a>
+      <button class="btn btn-quiet menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="sideBody"><svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg>Menü</button>
+    </div>
+    <div class="side-body" id="sideBody">
+      <nav class="nav" aria-label="Ana gezinme">
+        <a href="#stub" data-stub="Ana sayfa bu prototipte yok (chosen.html'de)."><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Ana sayfa</a>
+        <a href="#hist" data-nav="yed"><svg class="ic" aria-hidden="true"><use href="#i-db"/></svg>Yedeklemeler</a>
+        <a href="#stub" data-stub="Bilgisayarlar bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg>Bilgisayarlar</a>
+        <a href="#storage" data-nav="storage"><svg class="ic" aria-hidden="true"><use href="#i-hdd"/></svg>Depolama</a>
+        <a href="#stub" data-stub="Ayarlar bu prototipte yok."><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Ayarlar</a>
+      </nav>
+      <div class="side-foot">
+        <a href="#stub" data-stub="Platform Yönetimi bu prototipte yok.">Platform Yönetimi</a>
+        <button class="account" type="button" data-stub="Hesap menüsü bu prototipte yok."><span class="avatar" aria-hidden="true">AD</span><span><b>Ayşe Demir</b><small class="muted">Demir Muhasebe Ltd.</small></span></button>
+      </div>
+    </div>
+  </aside>
+  <div class="main"><main id="main"></main></div>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg-h"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+var $=function(s,r){return (r||document).querySelector(s)},$$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+function ic(n){return '<svg class="ic" aria-hidden="true"><use href="#i-'+n+'"/></svg>'}
+function badge(k,i,t){return '<span class="badge b-'+k+'">'+ic(i)+t+'</span>'}
+var LY='pane',ROLE='admin',F={status:'',job:'',pc:'',more:false},SEL=null,toastT;
+
+/* ---- örnek veri (bugün = 14 Kasım) ---- */
+var RUNS=[
+ {id:'r1',job:'Bordro veritabanı',pc:'MUHASEBE-SRV',when:'Bugün 14:12',st:'run',pct:62,stage:'Yedek alınıyor',trig:'Elle başlatıldı',art:null},
+ {id:'r2',job:'Bordro veritabanı',pc:'MUHASEBE-SRV',when:'Bugün 02:31',st:'ok',size:'38 GB',trig:'Zamanlanmış',art:{s:'avail',copies:'Yerel disk ve Google Drive · 2 / 2 doğrulandı',n:2,keep:'14 Aralık'},test:null},
+ {id:'r3',job:'Depo stok veritabanı',pc:'DEPO-01',when:'Bugün 02:14',st:'ok',size:'126 GB',trig:'Zamanlanmış',art:{s:'avail',copies:'Yerel disk · 1 / 1 doğrulandı',n:1,keep:'14 Aralık'},test:null},
+ {id:'r4',job:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',when:'Bugün 02:00',st:'fail',trig:'Zamanlanmış',art:null,cause:'MUHASEBE-SRV bilgisayarına ulaşılamadı.',fix:'Bilgisayarın açık ve internete bağlı olduğundan emin olun, sonra yeniden deneyin.',tech:'AgentLost · 3 / 3 deneme'},
+ {id:'r5',job:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',when:'13 Kasım 02:00',st:'fail',trig:'Zamanlanmış',art:null,cause:'MUHASEBE-SRV bilgisayarına ulaşılamadı.',fix:'Bilgisayarın açık ve internete bağlı olduğundan emin olun, sonra yeniden deneyin.',tech:'AgentLost · 3 / 3 deneme'},
+ {id:'r6',job:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',when:'12 Kasım 02:18',st:'ok',size:'94 GB',trig:'Zamanlanmış',art:{s:'avail',copies:'Yerel disk · 1 / 1 doğrulandı',n:1,keep:'12 Aralık'},test:'12 Kasım 14:05'},
+ {id:'r7',job:'Bordro veritabanı',pc:'MUHASEBE-SRV',when:'11 Kasım 02:29',st:'ok',size:'37 GB',trig:'Zamanlanmış',art:{s:'pending',copies:'Yerel disk ve Google Drive',n:2,keep:'11 Aralık',deleteOn:'Yarın 09:00',by:'Ayşe Demir'},test:null},
+ {id:'r8',job:'Depo stok veritabanı',pc:'DEPO-01',when:'3 Kasım 02:13',st:'ok',size:'124 GB',trig:'Zamanlanmış',art:{s:'delfail',copies:'Yerel disk',n:1,keep:'3 Aralık',reason:'Depolamaya ulaşılamadı (Yerel disk).'},test:null},
+ {id:'r9',job:'Muhasebe veritabanı',pc:'MUHASEBE-SRV',when:'2 Kasım 02:17',st:'ok',size:'93 GB',trig:'Zamanlanmış',art:{s:'deleted',reason:'Saklama süresi doldu.'},test:null},
+ {id:'r10',job:'Bordro veritabanı',pc:'MUHASEBE-SRV',when:'1 Kasım 14:40',st:'cancel',trig:'Elle başlatıldı',art:null}
+];
+var RS=[
+ {db:'muhasebe_deneme',test:true,st:'ok',ref:'r6',pc:'MUHASEBE-SRV',when:'12 Kasım 14:05',note:'Doğrulandı; deneme veritabanı silindi'},
+ {db:'bordro_onceki',test:false,st:'ok',ref:'r7',pc:'MUHASEBE-SRV',when:'11 Kasım 16:20',note:'Yeni veritabanı olarak geri yüklendi'},
+ {db:'stok_geri',test:false,st:'fail',ref:'r8',pc:'DEPO-01',when:'4 Kasım 09:12',note:'Hedefte yeterli boş yer yok'}
+];
+var SH=[
+ {ref:'r6',st:'ok',left:'Yarın 11:40’a kadar',reason:'Destek talebi #482'},
+ {ref:'r2',st:'exp',left:'12 Kasım’da doldu',reason:'Bordro karşılaştırma'}
+];
+function run(id){return RUNS.filter(function(r){return r.id===id})[0]}
+
+/* ---- ortak parçalar ---- */
+function stBadge(r){
+  if(r.st==='ok')return badge('ok','ok','Başarılı');
+  if(r.st==='fail')return badge('err','alert','Başarısız');
+  if(r.st==='run')return badge('neutral','clock','Çalışıyor %'+r.pct);
+  return badge('neutral','dash','İptal edildi');
+}
+function artNote(r){
+  if(r.st!=='ok')return r.st==='fail'?'Yedek alınmadı':r.st==='run'?r.stage:'';
+  var a=r.art;
+  if(a.s==='avail')return r.size+' · '+a.n+' kopya · '+a.keep+'’a kadar saklanır';
+  if(a.s==='pending')return r.size+' · Silinecek: '+a.deleteOn;
+  if(a.s==='delfail')return r.size+' · Dosya silinemedi';
+  return 'Yedek dosyası silindi';
+}
+function noteBadge(r){return r.st==='ok'&&r.art.s==='delfail'?' '+badge('warn','alert','Dosya silinemedi'):r.st==='ok'&&r.art.s==='pending'?' '+badge('warn','clock','Siliniyor'):''}
+function tabs(cur){
+  var T=[['hist','Geçmiş'],['jobs','İşler'],['restores','Geri yüklemeler'],['shares','Paylaşımlar']];
+  var order=[['jobs','İşler'],['hist','Geçmiş'],['restores','Geri yüklemeler'],['shares','Paylaşımlar']];
+  return '<p class="crumb">Yedeklemeler</p><nav class="subtabs" aria-label="Yedeklemeler bölümleri">'+order.map(function(t){
+    return '<a href="#'+(t[0]==='jobs'?'jobs':t[0])+'"'+(t[0]===cur?' aria-current="page"':'')+(t[0]==='jobs'?' data-stub="İşler bu prototipte yok (chosen.html\'de)."':'')+'>'+t[1]+'</a>'}).join('')+'</nav>';
+}
+
+/* ---- ayrıntı ---- */
+function actions(r){
+  var admin=ROLE==='admin',h='';
+  if(r.st==='ok'&&r.art.s!=='deleted'){
+    h+='<button class="btn btn-primary" type="button" data-act="restore" data-id="'+r.id+'">'+ic('restore')+'Geri yükle</button>';
+    h+='<details class="more"><summary class="btn" aria-label="Diğer eylemler">'+ic('dots')+'Diğer</summary><div class="menu">'+
+      '<button type="button" data-act="download" data-id="'+r.id+'">'+ic('download')+'İndir</button>'+
+      (admin?'<button type="button" data-act="share" data-id="'+r.id+'">'+ic('share')+'Paylaş…</button>':'')+
+      (admin&&r.art.s==='avail'?'<button type="button" class="danger" data-act="del" data-id="'+r.id+'">'+ic('trash')+'Yedek dosyasını sil…</button>':'')+
+      (!admin?'<div class="mi">'+ic('info')+'<span>Paylaşım ve silme yalnızca yöneticilere açıktır. Yöneticinize danışın.</span></div>':'')+
+      '</div></details>';
+  }
+  if(r.st==='fail')h+='<button class="btn btn-primary" type="button" data-act="retry" data-id="'+r.id+'">'+ic('play')+'Yeniden dene</button>';
+  if(r.st==='run')h+='<button class="btn" type="button" data-act="pause" data-id="'+r.id+'">'+ic('pause')+'Duraklat</button><button class="btn" type="button" data-act="cancel" data-id="'+r.id+'">İptal et</button>';
+  return h;
+}
+function techBox(r){
+  var rows=[['Yedekleme denemesi',r.job+' · '+r.when],['Yedekleme bilgisayarı',r.pc],['Nasıl başladı',r.trig]];
+  if(r.st==='fail')rows.push(['Hata kodu',r.tech]);
+  if(r.st==='ok'&&r.art.s!=='deleted'){rows.push(['Kopyalar',r.art.copies]);rows.push(['Doğrulama','SHA-256 eşleşti']);rows.push(['Deneme sayısı','1 / 3']);}
+  return '<details class="disc"><summary>Teknik ayrıntılar</summary><dl class="facts">'+rows.map(function(x){return '<div><dt>'+x[0]+'</dt><dd>'+x[1]+'</dd></div>'}).join('')+'</dl></details>';
+}
+function detail(r){
+  var h='<div class="d-h"><div class="d-title">'+(LY==='pane'?'<button class="btn btn-quiet back" type="button" data-act="toList">'+ic('left')+'Liste</button>':'')+
+    '<h2 tabindex="-1" data-focus="1">'+r.job+'</h2>'+stBadge(r)+noteBadge(r)+'<span class="muted">'+r.when+'</span></div><div class="acts">'+actions(r)+'</div></div>';
+  if(r.st==='fail')h+='<div class="d-alert err" role="alert">'+ic('alert')+'<div><b>'+r.cause+' Yedek alınamadı.</b>'+r.fix+'</div><div class="acts"><button class="btn" type="button" data-stub="Bilgisayarlar bu prototipte yok.">Bilgisayarı kontrol et</button></div></div>'+
+    '<div class="d-sec"><h3>Verileriniz şu an</h3><dl class="facts"><div><dt>Son başarılı yedek</dt><dd>12 Kasım 02:18<small>2 gün önce · geri yüklenebilir</small></dd></div><div><dt>Sonraki deneme</dt><dd>Yarın 02:00<small>Her gün 02:00 zamanlaması</small></dd></div></dl></div>';
+  if(r.st==='run')h+='<div class="d-sec"><h3>İlerleme</h3><div class="prog"><div class="bar" role="progressbar" aria-label="Yedekleme ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+r.pct+'" aria-valuetext="%'+r.pct+'"><i style="width:'+r.pct+'%"></i></div><p class="cap">'+r.stage+' · %'+r.pct+' · 14:12’de başladı. Bitince bu sayfa kendiliğinden güncellenir.</p></div></div>';
+  if(r.st==='cancel')h+='<p class="d-note">Bu yedekleme denemesi iptal edildi. Yedek alınmadı; önceki yedekleriniz etkilenmedi.</p>';
+  if(r.st==='ok'){
+    var a=r.art;
+    if(a.s==='deleted')h+='<p class="d-note">Bu yedek dosyası silindi ('+a.reason.toLowerCase().replace(/\.$/,'')+'). Geçmiş kaydı korunuyor; geri yüklenemez.</p>';
+    else{
+      if(a.s==='pending')h+='<div class="d-alert" role="status">'+ic('clock')+'<div><b>Silme bekleniyor: '+a.deleteOn+'</b>'+a.by+' silme isteği oluşturdu. Fiziksel silme başlamadan vazgeçebilirsiniz; sonra geri alınamaz.</div><div class="acts">'+(ROLE==='admin'?'<button class="btn" type="button" data-act="cancelDel" data-id="'+r.id+'">Silmeyi iptal et</button>':'')+'</div></div>';
+      if(a.s==='delfail')h+='<div class="d-alert" role="status">'+ic('alert')+'<div><b>Yedek dosyası silinemedi</b>'+a.reason+' Dosya depoda duruyor; diğer yedekleriniz etkilenmedi.</div><div class="acts"><a class="btn" href="#storage">Depolamaya git</a></div></div>';
+      h+='<div class="d-sec"><h3>Yedek</h3><dl class="facts"><div><dt>Boyut</dt><dd>'+r.size+'</dd></div><div><dt>Saklama sonu</dt><dd>'+a.keep+'<small>Sonra otomatik silinir</small></dd></div><div><dt>Kopyalar</dt><dd>'+a.n+' kopya<small>'+a.copies+'</small></dd></div></dl></div>';
+      h+='<div class="d-sec"><h3>Geri yüklenebilir mi?</h3>'+(r.test?'<p class="d-note">'+badge('ok','ok','Denendi')+' Son deneme: '+r.test+', başarılı. <button class="link" type="button" data-act="test" data-id="'+r.id+'">Yeniden dene</button></p>':'<p class="d-note">'+badge('neutral','dash','Henüz denenmedi')+' Yedeğin işe yaradığından emin olmak için deneme veritabanına geri yükleyin; asıl veriye dokunulmaz. <button class="link" type="button" data-act="test" data-id="'+r.id+'">Denemeyi başlat</button></p>')+'</div>';
+    }
+  }
+  return h+techBox(r);
+}
+
+/* ---- Geçmiş ---- */
+function filtered(){
+  return RUNS.filter(function(r){
+    if(F.status&&F.status!==r.st&&!(F.status==='gone'&&r.st==='ok'&&r.art.s!=='avail'))return false;
+    if(F.job&&F.job!==r.job)return false;
+    if(F.pc&&F.pc!==r.pc)return false;
+    return true;
+  });
+}
+function opts(list,cur,all){return '<option value="">'+all+'</option>'+list.map(function(x){var v=x[0]||x,l=x[1]||x;return '<option value="'+v+'"'+(v===cur?' selected':'')+'>'+l+'</option>'}).join('')}
+function uniq(k){var o=[];RUNS.forEach(function(r){if(o.indexOf(r[k])<0)o.push(r[k])});return o}
+function tools(n){
+  return '<div class="hist-tools"><div class="field"><label for="f-st">Durum</label><select class="select" id="f-st" data-f="status">'+opts([['ok','Başarılı'],['fail','Başarısız'],['run','Çalışıyor'],['cancel','İptal edildi']],F.status,'Tüm durumlar')+'</select></div>'+
+   '<div class="field"><label for="f-job">İş</label><select class="select" id="f-job" data-f="job">'+opts(uniq('job'),F.job,'Tüm işler')+'</select></div>'+
+   '<button class="btn more-f" type="button" data-act="xf" aria-expanded="'+F.more+'">Diğer filtreler</button></div>'+
+   (F.more?'<div class="xf"><div class="field"><label for="f-pc">Yedekleme bilgisayarı</label><select class="select" id="f-pc" data-f="pc">'+opts(uniq('pc'),F.pc,'Tüm bilgisayarlar')+'</select></div><div class="field"><label for="f-d1">Başlangıç tarihi</label><input class="input" id="f-d1" type="date" disabled aria-describedby="d-hint"></div><div class="field"><label for="f-d2">Bitiş tarihi</label><input class="input" id="f-d2" type="date" disabled aria-describedby="d-hint"></div><p class="cap" id="d-hint" style="align-self:center">Tarih filtresi bu prototipte etkisiz.</p></div>':'');
+}
+function viewHist(id){
+  var list=filtered(),h='<div class="hd"><div><h1 tabindex="-1" data-focus="'+(id?'':'1')+'">Geçmiş</h1><p class="sum">Yedekleme denemeleriniz ve ürettikleri yedek dosyaları, en yeni üstte.</p></div></div>'+tools(list.length);
+  var cur=id?run(id):null;
+  if(!list.length)return h+'<div class="panel"><div class="empty-h"><p><b>Bu filtrelere uygun yedekleme denemesi yok.</b></p><p><button class="link" type="button" data-act="clear">Filtreleri temizle</button></p></div></div>';
+  if(LY==='pane'){
+    if(!cur)cur=list[0];
+    h+='<div class="ws" data-view="'+(id?'detail':'list')+'"><div class="master"><div class="m-h"><h2>'+list.length+' kayıt</h2></div><ul class="jobs">'+list.map(function(r){
+      return '<li><button class="job-btn" type="button" data-go="'+r.id+'"'+(r.id===cur.id?' aria-current="true"':'')+'><span class="nm">'+r.job+'</span><span class="mt">'+stBadge(r)+'<span>'+r.when+'</span></span><span class="mt">'+artNote(r)+'</span></button></li>'}).join('')+
+      '</ul></div><div class="detail">'+detail(cur)+'</div></div>';
+  }else{
+    if(id&&cur)return tabsAndBack(cur);
+    h+='<div class="panel"><table class="tbl"><caption class="sr-only">Yedekleme geçmişi</caption><thead><tr><th scope="col">Durum</th><th scope="col">İş</th><th scope="col">Ne zaman</th><th scope="col">Yedek dosyası</th><th scope="col"><span class="sr-only">Ayrıntı</span></th></tr></thead><tbody>'+list.map(function(r){
+      return '<tr data-go="'+r.id+'"><td>'+stBadge(r)+noteBadge(r)+'</td><td><a class="rl" href="#hist/'+r.id+'">'+r.job+'</a><span class="sub">'+r.pc+'</span></td><td>'+r.when+'</td><td>'+artNote(r)+'</td><td class="num">'+ic('right')+'</td></tr>'}).join('')+'</tbody></table></div>';
+  }
+  return h;
+}
+function tabsAndBack(r){return '<p class="crumb"><a href="#hist">Geçmiş</a> › '+r.job+'</p><div class="page-d">'+detail(r)+'</div>'}
+
+/* ---- diğer sekmeler ---- */
+function viewRestores(){
+  return '<div class="hd"><div><h1 tabindex="-1" data-focus="1">Geri yüklemeler</h1><p class="sum">Yedeklerinizden geri getirdikleriniz ve denemeleriniz. Yeni geri yükleme yedeğin ayrıntısından başlar.</p></div></div>'+
+  '<div class="panel"><table class="tbl"><caption class="sr-only">Geri yüklemeler</caption><thead><tr><th scope="col">Hedef veritabanı</th><th scope="col">Durum</th><th scope="col">Kaynak yedek</th><th scope="col">Yedekleme bilgisayarı</th><th scope="col">Ne zaman</th></tr></thead><tbody>'+RS.map(function(x){
+    var r=run(x.ref);
+    return '<tr><td><span class="rown">'+x.db+(x.test?' '+badge('neutral','info','Deneme'):'')+'</span><span class="sub">'+x.note+'</span></td><td>'+(x.st==='ok'?badge('ok','ok','Başarılı'):badge('err','alert','Başarısız'))+'</td><td><a href="#hist/'+r.id+'">'+r.job+'</a><span class="sub">'+r.when+'</span></td><td>'+x.pc+'</td><td>'+x.when+'</td></tr>'}).join('')+'</tbody></table></div>';
+}
+function viewShares(){
+  var admin=ROLE==='admin';
+  return '<div class="hd"><div><h1 tabindex="-1" data-focus="1">Paylaşımlar</h1><p class="sum">Platform Yöneticisi’nin bir yedeği süreli indirmesine verdiğiniz izinler. Genellikle destek isterken gerekir. Yeni paylaşım yedeğin ayrıntısından oluşturulur.</p></div></div>'+
+  '<div class="panel"><table class="tbl"><caption class="sr-only">Paylaşımlar</caption><thead><tr><th scope="col">Yedek</th><th scope="col">Durum</th><th scope="col">Süre</th><th scope="col">Gerekçe</th><th scope="col"><span class="sr-only">Eylemler</span></th></tr></thead><tbody>'+SH.map(function(s,i){
+    var r=run(s.ref);
+    return '<tr><td><a href="#hist/'+r.id+'">'+r.job+'</a><span class="sub">'+r.when+'</span></td><td>'+(s.st==='ok'?badge('ok','ok','Etkin'):s.st==='rev'?badge('neutral','x','İptal edildi'):badge('neutral','clock','Süresi doldu'))+'</td><td>'+s.left+'</td><td>'+s.reason+'</td><td class="num">'+(s.st==='ok'&&admin?'<button class="btn btn-sm" type="button" data-act="ext" data-i="'+i+'">Uzat</button> <button class="btn btn-sm" type="button" data-act="rev" data-i="'+i+'">İptal et</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div>'+
+  (admin?'':'<p class="cap" style="margin-top:var(--space-2)">Paylaşımı uzatma ve iptal etme yalnızca yöneticilere açıktır.</p>')+
+  '<details class="disc" style="margin-top:var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)"><summary>İndirme girişimleri</summary><div class="d-note">12 Kasım 15:02 · Platform Yöneticisi · Muhasebe veritabanı (12 Kasım) · tamamlandı</div></details>';
+}
+function viewStorage(){
+  var bad=RUNS.filter(function(r){return r.st==='ok'&&r.art.s==='delfail'});
+  return '<div class="hd"><div><h1 tabindex="-1" data-focus="1">Depolama</h1><p class="sum">Yalnızca “Silinemeyen yedek dosyaları” bölümü #182 için; gerisi örnek.</p></div></div>'+
+  '<div class="stor-grid"><section class="panel" aria-labelledby="p-st"><div class="panel-h"><h2 id="p-st">Kullanım</h2></div><div class="panel-b"><div style="font-size:var(--text-lg);font-weight:600">412 GB <span class="muted" style="font-size:var(--text-base);font-weight:400">/ 1 TB · %41 dolu</span></div><div class="bar" role="progressbar" aria-label="Depolama kullanımı" aria-valuemin="0" aria-valuemax="100" aria-valuenow="41"><i style="width:41%"></i></div><div class="legend"><span>Yerel disk 296 GB</span><span>Google Drive 116 GB</span></div></div></section>'+
+  (bad.length?'<section class="panel" aria-labelledby="p-df"><div class="panel-h"><h2 id="p-df">Silinemeyen yedek dosyaları <span class="badge b-warn">'+bad.length+'</span></h2></div><div class="d-alert" role="status" style="border-bottom:1px solid var(--warn-bd)">'+ic('alert')+'<div><b>'+bad.length+' yedek dosyası silinemedi</b>Silinemeyen dosyalar depoda duruyor; diğer yedekleriniz etkilenmedi.</div></div><ul>'+bad.map(function(r){return '<li class="steps" style="list-style:none"><div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4)"><div><b>'+r.job+' · '+r.when+'</b><p class="muted">'+r.size+' · '+r.art.reason+'</p></div><a class="btn btn-sm" href="#hist/'+r.id+'">Ayrıntıyı aç</a></div></li>'}).join('')+'</ul></section>':'<p class="cap">Silinemeyen yedek dosyası yok; bu bölüm yalnızca sayı sıfırdan büyükken görünür.</p>')+'</div>';
+}
+
+/* ---- yönlendirme ---- */
+function render(focus){
+  var h=location.hash.replace(/^#/,'')||'hist',p=h.split('/'),main=$('#main'),nav='yed',html;
+  if(p[0]==='hist'){html=tabs('hist')+viewHist(p[1]||null)}
+  else if(p[0]==='restores')html=tabs('restores')+viewRestores();
+  else if(p[0]==='shares')html=tabs('shares')+viewShares();
+  else if(p[0]==='storage'){html=viewStorage();nav='storage'}
+  else{html=tabs('hist')+viewHist(null)}
+  main.innerHTML=html;
+  $$('.nav a').forEach(function(a){a.removeAttribute('aria-current')});
+  var n=$('.nav a[data-nav="'+nav+'"]');if(n)n.setAttribute('aria-current','page');
+  if(focus){var t=main.querySelector('[data-focus]:not([data-focus=""])');if(t)t.focus({preventScroll:true})}
+}
+function go(h){if(location.hash==='#'+h)render(true);else location.hash=h}
+window.addEventListener('hashchange',function(){render(true)});
+function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('show')},3200)}
+
+/* ---- iletişim kutuları ---- */
+var dlg=$('#dlg'),lastBtn=null;
+function openDlg(html,after){lastBtn=document.activeElement;dlg.innerHTML=html;dlg.showModal();if(after)after(dlg)}
+dlg.addEventListener('close',function(){if(lastBtn&&document.contains(lastBtn))lastBtn.focus()});
+function dlgHead(t){return '<div class="dec-h"><h2 id="dlg-h">'+t+'</h2><button class="btn btn-quiet" type="button" data-close aria-label="Kapat">'+ic('x')+'</button></div>'}
+function delDlg(r){
+  openDlg(dlgHead('Yedek dosyası silinsin mi?')+'<form method="dialog" class="dlg-form"><div class="dlg-b"><p><b>'+r.job+' · '+r.when+'</b> ('+r.size+')</p><p style="margin-top:var(--space-2)">Dosya hemen silinmez; bekleme süresi (24 saat) başlar. Süre dolunca kopyalar kalıcı olarak kaldırılır, geçmiş kaydı korunur.</p><p class="muted" style="margin-top:var(--space-2)">Geri alınabilir mi? Evet, fiziksel silme başlamadan önce bu sayfadan “Silmeyi iptal et” ile. Süre dolunca geri alınamaz.</p><div class="field" style="margin:var(--space-4) 0 0"><label for="dn">Onaylamak için iş adını yazın: <b>'+r.job+'</b></label><input class="input" id="dn" autocomplete="off"></div></div><div class="dlg-f"><button class="btn" type="button" data-close>Vazgeç</button><button class="btn btn-danger" type="button" id="dgo" disabled>Bekleme süresini başlat</button></div></form>',function(d){
+    var i=$('#dn',d),b=$('#dgo',d);i.addEventListener('input',function(){b.disabled=i.value.trim().toLowerCase()!==r.job.toLowerCase()});
+    b.addEventListener('click',function(){r.art.s='pending';r.art.deleteOn='Yarın '+'14:40';r.art.by='Ayşe Demir';d.close();toast('Silme isteği alındı. Bekleme süresi başladı; dosyalar hemen silinmez.');render(false)});
+  });
+}
+function shareDlg(r){
+  openDlg(dlgHead('Platform Yöneticisi ile paylaş')+'<form method="dialog"><div class="dlg-b"><p>Platform Yöneticisi bu yedeği (<b>'+r.job+' · '+r.when+'</b>) süreli olarak düz dosya biçiminde indirebilir. İstediğiniz zaman iptal edebilirsiniz.</p><fieldset class="field" style="margin-top:var(--space-4)"><legend>Ne kadar süre?</legend><div class="opt-row"><label><input type="radio" name="du" value="1 saat" > 1 saat</label><label><input type="radio" name="du" value="24 saat" checked> 24 saat</label><label><input type="radio" name="du" value="3 gün"> 3 gün</label></div></fieldset><div class="field" style="margin:0"><label for="why">Gerekçe</label><textarea class="input" id="why" rows="2" style="padding:var(--space-2) var(--space-3)" placeholder="Örn. Destek talebi #482"></textarea></div></div><div class="dlg-f"><button class="btn" type="button" data-close>Vazgeç</button><button class="btn btn-primary" type="button" id="sgo" disabled>Paylaş</button></div></form>',function(d){
+    var w=$('#why',d),b=$('#sgo',d);w.addEventListener('input',function(){b.disabled=!w.value.trim()});
+    b.addEventListener('click',function(){var du=$('input[name=du]:checked',d).value;SH.unshift({ref:r.id,st:'ok',left:du+' sonra biter',reason:w.value.trim()});d.close();toast('Paylaşım oluşturuldu ('+du+'). Paylaşımlar sekmesinde görünür.');render(false)});
+  });
+}
+function cancelRunDlg(r){
+  openDlg(dlgHead('Bu yedekleme denemesi iptal edilsin mi?')+'<form method="dialog"><div class="dlg-b"><p>Yarım kalan yedek tamamlanmaz. Önceki yedekleriniz etkilenmez. İptal edilen deneme sürdürülemez; yeni bir deneme başlatmanız gerekir.</p></div><div class="dlg-f"><button class="btn" type="button" data-close>Vazgeç</button><button class="btn btn-danger" type="button" id="cgo">İptali onayla</button></div></form>',function(d){
+    $('#cgo',d).addEventListener('click',function(){r.st='cancel';d.close();toast('Deneme iptal edildi.');render(false)});
+  });
+}
+dlg.addEventListener('click',function(e){if(e.target.closest('[data-close]'))dlg.close()});
+
+/* ---- olaylar ---- */
+document.addEventListener('click',function(e){
+  var t=e.target,st=t.closest('[data-stub]');
+  if(st){e.preventDefault();toast(st.getAttribute('data-stub'));return}
+  var lay=t.closest('[data-ly]');if(lay){LY=lay.getAttribute('data-ly');$$('[data-ly]').forEach(function(b){b.setAttribute('aria-pressed',String(b===lay))});if(/^#hist\//.test(location.hash)&&LY==='pane'||true)render(false);return}
+  var rl=t.closest('[data-role]');if(rl){ROLE=rl.getAttribute('data-role');$$('[data-role]').forEach(function(b){b.setAttribute('aria-pressed',String(b===rl))});render(false);return}
+  var g=t.closest('[data-go]');if(g&&!t.closest('a')){go('hist/'+g.getAttribute('data-go'));return}
+  var a=t.closest('[data-act]');
+  if(!a){$$('.more[open]').forEach(function(d){if(!d.contains(t))d.open=false});return}
+  var act=a.getAttribute('data-act'),r=run(a.getAttribute('data-id')),m=a.closest('.more');if(m)m.open=false;
+  if(act==='toList'){go('hist')}
+  else if(act==='xf'){F.more=!F.more;render(false)}
+  else if(act==='clear'){F={status:'',job:'',pc:'',more:F.more};render(false)}
+  else if(act==='restore')toast('Geri yükleme akışı (#179) bu prototipte yok.');
+  else if(act==='download')toast('İndirme bu prototipte yok.');
+  else if(act==='test')toast('Deneme geri yüklemesi bu prototipte yok.');
+  else if(act==='pause')toast('Duraklatma isteği iletildi.');
+  else if(act==='retry'){r.st='run';r.pct=4;r.stage='Hazırlanıyor';r.when='Şimdi';toast('Yeni deneme sıraya alındı.');render(false)}
+  else if(act==='cancel')cancelRunDlg(r);
+  else if(act==='share')shareDlg(r);
+  else if(act==='del')delDlg(r);
+  else if(act==='cancelDel'){r.art.s='avail';toast('Silme iptal edildi. Yedek dosyası korunuyor.');render(false)}
+  else if(act==='ext')toast('Paylaşım süresi uzatıldı (24 saat).');
+  else if(act==='rev'){SH[+a.getAttribute('data-i')].st='rev';toast('Paylaşım iptal edildi.');render(false)}
+});
+document.addEventListener('change',function(e){var f=e.target.getAttribute&&e.target.getAttribute('data-f');if(f){F[f]=e.target.value;render(false);var el=$('[data-f="'+f+'"]');if(el)el.focus()}});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){$$('.more[open]').forEach(function(d){d.open=false})}});
+$('#themeBtn').addEventListener('click',function(){var d=document.documentElement.classList.toggle('dark');this.setAttribute('aria-pressed',String(d))});
+var side=$('#side'),mb=$('#menuBtn');mb.addEventListener('click',function(){var o=side.classList.toggle('open');mb.setAttribute('aria-expanded',String(o))});
+render(false);
+})();
+
+</script>
+</body>
+</html>
