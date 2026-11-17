@@ -84,6 +84,10 @@ _Avoid_: Ajan, Client in user-facing text
 The stored output of one successful backup run.
 _Avoid_: Artifact in user-facing text
 
+**Backup job** (shown as "Korunan veri" on the home page):
+One configured backup of one source, listed on the home page as a thing being protected rather than as a job.
+_Avoid_: İş, Kaynak in the home page's protection list
+
 **Backup run** (shown as "Yedekleme denemesi"):
 One execution of a backup job, successful or not.
 _Avoid_: Run, Çalıştırma in user-facing text
