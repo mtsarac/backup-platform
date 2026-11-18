@@ -91,7 +91,7 @@ export function PlatformStoragePage() {
             <div className="text-xs text-text-muted">{tx("Henüz hesaplanmadı")}</div>
           )}
           {row.hasUsage && !row.usageCurrent && (
-            <StatusPill level="attention" className="mt-0.5">{tx("Kullanım hesabı güncel değil")}</StatusPill>
+            <div><StatusPill level="attention" className="mt-0.5">{tx("Kullanım hesabı güncel değil")}</StatusPill></div>
           )}
         </div>
       ),
