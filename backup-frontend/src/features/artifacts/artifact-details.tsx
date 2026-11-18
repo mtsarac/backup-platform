@@ -20,7 +20,7 @@ export interface ArtifactPresentation extends Omit<BackupArtifact, 'attemptId' |
 export function ArtifactDeletedNotice({ artifact }: { artifact: ArtifactPresentation }) {
   useLanguage()
   if (artifact.state !== 'Deleted') return null
-  return <Notice tone="info">{tx("Fiziksel dosyalar silindi. Bu kayıt yalnızca yedekleme geçmişidir; kullanılabilir bir Backup değildir.")}</Notice>
+  return <Notice tone="info">{tx("Fiziksel dosyalar silindi. Bu yedek geri yüklenemez; kayıt yalnızca yedekleme geçmişidir.")}</Notice>
 }
 
 /** What this Backup is: the facts a reader needs first. */

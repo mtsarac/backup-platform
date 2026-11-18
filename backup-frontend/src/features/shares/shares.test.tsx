@@ -1,15 +1,17 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
+import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 import { SharesPage } from '@/pages/shares/shares-page'
 import { PlatformSharesPage } from '@/pages/platform/platform-shares-page'
 import { ApiError, apiRequest } from '@/lib/api/client'
 import type * as ApiClient from '@/lib/api/client'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import type { BackupShareView, DownloadAttemptView } from './types'
+vi.mock('@/features/artifacts/artifact-run-link', () => ({ ArtifactRunLink: ({ children }: { children: ReactNode }) => <span>{children}</span> }))
 
 vi.mock('@/lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiClient>()
@@ -198,7 +200,7 @@ beforeEach(() => {
   permissions.role = 'UserAdmin'
 })
 
-function renderDetailPage() {
+async function renderDetailPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -206,11 +208,12 @@ function renderDetailPage() {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/tenants/tenant-a/artifacts/artifact-1']}>
         <Routes>
-          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetailPage />} />
+          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetail id="artifact-1" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   )
+  fireEvent.click(await screen.findByRole('button', { name: 'Paylaş' }))
   return queryClient
 }
 
@@ -255,7 +258,7 @@ describe('BackupShare frontend', () => {
       return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
-    renderDetailPage()
+    await renderDetailPage()
 
     await waitFor(() => {
       expect(screen.getByText('Paylaşımlar')).toBeInTheDocument()
@@ -277,7 +280,7 @@ describe('BackupShare frontend', () => {
       return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
-    renderDetailPage()
+    await renderDetailPage()
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
@@ -314,7 +317,7 @@ describe('BackupShare frontend', () => {
       return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
-    renderDetailPage()
+    await renderDetailPage()
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
@@ -350,7 +353,7 @@ describe('BackupShare frontend', () => {
       return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
     })
 
-    renderDetailPage()
+    await renderDetailPage()
 
     await waitFor(() => {
       const button = screen.getByRole('button', { name: 'Paylaşım oluştur' })
@@ -382,7 +385,7 @@ describe('BackupShare frontend', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Henüz paylaşım yapılmamış.')).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
+      expect(screen.getByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
   })
 

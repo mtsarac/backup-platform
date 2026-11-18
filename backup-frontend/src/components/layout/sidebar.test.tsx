@@ -55,11 +55,11 @@ describe('Tenant sidebar', () => {
     }
   })
 
-  it.each(['shares', 'discovery', 'notifications', 'encryption', 'upload-bandwidth', 'backup-jobs/j1/edit'])('no longer resolves %s', (path) => {
+  it.each(['shares', 'discovery', 'notifications', 'encryption', 'upload-bandwidth', 'artifacts', 'artifacts/a1', 'artifacts/a1/restore', 'backup-jobs/j1/edit'])('no longer resolves %s', (path) => {
     expect(matchRoutes(createRoutesFromChildren(tenantRoutes), `/${path}`)?.at(-1)?.route.path).toBe('*')
   })
 
-  it.each(['backup-shares', 'agents/databases', 'settings', 'settings/recovery-key', 'settings/bandwidth', 'discovery/instances/i1', 'backup-jobs/j1'])('resolves the new location %s', (path) => {
+  it.each(['backup-shares', 'agents/databases', 'settings', 'settings/recovery-key', 'settings/bandwidth', 'discovery/instances/i1', 'backup-jobs/j1', 'backup-runs/r1/restore'])('resolves the new location %s', (path) => {
     expect(matchRoutes(createRoutesFromChildren(tenantRoutes), `/${path}`)?.at(-1)?.route.path).not.toBe('*')
   })
 
@@ -82,7 +82,7 @@ describe('Tenant sidebar', () => {
   })
 
   it.each([
-    'backup-jobs', 'backup-jobs/new', 'backup-jobs/j1', 'backup-runs', 'backup-runs/r1', 'artifacts', 'artifacts/a1', 'artifacts/a1/restore', 'restores', 'restores/x1', 'backup-shares',
+    'backup-jobs', 'backup-jobs/new', 'backup-jobs/j1', 'backup-runs', 'backup-runs/r1', 'backup-runs/r1/restore', 'restores', 'restores/x1', 'backup-shares',
   ])('marks the single Yedeklemeler entry current on %s', (path) => {
     render(<MemoryRouter initialEntries={[`${base}/${path}`]}><Sidebar /></MemoryRouter>)
     expect(within(nav()).getAllByRole('link', { current: 'page' }).map((link) => link.textContent)).toEqual(['Yedeklemeler'])
@@ -101,7 +101,7 @@ describe('Tenant sidebar', () => {
     const names = within(nav()).getAllByRole('link').map((link) => link.textContent)
     render(<MemoryRouter initialEntries={[`${base}/backup-jobs`]}><Routes><Route path="/tenants/:tenantId" element={<BackupCenterLayout />}><Route path="backup-jobs" element={null} /></Route></Routes></MemoryRouter>)
     const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' })).getAllByRole('link').map((link) => link.textContent)
-    expect(tabs).toHaveLength(5)
+    expect(tabs).toHaveLength(4)
     for (const tab of tabs) expect(names).not.toContain(tab)
   })
 

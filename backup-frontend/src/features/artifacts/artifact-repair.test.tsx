@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import type { BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest } from './types'
-import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
+import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 
 const state = vi.hoisted(() => ({
   canOperate: true,
@@ -145,7 +145,7 @@ function renderPage() {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/tenants/tenant-1/artifacts/artifact-1']}>
         <Routes>
-          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetailPage />} />
+          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetail id="artifact-1" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -168,11 +168,11 @@ describe('Manual replica repair frontend flow', () => {
     const answers = within(screen.getByRole('region', { name: 'Kısaca durum' }))
     expect(answers.getByText('Sağlam')).toBeVisible()
     expect(answers.queryByText(/kopyanın bütünlüğü doğrulandı/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
     const replication = within(screen.getByRole('region', { name: 'Çoğaltma' }))
     expect(replication.getByText('1 / 2 doğrulanmış kopya gerekli · 2 hedef')).toBeVisible()
     expect(within(replication.getByRole('list', { name: 'Hedef sonuçları' })).getByText('Doğrulandı')).toBeVisible()
     expect(replication.getByRole('button', { name: 'Onar' })).toBeEnabled()
-    fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
     const replicas = within(screen.getByRole('region', { name: 'Kopyalar' }))
     expect(replicas.getByText('Evet · dosya korunuyor')).toBeVisible()
     expect(replicas.getByText('Doğrulama durumu').closest('div')).toHaveTextContent('Doğrulandı')

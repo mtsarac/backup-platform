@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
@@ -17,7 +17,8 @@ const state = vi.hoisted(() => ({
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backups/hooks', () => ({ useBackups: (filters: BackupRunFilters) => { state.filters.push(filters); return { data: state.page, isPending: false, isFetching: false, error: null } } }))
-vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [{ id: 'job-id', name: 'Günlük SQL yedeği' }], isPending: false, error: null }) }))
+vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [{ id: 'job-id', name: 'Günlük SQL yedeği' }, { id: 'old-job', name: 'Eski iş', archivedAt: '2026-10-01T00:00:00Z' }], isPending: false, error: null }) }))
+vi.mock('./backup-detail-page', () => ({ BackupDetailPage: () => { const { id } = useParams(); return <p>detail {id}</p> } }))
 vi.mock('@/features/agents/hooks', () => ({ useAgents: () => ({ data: [{ agentId: 'agent-id', hostName: 'SQL ajanı' }], isPending: false, error: null }) }))
 
 beforeEach(() => {
@@ -40,20 +41,42 @@ describe('run history filters and pagination', () => {
     expect(within(normalRow).getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('+%5')
   })
 
+  it.each([
+    ['DeletePending', 'Silme bekliyor'],
+    ['DeleteFailed', 'Silme başarısız'],
+    ['Deleted', 'Silindi'],
+    ['Available', null],
+  ])('shows backup file details and deletion state %s on a successful run', (stateName, note) => {
+    const run = makeRun({ status: 'Succeeded' })
+    run.attempts[0].artifacts = [{
+      id: 'artifact-id', sizeBytes: 2_000_000_000, sourceChecksum: '', artifactChecksum: '', checksumAlgorithm: '',
+      createdAt: '2026-10-06T10:00:00Z', replicas: [], state: stateName, acceptedAt: null,
+      retentionExpiresAt: '2026-12-01T12:00:00Z', retentionPinnedAt: null, deleteAfter: null, deleteReason: null,
+      runId: run.id, jobId: run.jobId, attemptId: run.attempts[0].id,
+      replication: { requiredVerifiedReplicas: 1, verifiedReplicas: 2, destinationCount: 2, status: 'Healthy', policySatisfied: true, destinations: [] },
+    }]
+    state.page = { items: [run], totalCount: 1, page: 1, pageSize: 25 }
+    render(<MemoryRouter><BackupsPage /></MemoryRouter>)
+    const row = within(screen.getAllByRole('row')[1])
+    expect(row.getByText(/2 GB · 2 kopya/)).toBeInTheDocument()
+    expect(row.getByText(/Saklama sonu:/)).toBeInTheDocument()
+    if (note) expect(row.getByText(note)).toBeInTheDocument()
+    else expect(row.queryByText('Silme bekliyor')).not.toBeInTheDocument()
+  })
+
   it('submits all filters to query hook, resets page on change, and clears filters', () => {
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
     expect(screen.getByRole('combobox', { name: 'Durum' })).toBeVisible()
-    expect(screen.getByLabelText('Tetikleyici')).not.toBeVisible()
+    expect(screen.queryByLabelText('Tetikleyici')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Diğer filtreler'))
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
     expect(state.filters.at(-1)?.page).toBe(2)
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'İş' }), { target: { value: 'job-id' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'Yedekleme bilgisayarı' }), { target: { value: 'agent-id' } })
-    fireEvent.change(screen.getByRole('combobox', { name: 'Tetikleyici' }), { target: { value: 'Retry' } })
     fireEvent.change(screen.getByLabelText('Oluşturulma başlangıcı'), { target: { value: '2026-10-01' } })
     fireEvent.change(screen.getByLabelText('Oluşturulma sonu'), { target: { value: '2026-10-06' } })
-    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, status: 'Failed', jobId: 'job-id', agentId: 'agent-id', trigger: 'Retry', from: dateFilterInstant('2026-10-01'), to: dateFilterInstant('2026-10-06', true) })
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, status: 'Failed', jobId: 'job-id', agentId: 'agent-id', from: dateFilterInstant('2026-10-01'), to: dateFilterInstant('2026-10-06', true) })
     fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
     expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
     expect(screen.getByLabelText('Oluşturulma başlangıcı')).toHaveValue('')
@@ -61,10 +84,10 @@ describe('run history filters and pagination', () => {
 
   it('shows job, result, start time and duration, with the job linking to the run and no raw ids', () => {
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    for (const name of ['İş', 'Durum', 'Başlangıç', 'Süre']) {
+    for (const name of ['İş', 'Durum', 'Yedek dosyası', 'Başlangıç', 'Süre']) {
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
     }
-    expect(screen.getAllByRole('columnheader')).toHaveLength(4)
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
     const row = within(screen.getAllByRole('row')[1])
     expect(row.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id')
     expect(row.getByText('Çalışıyor')).toBeInTheDocument()
@@ -91,7 +114,7 @@ describe('run history filters and pagination', () => {
     const card = within(screen.getByRole('listitem'))
     expect(card.getByRole('link', { name: 'Günlük SQL yedeği' })).toBeInTheDocument()
     expect(card.getByText('Çalışıyor')).toBeInTheDocument()
-    expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['Başlangıç', 'Süre'])
+    expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['Yedek dosyası', 'Başlangıç', 'Süre'])
   })
 
   it('on a phone clears an empty filtered history from its filters and restores the first-run action', () => {
@@ -129,9 +152,9 @@ describe('run history URL state', () => {
     expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' })).toHaveLength(1)
   })
 
-  it('a job link filters the history to that job, and the date, trigger and page filters survive a reload', () => {
+  it('a job link filters the history and date and page filters survive a reload', () => {
     mountAt('/?jobId=job-id&agentId=agent-id&trigger=Retry&from=2026-10-01&to=2026-10-06&page=2')
-    expect(state.filters.at(-1)).toEqual({ page: 2, pageSize: 25, jobId: 'job-id', agentId: 'agent-id', trigger: 'Retry', from: dateFilterInstant('2026-10-01'), to: dateFilterInstant('2026-10-06', true) })
+    expect(state.filters.at(-1)).toEqual({ page: 2, pageSize: 25, jobId: 'job-id', agentId: 'agent-id', from: dateFilterInstant('2026-10-01'), to: dateFilterInstant('2026-10-06', true) })
     expect(screen.getByRole('combobox', { name: 'İş' })).toHaveValue('job-id')
     expect(screen.getByLabelText('Oluşturulma başlangıcı')).toHaveValue('2026-10-01')
   })
@@ -172,5 +195,27 @@ describe('run history URL state', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/?status=Failed&from=2026-10-01')
     fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+  })
+})
+
+describe('history side panel', () => {
+  const mountRun = (url: string) => render(<MemoryRouter initialEntries={[url]}><Routes><Route path="/backup-runs" element={<BackupsPage />} /><Route path="/backup-runs/:id" element={<BackupsPage />} /></Routes></MemoryRouter>)
+
+  it('opens the selected attempt beside the list, keeps the filters in the row links and marks the open row', () => {
+    mountRun('/backup-runs/run-id?status=Succeeded')
+    expect(screen.getByRole('region', { name: 'Yedekleme denemesi' })).toHaveTextContent('detail run-id')
+    expect(screen.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id?status=Succeeded')
+    expect(screen.queryByRole('columnheader', { name: 'Başlangıç' })).not.toBeInTheDocument()
+  })
+
+  it('shows no panel without a selected attempt', () => {
+    mountRun('/backup-runs')
+    expect(screen.queryByRole('region', { name: 'Yedekleme denemesi' })).not.toBeInTheDocument()
+  })
+
+  it('lists an archived job in the job filter with a removed suffix', () => {
+    mountRun('/backup-runs')
+    expect(within(screen.getByRole('combobox', { name: 'İş' })).getByRole('option', { name: 'Eski iş (kaldırıldı)' })).toBeInTheDocument()
   })
 })

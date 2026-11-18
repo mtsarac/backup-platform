@@ -12,6 +12,8 @@ import { RestoreWizardPage } from '@/pages/restores/restore-wizard-page'
 import * as RestoreApi from './api'
 import * as AgentApi from '@/features/agents/api'
 import * as ArtifactApi from '@/features/artifacts/api'
+import * as BackupApi from '@/features/backups/api'
+import { makeRun } from '@/features/backups/test-data'
 import type { RestorePage, RestoreResult, RestoreTargetsResponse, RestoreView } from './types'
 import { PrecheckResults } from './precheck-results'
 
@@ -33,6 +35,7 @@ vi.mock('@/features/agents/api', () => ({
   getAgents: vi.fn(),
 }))
 
+vi.mock('@/features/backups/api', async (importOriginal) => ({ ...await importOriginal<typeof BackupApi>(), getBackup: vi.fn() }))
 vi.mock('@/features/artifacts/api', () => ({
   getArtifact: vi.fn(),
   listArtifacts: vi.fn(),
@@ -238,6 +241,7 @@ beforeEach(() => {
   ])
   vi.mocked(ArtifactApi.getArtifact).mockResolvedValue(sampleArtifact)
   vi.mocked(ArtifactApi.listArtifacts).mockResolvedValue({ items: [sampleArtifact, hrArtifact], totalCount: 2, page: 1, pageSize: 100 })
+  vi.mocked(BackupApi.getBackup).mockResolvedValue(makeRun({ id: 'run-1', status: 'Succeeded', attempts: [{ ...makeRun().attempts[0], artifacts: [sampleArtifact] }] }))
   vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(sampleRestore)
   vi.mocked(RestoreApi.startRestore).mockResolvedValue(sampleRestore)
 })
@@ -309,7 +313,7 @@ describe('RestoresPage', () => {
   it('names the source backup and the backup computer instead of showing ids', async () => {
     vi.mocked(RestoreApi.getRestores).mockResolvedValue({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
     renderWithClient(<RestoresPage />)
-    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-1')
+    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
     expect(within(screen.getByRole('table')).getByText('SQL Server Agent 1')).toBeInTheDocument()
   })
 
@@ -322,7 +326,7 @@ describe('RestoresPage', () => {
       await screen.findByTestId('restores-empty')
       const actions = emptyActions()
       expect(actions).toHaveLength(1)
-      expect(actions[0]).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
+      expect(actions[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
 
     it('sends a viewer to the administrator instead of offering the action', async () => {
@@ -340,7 +344,7 @@ describe('RestoresPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
       await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ status: '' }), expect.anything()))
       expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
-      expect(within(await screen.findByTestId('restores-empty')).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
+      expect(within(await screen.findByTestId('restores-empty')).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
   })
 })
@@ -393,7 +397,7 @@ describe('RestoreDetailPage', () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
     expect(await screen.findByRole('link', { name: 'Geri yüklemeler' })).toHaveAttribute('href', '/tenants/tenant-a/restores')
-    expect(screen.getAllByRole('link', { name: 'SalesDB' })).toHaveLength(1)
+    expect(await screen.findAllByRole('link', { name: 'SalesDB' })).toHaveLength(1)
     fireEvent.click(screen.getByRole('tab', { name: 'Seçenekler' }))
     expect(screen.queryByRole('link', { name: 'SalesDB' })).not.toBeInTheDocument()
   })
@@ -428,7 +432,7 @@ describe('RestoreDetailPage', () => {
   it('names the source backup and the backup computer, and never shows ids or codes outside the technical details', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
-    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-1')
+    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
     expect(screen.getByText('SQL Server Agent 1')).toBeInTheDocument()
     expect(screen.getByText(/Kısmen geri yüklendi/)).toBeInTheDocument()
     for (const raw of ['restore-1', 'artifact-1', 'agent-1', 'replica-1', 'PartiallyRestored', 'SqlRestoreFailed', 'localhost']) expect(visibleLeaves(raw), raw).toEqual([])
@@ -492,8 +496,8 @@ describe('RestoreDetailPage', () => {
   })
 })
 
-const wizardRoutes = <Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>
-const wizardUrl = '/tenants/tenant-a/artifacts/artifact-1/restore'
+const wizardRoutes = <Routes><Route path="/tenants/:tenantId/backup-runs/:id/restore" element={<RestoreWizardPage />} /></Routes>
+const wizardUrl = '/tenants/tenant-a/backup-runs/run-1/restore'
 const passedPrecheck = (id: string): RestoreView => ({ ...sampleRestore, id, purpose: 'Precheck', status: 'Succeeded' })
 /** The progress indicator's current step: the one numbering scheme the wizard shows. */
 const stepperCurrent = () => screen.getByRole('listitem', { current: 'step' }).textContent ?? ''
@@ -523,8 +527,8 @@ describe('RestoreWizardPage', () => {
   it('names the page after what it restores and links back to the backup file', async () => {
     const view = renderWithClient(wizardRoutes, wizardUrl)
     expect(await screen.findByRole('heading', { level: 1, name: 'Veritabanını geri yükle' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Yedek dosyaları' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
-    expect(screen.getByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-1')
+    expect(screen.getByRole('link', { name: 'Yedekleme denemeleri' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
+    expect(screen.getByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
     view.unmount()
     vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'file-system' })
     renderWithClient(wizardRoutes, wizardUrl)
@@ -548,7 +552,7 @@ describe('RestoreWizardPage', () => {
 
   it('routes a custom PostgreSQL target with password authentication and rejects identifiers over 63 UTF-8 bytes', async () => {
     vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'postgres', targets: [] })
-    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    renderWithClient(wizardRoutes, wizardUrl)
     fireEvent.click(await screen.findByRole('button', { name: /Devam et/i }))
     const host = await screen.findByLabelText("PostgreSQL Sunucusu")
     expect(screen.getByLabelText(/Bağlantı Noktası/)).toHaveValue(5432)
@@ -581,7 +585,7 @@ describe('RestoreWizardPage', () => {
     const precheck = { ...sampleRestore, id: 'precheck-correction', purpose: 'Precheck' as const, status: 'Succeeded' as const }
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(precheck)
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(precheck)
-    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    renderWithClient(wizardRoutes, wizardUrl)
     fireEvent.click(await screen.findByRole('button', { name: /Devam et/i }))
     fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
     await screen.findByRole('button', { name: /Devam et/i })
@@ -653,9 +657,9 @@ describe('RestoreWizardPage', () => {
 
     renderWithClient(
       <Routes>
-        <Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} />
+        <Route path="/tenants/:tenantId/backup-runs/:id/restore" element={<RestoreWizardPage />} />
       </Routes>,
-      '/tenants/tenant-a/artifacts/artifact-1/restore'
+      wizardUrl
     )
 
     // Step 1: where
@@ -695,7 +699,7 @@ describe('RestoreWizardPage', () => {
   })
 
   it('blocks an ineligible agent without sending a precheck and allows an eligible selection', async () => {
-    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    renderWithClient(wizardRoutes, wizardUrl)
     const selector = await screen.findByRole('combobox', { name: 'Yedekleme bilgisayarı' })
     fireEvent.change(selector, { target: { value: 'agent-2' } })
     const next = screen.getByRole('button', { name: /Devam et/i })
@@ -877,7 +881,7 @@ describe('file archive restore', () => {
     expect(screen.queryByText('Etkin bağlantıları sonlandır')).not.toBeInTheDocument()
   })
 
-  const fileWizard = <Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /><Route path="/tenants/:tenantId/restores/:id" element={<p>File restore started</p>} /></Routes>
+  const fileWizard = <Routes><Route path="/tenants/:tenantId/backup-runs/:id/restore" element={<RestoreWizardPage />} /><Route path="/tenants/:tenantId/restores/:id" element={<p>File restore started</p>} /></Routes>
   const runCheck = () => fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/ }))
   const field = (name: string) => screen.getByLabelText(name)
   /** Walks an eligible file wizard through where, how and check up to the confirmation step. */
@@ -1092,7 +1096,7 @@ describe('precheck verdict', () => {
   async function showVerdict(view: RestoreView) {
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(view)
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(view)
-    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, wizardUrl)
+    renderWithClient(wizardRoutes, wizardUrl)
     fireEvent.click(await screen.findByRole('button', { name: /Devam et/ }))
     fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/ }))
     await waitFor(() => expect(stepperCurrent()).toMatch(/Ön kontrol/))

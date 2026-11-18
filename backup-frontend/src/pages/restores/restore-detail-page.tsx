@@ -84,8 +84,8 @@ function RestoreDetail({ id }: { id: string }) {
   function failureControl(code: string | null | undefined) {
     if (!restore || !canOperate || !code) return undefined
     const kind = describeFailure(code, 'restore').actionKind
-    if (!kind || kind === 'backupNow') return undefined
-    const to = kind === 'checkComputer' ? `/tenants/${tenantId}/agents/${restore.agentId}` : kind === 'manageStorage' ? `/tenants/${tenantId}/storage` : `/tenants/${tenantId}/artifacts/${restore.artifactId}/restore`
+    if (!kind || kind === 'backupNow' || (kind !== 'checkComputer' && kind !== 'manageStorage' && !artifact.data?.runId)) return undefined
+    const to = kind === 'checkComputer' ? `/tenants/${tenantId}/agents/${restore.agentId}` : kind === 'manageStorage' ? `/tenants/${tenantId}/storage` : `/tenants/${tenantId}/backup-runs/${artifact.data?.runId}/restore`
     return <Link className={buttonVariants({ variant: 'outline' })} to={to}>{actionLabel(kind)}</Link>
   }
   const sourceJob = restore && (restore.sourceJobName ?? artifact.data?.jobName)
@@ -100,7 +100,7 @@ function RestoreDetail({ id }: { id: string }) {
       // The mutation error is mapped to a safe message in the confirmation dialog.
     }
   }
-  const source = restore && <Fact label={tx("Kaynak yedek")}><Link className={linkClass} to={`/tenants/${tenantId}/artifacts/${restore.artifactId}`}>{sourceName}</Link>
+  const source = restore && <Fact label={tx("Kaynak yedek")}>{artifact.data?.runId ? <Link className={linkClass} to={`/tenants/${tenantId}/backup-runs/${artifact.data.runId}`}>{sourceName}</Link> : sourceName}
     {sourceJob && <p className="mt-1 text-sm text-text-muted">{sourceJob}</p>}
     {artifact.error && <p className="mt-1 text-sm text-text-muted">{tx("Yedek dosyasının ayrıntıları yüklenemedi; geri yükleme kaydı yine de kullanılabilir.")}</p>}
   </Fact>
