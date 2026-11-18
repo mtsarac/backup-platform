@@ -111,7 +111,7 @@ const dummyConnections: ConnectionView[] = [
   }
 ]
 
-  it.each([['tr', 'Çoğaltma Hedefleri', 'Toplam 1 hedef'], ['en', 'Replication Destinations', 'Total 1 destinations']] as const)('translates the collapsed replication summary (%s)', (language, title, count) => {
+  it.each([['tr', 'Başka hedef ekle', 'Toplam 1 hedef'], ['en', 'Add another destination', 'Total 1 destinations']] as const)('translates the collapsed replication summary (%s)', (language, title, count) => {
     changeLanguage(language)
     try {
       const configuration = {
@@ -139,7 +139,7 @@ const dummyConnections: ConnectionView[] = [
     } as BackupConfiguration
     const onChange = vi.fn()
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={existingTarget} onChange={onChange} onRefresh={() => {}} />)
-    const summary = screen.getByText('Çoğaltma Hedefleri', { exact: false }).closest('summary')!
+    const summary = screen.getByText('Başka hedef ekle', { exact: false }).closest('summary')!
     expect(summary.parentElement).not.toHaveAttribute('open')
     expect(summary).toHaveTextContent('Toplam 2 hedef')
     expect(screen.getByLabelText('Gerekli Doğrulanmış Kopya Sayısı')).not.toBeVisible()
@@ -160,7 +160,7 @@ const dummyConnections: ConnectionView[] = [
       requiredVerifiedReplicaCount: 1,
     } as BackupConfiguration
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={false} onChange={() => {}} onRefresh={() => {}} {...errors} />)
-    expect(screen.getByText('Çoğaltma Hedefleri', { exact: false }).closest('details')).toHaveAttribute('open')
+    expect(screen.getByText('Başka hedef ekle', { exact: false }).closest('details')).toHaveAttribute('open')
     expect(screen.getByRole('alert')).toHaveTextContent(Object.values(errors)[0])
   })
 
@@ -264,7 +264,7 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Çoğaltma Hedefleri', { exact: false }))
+    fireEvent.click(screen.getByText('Başka hedef ekle', { exact: false }))
     expect(screen.getByText("Birincil")).toBeInTheDocument()
     expect(screen.getByText(/Toplam 1 hedef/)).toBeInTheDocument()
 
@@ -311,7 +311,7 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Çoğaltma Hedefleri', { exact: false }))
+    fireEvent.click(screen.getByText('Başka hedef ekle', { exact: false }))
     expect(screen.getByText(/Toplam 2 hedef/)).toBeInTheDocument()
     const count = screen.getByRole('spinbutton', { name: 'Gerekli Doğrulanmış Kopya Sayısı' })
     expect(count).toHaveAttribute('min', '1')

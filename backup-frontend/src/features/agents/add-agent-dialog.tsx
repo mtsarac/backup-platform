@@ -116,6 +116,12 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
               <div className="space-y-2 pt-2">
                 <Field label={tx('Tek kullanımlık kayıt anahtarı')}>{control => <TextArea {...control} readOnly value={secret} rows={2} />}</Field>
                 <CopyButton value={secret} label={tx('Kayıt anahtarını kopyala')} />
+                {platform === 'Windows' && (distribution?.packages['win-x64-setup']
+                  ? <div className="space-y-1">
+                    <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/win-x64-setup`} download>{tx('Kurulum sihirbazını indir (.exe)')}</a></p>
+                    <p className="text-text-muted">{tx('Sihirbaz yalnızca yukarıdaki anahtarı ve bilgisayarın adını sorar.')} {tx('Program henüz dijital olarak imzalı olmadığından Windows SmartScreen bir uyarı gösterebilir; “Ek bilgi” ve “Yine de çalıştır” ile devam edin.')}</p>
+                  </div>
+                  : <ErrorNotice what={tx('Windows kurulum sihirbazı (.exe) yayımlanmamış.')} dataImpact={tx('Mevcut yedekleriniz etkilenmedi.')} action={tx('Şimdilik yukarıdaki PowerShell komutunu ya da aşağıdaki script ve zip paketini kullanın.')} />)}
                 <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
                 <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/${platform === 'Windows' ? 'win-x64' : 'linux-x64'}`} download>{platform === 'Windows' ? tx('Windows zip paketini indir') : tx('Linux tar.gz paketini indir')}</a></p>
               </div>

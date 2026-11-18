@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.resetAllMocks(); vi.useFakeTimers()
   Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
   expiresAt = new Date(Date.now() + 60_000).toISOString()
-  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true } })
+  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
   vi.mocked(api.getAgents).mockResolvedValue([])
   vi.mocked(api.createEnrollmentToken).mockResolvedValue({ tokenId: 'token-a', token: 'transient-secret', expiresAt })
   vi.mocked(api.getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-a', expiresAt, state: 'Active', agentId: null })
@@ -83,7 +83,7 @@ describe('Adding a backup computer', () => {
     expect(screen.getByRole('textbox', { name: 'Bilgisayarın adı' })).toBeInTheDocument()
   })
   it('warns on the first step and disables continue when no server address is configured', async () => {
-    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: null, packages: { 'win-x64': true, 'linux-x64': true } })
+    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: null, packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
     mount()
     await act(async () => {})
     expect(screen.getByText('Sunucu HTTPS adresi ayarlanmamış.')).toBeVisible()
@@ -93,7 +93,7 @@ describe('Adding a backup computer', () => {
     expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   })
   it('explains instead of offering a command when no installation package is published for the system', async () => {
-    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': false, 'linux-x64': true } })
+    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': false, 'linux-x64': true, 'win-x64-setup': true } })
     mount()
     await act(async () => {})
     fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })

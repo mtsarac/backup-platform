@@ -8,6 +8,7 @@ import { Disclosure } from '@/components/ui/disclosure'
 import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { JobSummary } from '@/features/backup-jobs/job-summary'
+import { summaryInput } from '@/features/backup-jobs/job-summary-rows'
 import type { useJobOccurrences } from '@/features/backup-jobs/hooks'
 import { changedSections, stepLabel, type EditSection } from '@/features/backup-jobs/job-wizard-model'
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
@@ -40,10 +41,9 @@ export function StorageBlockedNotice({ onFix }: { onFix?: () => void }) {
 
 /** Last wizard step: everything that will be created. */
 export function ReviewStep({ form, onGo }: { form: JobFormState; onGo: (step: EditSection) => void }) {
-  const { values, agent } = form
-  const agentLabel = agent ? `${agent.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', agent.operationalStatus)}` : values.agentId ? tx('Bilgisayar bulunamadı') : tx('Seçilmedi')
+  const { values } = form
   return <>
-    <JobSummary values={values} agentLabel={agentLabel} canAdmin={form.canAdmin} connections={form.picker.connections} onGo={onGo} />
+    <JobSummary {...summaryInput(form)} onGo={onGo} />
     {values.selected.length > 1 && <CreatedJobsGroup name={values.name} selected={values.selected} results={form.results} />}
     {form.cannotSave && <StorageBlockedNotice onFix={() => onGo('storage')} />}
   </>

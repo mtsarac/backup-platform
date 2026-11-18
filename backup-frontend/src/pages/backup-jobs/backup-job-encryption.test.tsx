@@ -53,26 +53,27 @@ async function reachOptionsStep() {
 }
 
 describe('encryption policy in the job wizard', () => {
-  it('defaults to Off and sends it with the configuration', async () => {
+  it('defaults to Optional and sends it with the configuration', async () => {
     renderWizard()
     await reachOptionsStep()
-    expect(screen.getByLabelText('Yedek şifreleme politikası')).toHaveValue('Off')
+    expect(screen.getByLabelText('Yedek şifreleme politikası')).toHaveValue('Optional')
     next()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.encryptionPolicy).toBe('Off')
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.encryptionPolicy).toBe('Optional')
   })
 
-  it('offers Off / Optional / Required, explains the choice and carries Required into the summary and the request', async () => {
+  it('offers Optional / Required, explains the choice and carries Required into the summary and the request', async () => {
     renderWizard()
     await reachOptionsStep()
     const select = screen.getByLabelText('Yedek şifreleme politikası')
-    expect([...(select as HTMLSelectElement).options].map(option => option.value)).toEqual(['Off', 'Optional', 'Required'])
+    expect([...(select as HTMLSelectElement).options].map(option => option.value)).toEqual(['Optional', 'Required'])
+    expect(screen.getByText('Yedek şifrelenir.')).toBeInTheDocument()
     fireEvent.change(select, { target: { value: 'Required' } })
-    expect(screen.getByText(/Yedek yalnızca şifreli \(v2-bpe\) gelirse kabul edilir/)).toBeInTheDocument()
+    expect(screen.getByText('Yedek şifrelenir; şifrelenmemiş sonuç başarısız sayılır.')).toBeInTheDocument()
     next()
-    expect(screen.getByText('Zorunlu · şifrelenemezse başarısız')).toBeInTheDocument()
+    expect(screen.getByText('Gerekli')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
@@ -86,6 +87,6 @@ describe('encryption policy on the job list', () => {
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
     expect(await screen.findByText('Billing backup')).toBeInTheDocument()
-    expect(screen.queryByText(/Zorunlu/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Gerekli/)).not.toBeInTheDocument()
   })
 })

@@ -81,6 +81,39 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         Assert.Empty(await head.Content.ReadAsByteArrayAsync());
     }
 
+    [Fact]
+    public async Task Setup_wizard_is_served_with_the_server_address_stamped_after_the_file_and_status_reports_it()
+    {
+        using var absent = JsonDocument.Parse(await _client.GetStringAsync("/api/agent-dist/status"));
+        Assert.False(absent.RootElement.GetProperty("packages").GetProperty("win-x64-setup").GetBoolean());
+        using var missing = await _client.GetAsync("/api/agent-dist/packages/win-x64-setup");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        byte[] bytes = [1, 2, 3, 4];
+        await File.WriteAllBytesAsync(Path.Combine(_directory, "backup-agent-win-x64-setup.exe"), bytes);
+        _settingsStore.State = new PlatformAgentSettingsState("https://stored.example", 1440, DateTimeOffset.UtcNow);
+
+        using var response = await _client.GetAsync("/api/agent-dist/packages/win-x64-setup");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("backup-agent-win-x64-setup.exe", response.Content.Headers.ContentDisposition!.ToString());
+        var body = await response.Content.ReadAsByteArrayAsync();
+        Assert.Equal(bytes, body[..bytes.Length]);
+        Assert.Equal("\nBackupPlatformServer=https://stored.example\n", System.Text.Encoding.UTF8.GetString(body[bytes.Length..]));
+        using var head = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/api/agent-dist/packages/win-x64-setup"));
+        Assert.Equal(body.Length, head.Content.Headers.ContentLength);
+        using var status = JsonDocument.Parse(await _client.GetStringAsync("/api/agent-dist/status"));
+        Assert.True(status.RootElement.GetProperty("packages").GetProperty("win-x64-setup").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Setup_wizard_is_refused_while_no_server_address_can_be_embedded()
+    {
+        await File.WriteAllBytesAsync(Path.Combine(_directory, "backup-agent-win-x64-setup.exe"), [1]);
+        _app.Configuration["AgentDistribution:PublicBaseUrl"] = null;
+        using var response = await _client.GetAsync("/api/agent-dist/packages/win-x64-setup");
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("windows")]
     [InlineData("linux")]

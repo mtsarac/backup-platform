@@ -4,6 +4,11 @@ namespace BackupPlatform.Api.Endpoints;
 
 public static class AgentDistributionEndpoints
 {
+    // The Windows setup wizard is one pipeline-built file for every deployment. The server address is stamped after the executable
+    // as this trailer when it is downloaded, and the wizard reads it back from its own file (deploy/windows/installer/BackupAgentSetup.iss).
+    // shortcut: an Authenticode signature would be invalidated by appended bytes; revisit when signing is added.
+    public const string SetupTrailerPrefix = "\nBackupPlatformServer=";
+
     public static IEndpointRouteBuilder MapAgentDistributionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var dist = endpoints.MapGroup("/api/agent-dist").AllowAnonymous();
@@ -16,7 +21,8 @@ public static class AgentDistributionEndpoints
             packages = new Dictionary<string, bool>
             {
                 ["win-x64"] = PackagePath("win-x64", configuration) is not null,
-                ["linux-x64"] = PackagePath("linux-x64", configuration) is not null
+                ["linux-x64"] = PackagePath("linux-x64", configuration) is not null,
+                ["win-x64-setup"] = PackagePath("win-x64-setup", configuration) is not null
             }
         }));
         return endpoints;
@@ -30,21 +36,27 @@ public static class AgentDistributionEndpoints
         return Results.Content(reader.ReadToEnd(), "text/plain; charset=utf-8");
     }
 
-    private static IResult GetPackage(string platform, IConfiguration configuration)
+    private static async Task<IResult> GetPackage(string platform, IConfiguration configuration, PlatformAgentSettingsService settings, CancellationToken cancellationToken)
     {
-        if (platform is not ("win-x64" or "linux-x64"))
+        if (platform is not ("win-x64" or "linux-x64" or "win-x64-setup"))
             return Results.BadRequest(new { error = "invalid_platform" });
         var path = PackagePath(platform, configuration);
-        return path is null
-            ? Results.NotFound(new { error = "package_not_found" })
-            : Results.File(path, platform == "win-x64" ? "application/zip" : "application/gzip", Path.GetFileName(path));
+        if (path is null) return Results.NotFound(new { error = "package_not_found" });
+        if (platform != "win-x64-setup")
+            return Results.File(path, platform == "win-x64" ? "application/zip" : "application/gzip", Path.GetFileName(path));
+        var serverUrl = await settings.GetServerUrlAsync(cancellationToken) ?? PublicBaseUrl(configuration);
+        if (serverUrl is null) return Results.Conflict(new { error = "server_url_not_configured" });
+        var setup = await File.ReadAllBytesAsync(path, cancellationToken);
+        var trailer = System.Text.Encoding.UTF8.GetBytes($"{SetupTrailerPrefix}{serverUrl}\n");
+        return Results.File([.. setup, .. trailer], "application/vnd.microsoft.portable-executable", Path.GetFileName(path));
     }
 
     private static string? PackagePath(string platform, IConfiguration configuration)
     {
         var directory = configuration["AgentDistribution:PackagesDirectory"];
         if (string.IsNullOrWhiteSpace(directory) || !Path.IsPathFullyQualified(directory)) return null;
-        var path = Path.Combine(directory, platform == "win-x64" ? "backup-agent-win-x64.zip" : "backup-agent-linux-x64.tar.gz");
+        var fileName = platform switch { "win-x64" => "backup-agent-win-x64.zip", "win-x64-setup" => "backup-agent-win-x64-setup.exe", _ => "backup-agent-linux-x64.tar.gz" };
+        var path = Path.Combine(directory, fileName);
         return File.Exists(path) && new FileInfo(path).Length > 0 ? path : null;
     }
 
