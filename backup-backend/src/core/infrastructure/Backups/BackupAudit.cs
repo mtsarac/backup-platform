@@ -8,11 +8,11 @@ namespace BackupPlatform.Infrastructure.Backups;
 internal static class BackupAudit
 {
     internal readonly record struct JobState(string Name, AgentId AgentId, BackupConfiguration Configuration, BackupRetryPolicy Retry,
-        BackupOverlapPolicy Overlap, bool Enabled, BackupRetentionPolicy Retention,
+        BackupOverlapPolicy Overlap, bool Enabled, bool Archived, BackupRetentionPolicy Retention,
         (bool Enabled, string Cron, string Zone, TimeSpan Grace, DateTimeOffset Anchor)? Schedule);
 
     internal static JobState Capture(BackupJob job) => new(job.Name, job.AgentId, job.Configuration, job.RetryPolicy, job.OverlapPolicy,
-        job.Enabled, job.RetentionPolicy, job.Schedule is { } schedule
+        job.Enabled, job.IsArchived, job.RetentionPolicy, job.Schedule is { } schedule
             ? (schedule.Enabled, schedule.CronExpression, schedule.TimeZoneId, schedule.MissedRunGracePeriod, schedule.EffectiveFrom) : null);
 
     internal static void RecordJobChanges(PlatformDbContext context, BackupJob job, JobState before, UserId? actor, DateTimeOffset now)
@@ -20,7 +20,9 @@ internal static class BackupAudit
         var after = Capture(job);
         if (before.Name != after.Name || before.AgentId != after.AgentId || before.Configuration != after.Configuration || before.Retry != after.Retry || before.Overlap != after.Overlap)
             AddJobEvent(context, job, actor, now, AuditActions.BackupJobUpdated);
-        if (before.Enabled != after.Enabled)
+        if (!before.Archived && after.Archived)
+            AddJobEvent(context, job, actor, now, AuditActions.BackupJobArchived);
+        else if (before.Enabled != after.Enabled)
             AddJobEvent(context, job, actor, now, job.Enabled ? AuditActions.BackupJobEnabled : AuditActions.BackupJobDisabled);
         if (before.Retention != after.Retention)
             AddJobEvent(context, job, actor, now, AuditActions.BackupJobRetentionChanged);

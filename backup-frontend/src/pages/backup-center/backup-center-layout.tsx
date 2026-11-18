@@ -16,6 +16,7 @@ export function BackupCenterLayout() {
       { to: `${base}/backup-runs`, label: tx('Yedekleme denemeleri') },
       { to: `${base}/artifacts`, label: tx('Yedek dosyaları') },
       { to: `${base}/restores`, label: tx('Geri yüklemeler') },
+      { to: `${base}/backup-shares`, label: tx('Paylaşımlar') },
     ]} />
     <Outlet />
   </div>

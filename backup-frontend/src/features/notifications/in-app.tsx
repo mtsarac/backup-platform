@@ -33,7 +33,7 @@ function shareHref(item: InAppNotification, role?: string, currentTenantId?: str
   if (item.subjectKind !== 'backup_share' && !shareEventTypes[item.type]) return null
   if (role === 'PlatformAdmin') return '/platform/shares'
   const tenantId = item.tenantId || currentTenantId
-  return tenantId ? `/tenants/${encodeURIComponent(tenantId)}/shares` : '/platform/shares'
+  return tenantId ? `/tenants/${encodeURIComponent(tenantId)}/backup-shares` : '/platform/shares'
 }
 
 export function InAppNotifications({ userId }: { userId: string }) {

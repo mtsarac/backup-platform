@@ -1126,6 +1126,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     BackupType = table.Column<string>(type: "text", nullable: false),
                     Configuration = table.Column<string>(type: "jsonb", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    ArchivedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     Enabled = table.Column<bool>(type: "boolean", nullable: false),
                     OverlapPolicy = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),

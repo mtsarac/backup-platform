@@ -54,7 +54,7 @@ export function BackupJobsPage() {
       <Menu.Root>
         <Menu.Trigger
           aria-label={tx("Diğer işlemler: {0}", { "0": job.name })}
-          className="flex size-control items-center justify-center rounded-lg border border-border bg-surface text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:size-11"
+          className="flex size-control items-center justify-center rounded-lg border border-border bg-surface text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="text-xs" aria-hidden="true">▾</span>
         </Menu.Trigger>

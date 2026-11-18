@@ -22,7 +22,7 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
     public async Task<IReadOnlyList<BackupHealthEvidence>> ReadAsync(TenantId tenantId, Guid? jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        var rows = await db.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && (jobId == null || job.Id == jobId))
+        var rows = await db.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null && (jobId == null || job.Id == jobId))
             .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new
             {
                 Job = job,
@@ -85,7 +85,7 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
         var since = now.AddDays(-7);
         var warnings = from run in db.BackupRuns.AsNoTracking()
             join job in db.BackupJobs on run.JobId equals job.Id
-            where run.TenantId == tenantId && job.TenantId == tenantId && run.Status == BackupStatus.Succeeded &&
+            where run.TenantId == tenantId && job.TenantId == tenantId && job.ArchivedAt == null && run.Status == BackupStatus.Succeeded &&
                 run.SizeAnomalyStatus == BackupSizeAnomalyStatuses.SizeAnomalyWarning && run.CompletedAt >= since && run.CompletedAt <= now
             select new { Run = run, JobName = job.Name };
         var total = await warnings.CountAsync(cancellationToken);

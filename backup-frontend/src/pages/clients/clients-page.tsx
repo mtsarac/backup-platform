@@ -43,7 +43,7 @@ export function ClientsPage() {
   const empty = query.data?.length === 0
   const addButton = canAdmin && <Button onClick={() => setAddingTenant(tenantId)}>{tx("Yedekleme bilgisayarı ekle")}</Button>
   return <div className="space-y-6">
-    <PageHeader title={tx("Yedekleme bilgisayarları")} description={tx("Veritabanı yedeklerini alan bilgisayarlar ve açık olup olmadıkları.")} actions={!empty && addButton} />
+    <PageHeader title={tx("Bilgisayarlar")} description={tx("Veritabanı yedeklerini alan bilgisayarlar ve açık olup olmadıkları.")} actions={!empty && addButton} />
     <AgentsTabs />
     <CheckField className="w-fit" label={tx("İptal edilenleri göster")} checked={showRevoked} onChange={(event) => update({ revoked: event.target.checked ? 'true' : '' })} />
     {!empty && <Filters label={tx("Bilgisayar filtreleri")} onClear={filtered ? () => update({ search: '', connectivity: '' }) : undefined}>

@@ -220,9 +220,9 @@ function renderSharesPage() {
   })
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/tenants/tenant-a/shares']}>
+      <MemoryRouter initialEntries={['/tenants/tenant-a/backup-shares']}>
         <Routes>
-          <Route path="/tenants/:tenantId/shares" element={<SharesPage />} />
+          <Route path="/tenants/:tenantId/backup-shares" element={<SharesPage />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -367,7 +367,7 @@ describe('BackupShare frontend', () => {
     renderSharesPage()
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Paylaşımlarım' })).toBeInTheDocument()
+      expect(screen.getByRole('table', { name: 'Paylaşımlarım' })).toBeInTheDocument()
       expect(screen.getAllByText('ProductionDb')).toHaveLength(3)
       expect(screen.getByText('Aktif')).toBeInTheDocument()
       expect(screen.getByText('Süresi doldu')).toBeInTheDocument()
@@ -745,7 +745,7 @@ describe('BackupShare frontend', () => {
     fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Paylaşımlarım' })).toBeInTheDocument()
+      expect(screen.getByRole('table', { name: 'Paylaşımlarım' })).toBeInTheDocument()
       expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
       expect(screen.getByText('Tamamlandı')).toBeInTheDocument()
       expect(screen.getByText('Reddedildi')).toBeInTheDocument()

@@ -12,9 +12,13 @@ public sealed record BackupDashboardView(DashboardJobCounts Jobs, DashboardRunCo
 /// <summary>Tenant-qualified projections for browser history; never returns credentials, leases or tracked entities.</summary>
 public interface IBackupUiStore
 {
-    Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>Archived jobs are left out unless asked for: they only matter as a name to filter history by.</summary>
+    Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, bool includeArchived, CancellationToken cancellationToken);
+    /// <summary>An archived job is still readable: its history is reached through it.</summary>
     Task<BackupJobView?> GetJobAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<BackupRunPage> ListRunsAsync(TenantId tenantId, BackupRunQuery query, CancellationToken cancellationToken);
     Task<BackupRunView?> GetRunAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken);
     Task<BackupDashboardView> GetDashboardAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>The last 14 local days of every non-archived job, cut at the given zone's midnights.</summary>
+    Task<BackupHealthTimelineView> GetHealthTimelineAsync(TenantId tenantId, TimeZoneInfo zone, DateTimeOffset now, CancellationToken cancellationToken);
 }

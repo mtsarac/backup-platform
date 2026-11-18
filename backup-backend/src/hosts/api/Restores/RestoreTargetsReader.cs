@@ -32,7 +32,7 @@ public sealed class RestoreTargetsReader(IBackupRetentionStore retentionStore, I
         var artifact = artifactRecord.Artifact;
         var engine = BackupArtifactEngine.Read(artifact.SourceMetadataJson);
         var agentViews = await agentService.ListAsync(tenantId, AgentConnectivityFilter.All, cancellationToken);
-        var jobs = await uiStore.ListJobsAsync(tenantId, now, cancellationToken);
+        var jobs = await uiStore.ListJobsAsync(tenantId, now, includeArchived: true, cancellationToken);
 
         var agents = agentViews.Select(view =>
         {

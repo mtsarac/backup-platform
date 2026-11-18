@@ -70,6 +70,7 @@ describe('role gating', () => {
   it('shows all three sections to admins, one tab at a time', async () => {
     const user = userEvent.setup()
     mount()
+    expect(screen.getByText('Acme · E-posta ve web kancası ile uyarı bildirimleri.')).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Bildirim politikası' })).toBeInTheDocument()
     await screen.findByLabelText('Bildirimler etkin')
     expect(api.getChannels).not.toHaveBeenCalled()

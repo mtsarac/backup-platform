@@ -33,7 +33,7 @@ function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { ic
         {group.heading && <p aria-hidden="true" className="mb-1 px-3 text-xs font-medium text-text-muted">{group.heading}</p>}
         <ul className="space-y-0.5">{group.items.filter((item) => !item.feature || isFeatureEnabled(item.feature)).map((item) => <li key={item.to}>
           {(() => { const active = isActive(item, pathname); return <Link to={item.to} onClick={onClose} aria-current={active ? 'page' : undefined}
-            className={`flex min-h-control pointer-coarse:min-h-11 items-center gap-3 rounded-lg px-3 text-body transition-colors ${active ? 'bg-accent font-semibold text-primary' : 'text-text hover:bg-border'}`}>
+            className={`flex min-h-control items-center gap-3 rounded-lg px-3 text-body transition-colors ${active ? 'bg-accent font-semibold text-primary' : 'text-text hover:bg-border'}`}>
             <item.icon className={`size-4 shrink-0 ${active ? 'text-primary' : 'text-text-muted'}`} /><span className="min-w-0 break-words">{tx(item.label)}</span>
           </Link> })()}
         </li>)}</ul>

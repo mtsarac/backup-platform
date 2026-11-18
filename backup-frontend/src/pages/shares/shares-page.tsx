@@ -1,5 +1,4 @@
 import { QueryState } from '@/components/data/query-state'
-import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { useShares, useTenantDownloadAttempts } from '@/features/shares/hooks'
 import { DownloadAttemptsTable, SharesTable } from '@/features/shares/shares-table'
@@ -15,11 +14,6 @@ export function SharesPage() {
   const attempts = attemptsQuery.data?.pages.flatMap((page) => page.items) ?? []
   return (
     <div className="space-y-6">
-      <PageHeader
-        crumbs={[{ label: tx('Paylaşımlarım') }]}
-        title={tx('Paylaşımlarım')}
-      />
-
       <QueryState isPending={query.isPending} error={query.error}>
         <SharesTable
           shares={shares}
