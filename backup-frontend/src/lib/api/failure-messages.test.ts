@@ -157,7 +157,7 @@ describe('unknown failure code', () => {
     expect(description.what).toBe(unknownSentence)
     expect(description.technical.map(item => item.value)).toEqual(['some_new_backend_code'])
     expect(errorMessage(new ApiError(409, { error: 'some_new_backend_code' }))).toBe(unknownSentence)
-    for (const status of [404, 500]) {
+    for (const status of [401, 403, 404, 500]) {
       const error = new ApiError(status, { error: 'some_new_backend_code' })
       expect(errorMessage(error)).toBe(unknownSentence)
       expect(describeError(error).technical.some(item => item.value === 'some_new_backend_code')).toBe(true)

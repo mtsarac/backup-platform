@@ -203,8 +203,8 @@ export function failureMessage(code?: string | null, scope?: ErrorScope): string
 /** What happened, in plain words. A single sentence, used wherever a full notice does not fit (dialogs, inline hints). */
 export function errorMessage(error: unknown, scope?: ErrorScope): string {
   if (error instanceof ApiError) {
-    if (error.status === 401) return tx('Oturumunuz sona erdi. Yeniden giriş yapın.')
     const code = error.reason ?? error.code
+    if (error.status === 401 && (!code || !isPlainCode(code) || knownMessage(code, scope))) return tx('Oturumunuz sona erdi. Yeniden giriş yapın.')
     if (code) return failureMessage(code, scope)
     if (error.status === 403) return tx('Bu işlem için yetkiniz yok.')
     if (error.status === 404) return tx('Kayıt bulunamadı veya bu tenant altında erişilemiyor.')
@@ -314,7 +314,7 @@ export function describeError(error: unknown, scope?: ErrorScope): ErrorDescript
   if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), actionKind, technical }
   const uncertain = tx("Mevcut yedekleriniz etkilenmedi; işlemin tamamlanıp tamamlanmadığını listeden kontrol edin.")
   if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), actionKind: 'retry', technical }
-  if (error.status !== 401 && key && !knownMessage(key, scope)) return { what, dataImpact: uncertain, action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', technical }
+  if (key && !knownMessage(key, scope) && (error.status !== 401 || isPlainCode(key))) return { what, dataImpact: uncertain, action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', technical }
   if (error.status === 401) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Giriş yaptıktan sonra işlemi tekrarlayın."), technical }
   if (actionKind) return { what, dataImpact: error.status >= 500 ? uncertain : tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: actionSentence(actionKind), actionKind, technical }
   if (error.status === 403) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical }

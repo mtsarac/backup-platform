@@ -34,6 +34,15 @@ describe('ErrorNotice', () => {
     expect(within(dialog).getByRole('button', { name: 'Kopyala: Sunucu mesajı' })).toBeInTheDocument()
   })
 
+  it('keeps a free-form backend error copyable without showing it in the primary text', async () => {
+    render(<ErrorNotice error={new ApiError(400, { error: 'The service is unavailable.' })} />)
+    expect(screen.queryByText('The service is unavailable.')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('The service is unavailable.')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: Sunucu mesajı' })).toBeInTheDocument()
+  })
+
   it('accepts the three parts directly for failures that are not API errors', () => {
     render(<ErrorNotice what="İndirme bağlantısı güvenli değil." dataImpact="Yedeğiniz değişmedi." action="Yeni bir indirme başlatın." />)
     const alert = screen.getByRole('alert')

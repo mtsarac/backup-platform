@@ -23,7 +23,7 @@ export class ApiError extends Error {
     this.code = body.code ?? body.error
     this.reason = body.reason
     this.field = body.field
-    this.backendMessage = typeof body.message === 'string' ? body.message : undefined
+    this.backendMessage = typeof body.message === 'string' ? body.message : typeof body.error === 'string' && !/^[A-Za-z0-9_.-]{1,80}$/.test(body.error) ? body.error : undefined
     this.activeRunId = body.activeRunId
     this.sessionId = body.sessionId
     this.permission = body.permission
