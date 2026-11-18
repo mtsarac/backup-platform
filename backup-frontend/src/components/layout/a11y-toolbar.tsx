@@ -27,7 +27,7 @@ export function A11yToolbar() {
     </Popover.Trigger>
     <Popover.Portal>
       <Popover.Positioner sideOffset={8} align="end" className="z-50">
-        <Popover.Popup className="max-h-[var(--available-height)] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto rounded-xl border border-border bg-surface p-4 text-text shadow-lg">
+        <Popover.Popup className="max-h-[var(--available-height)] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto rounded-lg border border-border bg-surface-raised p-4 text-text shadow-overlay">
           <Popover.Title className="font-semibold text-text-heading">{tx("Görünüm")}</Popover.Title>
           <Button variant="outline" className="h-auto w-full whitespace-normal py-2" disabled={index === FONT_SCALES.length - 1} onClick={() => update(FONT_SCALES[index + 1], highContrast)}>
             <span aria-hidden="true" className="text-lg font-bold">{tx("A+")}</span>{tx("Yazıyı büyüt")}

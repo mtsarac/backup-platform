@@ -62,7 +62,7 @@ function ProviderStep({ providers, connections, value, onChange }: { providers: 
       const state = tenantCreateState(provider, connections)
       const selected = value === provider.providerType
       return <li key={provider.providerType}>
-        <RadioField className={`h-full items-start gap-3 rounded-xl border p-4 transition-colors ${state.creatable ? 'cursor-pointer hover:bg-surface-2' : 'cursor-not-allowed opacity-60'} ${selected ? 'border-primary bg-accent ring-2 ring-primary/30' : 'border-border-strong/50 bg-surface'}`} name="provider" value={provider.providerType} checked={selected} disabled={!state.creatable} onChange={() => onChange(provider.providerType)} label={<>
+        <RadioField className={`h-full items-start gap-3 rounded-lg border p-4 transition-colors ${state.creatable ? 'cursor-pointer hover:bg-surface-2' : 'cursor-not-allowed opacity-60'} ${selected ? 'border-primary bg-accent ring-2 ring-primary/30' : 'border-border bg-surface'}`} name="provider" value={provider.providerType} checked={selected} disabled={!state.creatable} onChange={() => onChange(provider.providerType)} label={<>
           <ProviderIcon providerType={provider.providerType} />
           <span className="min-w-0 space-y-1">
             <span className="block font-medium text-text-heading">{tx(provider.displayName)}</span>

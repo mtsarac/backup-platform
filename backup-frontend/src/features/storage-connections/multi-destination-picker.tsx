@@ -141,7 +141,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             </optgroup>
           })}
         </Select>
-        {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-destructive">{fieldError}</p>}
+        {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-error">{fieldError}</p>}
         <p className="text-xs text-text-muted">{tx("Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.")}</p>
       </div> : <>
       <div className="space-y-1">
@@ -167,18 +167,18 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             return <option key={connection.id} value={connection.id} disabled={Boolean(unavailable)}>{[connection.name, tx(connection.providerDisplayName), pickerOwnership(connection.ownership), unavailable ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
           })}
         </Select>
-        {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-destructive">{fieldError}</p>}
+        {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-error">{fieldError}</p>}
         <p id="storage-connection-help" className="text-xs text-text-muted">{tx("Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.")}</p>
       </div>
       <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">{tx("Depolama yürütme konumu")}</span><p className="text-sm">{executionLocationLabel(primary.storageExecutionLocation)}</p><p className="text-xs text-text-muted">{tx("Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.")}</p></div>
       </>}
       {pending && <p role="status" className="text-sm">{tx("Depolama bağlantıları yükleniyor…")}</p>}
-      {error ? <div role="alert" className="text-sm text-destructive">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</Button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
+      {error ? <div role="alert" className="text-sm text-error">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</Button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
 
       <Disclosure className="border-t border-border pt-4 md:col-span-2" open={Boolean(fieldError || replicaError || replicationError)} title={<>{tx("Replikasyon Hedefleri (Multi-Storage Replication)")} <span className="text-xs font-normal">· {tx("Toplam")}{' '}{destinations.length}{' '}{tx("hedef")}</span></>}>
         <div className="space-y-3">
         <p className="text-xs text-text-muted">{tx("Bu yedekleme işinin birden fazla depolama konumuna kopyalanmasını yapılandırın.")}</p>
-        {replicationError && <p id="replication-error" role="alert" className="text-sm text-destructive">{replicationError}</p>}
+        {replicationError && <p id="replication-error" role="alert" className="text-sm text-error">{replicationError}</p>}
 
         <div className="space-y-2">
           {destinations.map((dest, index) => {
@@ -189,7 +189,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             const unavailable = connectionUnavailableReason(destConn, destProv)
 
             return (
-              <div key={`${dest.storageProvider}:${dest.storageConnectionId ?? 'default'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border border-border bg-surface p-2.5 text-sm">
+              <div key={`${dest.storageProvider}:${dest.storageConnectionId ?? 'default'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border bg-surface p-2.5 text-sm">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
                     {!dest.isPrimary && <span className="font-medium text-text-heading">{tx(destProv?.displayName ?? dest.storageProvider)}</span>}
@@ -290,13 +290,13 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                 if (!Number.isNaN(count)) updateDestinations(destinations, count)
               }}
             />
-            {replicaError && <p id="required-replica-count-error" role="alert" className="text-sm text-destructive">{replicaError}</p>}
-            <p className="text-[11px] text-text-muted mt-1">
+            {replicaError && <p id="required-replica-count-error" role="alert" className="text-sm text-error">{replicaError}</p>}
+            <p className="text-xs text-text-muted mt-1">
               {destinations.length}{' '}{tx("hedeften en az")}{' '}{requiredCount}{' '}{tx("tanesi doğrulanmalıdır.")}</p>
           </div>
         </div>
         {destinations.length > 1 && (
-          <p className="rounded-md border border-warning/40 bg-warning-subtle/30 px-3 py-2 text-xs text-text-heading">
+          <p className="rounded-lg border border-warning-border bg-warning-subtle px-3 py-2 text-xs text-text-heading">
             {tx('Her hedefe ayrı yazılır ve bağımsız olarak doğrulanır. Yedek, gerekli sayıda hedef doğrulandığında başarılı sayılır; başarısız bir hedef sonradan onarılabilir.')}
           </p>
         )}

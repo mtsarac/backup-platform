@@ -81,7 +81,7 @@ function AgentJobs({ agentId }: { agentId: string }) {
   ]
   return <Section title={tx("Bu bilgisayarın yedekleme işleri")} flush>
     <QueryState isPending={jobs.isPending} error={jobs.error}>
-      <DataList rows={rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={tx("Bu bilgisayar için tanımlı yedekleme işi yok.")} className="rounded-none border-0 shadow-none" />
+      <DataList rows={rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={tx("Bu bilgisayar için tanımlı yedekleme işi yok.")} className="rounded-none border-0" />
     </QueryState>
   </Section>
 }

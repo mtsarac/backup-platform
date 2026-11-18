@@ -54,16 +54,16 @@ export function BackupJobsPage() {
       <Menu.Root>
         <Menu.Trigger
           aria-label={tx("Diğer işlemler: {0}", { "0": job.name })}
-          className="flex size-8 items-center justify-center rounded-md border border-border bg-surface text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pointer-coarse:size-11"
+          className="flex size-control items-center justify-center rounded-lg border border-border bg-surface text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:size-11"
         >
           <span className="text-xs" aria-hidden="true">▾</span>
         </Menu.Trigger>
         <Menu.Portal>
           <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-            <Menu.Popup className="min-w-36 rounded-md border border-border bg-surface p-1 shadow-overlay focus-visible:outline-none">
+            <Menu.Popup className="min-w-36 rounded-lg border border-border bg-surface-raised p-1 shadow-overlay focus-visible:outline-none">
               <Menu.Item
                 render={<Link to={`${base}/backup-jobs/${job.id}/edit`} />}
-                className="block w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+                className="block w-full cursor-pointer rounded-sm px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
               >
                 {tx("Düzenle")}
               </Menu.Item>
@@ -71,7 +71,7 @@ export function BackupJobsPage() {
                 disabled={toggle.isPending}
                 onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}
                 aria-describedby={job.enabled ? disableHint : enableHint}
-                className="block w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none disabled:opacity-50"
+                className="block w-full cursor-pointer rounded-sm px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none disabled:opacity-50"
               >
                 {job.enabled ? tx("Devre dışı bırak") : tx("Etkinleştir")}
               </Menu.Item>

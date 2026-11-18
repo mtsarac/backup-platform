@@ -29,7 +29,7 @@ export function ProgressBar({ label, value, reserved, now, valueText, tone = 'pr
       aria-valuemax={100}
       aria-valuenow={announced}
       aria-valuetext={valueText}
-      className={cn('flex h-2 w-full overflow-hidden rounded-full bg-surface-2', className)}
+      className={cn('flex h-2 w-full overflow-hidden rounded-sm bg-border', className)}
     >
       {value != null && <div className={cn('h-full transition-all', progressFill[tone])} style={{ width: `${clamp(value)}%` }} />}
       {reserved != null && <div className={cn('h-full opacity-45 transition-all', progressFill[tone])} style={{ width: `${clamp(reserved)}%` }} />}

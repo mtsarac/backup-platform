@@ -8,7 +8,7 @@ describe('Card', () => {
   it('renders the chosen element with its attributes and the danger tone', () => {
     render(<Card as="section" aria-label="Tehlikeli bölge" tone="danger" padding="none" className="extra">içerik</Card>)
     const card = screen.getByRole('region', { name: 'Tehlikeli bölge' })
-    expect(card).toHaveClass('border-error/40', 'extra')
+    expect(card).toHaveClass('border-error-border', 'extra')
     expect(card).not.toHaveClass('p-4')
   })
 })

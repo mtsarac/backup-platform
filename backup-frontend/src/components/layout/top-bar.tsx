@@ -43,6 +43,6 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
     </div>}
     badges={<>
       {user?.role === 'PlatformAdmin' && <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/platform">{tx('Platform Yönetimi')}</Link>}
-      {user && <Badge tone={user.role === 'PlatformAdmin' ? "warning" : "info"}>{user.role === 'PlatformAdmin' ? tx("Platform Yöneticisi") : tx("UserAdmin")}</Badge>}
+      {user && <Badge tone={user.role === 'PlatformAdmin' ? "warning" : "neutral"}>{user.role === 'PlatformAdmin' ? tx("Platform Yöneticisi") : tx("UserAdmin")}</Badge>}
     </>} />
 }

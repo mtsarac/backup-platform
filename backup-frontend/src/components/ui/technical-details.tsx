@@ -63,11 +63,11 @@ function TechnicalModal({ items, defaultOpen = false, children }: TechnicalDetai
   return <Dialog.Root open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery('') }}>
     <Dialog.Trigger className={triggerClass}>{tx('Teknik ayrıntılar')}</Dialog.Trigger>
     <Dialog.Portal>
-      <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/50" />
-      <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-hidden border border-border bg-surface text-left shadow-overlay sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[85dvh] sm:w-[calc(100%-2rem)] sm:max-w-xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+      <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+      <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-hidden border border-border bg-surface-raised text-left shadow-overlay sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[85dvh] sm:w-[calc(100%-2rem)] sm:max-w-xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg">
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-md border border-border bg-surface-2 text-text"><Terminal className="size-3.5" /></span>
+            <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-lg border border-border bg-surface-2 text-text"><Terminal className="size-3.5" /></span>
             <Dialog.Title className="text-base font-semibold text-text-heading">{tx('Teknik ayrıntılar')}</Dialog.Title>
           </div>
           <div className="flex items-center gap-1">
@@ -76,17 +76,17 @@ function TechnicalModal({ items, defaultOpen = false, children }: TechnicalDetai
           </div>
         </div>
         <Dialog.Description className="sr-only">{tx('Hata kodları, kimlikler ve sistem ayrıntıları. Destek ekibine iletmek için kopyalayabilirsiniz.')}</Dialog.Description>
-        {items.length > 4 && <div className="border-b border-border bg-surface-2/30 px-5 py-2">
+        {items.length > 4 && <div className="border-b border-border bg-surface-2 px-5 py-2">
           <div className="relative">
             <Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-text-muted" />
             <input type="search" aria-label={tx('Ara')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tx('Ara')}
-              className="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-hidden" />
+              className="w-full rounded-lg border border-border bg-surface py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-hidden" />
           </div>
         </div>}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           {items.length > 0 && (filtered.length === 0
             ? <p className="py-6 text-center text-sm text-text-muted">{tx('Aramayla eşleşen kayıt yok.')}</p>
-            : <dl className="space-y-2.5">{filtered.map(item => <div key={item.label} className={`${rowClass} rounded-lg border border-border/70 bg-surface-2/30 p-3 text-sm`}>
+            : <dl className="space-y-2.5">{filtered.map(item => <div key={item.label} className={`${rowClass} rounded-lg border border-border bg-surface-2 p-3 text-sm`}>
               <dt className="col-start-1 font-medium text-text-heading">{item.label}</dt>
               <dd className="col-start-1 mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap break-all font-mono text-xs text-text-muted">{item.value}</dd>
               <dd className="col-start-2 row-span-2 row-start-1"><CopyButton value={item.value} label={tx('Kopyala: {0}', { '0': item.label })} /></dd>
