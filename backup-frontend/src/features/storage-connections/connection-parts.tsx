@@ -52,9 +52,10 @@ export function LastTest({ test }: { test: ConnectionTest | null }) {
 export function SecretStatus({ connection }: { connection: Pick<ConnectionView, 'hasSecret' | 'secretUpdatedAt' | 'providerType' | 'configuration'> }) {
   useLanguage()
   if (connection.providerType === 'google-drive') {
-    const reauth = connection.configuration?.reauthorizationRequired === 'true' || !connection.hasSecret
+    const reauth = connection.configuration?.reauthorizationRequired === 'true'
+    const pending = reauth || !connection.hasSecret
     return <span className="inline-flex flex-wrap items-center gap-1.5">
-      <StatusPill level={reauth ? 'attention' : 'safe'}>{reauth ? tx('Yeniden yetkilendirme gerekli') : tx('Bağlı')}</StatusPill>
+      <StatusPill level={pending ? 'attention' : 'safe'}>{reauth ? tx('Yeniden yetkilendirme gerekli') : pending ? tx('Yetkilendirme gerekiyor') : tx('Bağlı')}</StatusPill>
       {connection.configuration?.accountEmail && <span className="text-xs text-text-muted">{String(connection.configuration.accountEmail)}</span>}
     </span>
   }

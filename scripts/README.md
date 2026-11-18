@@ -330,6 +330,8 @@ scripts/dev/publish-agent-dist.sh        # stages backup-agent-win-x64.zip and b
 BP_DEV_PUBLIC_HOST=192.168.122.1 scripts/dev/start.sh   # start.sh passes AgentDistribution__PackagesDirectory and __PublicBaseUrl to the API
 ```
 
+The Windows setup wizard cannot be built on Linux (Inno Setup runs on Windows; see `backup-backend/deploy/windows/installer/BackupAgentSetup.iss` for the `ISCC` command). To offer it on the dev stack, copy the built or released `.exe` into `$BP_DEV_HOME/agent-dist/backup-agent-win-x64-setup.exe`; `GET /api/agent-dist/status` then reports `win-x64-setup: true`.
+
 The Add agent dialog then offers the guided and automatic one-line commands. The development certificate must be trusted on the target machine (the Windows VM helper already trusts it; for a Linux guest add `$BP_DEV_HOME/cert.pem` to its CA store). The enrollment endpoint currently accepts only numeric agent versions, so prerelease labels cannot be used here.
 
 

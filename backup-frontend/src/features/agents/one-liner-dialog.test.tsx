@@ -13,7 +13,7 @@ vi.mock('./use-enrollment-monitor', () => ({
 beforeEach(() => {
   vi.resetAllMocks()
   localStorage.removeItem('bp_language')
-  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backup.corp.internal:8443', packages: { 'win-x64': true, 'linux-x64': true } })
+  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backup.corp.internal:8443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
   vi.mocked(api.createEnrollmentToken).mockResolvedValue({ tokenId: 'token-a', token: "secret'$(untrusted)", expiresAt: '2027-10-17T12:00:00Z' })
 })
 function mount() {
@@ -49,5 +49,39 @@ describe('One-line installation consumers', () => {
     expect(screen.getByRole('link', { name: 'Download installation script' })).toHaveAttribute('href', 'https://backup.corp.internal:8443/api/agent-dist/install.ps1')
     expect(screen.getByRole('link', { name: 'Download Windows zip package' })).toHaveAttribute('href', 'https://backup.corp.internal:8443/api/agent-dist/packages/win-x64')
     expect(document.documentElement.lang).toBe('en')
+  })
+
+  async function openOtherMethods(platform: 'Windows' | 'Linux') {
+    mount()
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'İşletim sistemi' }), { target: { value: platform } })
+    fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Kayıt anahtarı oluştur' }))
+    await screen.findByDisplayValue("secret'$(untrusted)")
+  }
+
+  it('offers the published Windows setup wizard with the key and says why SmartScreen warns', async () => {
+    await openOtherMethods('Windows')
+    expect(screen.getByRole('link', { name: 'Kurulum sihirbazını indir (.exe)' })).toHaveAttribute('href', 'https://backup.corp.internal:8443/api/agent-dist/packages/win-x64-setup')
+    expect(screen.getByRole('textbox', { name: 'Tek kullanımlık kayıt anahtarı' })).toHaveValue("secret'$(untrusted)")
+    expect(screen.getByText(/dijital olarak imzalı olmadığından Windows SmartScreen/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Kurulum scriptini indir' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Windows zip paketini indir' })).toBeInTheDocument()
+  })
+
+  it('explains an unpublished setup wizard and keeps the script and zip', async () => {
+    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backup.corp.internal:8443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': false } })
+    await openOtherMethods('Windows')
+    expect(screen.queryByRole('link', { name: 'Kurulum sihirbazını indir (.exe)' })).not.toBeInTheDocument()
+    expect(screen.getByText('Windows kurulum sihirbazı (.exe) yayımlanmamış.')).toBeInTheDocument()
+    expect(screen.getByText('Şimdilik yukarıdaki PowerShell komutunu ya da aşağıdaki script ve zip paketini kullanın.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Kurulum scriptini indir' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Windows zip paketini indir' })).toBeInTheDocument()
+  })
+
+  it('does not mention the Windows wizard for Linux', async () => {
+    await openOtherMethods('Linux')
+    expect(screen.queryByRole('link', { name: 'Kurulum sihirbazını indir (.exe)' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/SmartScreen/)).not.toBeInTheDocument()
   })
 })
