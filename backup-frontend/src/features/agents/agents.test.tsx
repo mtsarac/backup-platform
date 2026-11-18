@@ -260,6 +260,7 @@ describe('Adding a computer from the new-computer page', () => {
     await screen.findByRole('switch')
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     expect(await screen.findByDisplayValue('secret-once-only')).toBeInTheDocument()
@@ -292,6 +293,7 @@ describe('Adding a computer from the new-computer page', () => {
     vi.mocked(api.createEnrollmentToken).mockReturnValue(promise)
     const onCreated = vi.fn()
     const view = mount(<AddAgentDialog tenantId="tenant-a" onClose={vi.fn()} onCreated={onCreated} />)
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     fireEvent.click(await screen.findByRole('button', { name: 'İleri' }))
     fireEvent.click(await screen.findByRole('button', { name: "Kayıt anahtarı oluştur" }))
     const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![1]
@@ -306,6 +308,7 @@ describe('Adding a computer from the new-computer page', () => {
     await screen.findByRole('switch')
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     await screen.findByDisplayValue('secret-once-only')
