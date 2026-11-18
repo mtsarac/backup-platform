@@ -27,6 +27,7 @@ import { describeFailure } from '@/lib/api/failure-messages'
 import { formatBytes, formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
 import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
+import { artifactState } from '@/features/artifacts/format'
 
 
 type Tab = 'summary' | 'attempts' | 'replication'
@@ -127,7 +128,7 @@ function BackupDetail({ id }: { id: string }) {
         title={run?.jobName ?? tx('Yedekleme denemesi')}
         meta={run && <><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</>}
         actions={run && canOperate && <>
-          {run.status === 'Succeeded' && artifact && !restoreIneligibility(artifact) && <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs/${run.id}/restore`}>{tx('Geri yükle')}</Link>}
+          {run.status === 'Succeeded' && artifact && artifactState(artifact) !== 'DeleteFailed' && !restoreIneligibility(artifact) && <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs/${run.id}/restore`}>{tx('Geri yükle')}</Link>}
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
           {run.status === 'Paused' && <Button disabled={busy} onClick={() => void perform('resume')}>{actions.resume.isPending ? tx('Sıraya alınıyor…') : tx('Devam Et')}</Button>}

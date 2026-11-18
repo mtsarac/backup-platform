@@ -328,7 +328,7 @@ describe('dashboard failure notices', () => {
     state.data.runs.replicationInsufficientLast24Hours = 1
     renderDashboard()
     expect(screen.getAllByRole('alert')).toHaveLength(2)
-    expect(screen.getByRole('link', { name: 'Silme hatalarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts?state=DeleteFailed')
+    expect(screen.getByRole('link', { name: 'Silme hatalarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/storage')
   })
 
   it('keeps the failed-backups link to the filtered run history', () => {

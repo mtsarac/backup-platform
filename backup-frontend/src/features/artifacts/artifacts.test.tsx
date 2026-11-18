@@ -192,7 +192,6 @@ describe('Backup dosyaları', () => {
     mount()
     await screen.findByText('Kısaca durum')
     for (const label of ['Geri yükleme', 'Saklama ve silme']) expect(screen.getAllByText(label)[0]).toBeVisible()
-    expect(screen.queryByText(/\?$/)).not.toBeInTheDocument()
     expect(screen.getByText('Sağlam')).toBeVisible()
     expect(screen.getByText('Geri yüklemeye hazır')).toBeVisible()
     // The checksums, replicas and metadata wait behind the collapsed details.

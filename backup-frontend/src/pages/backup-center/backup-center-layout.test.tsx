@@ -13,7 +13,6 @@ function mount(path: string) {
       <Route element={<BackupCenterLayout />}>
         <Route path="backup-jobs" element={<p>jobs list</p>} />
         <Route path="backup-runs" element={<p>runs list</p>} />
-        <Route path="artifacts" element={<p>artifacts list</p>} />
         <Route path="restores" element={<p>restores list</p>} />
       </Route>
       <Route path="backup-jobs/new" element={<p>job wizard</p>} />
@@ -23,14 +22,13 @@ function mount(path: string) {
 }
 
 describe('Backup Center layout', () => {
-  it('shows one page heading and the five lists as navigation links, the open one marked current', () => {
+  it('shows one page heading and the four lists as navigation links, the open one marked current', () => {
     mount('/tenants/tenant-a/backup-runs')
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' }))
     expect(tabs.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Yedekleme işleri', '/tenants/tenant-a/backup-jobs'],
       ['Yedekleme denemeleri', '/tenants/tenant-a/backup-runs'],
-      ['Yedek dosyaları', '/tenants/tenant-a/artifacts'],
       ['Geri yüklemeler', '/tenants/tenant-a/restores'],
       ['Paylaşımlar', '/tenants/tenant-a/backup-shares'],
     ])
@@ -40,8 +38,8 @@ describe('Backup Center layout', () => {
 
   it('switches lists by navigation, and wizard and detail routes stay outside the tabs', async () => {
     mount('/tenants/tenant-a/backup-jobs')
-    await userEvent.click(screen.getByRole('link', { name: 'Yedek dosyaları' }))
-    expect(screen.getByText('artifacts list')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: 'Geri yüklemeler' }))
+    expect(screen.getByText('restores list')).toBeInTheDocument()
     expect(screen.queryByText('jobs list')).not.toBeInTheDocument()
   })
 

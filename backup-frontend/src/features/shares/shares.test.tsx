@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +11,7 @@ import { ApiError, apiRequest } from '@/lib/api/client'
 import type * as ApiClient from '@/lib/api/client'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import type { BackupShareView, DownloadAttemptView } from './types'
+vi.mock('@/features/artifacts/artifact-run-link', () => ({ ArtifactRunLink: ({ children }: { children: ReactNode }) => <span>{children}</span> }))
 
 vi.mock('@/lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiClient>()
@@ -383,7 +385,7 @@ describe('BackupShare frontend', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Henüz paylaşım yapılmamış.')).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
+      expect(screen.getByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
   })
 

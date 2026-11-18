@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { TechnicalDetails } from '@/components/ui/technical-details'
 import { ArtifactDeletedNotice } from '@/features/artifacts/artifact-details'
 import { ArtifactAnswers } from '@/features/artifacts/artifact-answers'
 import { ArtifactTechnical } from '@/features/artifacts/artifact-technical'
@@ -165,11 +164,10 @@ export function ArtifactDetail({ id }: { id: string }) {
             action={canOperate && <Button variant="outline" size="sm" disabled={cancelRepair.isPending} onClick={handleCancelRepair}>{cancelRepair.isPending ? tx('İptal ediliyor…') : tx('Onarımı iptal et')}</Button>}>{tx("Durum:")}{' '}{repairQuery.data.status === 'InProgress' ? tx('Aktarılıyor ve doğrulanıyor') : tx('Sırada')}
             {repairQuery.data.transferredBytes > 0 && tx(" · {0} MB aktarıldı", { "0": Math.round(repairQuery.data.transferredBytes / (1024 * 1024)) })}
           </Notice>}
-          {artifact.replication && <TechnicalDetails accordion items={[]}><ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} /></TechnicalDetails>}
           {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />}
           {artifact.backupMetadata?.engine !== 'file-system' && <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />}
           {showShares && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} canAdmin={canAdmin} />}
-          <ArtifactTechnical artifact={artifact} />
+          <ArtifactTechnical artifact={artifact} replication={artifact.replication && <ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} />} />
         </>}
       </QueryState>
       <ConfirmDialog open={dialogOpen && canRequestDelete} onClose={() => setDialogOpen(false)} title={tx("Yedek dosyası için silme isteği")} name={artifact ? artifactName(artifact) : ''}

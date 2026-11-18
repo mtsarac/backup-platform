@@ -101,7 +101,7 @@ describe('Tenant sidebar', () => {
     const names = within(nav()).getAllByRole('link').map((link) => link.textContent)
     render(<MemoryRouter initialEntries={[`${base}/backup-jobs`]}><Routes><Route path="/tenants/:tenantId" element={<BackupCenterLayout />}><Route path="backup-jobs" element={null} /></Route></Routes></MemoryRouter>)
     const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' })).getAllByRole('link').map((link) => link.textContent)
-    expect(tabs).toHaveLength(5)
+    expect(tabs).toHaveLength(4)
     for (const tab of tabs) expect(names).not.toContain(tab)
   })
 
