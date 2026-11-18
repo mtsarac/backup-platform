@@ -187,10 +187,8 @@ const scopedMessages: Record<ErrorScope, Record<string, string>> = {
     get unexpected() { return tx('Silme beklenmeyen bir nedenle tamamlanamadı.') },
   },
 }
-// Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true, decrypt_not_permitted: true, key_not_found: true, artifact_not_found: true }
 const lookup = (table: Record<string, string>, code: string) => Object.hasOwn(table, code) ? table[code] : undefined
-const knownMessage = (code: string, scope?: ErrorScope) => (scope && lookup(scopedMessages[scope], code)) ?? lookup(messages, code) ?? lookup(codeMessages, code)
+const knownMessage = (code: string, scope?: ErrorScope) => (scope && lookup(scopedMessages[scope], code)) ?? lookup(messages, code) ?? lookup(codeMessages, code) ?? (/^http_[345]\d\d$/.test(code) ? tx('Bildirim sunucusu isteği reddetti.') : undefined)
 const isPlainCode = (code: string) => /^[A-Za-z0-9_.-]{1,80}$/.test(code)
 
 /** The fixed sentence for a code the UI has no wording for: the code itself stays in the technical details, never in the sentence. */
@@ -201,17 +199,13 @@ export function failureMessage(code?: string | null, scope?: ErrorScope): string
   return knownMessage(code, scope) ?? unknownFailure()
 }
 
-/** Failures that carry a request body the user can fix: the scoped wording applies only there, never to auth, missing-resource or server failures. */
-const isRequestFailure = (error: ApiError) => error.status !== 401 && error.status !== 403 && error.status !== 404 && error.status < 500
 
 /** What happened, in plain words. A single sentence, used wherever a full notice does not fit (dialogs, inline hints). */
 export function errorMessage(error: unknown, scope?: ErrorScope): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return tx('Oturumunuz sona erdi. Yeniden giriş yapın.')
     const code = error.reason ?? error.code
-    if (code && !knownMessage(code, scope)) return unknownFailure()
-    if (scope && isRequestFailure(error)) return failureMessage(code, scope)
-    if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
+    if (code) return failureMessage(code, scope)
     if (error.status === 403) return tx('Bu işlem için yetkiniz yok.')
     if (error.status === 404) return tx('Kayıt bulunamadı veya bu tenant altında erişilemiyor.')
     if (error.status >= 500) return tx('Sunucu isteği tamamlayamadı. Daha sonra tekrar deneyin.')
@@ -234,8 +228,8 @@ const actionSentence = (action: FailureAction): string => ({
 })[action]
 
 const codeClasses: Record<Exclude<FailureAction, 'retry'>, readonly string[]> = {
-  checkComputer: ['DatabaseUnavailable', 'OperationTimedOut', 'AgentLost', 'agent_unavailable', 'StorageUnavailable', 'storage_unavailable', 'timeout', 'network_unavailable', 'network_denied', 'ConnectionFailed', 'download_agent_unavailable', 'LeaseLost'],
-  fixCredentials: ['AuthenticationFailed', 'PermissionDenied', 'StorageAuthenticationFailed', 'StorageHostKeyMismatch', 'authentication_failed', 'host_key_mismatch', 'access_denied', 'secret_unavailable', 'credentials_required', 'credential_unavailable', 'rotation_test_failed', 'InvalidConfiguration', 'invalid_configuration', 'DatabaseNotFound'],
+  checkComputer: ['DatabaseUnavailable', 'OperationTimedOut', 'AgentLost', 'agent_unavailable', 'StorageUnavailable', 'storage_unavailable', 'timeout', 'network_unavailable', 'network_denied', 'ConnectionFailed', 'connection_failed', 'unreachable', 'scan_timeout', 'download_agent_unavailable', 'LeaseLost', 'dns_failed', 'connect_failed', 'smtp_unavailable'],
+  fixCredentials: ['AuthenticationFailed', 'PermissionDenied', 'StorageAuthenticationFailed', 'StorageHostKeyMismatch', 'authentication_failed', 'permission_denied', 'host_key_mismatch', 'access_denied', 'secret_unavailable', 'secret_missing', 'smtp_auth_failed', 'credentials_required', 'credential_unavailable', 'rotation_test_failed', 'InvalidConfiguration', 'invalid_configuration', 'DatabaseNotFound'],
   manageStorage: ['quota_exceeded', 'QuotaExceeded', 'quota_size_unknown', 'insufficient_space'],
   backupNow: ['ScheduleGraceExpired'],
 }
@@ -250,8 +244,6 @@ export interface ErrorDescription {
   action: string
   /** The kind of action the notice offers as its one button; none when the failure has no single safe action. */
   actionKind?: FailureAction
-  /** A code the UI has no wording for: the notice opens its technical details so the code can be copied for support. */
-  unknown?: boolean
   /** Raw code, status and field: for the collapsed technical details only. */
   technical: TechnicalItem[]
 }
@@ -281,7 +273,8 @@ function technicalItems(error: unknown): TechnicalItem[] {
   const code = error.reason ?? error.code
   const items: TechnicalItem[] = []
   if (code && isPlainCode(code)) items.push({ label: tx("Hata kodu"), value: code })
-  if (error.backendMessage) items.push({ label: tx("Sunucu mesajı"), value: error.backendMessage })
+  const message = error.backendMessage ?? (error.reason && !isPlainCode(error.reason) ? error.reason : undefined)
+  if (message) items.push({ label: tx("Sunucu mesajı"), value: message })
   items.push({ label: tx("HTTP durumu"), value: String(error.status) })
   if (error.field && isPlainCode(error.field)) items.push({ label: tx("Alan"), value: error.field })
   return items
@@ -292,8 +285,8 @@ export function describeFailure(code: string | null | undefined, scope?: ErrorSc
   const what = failureMessage(code, scope)
   const technical = code && isPlainCode(code) ? [{ label: tx("Hata kodu"), value: code }] : []
   const key = code ?? ''
-  if (key && !knownMessage(key, scope)) return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', unknown: true, technical }
-  const actionKind = key === 'ServerCertificateUntrusted' ? undefined : classOfCode.get(key) ?? (scope === 'restore' ? 'retry' : undefined)
+  if (key && !knownMessage(key, scope)) return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', technical }
+  const actionKind = key === 'ServerCertificateUntrusted' || key === 'server_certificate_untrusted' ? undefined : classOfCode.get(key) ?? (scope === 'restore' ? 'retry' : undefined)
   if (Object.hasOwn(guidance, key)) return { what, dataImpact: guidance[key].dataImpact(), action: guidance[key].action(), actionKind, technical }
   if (scope === 'restore') return { what, dataImpact: tx("Yedeğiniz değişmedi; hedef veritabanının durumunu kontrol edin."), action: actionKind && actionKind !== 'retry' ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip geri yüklemeyi yeniden deneyin."), actionKind, technical }
   return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: actionKind ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip yeniden deneyin."), actionKind, technical }
@@ -321,8 +314,9 @@ export function describeError(error: unknown, scope?: ErrorScope): ErrorDescript
   if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), actionKind, technical }
   const uncertain = tx("Mevcut yedekleriniz etkilenmedi; işlemin tamamlanıp tamamlanmadığını listeden kontrol edin.")
   if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), actionKind: 'retry', technical }
-  if (error.status !== 401 && key && !knownMessage(key, scope)) return { what, dataImpact: uncertain, action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', unknown: true, technical }
+  if (error.status !== 401 && key && !knownMessage(key, scope)) return { what, dataImpact: uncertain, action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', technical }
   if (error.status === 401) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Giriş yaptıktan sonra işlemi tekrarlayın."), technical }
+  if (actionKind) return { what, dataImpact: error.status >= 500 ? uncertain : tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: actionSentence(actionKind), actionKind, technical }
   if (error.status === 403) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical }
   if (error.status === 404) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
   if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), actionKind: 'retry', technical }

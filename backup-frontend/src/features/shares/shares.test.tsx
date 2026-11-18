@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -382,9 +382,7 @@ describe('BackupShare frontend', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Henüz paylaşım yapılmamış.')).toBeInTheDocument()
-      expect(
-        screen.getByText('Yedek dosyası detayından PlatformAdmin için paylaşım oluşturabilirsiniz.')
-      ).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
     })
   })
 
@@ -749,16 +747,24 @@ describe('BackupShare frontend', () => {
       expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
       expect(screen.getByText('Tamamlandı')).toBeInTheDocument()
       expect(screen.getByText('Reddedildi')).toBeInTheDocument()
-      expect(screen.getByText('share_revoked')).toBeInTheDocument()
+      expect(screen.getByText('Paylaşım iptal edilmiş.')).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'Denetim ve paylaşım geçmişi saklama süresi' })).not.toBeInTheDocument()
     })
+    expect(screen.queryByText('share_revoked')).not.toBeInTheDocument()
+    const refusal = screen.getByText('Paylaşım iptal edilmiş.').closest('[role="alert"]')!
+    fireEvent.click(within(refusal).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const details = await screen.findByRole('dialog')
+    expect(within(details).getByText('share_revoked')).toBeVisible()
+    expect(within(details).getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
+    fireEvent.click(within(details).getByRole('button', { name: 'Kapat' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
     // Older attempts are fetched with the cursor of the previous page and appended; the control disappears on the last page.
-    expect(screen.queryByText('integrity_mismatch')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Dosya sağlama toplamı doğrulaması başarısız/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Daha eski girişimleri göster' }))
     await waitFor(() => {
-      expect(screen.getByText('integrity_mismatch')).toBeInTheDocument()
-      expect(screen.getByText('share_revoked')).toBeInTheDocument()
+      expect(screen.getByText(/Dosya sağlama toplamı doğrulaması başarısız/)).toBeInTheDocument()
+      expect(screen.getByText('Paylaşım iptal edilmiş.')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Daha eski girişimleri göster' })).not.toBeInTheDocument()
     })
     expect(request).toHaveBeenCalledWith(expect.stringContaining('download-attempts?cursor=next-page'), expect.anything())
@@ -773,7 +779,7 @@ describe('BackupShare frontend', () => {
     })
     renderPlatformSharesPage('/platform/shares?result=Failed')
     expect(await screen.findByRole('combobox', { name: 'Sonuç' })).toHaveValue('Failed')
-    expect(await screen.findByText('integrity_mismatch')).toBeVisible()
+    expect(await screen.findByText(/Dosya sağlama toplamı doğrulaması başarısız/)).toBeVisible()
   })
 
   it('renders download attempt history with filters and configurable 365-day retention in Paylaşılan Yedekler for PlatformAdmin', async () => {
@@ -813,8 +819,8 @@ describe('BackupShare frontend', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
-      expect(screen.getByText('share_revoked')).toBeInTheDocument()
-      expect(screen.getByText('integrity_mismatch')).toBeInTheDocument()
+      expect(screen.getByText('Paylaşım iptal edilmiş.')).toBeInTheDocument()
+      expect(screen.getByText(/Dosya sağlama toplamı doğrulaması başarısız/)).toBeInTheDocument()
       expect(screen.getByDisplayValue('365')).toBeInTheDocument()
     })
 

@@ -46,6 +46,7 @@ function technicalItems(restore: RestoreView): TechnicalItem[] {
     { label: tx('Yedekleme bilgisayarı kimliği'), value: restore.agentId },
     { label: tx('Yedek kopyası kimliği'), value: restore.replicaId },
     ...(restore.target.host ? [{ label: tx('Hedef sunucu'), value: target }] : []),
+    ...(restore.reason ? [{ label: tx('Sunucu mesajı'), value: restore.reason }] : []),
     ...(restore.targetState ? [{ label: tx('Hedef durumu kodu'), value: restore.targetState }] : []),
     { label: tx('Kaynak erişimi'), value: restore.sourceAccess === 'AgentLocal' ? tx('Yedekleme bilgisayarındaki kopya') : tx('Merkezi depolama') },
     { label: tx('Kopya koruması'), value: restore.replicaPinned ? tx('Geri yükleme için silmeye karşı korunuyor') : tx('Geri yükleme koruması sona erdi') },
@@ -80,6 +81,13 @@ function RestoreDetail({ id }: { id: string }) {
   const computer = agents.data?.find((agent) => agent.agentId === restore?.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
   const sourceName = restore && (restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? artifact.data?.databaseName ?? tx('Yedek dosyasını aç'))
   const failure = describeFailure(restore?.failureCode, 'restore')
+  function failureControl(code: string | null | undefined) {
+    if (!restore || !canOperate || !code) return undefined
+    const kind = describeFailure(code, 'restore').actionKind
+    if (!kind || kind === 'backupNow') return undefined
+    const to = kind === 'checkComputer' ? `/tenants/${tenantId}/agents/${restore.agentId}` : kind === 'manageStorage' ? `/tenants/${tenantId}/storage` : `/tenants/${tenantId}/artifacts/${restore.artifactId}/restore`
+    return <Link className={buttonVariants({ variant: 'outline' })} to={to}>{actionLabel(kind)}</Link>
+  }
   const sourceJob = restore && (restore.sourceJobName ?? artifact.data?.jobName)
   async function confirmCancel() {
     if (!mayCancel || cancel.isPending) return
@@ -97,7 +105,7 @@ function RestoreDetail({ id }: { id: string }) {
     {artifact.error && <p className="mt-1 text-sm text-text-muted">{tx("Yedek dosyasının ayrıntıları yüklenemedi; geri yükleme kaydı yine de kullanılabilir.")}</p>}
   </Fact>
   return <div className="space-y-6">
-    <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore} emptyState={<EmptyState message={tx("Bu geri yükleme bulunamadı. Geri yüklemeler listesinden yeniden seçin.")} />} onRetry={() => void query.refetch()}>
+    <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore} emptyState={<EmptyState message={tx("Bu geri yükleme bulunamadı. Geri yüklemeler listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/restores`}>{tx("Geri yüklemeler")}</Link>} />} onRetry={() => void query.refetch()}>
       {restore && <>
         <PageHeader title={`${restore.purpose === 'Verification' ? tx('Geri yükleme testi') : restore.purpose === 'Precheck' ? tx('Geri yükleme ön kontrolü') : restore.purpose === 'Discovery' ? tx('Hedef veritabanı bulma') : tx('Geri yükleme')} · ${restore.databaseName}`}
           crumbs={[{ label: tx('Geri yüklemeler'), to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}
@@ -111,7 +119,7 @@ function RestoreDetail({ id }: { id: string }) {
           {...failure}
           {...(restore.status === 'Failed' && restore.failureCode ? {} : { what: restore.status === 'AgentLost' ? tx('Yedekleme bilgisayarıyla bağlantı koptu.') : tx('Geri yükleme iptal edildi.') })}
           dataImpact={fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("Bu durum veritabanının sağlıklı olduğunu göstermez. Hedef veritabanının durumunu kontrol edin; elle müdahale gerekebilir.")}
-          control={canOperate && restore.status === 'Failed' && failure.actionKind && <Link className={buttonVariants({ variant: 'outline' })} to={failure.actionKind === 'checkComputer' ? `/tenants/${tenantId}/agents/${restore.agentId}` : failure.actionKind === 'manageStorage' ? `/tenants/${tenantId}/storage` : `/tenants/${tenantId}/artifacts/${restore.artifactId}/restore`}>{actionLabel(failure.actionKind)}</Link>} /></section>}
+          control={restore.status === 'Failed' ? failureControl(restore.failureCode) : undefined} /></section>}
         <Tabs label={tx("Geri yükleme bölümleri")} idPrefix="restore" value={tab} onChange={setTab} items={[
           { value: 'summary', label: tx('Özet') }, { value: 'details', label: tx('Seçenekler') }, { value: 'attempts', label: tx('Denemeler') }, { value: 'checks', label: tx('Doğrulama sonucu') },
         ]} />
@@ -142,7 +150,7 @@ function RestoreDetail({ id }: { id: string }) {
             </> : <Fact label={tx("Aktif bağlantıları sonlandır")}>{yesNo(restore.options.terminateActiveConnections)}</Fact>}
           </Facts></Section>}
           {tab === 'attempts' && <Section title={tx("Denemeler")}>
-            {restore.attempts.length === 0 ? <EmptyState message={tx("Henüz deneme yok; yedekleme bilgisayarı görevi alınca deneme bilgileri burada görünür.")} /> : <ol className="divide-y divide-border">{restore.attempts.map((attempt) => <li key={attempt.id} className="py-5 first:pt-0 last:pb-0"><article aria-label={tx("{0}. deneme", { "0": attempt.number })} className="space-y-4">
+            {restore.attempts.length === 0 ? <EmptyState message={tx("Henüz deneme yok; yedekleme bilgisayarı görevi alınca deneme bilgileri burada görünür.")} action={<Button onClick={() => void query.refetch()}>{tx("Yenile")}</Button>} /> : <ol className="divide-y divide-border">{restore.attempts.map((attempt) => <li key={attempt.id} className="py-5 first:pt-0 last:pb-0"><article aria-label={tx("{0}. deneme", { "0": attempt.number })} className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium">{attempt.number}{tx(". deneme")}</h3><StatusPill status={attempt.status} /></div>
               <Facts columns={3}>
                 <Fact label={tx('Oluşturulma')}><RelativeTime value={attempt.createdAt} /></Fact>
@@ -152,7 +160,7 @@ function RestoreDetail({ id }: { id: string }) {
                 <Fact label={tx('Hedef veritabanının durumu')}>{targetStateLabel(attempt.targetState)}</Fact>
               </Facts>
               <RestoreProgress stage={attempt.progressStage} percent={attempt.progressPercent} at={attempt.progressAt} label={tx("{0}. deneme ilerlemesi", { "0": attempt.number })} />
-              {attempt.failureCode && <ErrorNotice failureCode={attempt.failureCode} scope="restore" />}
+              {attempt.failureCode && <ErrorNotice failureCode={attempt.failureCode} scope="restore" control={restore.purpose === 'Execution' ? failureControl(attempt.failureCode) : undefined} />}
             </article></li>)}</ol>}
           </Section>}
           {tab === 'checks' && <Section title={tx("Doğrulama sonucu")}>
@@ -160,7 +168,7 @@ function RestoreDetail({ id }: { id: string }) {
               <Facts><Fact label={tx("Dosya bütünlüğü doğrulandı")}>{yesNo(restore.result.checksumVerified)}</Fact><Fact label={tx("Yedek doğrulandı")}>{yesNo(restore.result.backupVerified)}</Fact></Facts>
               <ul className="divide-y divide-border text-sm">{dedupeChecks(restore.result.preCheck).map((check, index) => <li key={`${check.checkId}:${index}`} className="flex flex-wrap justify-between gap-2 py-3"><span className="min-w-0 break-words">{precheckLabel(check.checkId)}</span><span className="font-medium">{({ Passed: tx('Geçti'), Warning: tx('Uyarı'), Failed: tx('Başarısız'), Skipped: tx('Atlandı') })[check.status]}</span></li>)}</ul>
               {restore.result.warnings.length > 0 && <Notice tone="warning">{tx("Geri yükleme sırasında uyarılar bildirildi; ayrıntıları aşağıdaki teknik ayrıntılarda bulabilirsiniz.")}</Notice>}
-            </div> : <EmptyState message={tx("Doğrulama sonucu henüz bildirilmedi; yedekleme bilgisayarı sonucu gönderince kontrol ayrıntıları burada görünür.")} />}
+            </div> : <EmptyState message={tx("Doğrulama sonucu henüz bildirilmedi; yedekleme bilgisayarı sonucu gönderince kontrol ayrıntıları burada görünür.")} action={<Button onClick={() => void query.refetch()}>{tx("Yenile")}</Button>} />}
           </Section>}
         </div>
         <TechnicalDetails items={technicalItems(restore)} />

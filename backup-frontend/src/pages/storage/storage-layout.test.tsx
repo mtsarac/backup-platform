@@ -68,6 +68,22 @@ describe('Storage hub', () => {
     expect(connectionApi.getTenantConnections).not.toHaveBeenCalled()
   })
 
+  it('offers the connection wizard in the empty destinations state', async () => {
+    vi.mocked(connectionApi.getTenantConnections).mockResolvedValue({ items: [] })
+    mount()
+    await screen.findByText(/İlk hedefi “Bağlantı ekle” ile ekleyin/)
+    expect(screen.getAllByRole('link', { name: 'Bağlantı ekle' })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: 'Bağlantı ekle' })[1]).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/new')
+  })
+
+  it('refreshes an empty provider catalog', async () => {
+    vi.mocked(connectionApi.getTenantProviders).mockResolvedValue({ items: [] })
+    mount('/providers')
+    const empty = (await screen.findByText('Henüz kullanılabilir depolama türü yok.')).parentElement!
+    await userEvent.click(within(empty).getByRole('button', { name: 'Yenile' }))
+    expect(connectionApi.getTenantProviders).toHaveBeenCalledTimes(2)
+  })
+
   it('names the hub once and offers one add action on every tab', async () => {
     mount()
     expect(await screen.findByRole('heading', { level: 1, name: 'Depolama' })).toBeInTheDocument()

@@ -1,15 +1,18 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { AlertTriangle, CheckCircle2, MinusCircle, RotateCcw, XCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { dedupeChecks, precheckLabel, precheckWarningText, technicalChecks } from './presentation'
 import type { RestoreResult, RestoreView } from './types'
-import { describeFailure, failureMessage } from '@/lib/api/failure-messages'
+import { useTenant } from '@/features/tenancy/use-tenant'
+import { actionLabel, describeFailure, failureMessage } from '@/lib/api/failure-messages'
 
 type PrecheckItem = RestoreResult['preCheck'][number]
 
@@ -34,6 +37,9 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
   data: RestoreView; failed: boolean; passed: boolean; onRecheck: () => void; recheckDisabled: boolean; fileArchive?: boolean
 }) {
   useLanguage()
+  const { tenantId, canOperate } = useTenant()
+  const failure = data.failureCode ? describeFailure(data.failureCode, 'restore') : undefined
+  const destination = failure?.actionKind === 'checkComputer' ? `/tenants/${tenantId}/agents/${data.agentId}` : failure?.actionKind === 'manageStorage' ? `/tenants/${tenantId}/storage` : undefined
   const items = dedupeChecks(data.result?.preCheck ?? [])
   const warnings = items.filter((item) => item.status === 'Warning')
   const source = data.result?.sourceBackup
@@ -42,7 +48,7 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
       <div className="flex items-center gap-2"><span className="font-medium text-text-heading">{tx("Durum:")}</span><StatusPill status={data.status} /></div>
       <Button variant="outline" size="sm" onClick={onRecheck} disabled={recheckDisabled}><RotateCcw aria-hidden="true" className="size-4" />{tx("Yeniden Kontrol Et")}</Button>
     </div>
-    {failed && <ErrorNotice title={tx("Ön kontrol başarısız oldu! Restore başlatılamaz.")} {...(data.failureCode ? describeFailure(data.failureCode, 'restore') : { what: tx('Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.'), dataImpact: fileArchive ? tx('Geri yükleme başlamadı; hedefteki dosyalar değişmedi.') : tx('Geri yükleme başlamadı; hedef veritabanı değişmedi.'), action: tx('Başarısız kontrolleri giderip ön kontrolü yeniden çalıştırın.'), technical: [] })} />}
+    {failed && <ErrorNotice title={tx("Ön kontrol başarısız oldu! Restore başlatılamaz.")} {...(failure ?? { what: tx('Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.'), dataImpact: fileArchive ? tx('Geri yükleme başlamadı; hedefteki dosyalar değişmedi.') : tx('Geri yükleme başlamadı; hedef veritabanı değişmedi.'), action: tx('Başarısız kontrolleri giderip ön kontrolü yeniden çalıştırın.'), technical: [] })} control={canOperate && destination && failure?.actionKind ? <Link className={buttonVariants({ variant: 'outline' })} to={destination}>{actionLabel(failure.actionKind)}</Link> : undefined} onRetry={canOperate && !recheckDisabled && (!failure || failure.actionKind === 'retry') ? onRecheck : undefined} />}
     {passed && warnings.length > 0 && <Notice tone="warning" title={tx("Ön kontrol uyarılarla geçti.")}>{tx("Aşağıdaki uyarıları inceleyerek devam edebilirsiniz.")}</Notice>}
     {passed && warnings.length === 0 && <Notice tone="success" title={tx("Tüm ön kontroller başarıyla tamamlandı. Geri yükleme güvenle başlatılabilir.")} />}
     <DataList rows={items} columns={columns} keyExtractor={(item) => `${item.checkId}:${item.reasonCode}:${item.status}:${items.indexOf(item)}`} emptyMessage={tx("Henüz kontrol sonucu bildirilmedi.")} />

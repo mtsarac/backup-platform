@@ -64,7 +64,6 @@ export function precheckLabel(checkId: string): string {
   }
   return Object.hasOwn(labels, checkId) ? labels[checkId] : tx('Diğer kontrol')
 }
-/** Warning texts come from the engines in English; known reason codes get Turkish wording, unknown ones keep the engine's message. */
 export function precheckWarningText(item: { reasonCode: string; message: string }): string {
   const texts: Record<string, string> = {
     'role-definitions-not-in-archive': tx('Rol tanımları yedeğe dahil değildir. Nesne sahibi ve ACL rollerinin hedef sunucuda önceden bulunması gerekir; eksik rol varsa geri yükleme yayımlanmadan önce güvenli biçimde başarısız olur. Sahiplik ve ACL bilgileri sessizce atılmaz.'),
@@ -93,7 +92,7 @@ export function precheckWarningText(item: { reasonCode: string; message: string 
     'target-relation-unknown': tx('Mevcut veritabanının bu yedeğin veritabanından oluşturulup oluşturulmadığı belirlenemedi.'),
     'target-unrelated-to-backup': tx('Mevcut veritabanı yedeklenen veritabanıyla ilişkili değil (farklı aile GUID’i); üzerine yazma onaylandığı için değiştirilecek.'),
   }
-  return Object.hasOwn(texts, item.reasonCode) ? texts[item.reasonCode] : item.message
+  return Object.hasOwn(texts, item.reasonCode) ? texts[item.reasonCode] : tx('Bu kontrol bir uyarı bildirdi; teknik ayrıntıları inceleyin.')
 }
 /**
  * How a failed start reads to the user. A failure that is not an API answer leaves it unknown whether the restore began; retrying is safe

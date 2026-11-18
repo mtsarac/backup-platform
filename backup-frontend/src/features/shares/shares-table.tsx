@@ -10,6 +10,7 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { formatBytes, formatDateTime } from '@/lib/format'
+import { describeFailure } from '@/lib/api/failure-messages'
 import { tx, useLanguage } from '@/lib/i18n'
 import { ShareActionDialogs } from './share-dialogs'
 import { canManageShare, type BackupShareView, type DownloadAttemptView } from './types'
@@ -182,6 +183,7 @@ export function SharesTable({
       <EmptyState
         icon={Share2}
         message={emptyMessage || tx('Henüz paylaşım yapılmamış.')}
+        canAct={emptyAction ? canAdmin : true}
         action={emptyAction}
       />
     )
@@ -224,6 +226,7 @@ export interface DownloadAttemptsTableProps {
   emptyMessage?: string
   /** Present while older attempts remain on the server. */
   onLoadMore?: () => void
+  onRefresh?: () => void
   loadingMore?: boolean
 }
 
@@ -232,6 +235,7 @@ export function DownloadAttemptsTable({
   showTenant = false,
   emptyMessage,
   onLoadMore,
+  onRefresh,
   loadingMore = false,
 }: DownloadAttemptsTableProps) {
   useLanguage()
@@ -287,7 +291,11 @@ export function DownloadAttemptsTable({
       key: 'failureReason',
       header: tx('Hata / Red gerekçesi'),
       wrap: true,
-      render: (attempt: DownloadAttemptView) => attempt.failureReason || '—',
+      render: (attempt: DownloadAttemptView) => {
+        if (!attempt.failureReason) return '—'
+        const failure = describeFailure(attempt.failureReason)
+        return <ErrorNotice {...failure} technical={failure.technical.length ? failure.technical : [{ label: tx('Sunucu mesajı'), value: attempt.failureReason }]} />
+      },
     },
   ]
 
@@ -296,6 +304,7 @@ export function DownloadAttemptsTable({
       <EmptyState
         icon={Share2}
         message={emptyMessage || tx('Henüz indirme girişimi kaydı yok.')}
+        action={onRefresh && <Button onClick={onRefresh}>{tx('Yenile')}</Button>}
       />
     )
   }

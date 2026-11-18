@@ -134,12 +134,39 @@ describe('restore verification detail', () => {
     expect(screen.queryByText('Sonuç')).not.toBeInTheDocument()
   })
 
-  it('renders a Failed outcome with the server reason', async () => {
+  it('keeps the server reason in copyable technical details', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(withResult({ ...base, status: 'Failed', verificationOutcome: 'Failed', failureCode: 'VerificationFailed', reason: 'The backup restored, but checks failed.', cleanup: cleanupOf({}) }, false))
     renderDetail()
-    expect(await screen.findByText(/The backup restored, but checks failed\./)).toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1, name: /Geri yükleme testi/ })
+    expect(screen.queryByText('The backup restored, but checks failed.')).not.toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
+    expect(await screen.findByText('The backup restored, but checks failed.')).toBeInTheDocument()
     expect(screen.getByText('Başarısız', { selector: 'li span.font-medium' })).toBeInTheDocument()
     expect(screen.queryByText(/Hedef veritabanını kontrol edin/)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['DatabaseUnavailable', 'Bilgisayarı kontrol et', '/tenants/tenant-a/agents/agent-1'],
+    ['quota_exceeded', 'Depolamayı yönet', '/tenants/tenant-a/storage'],
+    ['AuthenticationFailed', 'Bilgileri düzelt', '/tenants/tenant-a/artifacts/artifact-1/restore'],
+  ])('links the %s failure to its relevant screen', async (failureCode, label, href) => {
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, purpose: 'Execution', status: 'Failed', failureCode })
+    renderDetail()
+    expect(await screen.findByRole('link', { name: label })).toHaveAttribute('href', href)
+  })
+
+  it('does not offer operation controls to a viewer or for an untrusted certificate', async () => {
+    tenancy.canOperate = false
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, purpose: 'Execution', status: 'Failed', failureCode: 'DatabaseUnavailable' })
+    const view = renderDetail()
+    await screen.findByRole('heading', { level: 1, name: /Geri yükleme/ })
+    expect(screen.queryByRole('link', { name: 'Bilgisayarı kontrol et' })).not.toBeInTheDocument()
+    view.unmount()
+    tenancy.canOperate = true
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, purpose: 'Execution', status: 'Failed', failureCode: 'ServerCertificateUntrusted' })
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: /Geri yükleme/ })
+    expect(screen.queryByRole('link', { name: /Yeniden dene|Bilgileri düzelt/ })).not.toBeInTheDocument()
   })
 
   it('renders NotRun for a cancelled verification', async () => {

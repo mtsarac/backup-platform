@@ -6,6 +6,7 @@ import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -62,7 +63,7 @@ export function ConnectionList() {
   return <QueryState isPending={connections.isPending} error={connections.error} onRetry={() => void connections.refetch()}>
     <Section title={tx("Depolama hedefleri")} description={tx("Backup'ların yazıldığı yerler. Bir hedefi devre dışı bırakmak yalnızca yeni backup'ları durdurur; mevcut backup'lar silinmez.")} flush>
       {list.length === 0
-        ? <EmptyState icon={Cable} message={canAdmin ? tx("Henüz depolama bağlantısı yok. İlk hedefi “Bağlantı ekle” ile ekleyin.") : tx("Henüz depolama bağlantısı yok")} canAct={canAdmin} />
+        ? <EmptyState icon={Cable} message={canAdmin ? tx("Henüz depolama bağlantısı yok. İlk hedefi “Bağlantı ekle” ile ekleyin.") : tx("Henüz depolama bağlantısı yok")} canAct={canAdmin} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/storage/connections/new`}>{tx("Bağlantı ekle")}</Link>} />
         : <>
           <ul className="divide-y divide-border">{list.map((connection) => <ConnectionCard key={connection.id} connection={connection} tenantId={tenantId} total={total}
             testing={ops.test.isPending && ops.test.variables?.id === connection.id} testError={ops.test.error && ops.test.variables?.id === connection.id ? errorMessage(ops.test.error, 'storageConnection') : undefined} onTest={() => ops.test.mutate(connection)} />)}</ul>

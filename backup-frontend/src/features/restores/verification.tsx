@@ -32,7 +32,7 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
   return <Section title={tx("Restore doğrulaması")} description={tx("Backup'ın gerçekten geri yüklenebildiğini geçici, izole bir Database üzerinde kanıtlayın.")}
     actions={canOperate && !formOpen && <Button variant="outline" onClick={() => setFormOpen(true)}>{tx("Restore testi başlat")}</Button>}>
     <div className="space-y-4">
-      {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" />
+      {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" onRetry={() => void history.refetch()} />
         : rows.length === 0 && !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
       {formOpen && canOperate && <VerificationForm tenantId={tenantId} artifactId={artifact.id} onClose={() => setFormOpen(false)} />}
       {rows.length > 0 && <DataList caption={tx("Son restore testleri")} emptyMessage={tx("Henüz test edilmedi.")} rows={rows} keyExtractor={row => row.id} columns={[
@@ -58,7 +58,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
   const [error, setError] = useState<unknown>(null)
   const [loginPending, setLoginPending] = useState(false)
   if (targets.isPending) return <p className="text-sm text-text-muted">{tx("Hedefler yükleniyor…")}</p>
-  if (targets.error || !targets.data) return <ErrorNotice title={tx("Hedefler yüklenemedi")} error={targets.error} scope="restore" />
+  if (targets.error || !targets.data) return <ErrorNotice title={tx("Hedefler yüklenemedi")} error={targets.error} scope="restore" onRetry={() => void targets.refetch()} />
   const agents = targets.data.agents.filter((agent) => agent.canVerify && agent.sourceEligible)
   const configured = targets.data.targets
   const useConfigured = targetIndex >= 0 && configured[targetIndex] !== undefined

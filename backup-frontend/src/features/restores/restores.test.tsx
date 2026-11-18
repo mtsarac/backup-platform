@@ -13,6 +13,7 @@ import * as RestoreApi from './api'
 import * as AgentApi from '@/features/agents/api'
 import * as ArtifactApi from '@/features/artifacts/api'
 import type { RestorePage, RestoreResult, RestoreTargetsResponse, RestoreView } from './types'
+import { PrecheckResults } from './precheck-results'
 
 const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
@@ -1134,4 +1135,13 @@ describe('precheck verdict', () => {
     expect(screen.getAllByText('Hedefte yeterli disk alanı yok.').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Devam et/ })).toBeDisabled()
   })
+})
+
+it('rechecks a failed precheck only when retry is safe', () => {
+  const recheck = vi.fn()
+  const view = render(<PrecheckResults data={{ ...sampleRestore, failureCode: 'VerificationFailed' }} failed passed={false} onRecheck={recheck} recheckDisabled={false} />)
+  fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Yeniden dene' }))
+  expect(recheck).toHaveBeenCalledOnce()
+  view.rerender(<PrecheckResults data={{ ...sampleRestore, failureCode: 'ServerCertificateUntrusted' }} failed passed={false} onRecheck={recheck} recheckDisabled={false} />)
+  expect(within(screen.getByRole('alert')).queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
 })

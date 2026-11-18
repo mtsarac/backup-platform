@@ -2,11 +2,15 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { RadioField } from '@/components/ui/radio-field'
 import { Select } from '@/components/ui/text-input'
 import { CheckCircle2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { ErrorNotice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { FilePathList } from '@/features/backup-jobs/file-path-list'
+import { useTenant } from '@/features/tenancy/use-tenant'
+import { actionLabel, describeFailure } from '@/lib/api/failure-messages'
 import type { RestoreTargetAgent, RestoreTargetsResponse } from './types'
 
 interface FileRestoreSourceStepProps {
@@ -30,6 +34,7 @@ interface FileRestoreSourceStepProps {
 /** The backup file is fixed by the page; here the user picks the computer that reads it and which of its files to bring back. */
 export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId, originalAgent, original, scope, paths, pathsValid, eligible, onAgentChange, onScopeChange, onPathsChange, onContinue }: FileRestoreSourceStepProps) {
   useLanguage()
+  const { tenantId, canOperate } = useTenant()
   return (
     <div className="space-y-5">
       <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Dosyaları yedekten alıp yerlerine koyacak yedekleme bilgisayarını seçmeniz gerekir.")}>
@@ -42,7 +47,7 @@ export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId,
             ))}
           </Select>
           {eligible && <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />{tx("Bu bilgisayar bu yedek dosyasına ulaşabilir.")}</p>}
-          {agent && !eligible && <ErrorNotice failureCode={agent.rejectionCode} scope="restore" />}
+          {agent && !eligible && <ErrorNotice failureCode={agent.rejectionCode} scope="restore" control={canOperate && describeFailure(agent.rejectionCode, 'restore').actionKind === 'checkComputer' ? <Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{actionLabel('checkComputer')}</Link> : undefined} />}
           {agent && <TechnicalDetails items={[
             { label: tx('Yedekleme bilgisayarı kimliği'), value: agent.agentId },
             ...(agent.sourceAccess ? [{ label: tx('Yedek erişim yolu'), value: agent.sourceAccess }] : []),

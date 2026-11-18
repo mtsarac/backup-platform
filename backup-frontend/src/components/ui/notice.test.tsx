@@ -25,6 +25,15 @@ describe('ErrorNotice', () => {
     expect(within(dialog).getByRole('button', { name: 'Kopyala: Sunucu mesajı' })).toBeInTheDocument()
   })
 
+  it('keeps a free-form server reason in copyable technical details', async () => {
+    render(<ErrorNotice error={new ApiError(409, { reason: 'The remote server is offline.' })} />)
+    expect(screen.queryByText('The remote server is offline.')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('The remote server is offline.')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: Sunucu mesajı' })).toBeInTheDocument()
+  })
+
   it('accepts the three parts directly for failures that are not API errors', () => {
     render(<ErrorNotice what="İndirme bağlantısı güvenli değil." dataImpact="Yedeğiniz değişmedi." action="Yeni bir indirme başlatın." />)
     const alert = screen.getByRole('alert')
@@ -63,13 +72,15 @@ describe('ErrorNotice', () => {
     expect(retry).toHaveBeenCalledOnce()
   })
 
-  it('shows a code it has no wording for as a fixed sentence plus an open, copyable code', () => {
+  it('keeps an unknown code copyable under closed technical details', async () => {
     render(<ErrorNotice failureCode="brand_new_backend_code" />)
     const alert = screen.getByRole('alert')
     expect(alert).toHaveTextContent('Beklenmeyen bir sorun oluştu. Biraz sonra yeniden deneyin; sürerse aşağıdaki kodu destek ekibine iletin.')
-    expect(within(alert).getByText('brand_new_backend_code')).toBeVisible()
-    expect(within(alert).getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
-    expect(alert.textContent?.split('brand_new_backend_code').length).toBe(2)
+    expect(screen.queryByText('brand_new_backend_code')).not.toBeInTheDocument()
+    await userEvent.click(within(alert).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('brand_new_backend_code')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
   })
 
   it('keeps a known code out of the text and behind the closed technical details', () => {

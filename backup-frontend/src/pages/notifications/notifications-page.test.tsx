@@ -382,6 +382,20 @@ describe('channels', () => {
 })
 
 describe('delivery history', () => {
+  it('clears all delivery filters from the empty state', async () => {
+    vi.mocked(api.getDeliveries).mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 })
+    const user = userEvent.setup()
+    mount()
+    await openTab(user, 'Gönderim geçmişi')
+    await user.selectOptions(screen.getByLabelText('Durum'), 'failed')
+    await user.selectOptions(screen.getByLabelText('Kanal türü'), 'webhook')
+    await user.selectOptions(screen.getByLabelText('Olay türü'), 'test')
+    await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ status: 'failed', kind: 'webhook', eventType: 'test' }), expect.anything()))
+    const empty = screen.getByText('Gönderim kaydı bulunamadı.').parentElement!
+    await user.click(within(empty).getByRole('button', { name: 'Filtreleri temizle' }))
+    await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: undefined, kind: undefined, eventType: undefined }, expect.anything()))
+  })
+
   it('shows delivery cards with copyable error and attempt data collapsed', async () => {
     const user = userEvent.setup()
     mount()

@@ -66,7 +66,7 @@ export function DeliveriesSection() {
       </Filters>
       <QueryState isPending={deliveries.isPending} error={deliveries.error}>
         {data && (data.totalCount === 0
-          ? <EmptyState icon={Send} message={tx("Gönderim kaydı bulunamadı.")} action={<Button disabled={deliveries.isFetching} onClick={() => void deliveries.refetch()}>{tx('Yenile')}</Button>} />
+          ? <EmptyState icon={Send} message={tx("Gönderim kaydı bulunamadı.")} onClearFilters={status || kind || eventType ? () => update({ status: '', kind: '', eventType: '' }) : undefined} action={<Button disabled={deliveries.isFetching} onClick={() => void deliveries.refetch()}>{tx('Yenile')}</Button>} />
           : <>
             <ul className="space-y-3">{data.items.map(delivery => <DeliveryCard key={delivery.id} delivery={delivery} />)}</ul>
             <Pagination page={data.page} pageSize={data.pageSize} totalCount={data.totalCount} onPageChange={next => update({ page: next })} disabled={deliveries.isFetching} />

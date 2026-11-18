@@ -1,4 +1,6 @@
 import { QueryState } from '@/components/data/query-state'
+import { Link } from 'react-router-dom'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Section } from '@/components/ui/section'
 import { useShares, useTenantDownloadAttempts } from '@/features/shares/hooks'
 import { DownloadAttemptsTable, SharesTable } from '@/features/shares/shares-table'
@@ -20,11 +22,7 @@ export function SharesPage() {
           canAdmin={canAdmin}
           caption={tx('Paylaşımlarım')}
           emptyMessage={tx('Henüz paylaşım yapılmamış.')}
-          emptyAction={
-            <p className="text-sm text-text-muted">
-              {tx('Yedek dosyası detayından PlatformAdmin için paylaşım oluşturabilirsiniz.')}
-            </p>
-          }
+          emptyAction={<Link className={buttonVariants()} to={`/tenants/${tenantId}/artifacts`}>{tx('Yedek dosyalarını aç')}</Link>}
         />
       </QueryState>
 
@@ -35,7 +33,7 @@ export function SharesPage() {
         description={tx('Çalışma alanınıza ait paylaşımlar ve yedek dosyaları üzerindeki indirme girişimleri.')}
       >
         <QueryState isPending={attemptsQuery.isPending} error={attemptsQuery.error}>
-          <DownloadAttemptsTable attempts={attempts} onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined} loadingMore={attemptsQuery.isFetchingNextPage} />
+          <DownloadAttemptsTable attempts={attempts} onRefresh={() => void attemptsQuery.refetch()} onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined} loadingMore={attemptsQuery.isFetchingNextPage} />
         </QueryState>
       </Section>
       </details>

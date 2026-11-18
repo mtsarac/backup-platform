@@ -7,6 +7,7 @@ import { ProgressBar } from '@/components/data/progress-bar'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -128,7 +129,7 @@ function BackupDetail({ id }: { id: string }) {
           {canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => { actions.cancel.reset(); setConfirmCancel(true) }}>{actions.cancel.isPending ? tx('İletiliyor…') : tx('İptal et')}</Button>}
         </>}
       />
-      <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run} emptyState={<EmptyState icon={History} message={tx("Bu yedekleme denemesi bulunamadı. Yedekleme denemeleri listesinden yeniden seçin.")} />}>
+      <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run} emptyState={<EmptyState icon={History} message={tx("Bu yedekleme denemesi bulunamadı. Yedekleme denemeleri listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx("Yedekleme denemeleri")}</Link>} />}>
         {run && <>
           <ConfirmDialog open={confirmCancel && canOperate && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
             consequence={{
@@ -172,7 +173,7 @@ function BackupDetail({ id }: { id: string }) {
               <div role="region" aria-label={tx("Yedekleme denemesi ayrıntıları")}><TechnicalDetails items={runTechnicalItems(run)} /></div>
             </>}
             {tab === 'attempts' && (run.attempts.length === 0
-              ? <Card padding="none"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} /></Card>
+              ? <Card padding="none"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} action={<Button variant="outline" onClick={() => setTab('summary')}>{tx('Özet')}</Button>} /></Card>
               : run.attempts.map((attempt) => <Section key={attempt.id} title={tx("{0}. deneme · {1}", { "0": attempt.number, "1": triggerLabel(attempt.trigger) })} actions={<><StatusPill status={attempt.status} /><ReplicationBadge replication={attempt.replication} /></>}>
                 <div className="space-y-4">
                   <Facts columns={3}>

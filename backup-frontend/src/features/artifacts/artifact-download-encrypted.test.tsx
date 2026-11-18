@@ -27,7 +27,7 @@ describe('download of an encrypted Backup', () => {
     vi.mocked(prepareDownload).mockResolvedValue({ sessionId: 'session-a', downloadUrl: url, filename: 'backup-1.bak.bpe', checksum: 'cipher-sha256', sizeBytes: 4096, decrypted: false })
     mount()
     expect(await screen.findByRole('radio', { name: /Şifreli dosya \(\.bpe\)/ })).toBeChecked()
-    expect(screen.getByText('Şifreli dosyanın SHA256 checksum değeri')).toBeInTheDocument()
+    expect(screen.getByText('Şifreli dosyanın SHA256 sağlama toplamı')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Yedeklemeyi İndir' }))
     await waitFor(() => expect(click).toHaveBeenCalledOnce())
     expect(prepareDownload).toHaveBeenCalledWith('tenant-a', 'artifact-a', undefined)

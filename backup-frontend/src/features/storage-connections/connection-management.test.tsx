@@ -103,11 +103,11 @@ describe('Storage connections list and detail', () => {
     expect(local.getAllByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toHaveLength(1)
   })
 
-  it('gives an empty list one sentence and no second add button, or asks to consult the administrator', async () => {
+  it('offers the add connection action when permitted, or asks the administrator', async () => {
     serve([])
     const { unmount } = mount()
     expect(await screen.findByText(/İlk hedefi “Bağlantı ekle” ile ekleyin/)).toBeInTheDocument()
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Bağlantı ekle' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/new')
     unmount()
     access.canAdmin = false
     mount()
@@ -320,11 +320,17 @@ describe('Storage connections list and detail', () => {
     expect(crumbs.getByRole('link', { name: 'Depolama' })).toHaveAttribute('href', base)
   })
 
-  it('still explains a failed test and asks to retry, without hiding the header status', async () => {
+  it('offers credential correction and keeps the backend message in technical details', async () => {
     serve([s3({ lastTest: { status: 'Failed', code: 'access_denied', message: 'Access denied.', testedAt: new Date().toISOString() } })])
     mount(detail('conn-s3'))
-    expect(await screen.findByText('Son test başarısız')).toBeInTheDocument()
+    const alert = within((await screen.findByText('Son test başarısız')).closest('[role="alert"]')!)
     expect(screen.getByText('Bağlantı sorunu')).toBeInTheDocument()
+    expect(alert.getByRole('link', { name: 'Bilgileri düzelt' })).toHaveAttribute('href', `${base}/connections/conn-s3?tab=credentials`)
+    expect(screen.queryByText('Access denied.')).not.toBeInTheDocument()
+    await userEvent.click(alert.getByText('Teknik ayrıntılar'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Access denied.')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: Sunucu mesajı' })).toBeInTheDocument()
   })
 })
 

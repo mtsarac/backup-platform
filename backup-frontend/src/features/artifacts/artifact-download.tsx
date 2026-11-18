@@ -43,7 +43,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
   return <Section title={tx("Download Backup")} description={tx("Harici depolama indirmeleri yetkili Agent üzerinden doğrudan diske aktarılır; platform depolaması tarayıcının indirme yöneticisini kullanır.")} className="max-w-3xl">
     <div className="space-y-4">
       {availability.isPending && <p role="status" className="text-sm text-text-muted">{tx("İndirme kullanılabilirliği kontrol ediliyor…")}</p>}
-      {availability.error ? <ErrorNotice error={availability.error} /> : null}
+      {availability.error ? <ErrorNotice error={availability.error} onRetry={() => void availability.refetch()} /> : null}
       {availability.data && <>
         <Facts columns={1}>
           <Fact label={tx("Boyut")}>{formatBytes(availability.data.sizeBytes)}</Fact>
@@ -70,7 +70,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
         {!availability.data.available && <Notice tone="warning">{tx("İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil (")}{failureMessage(availability.data.reason)}).</Notice>}
         <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => void flow.start()}>{flow.pending || flow.state === 'Preparing' ? tx('İndirme hazırlanıyor…') : availability.data.format === 'v2-bpe' && decrypt ? tx('Çözülmüş dosyayı indir') : tx('Download Backup')}</Button>
       </>}
-      <DownloadFlowStatus flow={flow} />
+      <DownloadFlowStatus flow={flow} onRetry={!busy && availability.data?.available && !(selected && !selected.available) ? () => void flow.start() : undefined} />
     </div>
   </Section>
 }

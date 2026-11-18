@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import type { RestoreMode, RestoreOptions, RestoreView } from './types'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { describeError, errorMessage } from '@/lib/api/failure-messages'
 import { Disclosure } from '@/components/ui/disclosure'
 
 interface RestoreModeStepProps {
@@ -145,7 +145,9 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
       </Section>
 
       {precheckError != null && (
-        <ErrorNotice error={precheckError} scope="restore" />
+        <ErrorNotice error={precheckError} scope="restore"
+          onAction={describeError(precheckError, 'restore').actionKind === 'fixCredentials' ? onBack : undefined}
+          onRetry={describeError(precheckError, 'restore').actionKind === 'retry' && eligibleForRestore && targetValid && !loginPending && !precheckStarting && !restoreStarting ? onRunPrecheck : undefined} />
       )}
 
       <div className="flex flex-wrap justify-between gap-3">

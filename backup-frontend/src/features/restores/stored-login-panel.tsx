@@ -50,6 +50,6 @@ export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onSto
     </Button>
     {pending && <Notice tone="warning">{tx("Yazdığınız giriş henüz kaydedilmedi; devam etmeden önce “Girişi kaydet”e basın.")}</Notice>}
     {reference && !login && <Notice tone="success">{tx("Bu hedef için kayıtlı bir veritabanı girişi seçili.")}</Notice>}
-    {error && <ErrorNotice {...error} />}
+    {error && <ErrorNotice {...error} onAction={error.actionKind === 'fixCredentials' ? () => document.getElementById(`${idPrefix}-user`)?.focus() : undefined} onRetry={error.actionKind === 'retry' && pending && agentId && !saving ? () => void save() : undefined} />}
   </div>
 }

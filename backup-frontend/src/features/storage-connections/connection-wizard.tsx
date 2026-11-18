@@ -23,7 +23,7 @@ import { errorField, executionLocationLabel, tenantCreateState, testMessage, tes
 import { ProviderIcon } from './provider-icon'
 import { ProviderFields } from './provider-form'
 import type { ConnectionView, ProviderDescriptor } from './types'
-import { describeError } from '@/lib/api/failure-messages'
+import { describeError, describeFailure } from '@/lib/api/failure-messages'
 import { RadioField } from '@/components/ui/radio-field'
 
 type StepKey = 'provider' | 'connection' | 'settings' | 'credentials' | 'review'
@@ -165,7 +165,8 @@ function ConnectionWizardForm() {
           {testing && <Notice tone="info" title={tx("Bağlantı test ediliyor…")}>{tx("Küçük bir test dosyası yazılıp okunur ve silinir; mevcut yedekleriniz değişmez.")}</Notice>}
           {Boolean(ops.test.error) && !testing && <ErrorNotice title={tx("Test tamamlanamadı")} error={ops.test.error} scope="storageConnection" />}
           {test?.status === 'Succeeded' && <Notice tone="success" title={tx("Bağlantı çalışıyor")}>{testMessage(test)}</Notice>}
-          {test?.status === 'Failed' && <ErrorNotice title={tx("Test başarısız")} what={testMessage(test)} dataImpact={tx("Bağlantı kaydedildi ama henüz doğrulanmadı; yedekler bu depolamaya yazılamayabilir.")} action={tx("Ayarları düzeltip yeniden test edin.")} technical={testTechnical(test)} />}
+          {test?.status === 'Failed' && <ErrorNotice title={tx("Test başarısız")} what={testMessage(test)} dataImpact={tx("Bağlantı kaydedildi ama henüz doğrulanmadı; yedekler bu depolamaya yazılamayabilir.")} action={tx("Ayarları düzeltip yeniden test edin.")} technical={testTechnical(test)}
+            control={describeFailure(test.code, 'storageConnection').actionKind === 'fixCredentials' && (created.permissions.canManageSecret || created.permissions.canEdit) ? <Link to={`${connectionPath(tenantId, created.id)}?tab=${created.permissions.canManageSecret ? 'credentials' : 'configuration'}`} className={buttonVariants({ variant: 'outline' })}>{tx("Bilgileri düzelt")}</Link> : undefined} />}
           {test?.status === 'NotTestable' && <Notice tone="info" title={tx("Bu depolamayı yedekleme bilgisayarı denetler")}>{testMessage(test)}</Notice>}
           <div className="flex flex-wrap gap-2">
             {google && !testing && test?.status !== 'Succeeded' && <Button disabled={googleConnect.isPending} onClick={() => authorizeGoogle(created)}><ExternalLink aria-hidden="true" className="size-4" />{googleConnect.isPending ? tx('Yönlendiriliyor…') : tx('Google Hesabını Bağla')}</Button>}

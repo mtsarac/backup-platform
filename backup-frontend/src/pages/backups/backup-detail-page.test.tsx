@@ -47,6 +47,13 @@ beforeEach(() => {
 })
 
 describe('run detail controls and attention', () => {
+  it('links a missing run back to the run list', () => {
+    state.query.data = undefined
+    renderDetail()
+    const empty = screen.getByText(/Bu yedekleme denemesi bulunamadı/).parentElement!
+    expect(within(empty).getByRole('link', { name: 'Yedekleme denemeleri' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
+  })
+
   it('keeps identity and start time in the summary and links attempt outputs to their artifact owner', () => {
     const run = makeRun()
     run.attempts[0].artifacts = [{ id: 'artifact-a' } as BackupArtifact]

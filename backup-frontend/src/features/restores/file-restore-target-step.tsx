@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
+import { describeError } from '@/lib/api/failure-messages'
 import type { RestoreTargetAgent, RestoreTargetsResponse } from './types'
 
 interface FileRestoreTargetStepProps {
@@ -70,7 +71,7 @@ export function FileRestoreTargetStep({ instancePrefix, targets, originalAgent, 
         </div>
       </Section>
 
-      {precheckError != null && <ErrorNotice error={precheckError} scope="restore" />}
+      {precheckError != null && <ErrorNotice error={precheckError} scope="restore" onRetry={describeError(precheckError, 'restore').actionKind === 'retry' && canCheck && !precheckStarting && !restoreStarting ? onRunPrecheck : undefined} />}
 
       <div className="flex flex-wrap justify-between gap-3">
         <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button>

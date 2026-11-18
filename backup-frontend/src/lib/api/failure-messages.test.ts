@@ -155,13 +155,12 @@ describe('unknown failure code', () => {
     expect(failureMessage('some_new_backend_code')).toBe(unknownSentence)
     const description = describeFailure('some_new_backend_code')
     expect(description.what).toBe(unknownSentence)
-    expect(description.unknown).toBe(true)
     expect(description.technical.map(item => item.value)).toEqual(['some_new_backend_code'])
     expect(errorMessage(new ApiError(409, { error: 'some_new_backend_code' }))).toBe(unknownSentence)
     for (const status of [404, 500]) {
       const error = new ApiError(status, { error: 'some_new_backend_code' })
       expect(errorMessage(error)).toBe(unknownSentence)
-      expect(describeError(error).unknown).toBe(true)
+      expect(describeError(error).technical.some(item => item.value === 'some_new_backend_code')).toBe(true)
     }
   })
 
@@ -174,7 +173,9 @@ describe('backend codes that had no mapping', () => {
   const codes = [
     'authentication_failed', 'invalid_configuration', 'timeout', 'network_denied', 'network_unavailable', 'secret_unavailable', 'host_key_mismatch', 'insufficient_space',
     'delivery_not_failed', 'feature_disabled',
+    'dns_failed', 'connect_failed', 'no_sender', 'send_failed', 'authentication_none', 'port_not_allowed', 'insecure_authentication', 'incomplete_configuration', 'invalid_recipient', 'public_url_not_configured', 'transport_unavailable', 'insecure_endpoint', 'redirect_not_followed', 'invalid_endpoint', 'secret_missing', 'smtp_auth_failed', 'smtp_rejected', 'smtp_temporary', 'smtp_tls_failed', 'smtp_tls_unavailable', 'smtp_unavailable', 'http_400', 'http_429', 'http_500',
     'credential_unavailable', 'provider_unavailable', 'scan_failed', 'scan_timeout', 'too_many_databases',
+    'docker_not_found', 'docker_access_denied', 'docker_timeout', 'docker_failed', 'disabled_by_settings', 'systemd_not_found', 'systemd_not_running', 'systemd_access_denied', 'systemd_failed', 'registry_access_denied', 'registry_failed', 'detector_failed', 'probe_failed', 'no_published_port', 'no_endpoint', 'permission_denied', 'unreachable', 'connection_failed', 'server_certificate_untrusted', 'not_supported',
     'download_unavailable', 'download_already_started', 'download_lease_rejected', 'download_invalid_configuration', 'download_source_missing', 'download_source_inaccessible',
     'download_integrity_mismatch', 'download_agent_unavailable', 'download_cancelled', 'download_internal_error', 'cancelled_by_revocation',
     'storage_target_unknown', 'invalid_location', 'delete_not_supported', 'delete_not_verified',
