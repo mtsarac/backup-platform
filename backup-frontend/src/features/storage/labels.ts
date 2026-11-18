@@ -1,27 +1,15 @@
 import { tx } from '@/lib/i18n'
-import type { AccountingMode, EnforcementMode, PlanSummary, ScopeSelector } from './types'
-import { LEGACY_UNLIMITED_KEY } from './types'
+import type { AccountingMode, EnforcementMode, ScopeSelector } from './types'
 
 export const accountingModeLabels: Record<AccountingMode, string> = {
   get LogicalArtifactBytes() { return tx("Logical") },
   get PhysicalReplicaBytes() { return tx("Physical") },
 }
 
-export const accountingModeHelp: Record<AccountingMode, string> = {
-  get LogicalArtifactBytes() { return tx("Bir backup, kaç kopyası olursa olsun kapsamdaki en az bir kopyası varsa yalnızca bir kez, kendi boyutuyla sayılır.") },
-  get PhysicalReplicaBytes() { return tx("Kapsamdaki her fiziksel kopya kendi boyutuyla ayrı ayrı sayılır.") },
-}
-
 export const enforcementModeLabels: Record<EnforcementMode, string> = {
   get BlockNewBackups() { return tx("Yeni backup'ları engelle") },
   get WarnOnly() { return tx("Yalnızca uyar") },
   get None() { return tx("Kota uygulanmaz") },
-}
-
-export const enforcementModeHelp: Record<EnforcementMode, string> = {
-  get BlockNewBackups() { return tx("Limite ulaşan tenant yeni backup başlatamaz.") },
-  get WarnOnly() { return tx("Kullanım izlenir ve gösterilir; yeni backup hiçbir zaman engellenmez.") },
-  get None() { return tx("Kota kararı verilmez; tenant Unlimited görünür.") },
 }
 
 export const ownershipLabels: Record<string, string> = { get PlatformManaged() { return tx("Platform yönetimli") }, get TenantManaged() { return tx("Tenant yönetimli") } }
@@ -45,9 +33,4 @@ export function scopeLabel(selector: ScopeSelector): string {
 
 export function scopeLabels(scopes: readonly ScopeSelector[]): string[] {
   return scopes.map(scopeLabel)
-}
-
-/** The system plan every pre-quota tenant was migrated onto: unlimited, no commercial limit. */
-export function isLegacyUnlimited(plan: PlanSummary | null): boolean {
-  return plan?.isSystem === true && plan.systemKey === LEGACY_UNLIMITED_KEY
 }
