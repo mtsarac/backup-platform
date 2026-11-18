@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Disclosure } from '@/components/ui/disclosure'
@@ -92,7 +91,7 @@ export function PlatformStoragePage() {
             <div className="text-xs text-text-muted">{tx("Henüz hesaplanmadı")}</div>
           )}
           {row.hasUsage && !row.usageCurrent && (
-            <Badge tone="warning" className="mt-0.5">{tx("Kullanım hesabı güncel değil")}</Badge>
+            <StatusPill level="attention" className="mt-0.5">{tx("Kullanım hesabı güncel değil")}</StatusPill>
           )}
         </div>
       ),
