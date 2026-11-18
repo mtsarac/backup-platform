@@ -40,8 +40,14 @@ public sealed class BackupJob : ITenantOwned
     /// </summary>
     public BackupRetentionPolicy RetentionPolicy { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
-    /// <summary>A disabled job starts nothing: no manual run and no scheduled run. Disabling is the soft delete.</summary>
+    /// <summary>A disabled job starts nothing: no manual run and no scheduled run. Disabling is reversible; archiving is not.</summary>
     public bool Enabled { get; private set; }
+    /// <summary>
+    /// Set once, never cleared: an archived job is retired ("Korunan veriyi kaldır"). It is disabled for good and accepts no change, while its runs,
+    /// backup files, restores and shares stay as they were. The row itself is never deleted because that history refers to it.
+    /// </summary>
+    public DateTimeOffset? ArchivedAt { get; private set; }
+    public bool IsArchived => ArchivedAt is not null;
     public BackupOverlapPolicy OverlapPolicy { get; private set; }
     /// <summary>Null when the job runs only on demand.</summary>
     public BackupSchedule? Schedule { get; private set; }
@@ -64,20 +70,42 @@ public sealed class BackupJob : ITenantOwned
         RequestFingerprint = requestFingerprint;
     }
 
-    public void Disable() => Enabled = false;
+    public void Archive(DateTimeOffset now)
+    {
+        EnsureNotArchived();
+        Enabled = false;
+        ArchivedAt = now;
+    }
+
+    private void EnsureNotArchived()
+    {
+        if (IsArchived) throw new BackupJobArchivedException();
+    }
+
+    public void Disable()
+    {
+        EnsureNotArchived();
+        Enabled = false;
+    }
 
     /// <summary>Re-enabling counts schedule occurrences from <paramref name="now"/> on: the time the job was off is never caught up.</summary>
     public void Enable(DateTimeOffset now)
     {
+        EnsureNotArchived();
         if (!Enabled) Schedule = Schedule?.Reanchor(now);
         Enabled = true;
     }
 
-    public void Reconfigure(BackupConfiguration configuration) => Configuration = configuration.ValidateForSave() with { };
+    public void Reconfigure(BackupConfiguration configuration)
+    {
+        EnsureNotArchived();
+        Configuration = configuration.ValidateForSave() with { };
+    }
 
     /// <summary>Changes future executions only; existing runs retain their configuration and policy snapshots.</summary>
     public void Update(string name, AgentId agentId, BackupConfiguration configuration, BackupRetryPolicy retryPolicy, BackupOverlapPolicy overlapPolicy)
     {
+        EnsureNotArchived();
         BackupGuard.Text(name, 200);
         ArgumentNullException.ThrowIfNull(agentId);
         if (!Enum.IsDefined(overlapPolicy)) throw new ArgumentException("Unknown overlap policy.");
@@ -93,6 +121,7 @@ public sealed class BackupJob : ITenantOwned
     /// <summary>Replaces (or, with null, removes) the schedule. Past runs are untouched: they carry their own snapshots.</summary>
     public void ChangeSchedule(BackupSchedule? schedule, BackupOverlapPolicy? overlapPolicy = null)
     {
+        EnsureNotArchived();
         if (overlapPolicy is { } overlap)
         {
             if (!Enum.IsDefined(overlap)) throw new ArgumentException("Unknown overlap policy.");
@@ -101,5 +130,12 @@ public sealed class BackupJob : ITenantOwned
         Schedule = schedule;
     }
 
-    public void ChangeRetention(BackupRetentionPolicy policy) => RetentionPolicy = policy.Validate() with { };
+    public void ChangeRetention(BackupRetentionPolicy policy)
+    {
+        EnsureNotArchived();
+        RetentionPolicy = policy.Validate() with { };
+    }
 }
+
+/// <summary>A change was asked of an archived backup job, which never changes again.</summary>
+public sealed class BackupJobArchivedException() : InvalidOperationException("The backup job is archived.");

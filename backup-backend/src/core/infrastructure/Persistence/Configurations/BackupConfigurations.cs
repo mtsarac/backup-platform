@@ -90,6 +90,7 @@ internal sealed class BackupJobConfiguration : IEntityTypeConfiguration<BackupJo
             schedule.Property(value => value.EffectiveFrom).HasColumnName("ScheduleEffectiveFrom");
         });
         builder.Ignore(job => job.IsScheduled);
+        builder.Ignore(job => job.IsArchived);
         builder.ToTable("backup_jobs", table =>
         {
             table.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" IN ('Skip','Queue')");
