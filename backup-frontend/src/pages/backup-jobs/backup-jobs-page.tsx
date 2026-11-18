@@ -99,7 +99,7 @@ export function BackupJobsPage() {
           <p id={disableHint}>{tx("Devre dışı bırak: zamanlanmış yedekleme durur, mevcut yedekler silinmez.")}</p>
           <p id={enableHint}>{tx("Etkinleştir: zamanlanmış yedekleme yeniden başlar.")}</p>
         </div>
-        <Filters label={tx("Yedekleme işi filtreleri")} onClear={filtering ? () => update({ search: '', state: '' }) : undefined}>
+        <Filters label={tx("Yedekleme işi filtreleri")} onClear={filtering && filtered.length > 0 ? () => update({ search: '', state: '' }) : undefined}>
           <FilterField label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")}><TextInput type="search" value={search} aria-label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")} onChange={event => update({ search: event.target.value }, { replace: true })} /></FilterField>
           <FilterField label={tx("Durum")}><Select value={state ?? 'all'} aria-label={tx("Durum")} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="enabled">{tx("Etkin")}</option><option value="disabled">{tx("Devre dışı")}</option></Select></FilterField>
         </Filters>

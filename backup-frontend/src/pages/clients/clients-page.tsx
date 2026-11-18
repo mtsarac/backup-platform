@@ -46,7 +46,7 @@ export function ClientsPage() {
     <PageHeader title={tx("Bilgisayarlar")} description={tx("Veritabanı yedeklerini alan bilgisayarlar ve açık olup olmadıkları.")} actions={!empty && addButton} />
     <AgentsTabs />
     <CheckField className="w-fit" label={tx("İptal edilenleri göster")} checked={showRevoked} onChange={(event) => update({ revoked: event.target.checked ? 'true' : '' })} />
-    {!empty && <Filters label={tx("Bilgisayar filtreleri")} onClear={filtered ? () => update({ search: '', connectivity: '' }) : undefined}>
+    {!empty && <Filters label={tx("Bilgisayar filtreleri")} onClear={filtered && rows.length > 0 ? () => update({ search: '', connectivity: '' }) : undefined}>
       <FilterField label={tx("Bilgisayar ara")} className="sm:col-span-2"><TextInput type="search" aria-label={tx("Bilgisayar ara")} placeholder={tx("Bilgisayar adı")} value={search} onChange={(event) => update({ search: event.target.value }, { replace: true })} /></FilterField>
       <FilterField label={tx("Durum")}><Select value={connectivity ?? 'all'} onChange={(event) => update({ connectivity: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></Select></FilterField>
     </Filters>}

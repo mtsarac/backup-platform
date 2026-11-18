@@ -6,6 +6,7 @@ import { ProgressBar } from '@/components/data/progress-bar'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { EmptyState } from '@/components/ui/empty-state'
 import { linkClass } from '@/components/ui/form-styles'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -22,7 +23,7 @@ import { canCancelRestore, databaseStateLabel, isActiveRestore, precheckLabel, r
 import type { RestoreView } from '@/features/restores/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDateTime, formatDuration } from '@/lib/format'
-import { describeFailure } from '@/lib/api/failure-messages'
+import { actionLabel, describeFailure } from '@/lib/api/failure-messages'
 
 function RestoreProgress({ stage, percent: rawPercent, at, label }: { stage: string | null; percent: number | null; at: string | null; label: string }) {
   useLanguage()
@@ -78,6 +79,7 @@ function RestoreDetail({ id }: { id: string }) {
   const mayCancel = Boolean(restore && canOperate && canCancelRestore(restore.status, restore.cancellationRequestedAt))
   const computer = agents.data?.find((agent) => agent.agentId === restore?.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
   const sourceName = restore && (restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? artifact.data?.databaseName ?? tx('Yedek dosyasını aç'))
+  const failure = describeFailure(restore?.failureCode, 'restore')
   const sourceJob = restore && (restore.sourceJobName ?? artifact.data?.jobName)
   async function confirmCancel() {
     if (!mayCancel || cancel.isPending) return
@@ -106,9 +108,10 @@ function RestoreDetail({ id }: { id: string }) {
         {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <Notice tone="warning">{tx("İptal istendi; işlem henüz sona ermedi. Yedekleme bilgisayarının sonucu ve veritabanının durumu bekleniyor.")}</Notice>}
         {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && restore.purpose !== 'Verification' && <section aria-label={tx("Geri yükleme sonucu uyarısı")}><ErrorNotice
           title={fileRestore ? tx('Hedef dosyaları kontrol edin') : tx("Hedef veritabanını kontrol edin")}
-          {...describeFailure(restore.failureCode, 'restore')}
+          {...failure}
           {...(restore.status === 'Failed' && restore.failureCode ? {} : { what: restore.status === 'AgentLost' ? tx('Yedekleme bilgisayarıyla bağlantı koptu.') : tx('Geri yükleme iptal edildi.') })}
-          dataImpact={fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("Bu durum veritabanının sağlıklı olduğunu göstermez. Hedef veritabanının durumunu kontrol edin; elle müdahale gerekebilir.")} /></section>}
+          dataImpact={fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("Bu durum veritabanının sağlıklı olduğunu göstermez. Hedef veritabanının durumunu kontrol edin; elle müdahale gerekebilir.")}
+          control={canOperate && restore.status === 'Failed' && failure.actionKind && <Link className={buttonVariants({ variant: 'outline' })} to={failure.actionKind === 'checkComputer' ? `/tenants/${tenantId}/agents/${restore.agentId}` : failure.actionKind === 'manageStorage' ? `/tenants/${tenantId}/storage` : `/tenants/${tenantId}/artifacts/${restore.artifactId}/restore`}>{actionLabel(failure.actionKind)}</Link>} /></section>}
         <Tabs label={tx("Geri yükleme bölümleri")} idPrefix="restore" value={tab} onChange={setTab} items={[
           { value: 'summary', label: tx('Özet') }, { value: 'details', label: tx('Seçenekler') }, { value: 'attempts', label: tx('Denemeler') }, { value: 'checks', label: tx('Doğrulama sonucu') },
         ]} />

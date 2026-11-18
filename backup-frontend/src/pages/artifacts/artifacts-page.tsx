@@ -62,7 +62,7 @@ export function ArtifactsPage() {
   ]
   return (
     <div className="space-y-6">
-      <Filters label={tx("Backup filtreleri")} onClear={filtering ? () => update({ state: '', from: '', to: '' }) : undefined}>
+      <Filters label={tx("Backup filtreleri")} onClear={filtering && (invalidDates || query.data?.items.length !== 0) ? () => update({ state: '', from: '', to: '' }) : undefined}>
         <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={filter.state} onChange={(event) => update({ state: event.target.value })}>{stateOptions.map((item) => <option key={item.value} value={item.value}>{tx(item.label)}</option>)}</Select></FilterField>
         <FilterField label={tx("Başlangıç tarihi")}><TextInput type="date" value={filter.from} onChange={(event) => update({ from: event.target.value })} /></FilterField>
         <FilterField label={tx("Bitiş tarihi")}><TextInput type="date" value={filter.to} min={filter.from || undefined} onChange={(event) => update({ to: event.target.value })} /></FilterField>
