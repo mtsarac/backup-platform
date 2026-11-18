@@ -6,8 +6,7 @@ import { TextInput } from '@/components/ui/text-input'
 import { useSaveBandwidthProfile } from './hooks'
 import type { BandwidthProfile, TransferScheduleWindowDto } from './types'
 import { DAYS } from './schedule'
-import { bandwidthUnits, formatBandwidth, parseBandwidth, unitLabel } from './units'
-import type { BandwidthUnitId } from './units'
+import { formatBandwidth, parseBandwidth } from './units'
 import { Select } from '@/components/ui/text-input'
 import { Button } from '@/components/ui/button'
 
@@ -16,7 +15,6 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
 }) {
   useLanguage()
   const [name, setName] = useState(profile?.name ?? '')
-  const [timeZoneId, setTimeZoneId] = useState(profile?.timeZoneId ?? 'Europe/Istanbul')
   const [windows, setWindows] = useState<TransferScheduleWindowDto[]>(profile?.windows ? [...profile.windows] : [])
   const save = useSaveBandwidthProfile()
 
@@ -25,10 +23,9 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('18:00')
   const [rateText, setRateText] = useState('10')
-  const [rateUnit, setRateUnit] = useState<BandwidthUnitId>('Mbit/s')
   const [pause, setPause] = useState(false)
 
-  const parsed = pause ? { bytesPerSecond: 0 } : parseBandwidth(rateText, rateUnit, minimum, maximum)
+  const parsed = pause ? { bytesPerSecond: 0 } : parseBandwidth(rateText, minimum, maximum)
   const isRateValid = parsed !== null && !('error' in parsed)
 
   function addWindow() {
@@ -48,7 +45,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
 
   function submit() {
     if (!name.trim()) return
-    save.mutate({ id: profile?.id, name: name.trim(), timeZoneId: timeZoneId.trim(), windows }, { onSuccess: onClose })
+    save.mutate({ id: profile?.id, name: name.trim(), timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone, windows }, { onSuccess: onClose })
   }
 
   return (
@@ -66,9 +63,6 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
       <div className="space-y-4">
         <Field label={tx("Profil Adı")}>
           {control => <TextInput {...control}  value={name} onChange={e => setName(e.target.value)} placeholder={tx("Örn. Mesai Saatleri")} maxLength={200} required />}
-        </Field>
-        <Field label={tx("Zaman Dilimi (IANA)")}>
-          {control => <TextInput {...control}  value={timeZoneId} onChange={e => setTimeZoneId(e.target.value)} placeholder="Europe/Istanbul" required />}
         </Field>
 
         <div className="rounded-lg border border-border p-3 space-y-3 bg-surface-2">
@@ -97,9 +91,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
               {control => (
                 <div className="flex gap-1">
                   <TextInput {...control}  value={rateText} disabled={pause} onChange={e => setRateText(e.target.value)} />
-                  <div className="w-28 shrink-0"><Select aria-label={tx("Hız Birimi")} value={rateUnit} disabled={pause} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
-                    {bandwidthUnits.map(u => <option key={u.id} value={u.id}>{unitLabel(u.id)}</option>)}
-                  </Select></div>
+                  <span>{tx('Mbit/sn')}</span>
                 </div>
               )}
             </Field>
