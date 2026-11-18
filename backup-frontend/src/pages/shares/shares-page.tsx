@@ -22,7 +22,7 @@ export function SharesPage() {
           canAdmin={canAdmin}
           caption={tx('Paylaşımlarım')}
           emptyMessage={tx('Henüz paylaşım yapılmamış.')}
-          emptyAction={<Link className={buttonVariants()} to={`/tenants/${tenantId}/artifacts`}>{tx('Yedek dosyalarını aç')}</Link>}
+          emptyAction={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx('Yedek dosyalarını aç')}</Link>}
         />
       </QueryState>
 

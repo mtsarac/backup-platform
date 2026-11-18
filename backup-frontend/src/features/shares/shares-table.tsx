@@ -15,6 +15,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { ShareActionDialogs } from './share-dialogs'
 import { canManageShare, type BackupShareView, type DownloadAttemptView } from './types'
 import { prepareDownload } from '@/features/artifacts/api'
+import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 
 export interface SharesTableProps {
   shares: BackupShareView[]
@@ -96,9 +97,9 @@ export function SharesTable({
       header: tx('Yedek dosyası'),
       card: 'title' as const,
       render: (share: BackupShareView) => (
-        <Link className={`${linkClass} ${rowLinkClass}`} to={`/tenants/${share.tenantId}/artifacts/${share.artifactId}`}>
+        <ArtifactRunLink className={`${linkClass} ${rowLinkClass}`} tenantId={share.tenantId} artifactId={share.artifactId}>
           {share.artifactName || tx('Yedek dosyası')}
-        </Link>
+        </ArtifactRunLink>
       ),
     },
     {

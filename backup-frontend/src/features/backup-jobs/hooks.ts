@@ -11,9 +11,9 @@ export const backupJobQueryKeys = {
   all: (tenantId: string) => ['tenant', tenantId, 'backup-jobs'] as const,
   detail: (tenantId: string, id: string) => ['tenant', tenantId, 'backup-jobs', id] as const,
 }
-export function useBackupJobs() {
+export function useBackupJobs({ includeArchived = false }: { includeArchived?: boolean } = {}) {
   const { tenantId } = useTenant()
-  return useQuery({ queryKey: backupJobQueryKeys.all(tenantId), queryFn: ({ signal }) => getBackupJobs(tenantId, signal) })
+  return useQuery({ queryKey: includeArchived ? [...backupJobQueryKeys.all(tenantId), 'with-archived'] : backupJobQueryKeys.all(tenantId), queryFn: ({ signal }) => getBackupJobs(tenantId, signal, includeArchived) })
 }
 export function useBackupJob(id: string) {
   const { tenantId } = useTenant()

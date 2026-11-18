@@ -23,7 +23,7 @@ vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn() }))
 vi.mock('@/features/artifacts/api', () => ({ getArtifact: vi.fn() }))
 
 const artifact = {
-  id: 'artifact-1', backupType: 'Full', databaseName: 'SalesDB', state: 'Available', sizeBytes: 1,
+  id: 'artifact-1', runId: 'run-1', backupType: 'Full', databaseName: 'SalesDB', state: 'Available', sizeBytes: 1,
   replicas: [{ id: 'r1', verificationState: 'Verified', status: 'Available', usable: true }],
 } as unknown as BackupArtifact
 
@@ -148,7 +148,7 @@ describe('restore verification detail', () => {
   it.each([
     ['DatabaseUnavailable', 'Bilgisayarı kontrol et', '/tenants/tenant-a/agents/agent-1'],
     ['quota_exceeded', 'Depolamayı yönet', '/tenants/tenant-a/storage'],
-    ['AuthenticationFailed', 'Bilgileri düzelt', '/tenants/tenant-a/artifacts/artifact-1/restore'],
+    ['AuthenticationFailed', 'Bilgileri düzelt', '/tenants/tenant-a/backup-runs/run-1/restore'],
   ])('links the %s failure to its relevant screen', async (failureCode, label, href) => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, purpose: 'Execution', status: 'Failed', failureCode })
     renderDetail()

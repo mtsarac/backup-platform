@@ -11,7 +11,7 @@ import { runStatuses } from '@/features/backups/presentation'
 import type { BackupRun } from '@/features/backups/types'
 import { BackupDetailPage } from './backup-detail-page'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { formatDateTime } from '@/lib/format'
+import { formatBytes, formatDateTime } from '@/lib/format'
 
 const state = vi.hoisted(() => ({
   canOperate: true,
@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: state.canOperate }) }))
 vi.mock('@/features/backups/hooks', () => ({ useBackup: () => state.query, useBackupActions: () => ({ retry: state.retry, cancel: state.cancel, pause: state.pause, resume: state.resume }) }))
+vi.mock('@/pages/artifacts/artifact-detail-page', () => ({ ArtifactDetail: ({ id }: { id: string }) => <div data-testid="artifact-detail">{id}</div> }))
 
 function renderDetail() {
   return render(<MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter>)
@@ -47,6 +48,30 @@ beforeEach(() => {
 })
 
 describe('run detail controls and attention', () => {
+  it.each([
+    ['Available', true],
+    ['DeletePending', false],
+    ['DeleteFailed', false],
+    ['Deleted', false],
+  ] as const)('a successful run whose backup file is %s offers the restore flow only when restorable', (artifactState, restorable) => {
+    const run = makeRun({ status: 'Succeeded' })
+    run.attempts[0].artifacts = [{ id: 'artifact-a', state: artifactState, backupType: 'Full', replicas: [{ verificationState: 'Verified', usable: true, status: 'Available' }] } as unknown as BackupArtifact]
+    state.query.data = run
+    renderDetail()
+    expect(screen.getByTestId('artifact-detail')).toHaveTextContent('artifact-a')
+    const link = screen.queryByRole('link', { name: 'Geri yükle' })
+    if (restorable) expect(link).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id/restore')
+    else expect(link).not.toBeInTheDocument()
+  })
+
+  it.each(['Failed', 'Running'] as const)('a %s run shows no backup file panel and no restore action', (status) => {
+    state.query.data = makeRun({ status })
+    renderDetail()
+    expect(screen.queryByTestId('artifact-detail')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    if (status === 'Failed') expect(screen.getAllByRole('button', { name: 'Yeniden dene' }).length).toBeGreaterThan(0)
+    else expect(screen.getByRole('button', { name: 'Duraklat' })).toBeInTheDocument()
+  })
   it('links a missing run back to the run list', () => {
     state.query.data = undefined
     renderDetail()
@@ -56,7 +81,7 @@ describe('run detail controls and attention', () => {
 
   it('keeps identity and start time in the summary and links attempt outputs to their artifact owner', () => {
     const run = makeRun()
-    run.attempts[0].artifacts = [{ id: 'artifact-a' } as BackupArtifact]
+    run.attempts[0].artifacts = [{ id: 'artifact-a', sizeBytes: 4096 } as BackupArtifact]
     state.query.data = run
     renderDetail()
     expect(screen.getByText('Veritabanı').closest('div')).toHaveTextContent('Uygulama')
@@ -64,7 +89,7 @@ describe('run detail controls and attention', () => {
     expect(screen.getByText('Başlangıç').closest('div')?.querySelector('time')).toHaveAttribute('dateTime', run.startedAt)
     fireEvent.click(screen.getByRole('tab', { name: /^Denemeler/ }))
     const output = within(screen.getByRole('region', { name: '1. deneme çıktıları' }))
-    expect(output.getByRole('link', { name: 'Yedek dosyasını aç' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a')
+    expect(output.getByText(formatBytes(4096))).toBeInTheDocument()
     expect(output.queryByText('Uygulama')).not.toBeInTheDocument()
     expect(output.queryByText('SQL ajanı')).not.toBeInTheDocument()
     expect(output.queryByText('Yedekleme bilgileri')).not.toBeInTheDocument()
