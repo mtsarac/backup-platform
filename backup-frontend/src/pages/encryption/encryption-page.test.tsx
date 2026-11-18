@@ -22,12 +22,12 @@ describe('tenant encryption page', () => {
   it('makes no request when access is denied', () => {
     mount(false)
     expect(screen.getByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(api.getTenantEncryption).not.toHaveBeenCalled()
   })
 
   it('shows protection with copyable collapsed key details', async () => {
     mount()
+    expect(screen.getByText('Şifreli yedeklerinizin korumasını inceleyin.')).toBeInTheDocument()
     expect(await screen.findByText('Kurtarma anahtarınız eklenmemiş')).toBeInTheDocument()
     expect(screen.getByText('Şifreli yedekleriniz korunuyor')).toBeInTheDocument()
     expect(screen.queryByText(keyId)).not.toBeInTheDocument()

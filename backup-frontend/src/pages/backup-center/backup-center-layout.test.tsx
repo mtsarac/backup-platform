@@ -23,7 +23,7 @@ function mount(path: string) {
 }
 
 describe('Backup Center layout', () => {
-  it('shows one page heading and the four lists as navigation links, the open one marked current', () => {
+  it('shows one page heading and the five lists as navigation links, the open one marked current', () => {
     mount('/tenants/tenant-a/backup-runs')
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' }))
@@ -32,6 +32,7 @@ describe('Backup Center layout', () => {
       ['Yedekleme denemeleri', '/tenants/tenant-a/backup-runs'],
       ['Yedek dosyaları', '/tenants/tenant-a/artifacts'],
       ['Geri yüklemeler', '/tenants/tenant-a/restores'],
+      ['Paylaşımlar', '/tenants/tenant-a/backup-shares'],
     ])
     expect(tabs.getByRole('link', { current: 'page' })).toHaveTextContent('Yedekleme denemeleri')
     expect(screen.getByText('runs list')).toBeInTheDocument()

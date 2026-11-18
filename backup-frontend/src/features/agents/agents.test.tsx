@@ -56,7 +56,7 @@ describe('Backup computers list', () => {
     const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000).toISOString()
     vi.mocked(api.getAgents).mockResolvedValue([{ ...agent, lastSeenAt: threeHoursAgo }])
     mount(<ClientsPage />)
-    expect(screen.getByRole('heading', { level: 1, name: 'Yedekleme bilgisayarları' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Bilgisayarlar' })).toBeInTheDocument()
     const link = await screen.findByRole('link', { name: 'SQL-01' })
     expect(link).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
     const row = link.closest('tr')!
@@ -128,11 +128,11 @@ describe('Backup computers list', () => {
     expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
   })
 
-  it('does not offer the enrolment tabs to a non-administrator', async () => {
+  it('does not offer the enrolment tab to a non-administrator', async () => {
     tenancy.canAdmin = false
     mount(<ClientsPage />)
     await screen.findByRole('link', { name: 'SQL-01' })
-    expect(screen.queryByRole('navigation', { name: 'Yedekleme bilgisayarı bölümleri' })).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Bilgisayar bölümleri' })).not.toHaveTextContent('Yeni bilgisayar kaydı')
   })
 })
 
@@ -202,7 +202,7 @@ describe('Backup computer page', () => {
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] })
     const view = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     expect(await screen.findByRole('link', { name: 'Muhasebe' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-1/edit')
-    expect(screen.getByRole('link', { name: 'Bulunan veritabanı sunucuları' })).toHaveAttribute('href', '/tenants/tenant-a/discovery?agentId=agent-a')
+    expect(screen.getByRole('link', { name: 'Bulunan veritabanı sunucuları' })).toHaveAttribute('href', '/tenants/tenant-a/agents/databases?agentId=agent-a')
     view.unmount()
     vi.mocked(api.getAgent).mockResolvedValue(agent)
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')

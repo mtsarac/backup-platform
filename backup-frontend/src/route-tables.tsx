@@ -41,12 +41,14 @@ import { NotificationsPage } from './pages/notifications/notifications-page'
 import { PlatformNotificationTransportsPage } from './pages/platform/platform-notification-transports-page'
 import { PlatformAgentSettingsPage } from './pages/platform/platform-agent-settings-page'
 import { EncryptionPage } from './pages/encryption/encryption-page'
+import { SettingsLayout } from './pages/settings/settings-layout'
 import { PlatformSharesPage } from './pages/platform/platform-shares-page'
 
 /** Routes under /tenants/:tenantId/*, relative to it. Kept as data so tests can check every menu link resolves to a real page. */
 export const tenantRoutes = <>
   <Route index element={<DashboardPage />} />
   <Route path="agents" element={<ClientsPage />} />
+  <Route path="agents/databases" element={<DiscoveryPage />} />
   <Route path="agents/:id" element={<ClientDetailPage />} />
   <Route path="enrollment" element={<AgentRegisterPage />} />
   <Route element={<BackupCenterLayout />}>
@@ -54,6 +56,7 @@ export const tenantRoutes = <>
     <Route path="backup-runs" element={<BackupsPage />} />
     <Route path="artifacts" element={<ArtifactsPage />} />
     <Route path="restores" element={<RestoresPage />} />
+    <Route path="backup-shares" element={<SharesPage />} />
   </Route>
   <Route path="backup-jobs/new" element={<BackupJobWizardPage />} />
   <Route path="backup-jobs/:id/edit" element={<BackupJobEditPage />} />
@@ -65,15 +68,15 @@ export const tenantRoutes = <>
   </Route>
   <Route path="storage/connections/new" element={<ConnectionWizard />} />
   <Route path="storage/connections/:connectionId" element={<ConnectionDetail />} />
-  <Route path="discovery" element={<DiscoveryPage />} />
   <Route path="discovery/instances/:instanceId" element={<InstanceDetailPage />} />
-  <Route path="upload-bandwidth" element={<UploadBandwidthPage />} />
   <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
   <Route path="artifacts/:id/restore" element={<RestoreWizardPage />} />
   <Route path="restores/:id" element={<RestoreDetailPage />} />
-  <Route path="notifications" element={<NotificationsPage />} />
-  <Route path="encryption" element={<EncryptionPage />} />
-  <Route path="shares" element={<SharesPage />} />
+  <Route path="settings" element={<SettingsLayout />}>
+    <Route index element={<NotificationsPage />} />
+    <Route path="recovery-key" element={<EncryptionPage />} />
+    <Route path="bandwidth" element={<UploadBandwidthPage />} />
+  </Route>
   <Route path="*" element={<NotFound />} />
 </>
 

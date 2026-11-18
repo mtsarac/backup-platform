@@ -13,7 +13,7 @@ import { useDiscoveryInstance, useDiscoveryInstances } from '@/features/discover
 import { selectableNames } from '@/features/discovery/job-prefill'
 import { canCreateJob, engineLabels, supportsDiscovery } from '@/features/discovery/status'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
-import { discoveryPath } from '@/lib/routes'
+import { discoveredDatabasesPath } from '@/lib/routes'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
 export interface DiscoverySourceProps {
@@ -46,7 +46,7 @@ export function DiscoverySourcePicker({ agents, agentId: startAgent, instanceId:
     {supported.length > 1 && <Field id="discovery-agent" label={tx("Keşif Agent'ı")}>{control => <Select {...control} value={agentId} onChange={event => { setPickedAgent(event.target.value); setPickedInstance(''); setPicked([]) }}>
       <option value="">{tx("Agent seçin")}</option>{supported.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız Agent')}</option>)}</Select>}</Field>}
     {agentId && <QueryState isPending={instances.isPending} error={instances.error}>
-      {usable.length === 0 ? <Notice tone="info">{tx("Bu bilgisayarda kullanılabilir veritabanı sunucusu yok.")}{' '}<Link className={linkClass} to={discoveryPath(tenantId)}>{tx("Veritabanı bulma sayfasına gidin")}</Link></Notice>
+      {usable.length === 0 ? <Notice tone="info">{tx("Bu bilgisayarda kullanılabilir veritabanı sunucusu yok.")}{' '}<Link className={linkClass} to={discoveredDatabasesPath(tenantId)}>{tx("Bulunan veritabanları sayfasına gidin")}</Link></Notice>
         : <Field id="discovery-instance" label={tx("Instance")} hint={tx("Yalnızca kimlik doğrulanmış ve adresi bilinen Instance'lar listelenir.")}>{control => <Select {...control} value={instanceId} onChange={event => { setPickedInstance(event.target.value); setPicked([]) }}>
           <option value="">{tx("Instance seçin")}</option>{usable.map(item => <option key={item.id} value={item.id}>{item.displayName} · {engineLabels[item.engine]} · {item.host}:{item.port}</option>)}</Select>}</Field>}
     </QueryState>}
