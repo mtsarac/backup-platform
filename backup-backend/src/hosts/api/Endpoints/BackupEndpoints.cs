@@ -316,6 +316,8 @@ public static class BackupEndpoints
         {
             case BackupRetryOutcome.NotFound:
                 return Results.NotFound();
+            case BackupRetryOutcome.JobArchived:
+                return Results.Conflict(new { error = "retry_not_allowed", reason = "job_archived", message = "The backup job is archived." });
             case BackupRetryOutcome.Started:
                 await HintAsync(push, result.Run!.AgentId, "WorkAvailable", logger);
                 return Results.Ok(BackupOrchestrator.ToView(result.Run));

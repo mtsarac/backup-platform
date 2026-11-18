@@ -176,6 +176,49 @@ public sealed class BackupJobArchiveApiTests(PostgreSqlFixture fixture) : IClass
     }
 
     [Fact]
+    public async Task ArchivedJobsNeverRetryFailedRunsOrDispatchAlreadyQueuedAttempts()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(Start));
+        var job = await scenario.CreateJobAsync();
+        var failedRun = await scenario.StartRunAsync(job);
+        await scenario.FailNextAsync("DatabaseUnavailable");
+        var queuedJob = await scenario.CreateJobAsync();
+        var queuedRun = await scenario.StartRunAsync(queuedJob);
+        await ArchiveOkAsync(scenario, job);
+        await ArchiveOkAsync(scenario, queuedJob);
+
+        using var retry = await scenario.RetryRawAsync(failedRun);
+        Assert.Equal(HttpStatusCode.Conflict, retry.StatusCode);
+        scenario.Clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(0, await scenario.ScanRetriesAsync());
+        Assert.Single(BackupApiScenario.AttemptsOf(await scenario.RunAsync(failedRun)));
+        Assert.Null(await scenario.PollAsync());
+        Assert.Single(BackupApiScenario.AttemptsOf(await scenario.RunAsync(queuedRun)));
+    }
+
+    [Fact]
+    public async Task AFailureAfterArchivingDoesNotRetryButOtherJobsStillRetry()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(Start));
+        var job = await scenario.CreateJobAsync();
+        var run = await scenario.StartRunAsync(job);
+        var claim = await scenario.ClaimAsync();
+        await scenario.StartAttemptAsync(claim);
+        await ArchiveOkAsync(scenario, job);
+        using (var failure = await scenario.FailRawAsync(claim, "DatabaseUnavailable"))
+            Assert.Equal(HttpStatusCode.NoContent, failure.StatusCode);
+
+        var controlJob = await scenario.CreateJobAsync();
+        var controlRun = await scenario.StartRunAsync(controlJob);
+        await scenario.FailNextAsync("DatabaseUnavailable");
+        scenario.Clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(1, await scenario.ScanRetriesAsync());
+        Assert.Single(BackupApiScenario.AttemptsOf(await scenario.RunAsync(run)));
+        Assert.Equal(2, BackupApiScenario.AttemptsOf(await scenario.RunAsync(controlRun)).Count);
+        Assert.Equal(controlRun, (await scenario.ClaimAsync()).RunId);
+    }
+
+    [Fact]
     public async Task BackupFilesOfAnArchivedJobAreCleanedUpWhenTheirRetentionExpires()
     {
         var root = Directory.CreateTempSubdirectory("archive-retention-").FullName;
