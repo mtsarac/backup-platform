@@ -71,7 +71,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
           {control => <TextInput {...control}  value={timeZoneId} onChange={e => setTimeZoneId(e.target.value)} placeholder="Europe/Istanbul" required />}
         </Field>
 
-        <div className="rounded-lg border border-border p-3 space-y-3 bg-surface-muted/30">
+        <div className="rounded-lg border border-border p-3 space-y-3 bg-surface-2">
           <h4 className="text-sm font-semibold text-text-heading">{tx("Pencere Ekle")}</h4>
           <Field label={tx("Pencere Davranışı")}>
             {control => <Select {...control} value={pause ? 'pause' : 'limit'} onChange={e => setPause(e.target.value === 'pause')}>
@@ -114,7 +114,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
             <h4 className="text-sm font-semibold text-text-heading">{tx("Tanımlı Pencereler ({0})", { "0": windows.length })}</h4>
             <div className="max-h-40 overflow-y-auto space-y-1">
               {windows.map((w, idx) => (
-                <div key={idx} className="flex items-center justify-between rounded border border-border px-3 py-1.5 text-xs">
+                <div key={idx} className="flex items-center justify-between rounded-sm border border-border px-3 py-1.5 text-xs">
                   <span>
                     <strong>{DAYS.find(d => d.value === w.dayOfWeek)?.label()}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {w.bytesPerSecond === 0 ? tx("Aktarımı Duraklat") : formatBandwidth(w.bytesPerSecond)}
                   </span>

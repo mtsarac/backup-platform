@@ -3,8 +3,8 @@ import { useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
-const tabClass = (active: boolean) => cn('relative inline-flex min-h-9 pointer-coarse:min-h-11 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-1.5 sm:px-3 text-body font-medium transition-colors',
-  active ? 'border-primary text-text-heading' : 'border-transparent text-text-muted hover:border-border-strong hover:text-text')
+const tabClass = (active: boolean) => cn('relative inline-flex min-h-control pointer-coarse:min-h-11 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-1.5 sm:px-3 text-body font-medium transition-colors',
+  active ? 'border-primary text-text-heading' : 'border-transparent text-text-muted hover:border-input hover:text-text')
 
 /** Tabs that are real routes (NavLinks in a labelled nav, current tab gets aria-current): `label` names the nav; `items` are `{ to, label, end? }` — set `end` on an index tab. Render it above an `<Outlet />` in a layout route, as pages/storage/storage-layout.tsx does. */
 export function RouteTabs({ label, items }: { label: string; items: readonly { to: string; label: ReactNode; end?: boolean }[] }) {

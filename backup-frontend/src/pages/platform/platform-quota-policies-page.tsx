@@ -25,7 +25,7 @@ export function PlatformQuotaPoliciesPage() {
   const [isCreating, setIsCreating] = useState(false)
   const policies = query.data?.items ?? []
   const columns: Column<QuotaPolicy>[] = [
-    { key: 'name', header: tx('Politika'), wrap: true, render: (policy) => <div className="space-y-1"><span className="font-semibold">{policy.name}</span>{policy.isDefault && <div><Badge tone="info">{tx("Varsayılan")}</Badge></div>}</div> },
+    { key: 'name', header: tx('Politika'), wrap: true, render: (policy) => <div className="space-y-1"><span className="font-semibold">{policy.name}</span>{policy.isDefault && <div><Badge tone="accent">{tx("Varsayılan")}</Badge></div>}</div> },
     { key: 'status', card: 'status', header: tx('Durum'), render: (policy) => <StatusPill level={policy.enabled ? 'safe' : 'neutral'}>{policy.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
     { key: 'enforcement', header: tx('Sınıra ulaşınca'), wrap: true, render: (policy) => enforcementModeLabels[policy.enforcementMode] },
     { key: 'technical', header: tx('Teknik ayrıntılar'), wrap: true, render: (policy) => <TechnicalDetails items={[

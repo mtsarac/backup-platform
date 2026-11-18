@@ -21,7 +21,7 @@ export function PageHeader({ title, description, crumbs, actions, meta }: {
     </ol></nav>}
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0 max-w-3xl space-y-1">
-        <h1 className="break-words text-2xl font-semibold text-text-heading">{title}</h1>
+        <h1 className="break-words text-xl font-semibold text-text-heading">{title}</h1>
         {description && <p className="break-words text-body text-text-muted">{description}</p>}
         {meta && <div data-slot="page-meta" className="flex flex-wrap items-center gap-2 pt-1">{meta}</div>}
       </div>

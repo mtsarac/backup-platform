@@ -65,7 +65,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
       </Section>}
     </QueryState>
     <Section title={tx("Bekleyen kayıt anahtarları")} description={tx("Anahtarın değeri güvenlik nedeniyle gösterilmez. Süresi dolan, kullanılan veya iptal edilen anahtarlar listelenmez.")} flush actions={<Button disabled={!policy.data?.enabled || Boolean(policy.error) || changePolicy.isPending} onClick={() => setCreateOpen(true)}>{tx("Yedekleme bilgisayarı ekle")}</Button>}>
-      <QueryState isPending={tokens.isPending} error={tokens.error}><DataList rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyMessage={tx("Bekleyen kayıt anahtarı yok.")} className="rounded-none border-0 shadow-none" /></QueryState>
+      <QueryState isPending={tokens.isPending} error={tokens.error}><DataList rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyMessage={tx("Bekleyen kayıt anahtarı yok.")} className="rounded-none border-0" /></QueryState>
     </Section>
     {createOpen && policy.data?.enabled && !changePolicy.isPending && <AddAgentDialog tenantId={tenantId} onClose={() => setCreateOpen(false)} />}
     <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Kayıt anahtarı iptal edilsin mi?")}

@@ -19,10 +19,10 @@ export function ObservabilityPanel({ tenantId }: { tenantId: string }) {
     <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
       {data && <div className="space-y-5">
         <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <div><dt className="text-sm text-text-muted">{tx('Ortalama sağlık puanı')}</dt><dd className="text-2xl font-semibold tabular-nums">{data.averageScore === null ? '—' : data.averageScore.toLocaleString(currentLocale(), { maximumFractionDigits: 1 })}<span className="text-sm text-text-muted"> / 100</span></dd></div>
-          <div><dt className="text-sm text-text-muted">{tx('Sağlıklı işler')}</dt><dd className="text-2xl font-semibold tabular-nums text-success">{data.healthy}</dd></div>
-          <div><dt className="text-sm text-text-muted">{tx('Zayıflamış işler')}</dt><dd className="text-2xl font-semibold tabular-nums text-warning">{data.degraded}</dd></div>
-          <div><dt className="text-sm text-text-muted">{tx('Kritik işler')}</dt><dd className="text-2xl font-semibold tabular-nums text-error">{data.critical}</dd></div>
+          <div><dt className="text-sm text-text-muted">{tx('Ortalama sağlık puanı')}</dt><dd className="text-xl font-semibold tabular-nums">{data.averageScore === null ? '—' : data.averageScore.toLocaleString(currentLocale(), { maximumFractionDigits: 1 })}<span className="text-sm text-text-muted"> / 100</span></dd></div>
+          <div><dt className="text-sm text-text-muted">{tx('Sağlıklı işler')}</dt><dd className="text-xl font-semibold tabular-nums text-success">{data.healthy}</dd></div>
+          <div><dt className="text-sm text-text-muted">{tx('Zayıflamış işler')}</dt><dd className="text-xl font-semibold tabular-nums text-warning">{data.degraded}</dd></div>
+          <div><dt className="text-sm text-text-muted">{tx('Kritik işler')}</dt><dd className="text-xl font-semibold tabular-nums text-error">{data.critical}</dd></div>
         </dl>
         <div className="grid gap-5 xl:grid-cols-3">
           {others.length > 0 && <div><h3 className="mb-2 font-medium">{tx('Diğer dikkat isteyen işler')}</h3>

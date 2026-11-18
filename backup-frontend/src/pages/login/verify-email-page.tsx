@@ -38,7 +38,7 @@ export function VerifyEmailPage() {
       <main className="flex min-h-svh items-center justify-center px-4 py-10">
         <div className="w-full max-w-sm space-y-6">
           <BrandMark size="sm" />
-          <h1 className="text-2xl font-semibold text-text-heading">{tx('E-posta doğrulama')}</h1>
+          <h1 className="text-xl font-semibold text-text-heading">{tx('E-posta doğrulama')}</h1>
           {done ? (
             <Notice tone="success">{tx('E-posta adresiniz doğrulandı.')}</Notice>
           ) : !token ? (

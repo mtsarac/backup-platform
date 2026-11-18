@@ -7,10 +7,10 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { cn } from '@/lib/utils'
 
 const tones = {
-  info: { icon: Info, box: 'border-info/30 bg-info-subtle', text: 'text-info' },
-  success: { icon: CheckCircle2, box: 'border-success/30 bg-success-subtle', text: 'text-success' },
-  warning: { icon: AlertTriangle, box: 'border-warning/35 bg-warning-subtle', text: 'text-warning' },
-  error: { icon: OctagonAlert, box: 'border-error/35 bg-error-subtle', text: 'text-error' },
+  info: { icon: Info, box: 'border-border bg-neutral-subtle', text: 'text-neutral' },
+  success: { icon: CheckCircle2, box: 'border-success-border bg-success-subtle', text: 'text-success' },
+  warning: { icon: AlertTriangle, box: 'border-warning-border bg-warning-subtle', text: 'text-warning' },
+  error: { icon: OctagonAlert, box: 'border-error-border bg-error-subtle', text: 'text-error' },
 } as const
 
 /** An inline message that is not a failure. Failures go through `ErrorNotice`, which cannot omit what the user needs to know. */

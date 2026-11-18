@@ -28,7 +28,7 @@ export function AuditTable({ rows, emptyMessage, showTenant = true, className }:
   const columns: Column<PlatformAuditEntry>[] = [
     { key: 'at', header: tx('Zaman'), render: (entry) => <RelativeTime value={entry.at} /> },
     { key: 'action', card: 'title', header: tx('İşlem'), wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action) ?? tx('Bilinmeyen işlem')}</span> },
-    { key: 'actor', header: tx('Yapan'), wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? tx('Bilinmeyen kullanıcı')}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'info'}>{actorLabels[entry.actorKind]}</Badge></div> },
+    { key: 'actor', header: tx('Yapan'), wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? tx('Bilinmeyen kullanıcı')}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'accent'}>{actorLabels[entry.actorKind]}</Badge></div> },
     ...(showTenant ? [{ key: 'tenant', header: tx('Tenant'), wrap: true, render: (entry: PlatformAuditEntry) => entry.tenantId ? <Link className={`${linkClass} inline-flex min-h-6 pointer-coarse:min-h-11 items-center`} to={platformPaths.tenant(entry.tenantId)}>{entry.tenantName ?? tx('Tenant')}</Link> : <span className="text-text-muted">—</span> }] : []),
     { key: 'technical', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: (entry) => <TechnicalDetails items={[
       { label: tx('İşlem kodu'), value: entry.action },
