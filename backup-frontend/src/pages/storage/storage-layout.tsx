@@ -1,20 +1,40 @@
+import { useState } from 'react'
 import { tx, useLanguage } from '@/lib/i18n'
 import { Link, Outlet } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { PageHeader } from '@/components/ui/page-header'
-import { RouteTabs } from '@/components/ui/tabs'
+import { Section } from '@/components/ui/section'
+import { QueryState } from '@/components/data/query-state'
+import { Pagination } from '@/components/data/pagination'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { useTenantConnections } from '@/features/storage-connections/hooks'
+import { useTenantStorageQuota } from '@/features/storage/hooks'
+import { QuotaMeter } from '@/features/storage/quota-meter'
+import { useArtifacts } from '@/features/artifacts/hooks'
+import { formatBytes } from '@/lib/format'
 
-/** Storage hub: where backups go (connections), how much room there is (usage and quota), and what each provider can do. The tabs name the sections, so the header carries only the one add action. */
 export function StorageLayout() {
   useLanguage()
   const { tenantId, canAdmin } = useTenant()
-  const base = `/tenants/${tenantId}/storage`
-  return <>
-    <PageHeader title={tx("Depolama")}
-      actions={canAdmin ? <Link to={`${base}/connections/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx("Bağlantı ekle")}</Link> : undefined} />
-    <RouteTabs label={tx("Storage bölümleri")} items={[{ to: base, label: tx('Bağlantılar'), end: true }, { to: `${base}/usage`, label: tx('Kullanım ve kota') }, { to: `${base}/providers`, label: tx('Sağlayıcılar') }]} />
+  const base = `/tenants/${tenantId}`
+  const connections = useTenantConnections()
+  const quota = useTenantStorageQuota()
+  const [page, setPage] = useState(1)
+  const failed = useArtifacts(tenantId, { page, pageSize: 25, state: 'DeleteFailed', from: '', to: '' })
+  return <div className="space-y-6">
+    <PageHeader title={tx('Depolama')} actions={canAdmin && Boolean(connections.data?.items.length) ? <Link to={`${base}/storage/connections/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx('Depolama bağlantısı ekle')}</Link> : undefined} />
+    <QueryState isPending={quota.isPending} error={quota.error} onRetry={() => void quota.refetch()}>
+      {quota.data && <Section title={tx('Depolama kullanımı')}>
+        <p>{tx('Toplam boyut')}: {formatBytes(quota.data.usedBytes)}{quota.data.limitBytes !== null && <> · {tx('Kota')}: {formatBytes(quota.data.limitBytes)}</>}</p>
+        {quota.data.limitBytes !== null && <QuotaMeter usedBytes={quota.data.usedBytes} reservedBytes={quota.data.reservedBytes} limitBytes={quota.data.limitBytes} state={quota.data.state} />}
+      </Section>}
+    </QueryState>
     <Outlet />
-  </>
+    {failed.isError && <QueryState isPending={false} error={failed.error} onRetry={() => void failed.refetch()} />}
+    {failed.data && failed.data.totalCount > 0 && <Section title={tx('Silinemeyen yedek dosyaları')}>
+      <ul className="space-y-2">{failed.data.items.map((artifact) => <li key={artifact.id}>{artifact.runId ? <Link className="underline" to={`${base}/backup-runs/${artifact.runId}`}>{artifact.jobName || artifact.databaseName || tx('Yedekleme denemesi')}</Link> : (artifact.jobName || artifact.databaseName || tx('Yedek dosyası'))}</li>)}</ul>
+      {failed.data.totalCount > 25 && <Pagination page={page} pageSize={25} totalCount={failed.data.totalCount} onPageChange={setPage} disabled={failed.isFetching} />}
+    </Section>}
+  </div>
 }

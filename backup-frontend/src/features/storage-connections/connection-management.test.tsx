@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { StorageProvidersTab } from '@/pages/storage/storage-providers-tab'
 import { ApiError } from '@/lib/api/client'
 import * as api from './api'
 import { catalog, fakeProvider, makeConnection, makeManaged, makeProvider, tenantAdminPermissions } from './test-fixtures'
@@ -27,7 +26,6 @@ function mount(path = base) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const view = render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><Routes>
     <Route path={base} element={<ConnectionList />} />
-    <Route path={`${base}/providers`} element={<StorageProvidersTab />} />
     <Route path={`${base}/connections/new`} element={<ConnectionWizard />} />
     <Route path={`${base}/connections/:connectionId`} element={<ConnectionDetail />} />
   </Routes></MemoryRouter></QueryClientProvider>)
@@ -106,13 +104,13 @@ describe('Storage connections list and detail', () => {
   it('offers the add connection action when permitted, or asks the administrator', async () => {
     serve([])
     const { unmount } = mount()
-    expect(await screen.findByText(/İlk hedefi “Bağlantı ekle” ile ekleyin/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Bağlantı ekle' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/new')
+    expect(await screen.findByText(/Henüz depolama bağlantısı yok/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Depolama bağlantısı ekle' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/new')
     unmount()
     access.canAdmin = false
     mount()
     expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByText(/“Bağlantı ekle” ile ekleyin/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Depolama bağlantısı ekle' })).not.toBeInTheDocument()
   })
 
   it('opens a destination from its card without exposing credentials or configuration; quota scope and capabilities are technical', async () => {
@@ -334,38 +332,13 @@ describe('Storage connections list and detail', () => {
   })
 })
 
-describe('Provider catalog', () => {
-  it('does not offer creation for planned, platform-managed or default-only providers', async () => {
-    serve([makeConnection(), makeManaged()], catalog)
-    mount(`${base}/providers`)
-    await screen.findByRole('heading', { name: 'SFTP' })
-    for (const name of ['SFTP', 'Google Drive']) {
-      const card = screen.getByRole('heading', { name }).closest('li')!
-      expect(card).toHaveAttribute('aria-disabled', 'true')
-      expect(within(card).getByText(/Yakında \/ henüz kullanılamaz/)).toBeInTheDocument()
-      expect(within(card).queryByRole('link')).not.toBeInTheDocument()
-    }
-    expect(screen.queryByRole('link', { name: /bağlantı ekle/i })).not.toBeInTheDocument()
-  })
-
-  it('offers creation for an available provider below its connection limit', async () => {
-    mount(`${base}/providers`)
-    expect(await screen.findByRole('link', { name: /(?:Fake S3|Sahte S3) için bağlantı ekle/ })).toHaveAttribute('href', `${base}/connections/new?provider=fake-s3`)
-  })
-
+describe('Connection wizard access', () => {
   it('does not allow the non-admin role to create, including a direct wizard URL', async () => {
     access.canAdmin = false
     mount(`${base}/connections/new`)
     expect(screen.getByText("Yöneticinize danışın")).toBeInTheDocument()
     expect(api.getTenantConnections).not.toHaveBeenCalled()
     expect(api.createTenantConnection).not.toHaveBeenCalled()
-  })
-
-  it('stops offering creation at the provider connection limit', async () => {
-    serve([makeConnection(), s3({ id: 's1', name: 'S3 A' }), s3({ id: 's2', name: 'S3 B' })])
-    mount(`${base}/providers`)
-    expect(await screen.findByText('Bağlantı sınırına ulaşıldı (2).')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /(?:Fake S3|Sahte S3) için bağlantı ekle/ })).not.toBeInTheDocument()
   })
 })
 
