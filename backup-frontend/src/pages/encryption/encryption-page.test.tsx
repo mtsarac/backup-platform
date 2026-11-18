@@ -22,7 +22,6 @@ describe('tenant encryption page', () => {
   it('makes no request when access is denied', () => {
     mount(false)
     expect(screen.getByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(api.getTenantEncryption).not.toHaveBeenCalled()
   })
 

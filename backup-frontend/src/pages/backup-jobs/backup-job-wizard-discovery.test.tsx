@@ -137,7 +137,7 @@ describe('discovery-first source step', () => {
     vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
     mount()
     expect(await screen.findByText('Bu bilgisayarda kullanılabilir veritabanı sunucusu yok.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Veritabanı bulma sayfasına gidin' })).toHaveAttribute('href', '/tenants/tenant-a/discovery')
+    expect(screen.getByRole('link', { name: 'Bulunan veritabanları sayfasına gidin' })).toHaveAttribute('href', '/tenants/tenant-a/agents/databases')
     expect(screen.getByRole('button', { name: 'Elle yapılandır' })).toBeInTheDocument()
   })
   it('opens the choice on the linked computer and instance when none of the linked databases can be picked any more', async () => {
