@@ -54,7 +54,7 @@ function DashboardAttention({ data }: { data: PlatformSummary }) {
     </div>
     {items.length > 0 && <ul aria-label={tx("Dikkat gerektirenler")} className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
       {items.map((item) => <li key={item.key}>
-        <Link className="flex min-h-control pointer-coarse:min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-2" to={item.to}>
+        <Link className="flex min-h-control items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-2" to={item.to}>
           <span className="min-w-0 break-words">{item.text}</span>
           <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
         </Link>
