@@ -67,7 +67,7 @@ export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' |
  */
 export function connectionHealth(connection: Pick<ConnectionView, 'effectiveEnabled' | 'lastTest' | 'providerType' | 'hasSecret' | 'configuration'>): Health {
   if (!connection.effectiveEnabled) return { key: 'disabled', label: tx('Devre dışı'), level: 'attention' }
-  if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: tx('Yeniden yetkilendirme gerekli'), level: 'attention' }
+  if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: connection.configuration?.reauthorizationRequired === 'true' ? tx('Yeniden yetkilendirme gerekli') : tx('Yetkilendirme gerekiyor'), level: 'attention' }
   const test = connection.lastTest
   if (!test) return { key: 'untested', label: tx('Test edilmedi'), level: 'neutral' }
   if (test.status === 'Failed') return { key: 'failed', label: tx('Bağlantı sorunu'), level: 'urgent' }

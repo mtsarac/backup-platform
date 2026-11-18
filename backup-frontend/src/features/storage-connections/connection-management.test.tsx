@@ -4,10 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { StorageProvidersTab } from '@/pages/storage/storage-providers-tab'
 import { ApiError } from '@/lib/api/client'
 import * as api from './api'
-import { catalog, fakeProvider, makeConnection, makeManaged, makeProvider, tenantAdminPermissions } from './test-fixtures'
+import { catalog, fakeProvider, makeConnection, makeManaged, tenantAdminPermissions } from './test-fixtures'
 import { ConnectionList } from './connection-list'
 import { ConnectionDetail } from './connection-detail'
 import { ConnectionWizard } from './connection-wizard'
@@ -27,7 +26,6 @@ function mount(path = base) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const view = render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><Routes>
     <Route path={base} element={<ConnectionList />} />
-    <Route path={`${base}/providers`} element={<StorageProvidersTab />} />
     <Route path={`${base}/connections/new`} element={<ConnectionWizard />} />
     <Route path={`${base}/connections/:connectionId`} element={<ConnectionDetail />} />
   </Routes></MemoryRouter></QueryClientProvider>)
@@ -106,13 +104,13 @@ describe('Storage connections list and detail', () => {
   it('offers the add connection action when permitted, or asks the administrator', async () => {
     serve([])
     const { unmount } = mount()
-    expect(await screen.findByText(/İlk hedefi “Bağlantı ekle” ile ekleyin/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Bağlantı ekle' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/new')
+    expect(await screen.findByText(/Henüz depolama bağlantısı yok/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Depolama bağlantısı ekle' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/new')
     unmount()
     access.canAdmin = false
     mount()
     expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByText(/“Bağlantı ekle” ile ekleyin/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Depolama bağlantısı ekle' })).not.toBeInTheDocument()
   })
 
   it('opens a destination from its card without exposing credentials or configuration; quota scope and capabilities are technical', async () => {
@@ -334,170 +332,13 @@ describe('Storage connections list and detail', () => {
   })
 })
 
-describe('Provider catalog', () => {
-  it('does not offer creation for planned, platform-managed or default-only providers', async () => {
-    serve([makeConnection(), makeManaged()], catalog)
-    mount(`${base}/providers`)
-    await screen.findByRole('heading', { name: 'SFTP' })
-    for (const name of ['SFTP', 'Google Drive']) {
-      const card = screen.getByRole('heading', { name }).closest('li')!
-      expect(card).toHaveAttribute('aria-disabled', 'true')
-      expect(within(card).getByText(/Yakında \/ henüz kullanılamaz/)).toBeInTheDocument()
-      expect(within(card).queryByRole('link')).not.toBeInTheDocument()
-    }
-    expect(screen.queryByRole('link', { name: /bağlantı ekle/i })).not.toBeInTheDocument()
-  })
-
-  it('offers creation for an available provider below its connection limit', async () => {
-    mount(`${base}/providers`)
-    expect(await screen.findByRole('link', { name: /(?:Fake S3|Sahte S3) için bağlantı ekle/ })).toHaveAttribute('href', `${base}/connections/new?provider=fake-s3`)
-  })
-
+describe('Connection wizard access', () => {
   it('does not allow the non-admin role to create, including a direct wizard URL', async () => {
     access.canAdmin = false
     mount(`${base}/connections/new`)
     expect(screen.getByText("Yöneticinize danışın")).toBeInTheDocument()
     expect(api.getTenantConnections).not.toHaveBeenCalled()
     expect(api.createTenantConnection).not.toHaveBeenCalled()
-  })
-
-  it('stops offering creation at the provider connection limit', async () => {
-    serve([makeConnection(), s3({ id: 's1', name: 'S3 A' }), s3({ id: 's2', name: 'S3 B' })])
-    mount(`${base}/providers`)
-    expect(await screen.findByText('Bağlantı sınırına ulaşıldı (2).')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /(?:Fake S3|Sahte S3) için bağlantı ekle/ })).not.toBeInTheDocument()
-  })
-})
-
-async function fillWizard() {
-  const user = userEvent.setup()
-  await user.click(await screen.findByRole('radio', { name: /Sahte S3/ }))
-  await user.click(screen.getByRole('button', { name: 'İleri' }))
-  expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-  await user.type(screen.getByRole('textbox', { name: 'Ad' }), ' Arşiv ')
-  expect(screen.queryByLabelText("Kova")).not.toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'İleri' }))
-  expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-  await user.type(screen.getByLabelText("Kova"), 'archive')
-  await user.type(screen.getByLabelText("Bağlantı noktası"), '9000')
-  await user.click(screen.getByLabelText('TLS kullan'))
-  await user.click(screen.getByRole('button', { name: 'İleri' }))
-  expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-  await user.type(screen.getByLabelText("Erişim anahtarı"), SECRET_A)
-  await user.type(screen.getByLabelText("Gizli anahtar"), SECRET_B)
-  expect(screen.getByLabelText("Gizli anahtar")).toHaveAttribute('type', 'password')
-  await user.click(screen.getByRole('button', { name: 'İleri' }))
-  return user
-}
-
-describe('Connection wizard', () => {
-  it('validates each step, creates typed settings once, tests, and forgets submitted credentials', async () => {
-    const connection = s3({ id: 'new', name: 'Arşiv', hasSecret: true })
-    const { promise, resolve: finishCreate } = Promise.withResolvers<ConnectionView>()
-    vi.mocked(api.createTenantConnection).mockReturnValue(promise)
-    vi.mocked(api.testTenantConnection).mockResolvedValue({ connection, test: { status: 'Succeeded', code: 'ok', message: '', testedAt: '2026-10-06T10:00:00Z', durationMs: 12 } })
-    const { client } = mount(`${base}/connections/new`)
-    const user = await fillWizard()
-    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent(/Özet/)
-    expect(screen.queryByRole('button', { name: /Kopyala: Kova/ })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const technical = within(await screen.findByRole('dialog'))
-    expect(technical.getByRole('button', { name: /Kopyala: Kova/ })).toBeInTheDocument()
-    expect(technical.queryByRole('button', { name: /Kopyala: Yetenek kodları/ })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('list', { name: /yetenekleri/ })).toHaveLength(1)
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(document.body.textContent).not.toContain(SECRET_A)
-    await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
-    expect(screen.getByRole('button', { name: 'Oluşturuluyor…' })).toBeDisabled()
-    expect(api.testTenantConnection).not.toHaveBeenCalled()
-    expect(document.body.textContent).not.toContain(SECRET_B)
-    finishCreate(connection)
-    expect(await screen.findByText('Bağlantı çalışıyor')).toBeInTheDocument()
-    expect(screen.getByText('Kimlik bilgisi kayıtlı')).toBeInTheDocument()
-    expect(api.createTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', { providerType: 'fake-s3', name: 'Arşiv', configuration: { bucket: 'archive', port: '9000', useTls: 'true' }, secret: { accessKey: SECRET_A, secretKey: SECRET_B } })
-    expect(api.testTenantConnection).toHaveBeenCalledWith('tenant-a', 'new')
-    expect(JSON.stringify(client.getQueryCache().getAll().map(entry => entry.queryKey))).not.toContain(SECRET_A)
-    await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map(entry => entry.state.variables))).not.toContain(SECRET_A))
-  })
-
-  it('keeps settings after rejection but requires credentials to be re-entered', async () => {
-    vi.mocked(api.createTenantConnection).mockRejectedValue(new ApiError(409, { error: 'connection_limit_reached' }))
-    mount(`${base}/connections/new`)
-    const user = await fillWizard()
-    await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent("Bu depolama sağlayıcısı için bağlantı sınırına ulaşıldı.")
-    await user.click(screen.getByRole('button', { name: 'Geri' }))
-    expect(screen.getByLabelText("Erişim anahtarı")).toHaveValue('')
-    expect(screen.getByLabelText("Gizli anahtar")).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Geri' }))
-    expect(screen.getByLabelText("Kova")).toHaveValue('archive')
-  })
-
-  it('keeps an available provider preselected after loading its catalog', async () => {
-    mount(`${base}/connections/new?provider=fake-s3`)
-    expect(await screen.findByRole('radio', { name: /Sahte S3/ })).toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: 'İleri' }))
-    expect(screen.getByRole('textbox', { name: 'Ad' })).toBeInTheDocument()
-    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Ad')
-    expect(screen.queryByText(/Neden soruluyor/)).not.toBeInTheDocument()
-  })
-
-  it('does not accept provider preselection for a provider that cannot be created', async () => {
-    mount(`${base}/connections/new?provider=local`)
-    expect(await screen.findByRole('radio', { name: /Yerel/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-    expect(api.createTenantConnection).not.toHaveBeenCalled()
-  })
-
-  it('uses the selected SFTP sign-in method, never renders a pasted key, and wipes it after rejection', async () => {
-    const user = userEvent.setup()
-    const key = ['test-private-key-header', 'private-key-content', 'test-private-key-footer', ''].join('\n')
-    serve([], [makeProvider({
-      providerType: 'sftp', displayName: 'SFTP', tenantCreatable: true, maxConnectionsPerTenant: null,
-      configFields: [
-        { name: 'host', label: 'Host', kind: 'Text', required: true },
-        { name: 'port', label: 'Port', kind: 'Number', required: true },
-        { name: 'username', label: 'Username', kind: 'Text', required: true },
-        { name: 'authenticationType', label: 'Authentication type', kind: 'Text', required: true },
-        { name: 'remoteBaseDirectory', label: 'Remote base directory', kind: 'Text', required: true },
-        { name: 'hostKeyFingerprint', label: 'SSH host key fingerprint (SHA256)', kind: 'Text', required: true },
-      ],
-      secretFields: [{ name: 'password', label: 'Password', required: true }, { name: 'privateKey', label: 'SSH private key', required: false }, { name: 'passphrase', label: 'Key passphrase (optional)', required: false }],
-    })])
-    vi.mocked(api.createTenantConnection).mockRejectedValue(new ApiError(400, { error: 'invalid_request' }))
-    mount(`${base}/connections/new?provider=sftp`)
-    await user.click(await screen.findByRole('button', { name: 'İleri' }))
-    await user.type(screen.getByRole('textbox', { name: 'Ad' }), 'Sunucu arşivi')
-    await user.click(screen.getByRole('button', { name: 'İleri' }))
-    await user.type(screen.getByLabelText('Sunucu'), 'backup.internal')
-    expect(screen.getByLabelText('Bağlantı noktası')).toHaveValue(22)
-    await user.type(screen.getByLabelText('Kullanıcı adı'), 'backup-user')
-    await user.type(screen.getByLabelText('Yedeklerin saklanacağı klasör'), '/backups')
-    await user.type(screen.getByLabelText('Sunucunun güvenlik parmak izi (SHA256)'), 'SHA256:trusted')
-    await user.selectOptions(screen.getByRole('combobox'), 'private-key')
-    await user.click(screen.getByRole('button', { name: 'İleri' }))
-    const input = screen.getByLabelText('SSH özel anahtarı')
-    expect(input).toHaveAttribute('type', 'password')
-    expect(screen.queryByLabelText('Parola')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-    await user.click(input)
-    await user.paste(key)
-    expect(document.body.textContent).not.toContain('private-key-content')
-    await user.click(screen.getByRole('button', { name: 'İleri' }))
-    expect(document.body.textContent).not.toContain('private-key-content')
-    await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
-    await screen.findByRole('alert')
-    expect(api.createTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', {
-      providerType: 'sftp', name: 'Sunucu arşivi',
-      configuration: { host: 'backup.internal', port: '22', username: 'backup-user', authenticationType: 'private-key', remoteBaseDirectory: '/backups', hostKeyFingerprint: 'SHA256:trusted' },
-      secret: { privateKey: key },
-    })
-    expect(api.testTenantConnection).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'Geri' }))
-    expect(screen.getByLabelText('SSH özel anahtarı')).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   })
 })
 

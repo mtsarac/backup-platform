@@ -7,15 +7,12 @@ import { AgentRegisterPage } from './pages/clients/agent-register-page'
 import { BackupCenterLayout } from './pages/backup-center/backup-center-layout'
 import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
-import { BackupJobEditPage } from './pages/backup-jobs/backup-job-edit-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { BackupDetailPage } from './pages/backups/backup-detail-page'
 import { DiscoveryPage } from './pages/discovery/discovery-page'
 import { InstanceDetailPage } from './pages/discovery/instance-detail-page'
 import { UploadBandwidthPage } from './pages/upload-bandwidth/upload-bandwidth-page'
 import { StorageLayout } from './pages/storage/storage-layout'
-import { StorageUsageTab } from './pages/storage/storage-usage-tab'
-import { StorageProvidersTab } from './pages/storage/storage-providers-tab'
 import { ConnectionList } from './features/storage-connections/connection-list'
 import { ConnectionDetail } from './features/storage-connections/connection-detail'
 import { ConnectionWizard } from './features/storage-connections/connection-wizard'
@@ -53,18 +50,16 @@ export const tenantRoutes = <>
   <Route path="enrollment" element={<AgentRegisterPage />} />
   <Route element={<BackupCenterLayout />}>
     <Route path="backup-jobs" element={<BackupJobsPage />} />
+    <Route path="backup-jobs/:id" element={<BackupJobsPage />} />
     <Route path="backup-runs" element={<BackupsPage />} />
     <Route path="artifacts" element={<ArtifactsPage />} />
     <Route path="restores" element={<RestoresPage />} />
     <Route path="backup-shares" element={<SharesPage />} />
   </Route>
   <Route path="backup-jobs/new" element={<BackupJobWizardPage />} />
-  <Route path="backup-jobs/:id/edit" element={<BackupJobEditPage />} />
   <Route path="backup-runs/:id" element={<BackupDetailPage />} />
   <Route path="storage" element={<StorageLayout />}>
     <Route index element={<ConnectionList />} />
-    <Route path="usage" element={<StorageUsageTab />} />
-    <Route path="providers" element={<StorageProvidersTab />} />
   </Route>
   <Route path="storage/connections/new" element={<ConnectionWizard />} />
   <Route path="storage/connections/:connectionId" element={<ConnectionDetail />} />

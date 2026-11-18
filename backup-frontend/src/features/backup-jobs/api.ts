@@ -15,3 +15,6 @@ export function saveBackupJob(tenantId: string, input: BackupJobInput, id?: stri
 }
 export const setJobEnabled = (tenantId: string, id: string, enabled: boolean) => apiRequest<BackupJob>(`${jobPath(tenantId, id)}/${enabled ? 'enable' : 'disable'}`, { method: 'POST' })
 export const startJobRun = (tenantId: string, id: string, key: string) => apiRequest<{ id: string }>(`${jobPath(tenantId, id)}/runs`, { method: 'POST', headers: { 'Idempotency-Key': key } })
+export const archiveBackupJob = (tenantId: string, id: string) => apiRequest<void>(jobPath(tenantId, id), { method: 'DELETE' })
+export interface HealthTimeline { jobs: { jobId: string; days: { date: string; status: string; attemptCount: number }[] }[] }
+export const getHealthTimeline = (tenantId: string, signal?: AbortSignal) => apiRequest<HealthTimeline>(`${jobPath(tenantId)}/health-timeline?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { signal })

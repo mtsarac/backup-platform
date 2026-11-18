@@ -1,58 +1,31 @@
 import { currentLocale, tx } from '@/lib/i18n'
-/**
- * Decimal units only; bits and bytes are never mixed: 1 Mbit/s = 125,000 B/s, 1 MB/s = 1,000,000 B/s. The API unit is always bytes per second.
- * Order matters: `formatBandwidth` / `toInput` pick the first unit that shows the value as a whole number.
- */
-export const bandwidthUnits = [
-  { id: 'Mbit/s', bytesPerSecond: 125_000 },
-  { id: 'MB/s', bytesPerSecond: 1_000_000 },
-  { id: 'KB/s', bytesPerSecond: 1_000 },
-  { id: 'B/s', bytesPerSecond: 1 },
-] as const
-export type BandwidthUnitId = (typeof bandwidthUnits)[number]['id']
-
-
-/** The unit as written to the user ("Mbit/sn" in Turkish); the ids stay `Mbit/s` etc. because they are form values. */
-const unitLabels: Record<BandwidthUnitId, () => string> = {
-  'Mbit/s': () => tx('Mbit/sn'), 'MB/s': () => tx('MB/sn'), 'KB/s': () => tx('KB/sn'), 'B/s': () => tx('B/sn'),
-}
-export const unitLabel = (unit: BandwidthUnitId) => unitLabels[unit]()
-
-const unitSize = (unit: BandwidthUnitId) => bandwidthUnits.find(item => item.id === unit)?.bytesPerSecond ?? 1
-
-/** The first unit (Mbit/s, MB/s, KB/s, B/s) in which `bytesPerSecond` is a whole number; B/s always fits. */
-export function cleanUnit(bytesPerSecond: number) {
-  return bandwidthUnits.find(unit => bytesPerSecond % unit.bytesPerSecond === 0) ?? bandwidthUnits[bandwidthUnits.length - 1]
-}
+/** Bandwidth is entered and shown in Mbit/s only (1 Mbit/s = 125,000 B/s); the API unit is always bytes per second. */
+const BYTES_PER_MBIT = 125_000
 
 /** `10 Mbit/sn` for 1,250,000 B/s. */
 export function formatBandwidth(bytesPerSecond: number): string {
-  const unit = cleanUnit(bytesPerSecond)
-  return `${(bytesPerSecond / unit.bytesPerSecond).toLocaleString(currentLocale())} ${unitLabel(unit.id)}`
+  return `${(bytesPerSecond / BYTES_PER_MBIT).toLocaleString(currentLocale(), { maximumFractionDigits: 6 })} ${tx('Mbit/sn')}`
 }
 
 /** `1.250.000 B/sn` (Turkish grouping): the exact value for technical details, never the headline. */
 export function formatExactRate(bytesPerSecond: number): string {
-  return `${bytesPerSecond.toLocaleString(currentLocale())} ${unitLabel('B/s')}`
+  return `${bytesPerSecond.toLocaleString(currentLocale())} ${tx('B/sn')}`
 }
 
 /** Editor text that round-trips through `parseBandwidth` (plain digits, no grouping). */
-export function toInput(bytesPerSecond: number): { text: string; unit: BandwidthUnitId } {
-  const unit = cleanUnit(bytesPerSecond)
-  return { text: String(bytesPerSecond / unit.bytesPerSecond), unit: unit.id }
-}
+export const toInput = (bytesPerSecond: number) => String(bytesPerSecond / BYTES_PER_MBIT)
 
 export type BandwidthParseResult = { bytesPerSecond: number } | { error: 'invalid' | 'out_of_range' }
 
 /**
- * Exact BigInt arithmetic (no float multiplication of a fraction). Up to 6 decimals; the result must be a whole number of bytes per second,
- * so `1,5 B/s` is invalid rather than silently rounded.
+ * Mbit/s text to bytes per second. Exact BigInt arithmetic (no float multiplication of a fraction). Up to 6 decimals; the result must be a whole number of bytes per second,
+ * so a value that is not is invalid rather than silently rounded.
  */
-export function parseBandwidth(text: string, unit: BandwidthUnitId, minimum: number, maximum: number): BandwidthParseResult {
+export function parseBandwidth(text: string, minimum: number, maximum: number): BandwidthParseResult {
   const match = /^(\d{1,15})(?:[.,](\d{1,6}))?$/.exec(text.trim())
   if (!match) return { error: 'invalid' }
   const decimals = match[2] ?? ''
-  const scaled = BigInt(match[1] + decimals) * BigInt(unitSize(unit))
+  const scaled = BigInt(match[1] + decimals) * BigInt(BYTES_PER_MBIT)
   const divisor = 10n ** BigInt(decimals.length)
   if (scaled % divisor !== 0n) return { error: 'invalid' }
   const bytes = scaled / divisor

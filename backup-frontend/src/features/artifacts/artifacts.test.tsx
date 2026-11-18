@@ -251,7 +251,7 @@ describe('Backup dosyaları', () => {
     mount('list')
     await screen.findByRole('link', { name: 'Accounting' })
     expect(screen.getByRole('link', { name: 'History' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-b')
-    expect(screen.getAllByRole('link', { name: 'Günlük SQL' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-internal/edit')
+    expect(screen.getAllByRole('link', { name: 'Günlük SQL' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-internal')
     expect(screen.getAllByRole('link', { name: 'Bu yedeğin geri yüklemeleri' })[0]).toHaveAttribute('href', '/tenants/tenant-a/restores?artifactId=artifact-a')
     expect(screen.getAllByRole('link', { name: 'Çalıştırmayı aç' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-internal')
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'DeleteFailed' } })

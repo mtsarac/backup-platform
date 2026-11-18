@@ -27,7 +27,7 @@ export function ObservabilityPanel({ tenantId }: { tenantId: string }) {
         <div className="grid gap-5 xl:grid-cols-3">
           {others.length > 0 && <div><h3 className="mb-2 font-medium">{tx('Diğer dikkat isteyen işler')}</h3>
             <ul className="divide-y divide-border">{others.map(job => <li key={job.jobId} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <Link className="min-w-0 break-words text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.jobId}/edit`}>{job.jobName}</Link>
+              <Link className="min-w-0 break-words text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.jobId}`}>{job.jobName}</Link>
               <StatusPill level={job.state === 'Critical' ? 'urgent' : 'attention'}>{tx('{0} / 100', { '0': job.score })}</StatusPill>
             </li>)}</ul>
           </div>}

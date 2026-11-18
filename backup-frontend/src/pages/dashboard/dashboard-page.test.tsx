@@ -142,9 +142,9 @@ describe('tenant recommendations', () => {
     const items = within(screen.getByRole('list', { name: 'Öneriler' })).getAllByRole('listitem')
     expect(items).toHaveLength(2)
     expect(within(items[0]).getByRole('link')).toHaveTextContent('Muhasebe: Henüz başarılı yedek alınmadı')
-    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-bad/edit')
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-bad')
     expect(within(items[1]).getByRole('link')).toHaveTextContent('Depo işi: Depolama alanı doluyor')
-    expect(within(items[1]).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-warn/edit')
+    expect(within(items[1]).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-warn')
   })
 
   it('shows at most three recommendations', () => {
@@ -162,7 +162,7 @@ describe('tenant recommendations', () => {
   it('still links an unhealthy job whose reason code is not known', () => {
     state.observability = { ...state.observability, state: 'Degraded', jobs: [jobHealth('job-x', 'Yeni etken', 'Degraded', 70, { freshness: { score: 10, maxScore: 40, status: 'Degraded', reason: 'brand_new_code' } })] }
     renderDashboard()
-    expect(within(screen.getByRole('list', { name: 'Öneriler' })).getByRole('link', { name: /Yeni etken/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-x/edit')
+    expect(within(screen.getByRole('list', { name: 'Öneriler' })).getByRole('link', { name: /Yeni etken/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-x')
   })
 })
 
@@ -184,7 +184,7 @@ describe('dashboard loading and failure', () => {
     state.observability = { ...state.observability, state: backendState, jobs: [jobHealth('job-bad', 'Muhasebe', 'Critical', 30, { freshness: { score: 0, maxScore: 40, status: 'Unavailable', reason: 'backup_missing' } })] }
     renderDashboard()
     expect(screen.getByText(title)).toBeVisible()
-    expect(within(screen.getByRole('list', { name: 'Öneriler' })).getByRole('link', { name: /Muhasebe/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-bad/edit')
+    expect(within(screen.getByRole('list', { name: 'Öneriler' })).getByRole('link', { name: /Muhasebe/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-bad')
   })
 })
 
@@ -235,7 +235,7 @@ describe('dashboard missing-copy ownership', () => {
     const risk = screen.getByRole('region', { name: 'Doğrulanmış kopyalar' })
     expect(within(risk).getByRole('alert')).toHaveTextContent('Son 24 saatte 4 yedekleme')
     expect(within(risk).getByRole('alert')).toHaveTextContent('Yedekler kullanılabilir durumda ama gereken kopya sayısına ulaşılamadı.')
-    expect(within(risk).getByRole('link', { name: `Muhasebe: ${message}` })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-copy/edit')
+    expect(within(risk).getByRole('link', { name: `Muhasebe: ${message}` })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-copy')
     expect(within(risk).getByRole('link', { name: 'Çoğaltma sonuçlarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
     expect(screen.getAllByRole('link', { name: /Muhasebe:/ })).toHaveLength(1)
     expect(screen.getAllByText(/Son 24 saatte 4 yedekleme/)).toHaveLength(1)
@@ -249,7 +249,7 @@ describe('dashboard missing-copy ownership', () => {
     state.data.runs.replicationInsufficientLast24Hours = 0
     renderDashboard()
     const risk = screen.getByRole('region', { name: 'Doğrulanmış kopyalar' })
-    expect(within(risk).getByRole('link', { name: 'Eski yedek: Yedeğin yeterince kopyası yok' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-copy/edit')
+    expect(within(risk).getByRole('link', { name: 'Eski yedek: Yedeğin yeterince kopyası yok' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-copy')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/Son 24 saatte/)).not.toBeInTheDocument()
   })
@@ -411,7 +411,7 @@ describe('observability dashboard', () => {
     }
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
     renderDashboard()
-    expect(screen.getAllByRole('link', { name: /Riskli veritabanı/ }).map(link => link.getAttribute('href'))).toContain('/tenants/tenant-a/backup-jobs/job-risk/edit')
+    expect(screen.getAllByRole('link', { name: /Riskli veritabanı/ }).map(link => link.getAttribute('href'))).toContain('/tenants/tenant-a/backup-jobs/job-risk')
     expect(screen.getByRole('link', { name: 'Dolu disk' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/disk-risk')
     expect(screen.getByRole('link', { name: 'Küçülen yedek' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-anomaly')
     expect(screen.getByText('Kritik kapasite')).toBeInTheDocument()

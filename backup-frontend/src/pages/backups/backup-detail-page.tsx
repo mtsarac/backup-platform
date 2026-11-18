@@ -153,7 +153,7 @@ function BackupDetail({ id }: { id: string }) {
                 action={canOperate ? failure.action : tx("Yöneticinize danışın.")}
                 onAction={canOperate && failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
                   if (failure.actionKind === 'checkComputer') navigate(`/tenants/${tenantId}/agents/${run.agentId}`)
-                  else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}/edit`)
+                  else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}`)
                   else if (failure.actionKind === 'manageStorage') navigate(`/tenants/${tenantId}/storage`)
                   else if (failure.actionKind === 'backupNow' && canRetryRun(run.status)) void perform('retry')
                 } : undefined}
