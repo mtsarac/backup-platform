@@ -751,7 +751,7 @@ describe('BackupShare frontend', () => {
       expect(screen.queryByRole('heading', { name: 'Denetim ve paylaşım geçmişi saklama süresi' })).not.toBeInTheDocument()
     })
     expect(screen.queryByText('share_revoked')).not.toBeInTheDocument()
-    const refusal = screen.getByText('Paylaşım iptal edilmiş.').closest('[role="alert"]')!
+    const refusal = screen.getByText('Paylaşım iptal edilmiş.').closest<HTMLElement>('[role="alert"]')!
     fireEvent.click(within(refusal).getByRole('button', { name: 'Teknik ayrıntılar' }))
     const details = await screen.findByRole('dialog')
     expect(within(details).getByText('share_revoked')).toBeVisible()
