@@ -23,7 +23,7 @@ import type { BackupRun, BackupRunFilters } from '@/features/backups/types'
 import { LIST_PAGE_SIZE, dayParam, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { formatDuration } from '@/lib/format'
+import { formatBytes, formatDateTime, formatDuration } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 
 const pageSize = LIST_PAGE_SIZE
@@ -35,17 +35,24 @@ export function BackupsPage() {
   const fromDay = dayParam(get('from'))
   const toDay = dayParam(get('to'))
   const status = oneOf(get('status'), runStatuses)
-  const trigger = oneOf(get('trigger'), ['Manual', 'Scheduled', 'Retry'])
-  const filters: BackupRunFilters = { page, pageSize, status, jobId: get('jobId') || undefined, agentId: get('agentId') || undefined, trigger, from: dateFilterInstant(fromDay), to: dateFilterInstant(toDay, true) }
+  const filters: BackupRunFilters = { page, pageSize, status, jobId: get('jobId') || undefined, agentId: get('agentId') || undefined, from: dateFilterInstant(fromDay), to: dateFilterInstant(toDay, true) }
   const backups = useBackups(filters)
   const jobs = useBackupJobs()
   const agents = useAgents(tenantId, true)
-  const filtering = Boolean(status || filters.jobId || filters.agentId || trigger || fromDay || toDay)
+  const filtering = Boolean(status || filters.jobId || filters.agentId || fromDay || toDay)
   const invalidDateRange = Boolean(fromDay && toDay && fromDay > toDay)
   const clearFilters = () => update({ status: '', jobId: '', agentId: '', trigger: '', from: '', to: '' })
   const columns: Column<BackupRun>[] = [
     { key: 'job', card: 'title', header: tx('İş'), wrap: true, render: (run) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-runs/${run.id}`}>{run.jobName ?? jobs.data?.find((job) => job.id === run.jobId)?.name ?? tx('Yedekleme işi')}</Link> },
     { key: 'status', card: 'status', header: tx('Durum'), render: (run) => <div className="flex flex-col items-start gap-1"><StatusPill status={run.status} /><SizeAnomalyBadge run={run} /><SizeAnomalyComparison run={run} /></div> },
+    { key: 'artifact', header: tx('Yedek dosyası'), wrap: true, render: (run) => {
+      if (run.status !== 'Succeeded') return '—'
+      const artifact = [...run.attempts].reverse().flatMap((attempt) => attempt.artifacts)[0]
+      if (!artifact) return '—'
+      const copies = artifact.replication?.verifiedReplicas ?? run.replication?.verifiedReplicas ?? artifact.replicas.filter((replica) => replica.usable).length
+      const deletion = artifact.state === 'DeletePending' ? tx('Silme bekliyor') : artifact.state === 'DeleteFailed' ? tx('Silme başarısız') : artifact.state === 'Deleted' ? tx('Silindi') : null
+      return <div><p>{formatBytes(artifact.sizeBytes)} · {tx('{0} kopya', { '0': copies })}</p><p>{artifact.retentionExpiresAt ? tx('Saklama sonu: {0}', { '0': formatDateTime(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p>{deletion && <p>{deletion}</p>}</div>
+    } },
     { key: 'started', header: tx('Başlangıç'), render: (run) => <RelativeTime value={run.startedAt} /> },
     { key: 'duration', header: tx('Süre'), render: (run) => formatDuration(run.startedAt, run.completedAt) },
   ]
@@ -67,17 +74,12 @@ export function BackupsPage() {
           </Select>
         </FilterField>
       </Filters>
-      <Disclosure title={tx('Diğer filtreler')} open={Boolean(filters.agentId || trigger || fromDay || toDay)}>
+      <Disclosure title={tx('Diğer filtreler')} open={Boolean(filters.agentId || fromDay || toDay)}>
         <Filters label={tx("Diğer filtreler")} footer={<span className="text-sm text-text-muted">{tx("Tarihler yerel saat diliminizdeki oluşturulma günlerini kapsar.")}</span>}>
         <FilterField label={tx("Yedekleme bilgisayarı")}>
           <Select aria-label={tx("Yedekleme bilgisayarı")} value={filters.agentId ?? ''} onChange={(event) => update({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}>
             <option value="">{tx("Tüm yedekleme bilgisayarları")}</option>
             {agents.data?.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız yedekleme bilgisayarı')}</option>)}
-          </Select>
-        </FilterField>
-        <FilterField label={tx("Tetikleyici")}>
-          <Select aria-label={tx("Tetikleyici")} value={trigger ?? ''} onChange={(event) => update({ trigger: event.target.value })}>
-            <option value="">{tx("Tüm tetikleyiciler")}</option><option value="Manual">{tx("Elle başlatıldı")}</option><option value="Scheduled">{tx("Zamanlanmış")}</option><option value="Retry">{tx("Yeniden denemeler")}</option>
           </Select>
         </FilterField>
         <FilterField label={tx("Oluşturulma başlangıcı")}>

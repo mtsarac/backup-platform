@@ -47,6 +47,14 @@ beforeEach(() => {
 })
 
 describe('run detail controls and attention', () => {
+  it('opens a successful backup in the run restore flow', () => {
+    const run = makeRun({ status: 'Succeeded' })
+    run.attempts[0].artifacts = [{ id: 'artifact-a', state: 'Available', replicas: [] } as unknown as BackupArtifact]
+    state.query.data = run
+    renderDetail()
+    expect(screen.getByRole('link', { name: 'Geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id/restore')
+  })
+
   it('links a missing run back to the run list', () => {
     state.query.data = undefined
     renderDetail()

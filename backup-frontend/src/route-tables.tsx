@@ -19,8 +19,6 @@ import { StorageProvidersTab } from './pages/storage/storage-providers-tab'
 import { ConnectionList } from './features/storage-connections/connection-list'
 import { ConnectionDetail } from './features/storage-connections/connection-detail'
 import { ConnectionWizard } from './features/storage-connections/connection-wizard'
-import { ArtifactsPage } from './pages/artifacts/artifacts-page'
-import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
 import { RestoresPage } from './pages/restores/restores-page'
 import { RestoreDetailPage } from './pages/restores/restore-detail-page'
 import { RestoreWizardPage } from './pages/restores/restore-wizard-page'
@@ -54,13 +52,13 @@ export const tenantRoutes = <>
   <Route element={<BackupCenterLayout />}>
     <Route path="backup-jobs" element={<BackupJobsPage />} />
     <Route path="backup-runs" element={<BackupsPage />} />
-    <Route path="artifacts" element={<ArtifactsPage />} />
     <Route path="restores" element={<RestoresPage />} />
     <Route path="backup-shares" element={<SharesPage />} />
   </Route>
   <Route path="backup-jobs/new" element={<BackupJobWizardPage />} />
   <Route path="backup-jobs/:id/edit" element={<BackupJobEditPage />} />
   <Route path="backup-runs/:id" element={<BackupDetailPage />} />
+  <Route path="backup-runs/:id/restore" element={<RestoreWizardPage />} />
   <Route path="storage" element={<StorageLayout />}>
     <Route index element={<ConnectionList />} />
     <Route path="usage" element={<StorageUsageTab />} />
@@ -69,8 +67,6 @@ export const tenantRoutes = <>
   <Route path="storage/connections/new" element={<ConnectionWizard />} />
   <Route path="storage/connections/:connectionId" element={<ConnectionDetail />} />
   <Route path="discovery/instances/:instanceId" element={<InstanceDetailPage />} />
-  <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
-  <Route path="artifacts/:id/restore" element={<RestoreWizardPage />} />
   <Route path="restores/:id" element={<RestoreDetailPage />} />
   <Route path="settings" element={<SettingsLayout />}>
     <Route index element={<NotificationsPage />} />

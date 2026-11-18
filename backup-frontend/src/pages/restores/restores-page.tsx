@@ -17,6 +17,7 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { useAgents } from '@/features/agents/hooks'
 import { BackupPicker } from '@/features/artifacts/backup-picker'
+import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 import { useRestores } from '@/features/restores/hooks'
 import { restoreModeLabel, restoreStatuses, targetStateLabel, verificationCleanupText } from '@/features/restores/presentation'
 import type { RestoreFilters, RestoreView } from '@/features/restores/types'
@@ -39,7 +40,7 @@ export function RestoresPage() {
   const clearFilters = () => update({ status: '', artifactId: '', agentId: '' })
   const computer = (restore: RestoreView) => agents.data?.find((agent) => agent.agentId === restore.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
   const sourceBackup = (restore: RestoreView) => <div className="space-y-1">
-    <Link className={linkClass} to={`${base}/artifacts/${restore.artifactId}`}>{restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? tx('Yedek dosyasını aç')}</Link>
+    <ArtifactRunLink className={linkClass} tenantId={tenantId} artifactId={restore.artifactId}>{restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? tx('Yedek dosyasını aç')}</ArtifactRunLink>
     {restore.sourceJobName && <p className="text-xs text-text-muted">{restore.sourceJobName}</p>}
   </div>
   const when = { key: 'when', header: tx('Ne zaman'), wrap: true, render: (restore: RestoreView) => <RelativeTime value={restore.createdAt} /> } satisfies Column<RestoreView>
@@ -75,7 +76,7 @@ export function RestoresPage() {
       {query.data?.items.length === 0
         ? <Card data-testid="restores-empty" padding="none"><EmptyState icon={History} canAct={filtering || canOperate}
           message={filtering ? tx("Bu filtrelere uyan geri yükleme yok.") : verification ? tx("Henüz geri yükleme testi yapılmadı.") : tx("Henüz geri yükleme yapılmadı.")}
-          onClearFilters={filtering ? clearFilters : undefined} action={!filtering && <Link className={buttonVariants()} to={`${base}/artifacts`}>{tx("Yedek dosyalarını aç")}</Link>} /></Card>
+          onClearFilters={filtering ? clearFilters : undefined} action={!filtering && <Link className={buttonVariants()} to={`${base}/backup-runs`}>{tx("Yedek dosyalarını aç")}</Link>} /></Card>
         : <DataList rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} emptyMessage={tx("Henüz geri yükleme yapılmadı.")} />}
       {query.data && query.data.totalCount > 0 && <Pagination label={tx("Geri yükleme sayfaları")} page={query.data.page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
     </QueryState>

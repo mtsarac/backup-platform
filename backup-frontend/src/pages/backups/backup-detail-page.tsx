@@ -26,6 +26,9 @@ import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
+import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
+import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
+
 
 type Tab = 'summary' | 'attempts' | 'replication'
 
@@ -113,6 +116,8 @@ function BackupDetail({ id }: { id: string }) {
     ...(run?.replication ? [{ value: 'replication' as const, label: tx('Replikasyon') }] : []),
   ]
   const latest = run?.attempts.at(-1)
+  const artifact = run?.attempts.flatMap(attempt => attempt.artifacts).at(-1)
+
   const failureCode = run && (run.reasonCode ?? run.retry.lastFailureCode ?? (run.status === 'AgentLost' ? 'AgentLost' : null))
   const failure = describeFailure(failureCode)
 
@@ -123,6 +128,7 @@ function BackupDetail({ id }: { id: string }) {
         title={run?.jobName ?? tx('Yedekleme denemesi')}
         meta={run && <><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</>}
         actions={run && canOperate && <>
+          {run.status === 'Succeeded' && artifact && !restoreIneligibility(artifact) && <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs/${run.id}/restore`}>{tx('Geri yükle')}</Link>}
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
           {run.status === 'Paused' && <Button disabled={busy} onClick={() => void perform('resume')}>{actions.resume.isPending ? tx('Sıraya alınıyor…') : tx('Devam Et')}</Button>}
@@ -162,6 +168,7 @@ function BackupDetail({ id }: { id: string }) {
               {run.status === 'CancellationRequested' && <Notice tone="warning">{tx("İptal istendi; yedekleme denemesi henüz iptal edilmiş değildir. Yedekleme bilgisayarı sonucu bildirdiğinde durum güncellenir.")}</Notice>}
               {run.status === 'Paused' && <Notice tone="warning">{run.pauseReason === 'PausedByNetworkError' ? tx('Ağ kesintisi nedeniyle aktarım duraklatıldı. Bağlantıyı kontrol edip Devam Et ile sürdürün.') : tx('Aktarım duraklatıldı. Hazırlanmış yedek korunur; Devam Et ile aynı baytlardan sürdürülür.')}</Notice>}
               {isActiveRun(run.status) && latest && <Section title={tx("Güncel deneme")} description={tx("{0}. deneme · {1}", { "0": latest.number, "1": progressStageLabel(latest.progressStage) })}><AttemptProgress attempt={latest} /></Section>}
+              {run.status === 'Succeeded' && artifact && <ArtifactDetail id={artifact.id} embedded />}
               <Section title={tx("Yedekleme denemesi özeti")}>
                 <Facts columns={2}>
                   <Fact label={tx("Veritabanı")}>{run.configuration.database}</Fact>
@@ -186,7 +193,7 @@ function BackupDetail({ id }: { id: string }) {
                   <TechnicalDetails items={attemptTechnicalItems(attempt)} />
                   <section aria-label={tx("{0}. deneme çıktıları", { "0": attempt.number })} className="space-y-3 border-t border-border pt-4">
                     <h3 className="text-sm font-medium text-text-heading">{tx("Yedek dosyaları")}</h3>
-                    {attempt.artifacts.length === 0 ? <p className="text-sm text-text-muted">{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p> : attempt.artifacts.map((artifact) => <div key={artifact.id}><Link className={`text-sm ${linkClass}`} to={`/tenants/${tenantId}/artifacts/${artifact.id}`}>{tx("Yedek dosyasını aç")}</Link></div>)}
+                    {attempt.artifacts.length === 0 ? <p className="text-sm text-text-muted">{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p> : attempt.artifacts.map((artifact) => <div key={artifact.id}><Link className={`text-sm ${linkClass}`} to={`/tenants/${tenantId}/backup-runs/${run.id}`}>{tx("Yedek dosyasını aç")}</Link></div>)}
                   </section>
                 </div>
               </Section>))}

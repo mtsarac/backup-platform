@@ -9,6 +9,7 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { ArtifactDeletedNotice } from '@/features/artifacts/artifact-details'
 import { ArtifactAnswers } from '@/features/artifacts/artifact-answers'
 import { ArtifactTechnical } from '@/features/artifacts/artifact-technical'
@@ -47,7 +48,7 @@ export function ArtifactDetailPage() {
   return <ArtifactDetail key={`${tenantId}:${id}`} id={id} />
 }
 
-function ArtifactDetail({ id }: { id: string }) {
+export function ArtifactDetail({ id, embedded = false }: { id: string; embedded?: boolean }) {
   useLanguage()
   const { tenantId, canAdmin, canOperate } = useTenant()
   const { user } = useAuth()
@@ -57,6 +58,7 @@ function ArtifactDetail({ id }: { id: string }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [showDownload, setShowDownload] = useState(false)
+  const [showShares, setShowShares] = useState(false)
   const [activeRepairId, setActiveRepairId] = useState<string | null>(null)
   const [repairingDestId, setRepairingDestId] = useState<string | null>(null)
   const [repairError, setRepairError] = useState<ErrorDescription | null>(null)
@@ -145,7 +147,7 @@ function ArtifactDetail({ id }: { id: string }) {
   const canDownload = Boolean(user?.role === 'UserAdmin' && canAdmin && artifact?.state === 'Available')
   return (
     <div className="space-y-6">
-      <PageHeader
+      {!embedded && <PageHeader
         crumbs={[{ label: tx('Yedek dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: artifact?.databaseName ?? tx('Yedek dosyası') }]}
         title={artifact?.databaseName ? tx("{0} · Yedek dosyası", { "0": artifact.databaseName }) : tx('Yedek dosyası')}
         meta={artifact && <>
@@ -158,9 +160,17 @@ function ArtifactDetail({ id }: { id: string }) {
           {canDownload && <Button variant="outline" aria-expanded={showDownload} onClick={() => setShowDownload(shown => !shown)}>{tx("İndir")}</Button>}
           {canRequestDelete && <Button variant="destructive" disabled={busy} onClick={() => { requestDelete.reset(); cancelDelete.reset(); setDialogOpen(true) }}>{tx("Silme isteği oluştur")}</Button>}
         </>}
-      />
+      />}
       <QueryState isPending={query.isPending} error={query.error}>
         {artifact && <>
+          {embedded && artifact.state !== 'Deleted' && <details className="text-sm">
+            <summary className="cursor-pointer">{tx('Diğer')}</summary>
+            <div className="flex flex-wrap gap-2 pt-2">
+              {canDownload && <Button variant="outline" onClick={() => setShowDownload(shown => !shown)}>{tx('İndir')}</Button>}
+              {canAdmin && artifact.state === 'Available' && <Button variant="outline" onClick={() => setShowShares(shown => !shown)}>{tx('Paylaş')}</Button>}
+              {canRequestDelete && <Button variant="destructive" disabled={busy} onClick={() => { requestDelete.reset(); cancelDelete.reset(); setDialogOpen(true) }}>{tx('Sil')}</Button>}
+            </div>
+          </details>}
           <ArtifactDeletedNotice artifact={artifact} />
           <ArtifactAnswers artifact={artifact} canOperate={canOperate} now={now} />
           {user?.role === 'PlatformAdmin' && <Notice tone="info">{tx('Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.')}</Notice>}
@@ -179,10 +189,10 @@ function ArtifactDetail({ id }: { id: string }) {
             action={canOperate && <Button variant="outline" size="sm" disabled={cancelRepair.isPending} onClick={handleCancelRepair}>{cancelRepair.isPending ? tx('İptal ediliyor…') : tx('Onarımı iptal et')}</Button>}>{tx("Durum:")}{' '}{repairQuery.data.status === 'InProgress' ? tx('Aktarılıyor ve doğrulanıyor') : tx('Sırada')}
             {repairQuery.data.transferredBytes > 0 && tx(" · {0} MB aktarıldı", { "0": Math.round(repairQuery.data.transferredBytes / (1024 * 1024)) })}
           </Notice>}
-          {artifact.replication && <ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} />}
+          {artifact.replication && <TechnicalDetails accordion items={[]}><ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} /></TechnicalDetails>}
           {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />}
           {artifact.backupMetadata?.engine !== 'file-system' && <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />}
-          <ArtifactSharesSection tenantId={tenantId} artifact={artifact} canAdmin={canAdmin} />
+          {(!embedded || showShares) && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} canAdmin={canAdmin} />}
           <ArtifactTechnical artifact={artifact} />
         </>}
       </QueryState>
