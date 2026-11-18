@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import type { BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest } from './types'
-import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
+import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 
 const state = vi.hoisted(() => ({
   canOperate: true,
@@ -145,7 +145,7 @@ function renderPage() {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/tenants/tenant-1/artifacts/artifact-1']}>
         <Routes>
-          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetailPage />} />
+          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetail id="artifact-1" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>

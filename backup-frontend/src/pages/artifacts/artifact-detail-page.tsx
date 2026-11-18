@@ -1,12 +1,9 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
-import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
-import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -16,7 +13,6 @@ import { ArtifactTechnical } from '@/features/artifacts/artifact-technical'
 import { ArtifactDownload } from '@/features/artifacts/artifact-download'
 import { ArtifactSharesSection } from '@/features/artifacts/artifact-shares'
 import { ArtifactVerificationSection } from '@/features/restores/verification'
-import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import { artifactName, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
 import { ReplicationSection } from '@/features/backups/replication'
 import type { ReplicationDestination } from '@/features/artifacts/types'
@@ -26,6 +22,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { useAuth } from '@/features/auth/use-auth'
 import { type ErrorDescription, describeError, describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
+import { linkClass } from '@/components/ui/form-styles'
 import { storageProviderLabel } from '@/features/storage-connections/labels'
 
 function DeleteCountdown({ deleteAfter }: { deleteAfter: string }) {
@@ -41,14 +38,7 @@ function DeleteCountdown({ deleteAfter }: { deleteAfter: string }) {
   return <p className="text-sm text-text">{seconds > 0 ? tx("Fiziksel silmeye kalan süre: {0} sa {1} dk {2} sn", { "0": hours, "1": minutes, "2": seconds % 60 }) : tx('Bekleme süresi doldu. Fiziksel silme işleminin başlaması bekleniyor.')} <span>{tx("En erken:")}{' '}{formatDateTime(deleteAfter)}</span></p>
 }
 
-export function ArtifactDetailPage() {
-  useLanguage()
-  const { id = '' } = useParams<{ id: string }>()
-  const { tenantId } = useTenant()
-  return <ArtifactDetail key={`${tenantId}:${id}`} id={id} />
-}
-
-export function ArtifactDetail({ id, embedded = false }: { id: string; embedded?: boolean }) {
+export function ArtifactDetail({ id }: { id: string }) {
   useLanguage()
   const { tenantId, canAdmin, canOperate } = useTenant()
   const { user } = useAuth()
@@ -143,27 +133,12 @@ export function ArtifactDetail({ id, embedded = false }: { id: string; embedded?
     cancelDelete.mutate(undefined, { onSuccess: () => setNotice(tx('Silme iptal edildi. Backup dosyaları korunuyor.')) })
   }
   const canRequestDelete = Boolean(canAdmin && artifact && artifact.state !== 'Deleted' && artifact.replicas.some((replica) => replica.status === 'Available'))
-  const canRestore = Boolean(canOperate && artifact && !restoreIneligibility(artifact))
   const canDownload = Boolean(user?.role === 'UserAdmin' && canAdmin && artifact?.state === 'Available')
   return (
     <div className="space-y-6">
-      {!embedded && <PageHeader
-        crumbs={[{ label: tx('Yedek dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: artifact?.databaseName ?? tx('Yedek dosyası') }]}
-        title={artifact?.databaseName ? tx("{0} · Yedek dosyası", { "0": artifact.databaseName }) : tx('Yedek dosyası')}
-        meta={artifact && <>
-          <StatusPill status={artifactState(artifact)} />
-          {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
-          {artifact.runId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-runs/${artifact.runId}`}>{tx("Yedekleme denemesini aç")}</Link>}
-        </>}
-        actions={artifact && <>
-          {canRestore && <Link className={buttonVariants()} to={`/tenants/${tenantId}/artifacts/${artifact.id}/restore`}>{artifact.backupMetadata?.engine === 'file-system' ? tx("Dosyaları geri yükle") : tx("Veritabanını geri yükle")}</Link>}
-          {canDownload && <Button variant="outline" aria-expanded={showDownload} onClick={() => setShowDownload(shown => !shown)}>{tx("İndir")}</Button>}
-          {canRequestDelete && <Button variant="destructive" disabled={busy} onClick={() => { requestDelete.reset(); cancelDelete.reset(); setDialogOpen(true) }}>{tx("Silme isteği oluştur")}</Button>}
-        </>}
-      />}
       <QueryState isPending={query.isPending} error={query.error}>
         {artifact && <>
-          {embedded && artifact.state !== 'Deleted' && <details className="text-sm">
+          {artifact.state !== 'Deleted' && <details className="text-sm">
             <summary className="cursor-pointer">{tx('Diğer')}</summary>
             <div className="flex flex-wrap gap-2 pt-2">
               {canDownload && <Button variant="outline" onClick={() => setShowDownload(shown => !shown)}>{tx('İndir')}</Button>}
@@ -172,6 +147,7 @@ export function ArtifactDetail({ id, embedded = false }: { id: string; embedded?
             </div>
           </details>}
           <ArtifactDeletedNotice artifact={artifact} />
+          {artifactState(artifact) === 'DeleteFailed' && <p className="text-sm text-text">{tx('Fiziksel silme tamamlanamadı; dosyalar hâlâ depolamada olabilir.')}{' '}<Link className={linkClass} to={`/tenants/${tenantId}/storage`}>{tx('Depolama')}</Link></p>}
           <ArtifactAnswers artifact={artifact} canOperate={canOperate} now={now} />
           {user?.role === 'PlatformAdmin' && <Notice tone="info">{tx('Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.')}</Notice>}
           {pending && <Section title={tx("Silme süreci")} className="border-warning-border">
@@ -192,7 +168,7 @@ export function ArtifactDetail({ id, embedded = false }: { id: string; embedded?
           {artifact.replication && <TechnicalDetails accordion items={[]}><ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} /></TechnicalDetails>}
           {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />}
           {artifact.backupMetadata?.engine !== 'file-system' && <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />}
-          {(!embedded || showShares) && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} canAdmin={canAdmin} />}
+          {showShares && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} canAdmin={canAdmin} />}
           <ArtifactTechnical artifact={artifact} />
         </>}
       </QueryState>

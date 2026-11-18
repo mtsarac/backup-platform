@@ -29,7 +29,7 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
   const history = useRestores({ purpose: 'Verification', artifactId: artifact.id, pageSize: 10 })
   if (restoreIneligibility(artifact)) return null
   const rows = history.data?.items ?? []
-  return <Section title={tx("Restore doğrulaması")} description={tx("Backup'ın gerçekten geri yüklenebildiğini geçici, izole bir Database üzerinde kanıtlayın.")}
+  return <Section title={tx("Geri yüklenebilir mi?")} description={tx("Backup'ın gerçekten geri yüklenebildiğini geçici, izole bir Database üzerinde kanıtlayın.")}
     actions={canOperate && !formOpen && <Button variant="outline" onClick={() => setFormOpen(true)}>{tx("Restore testi başlat")}</Button>}>
     <div className="space-y-4">
       {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" onRetry={() => void history.refetch()} />
