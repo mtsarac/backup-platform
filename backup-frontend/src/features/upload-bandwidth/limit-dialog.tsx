@@ -7,9 +7,7 @@ import { TextInput } from '@/components/ui/text-input'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useSetUploadBandwidth } from './hooks'
 import type { BandwidthTarget } from './types'
-import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, formatExactRate, parseBandwidth, toInput, unitLabel } from './units'
-import type { BandwidthUnitId } from './units'
-import { Select } from '@/components/ui/text-input'
+import { bandwidthErrorMessage, formatBandwidth, formatExactRate, parseBandwidth, toInput } from './units'
 
 const scopeHelp = {
   get tenant() { return tx("Tenant genelinde eş zamanlı tüm yüklemelerin toplamı için üst sınırdır; tüm Agent'lardaki yüklemeler bu sınırı adil paylaşır.") },
@@ -22,12 +20,11 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
   target: BandwidthTarget; name: string; current: number | null; minimum: number; maximum: number; onClose: () => void
 }) {
   useLanguage()
-  const initial = current === null ? { text: '', unit: 'Mbit/s' as BandwidthUnitId } : toInput(current)
+  const initial = current === null ? '' : toInput(current)
   const [unlimited, setUnlimited] = useState(current === null)
-  const [text, setText] = useState(initial.text)
-  const [unit, setUnit] = useState<BandwidthUnitId>(initial.unit)
+  const [text, setText] = useState(initial)
   const save = useSetUploadBandwidth()
-  const parsed = unlimited ? null : parseBandwidth(text, unit, minimum, maximum)
+  const parsed = unlimited ? null : parseBandwidth(text, minimum, maximum)
   const invalid = parsed !== null && 'error' in parsed
   const showInvalid = invalid && text.trim() !== ''
   function submit() {
@@ -41,11 +38,7 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
       <Field label={tx("Hız sınırı")} error={showInvalid ? bandwidthErrorMessage(parsed.error, minimum, maximum) : undefined}>
         {control => <TextInput {...control}  inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}
       </Field>
-      <Field label={tx("Birim")}>
-        {control => <Select {...control} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
-          {bandwidthUnits.map(item => <option key={item.id} value={item.id}>{unitLabel(item.id)}</option>)}
-        </Select>}
-      </Field>
+      <span>{tx('Mbit/sn')}</span>
     </div>
     <p className="text-sm text-text-muted">{tx("En az {0}, en çok {1}.", { "0": formatBandwidth(minimum), "1": formatBandwidth(maximum) })}</p>
     <TechnicalDetails items={parsed && 'bytesPerSecond' in parsed ? [{ label: tx("Kaydedilecek değer"), value: formatExactRate(parsed.bytesPerSecond) }] : []} />

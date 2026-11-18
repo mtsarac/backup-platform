@@ -75,7 +75,7 @@ function AgentJobs({ agentId }: { agentId: string }) {
   const jobs = useBackupJobs()
   const rows = (jobs.data ?? []).filter((job) => job.agentId === agentId)
   const columns: Column<BackupJob>[] = [
-    { key: 'name', header: tx('Yedekleme işi'), card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}/edit`}>{job.name}</Link> },
+    { key: 'name', header: tx('Yedekleme işi'), card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}`}>{job.name}</Link> },
     { key: 'enabled', card: 'status', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
     { key: 'lastRun', header: tx('Son sonuç'), render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted"><RelativeTime value={job.lastRun.createdAt} /></span></div> : tx('Henüz çalışmadı') },
     { key: 'next', header: tx('Sonraki yedek'), render: (job) => job.nextOccurrenceAt ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },

@@ -49,7 +49,7 @@ export function ArtifactsPage() {
         <Link className={`${linkClass} ${rowLinkClass} block max-w-full truncate`} title={title} to={`${base}/artifacts/${artifact.id}`}>{title}</Link>
         {meta && <p className="max-w-full truncate text-sm text-text-muted" title={meta}>{meta}</p>}
         <p className="flex flex-wrap items-center gap-x-2 text-sm text-text-muted">
-          {artifact.jobId ? <Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işi')}</Link> : <span>{tx('Backup Job yok')}</span>}
+          {artifact.jobId ? <Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-jobs/${artifact.jobId}`}>{artifact.jobName || tx('Yedekleme işi')}</Link> : <span>{tx('Backup Job yok')}</span>}
           {artifact.runId && <><span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/backup-runs/${artifact.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}
           <span aria-hidden="true">·</span><Link className={`hover:underline ${rowLinkClass}`} to={`${base}/restores?artifactId=${encodeURIComponent(artifact.id)}`}>{tx("Bu yedeğin geri yüklemeleri")}</Link>
         </p>
