@@ -8,7 +8,6 @@ import { BackupCenterLayout } from './pages/backup-center/backup-center-layout'
 import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
-import { BackupDetailPage } from './pages/backups/backup-detail-page'
 import { DiscoveryPage } from './pages/discovery/discovery-page'
 import { InstanceDetailPage } from './pages/discovery/instance-detail-page'
 import { UploadBandwidthPage } from './pages/upload-bandwidth/upload-bandwidth-page'
@@ -50,11 +49,11 @@ export const tenantRoutes = <>
     <Route path="backup-jobs" element={<BackupJobsPage />} />
     <Route path="backup-jobs/:id" element={<BackupJobsPage />} />
     <Route path="backup-runs" element={<BackupsPage />} />
+    <Route path="backup-runs/:id" element={<BackupsPage />} />
     <Route path="restores" element={<RestoresPage />} />
     <Route path="backup-shares" element={<SharesPage />} />
   </Route>
   <Route path="backup-jobs/new" element={<BackupJobWizardPage />} />
-  <Route path="backup-runs/:id" element={<BackupDetailPage />} />
   <Route path="backup-runs/:id/restore" element={<RestoreWizardPage />} />
   <Route path="storage" element={<StorageLayout />}>
     <Route index element={<ConnectionList />} />

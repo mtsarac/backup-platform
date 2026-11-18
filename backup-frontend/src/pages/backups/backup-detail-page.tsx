@@ -1,7 +1,7 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { History } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, History } from 'lucide-react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { RelativeTime } from '@/components/data/relative-time'
@@ -11,7 +11,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
-import { PageHeader } from '@/components/ui/page-header'
+import { linkClass } from '@/components/ui/form-styles'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
 import { Tabs } from '@/components/ui/tabs'
@@ -87,6 +87,7 @@ function BackupDetail({ id }: { id: string }) {
   useLanguage()
   const { tenantId, canOperate } = useTenant()
   const navigate = useNavigate()
+  const { search } = useLocation()
   const query = useBackup(id)
   const actions = useBackupActions(id)
   const [notice, setNotice] = useState('')
@@ -123,18 +124,20 @@ function BackupDetail({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        crumbs={[{ label: tx('Yedekleme denemeleri'), to: `/tenants/${tenantId}/backup-runs` }, { label: run?.jobName ?? tx('Yedekleme denemesi') }]}
-        title={run?.jobName ?? tx('Yedekleme denemesi')}
-        meta={run && <><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</>}
-        actions={run && canOperate && <>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0 space-y-1">
+          <Link className={`inline-flex items-center gap-1 text-sm md:hidden ${linkClass}`} to={`/tenants/${tenantId}/backup-runs${search}`}><ArrowLeft aria-hidden="true" className="size-4" />{tx('Geçmişe dön')}</Link>
+          <h2 className="break-words text-lg font-semibold text-text-heading">{run?.jobName ?? tx('Yedekleme denemesi')}</h2>
+          {run && <div className="flex flex-wrap items-center gap-2"><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</div>}
+        </div>
+        {run && canOperate && <div className="flex flex-wrap items-center gap-2">
           {run.status === 'Succeeded' && artifact && artifactState(artifact) !== 'DeleteFailed' && !restoreIneligibility(artifact) && <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs/${run.id}/restore`}>{tx('Geri yükle')}</Link>}
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
           {run.status === 'Paused' && <Button disabled={busy} onClick={() => void perform('resume')}>{actions.resume.isPending ? tx('Sıraya alınıyor…') : tx('Devam Et')}</Button>}
           {canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => { actions.cancel.reset(); setConfirmCancel(true) }}>{actions.cancel.isPending ? tx('İletiliyor…') : tx('İptal et')}</Button>}
-        </>}
-      />
+        </div>}
+      </div>
       <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run} emptyState={<EmptyState icon={History} message={tx("Bu yedekleme denemesi bulunamadı. Yedekleme denemeleri listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx("Yedekleme denemeleri")}</Link>} />}>
         {run && <>
           <ConfirmDialog open={confirmCancel && canOperate && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}

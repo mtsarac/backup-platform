@@ -13,10 +13,11 @@ function mount(path: string) {
       <Route element={<BackupCenterLayout />}>
         <Route path="backup-jobs" element={<p>jobs list</p>} />
         <Route path="backup-runs" element={<p>runs list</p>} />
+        <Route path="backup-runs/:id" element={<p>run detail</p>} />
         <Route path="restores" element={<p>restores list</p>} />
       </Route>
       <Route path="backup-jobs/new" element={<p>job wizard</p>} />
-      <Route path="backup-runs/:id" element={<p>run detail</p>} />
+      <Route path="backup-runs/:id/restore" element={<p>run restore</p>} />
     </Route>
   </Routes></MemoryRouter>)
 }
@@ -28,11 +29,11 @@ describe('Backup Center layout', () => {
     const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' }))
     expect(tabs.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Yedekleme işleri', '/tenants/tenant-a/backup-jobs'],
-      ['Yedekleme denemeleri', '/tenants/tenant-a/backup-runs'],
+      ['Geçmiş', '/tenants/tenant-a/backup-runs'],
       ['Geri yüklemeler', '/tenants/tenant-a/restores'],
       ['Paylaşımlar', '/tenants/tenant-a/backup-shares'],
     ])
-    expect(tabs.getByRole('link', { current: 'page' })).toHaveTextContent('Yedekleme denemeleri')
+    expect(tabs.getByRole('link', { current: 'page' })).toHaveTextContent('Geçmiş')
     expect(screen.getByText('runs list')).toBeInTheDocument()
   })
 
@@ -43,7 +44,7 @@ describe('Backup Center layout', () => {
     expect(screen.queryByText('jobs list')).not.toBeInTheDocument()
   })
 
-  it.each(['/tenants/tenant-a/backup-jobs/new', '/tenants/tenant-a/backup-runs/run-1'])('%s is not wrapped in the tabs', (path) => {
+  it.each(['/tenants/tenant-a/backup-jobs/new', '/tenants/tenant-a/backup-runs/run-1/restore'])('%s is not wrapped in the tabs', (path) => {
     mount(path)
     expect(screen.queryByRole('navigation', { name: 'Yedekleme bölümleri' })).not.toBeInTheDocument()
   })

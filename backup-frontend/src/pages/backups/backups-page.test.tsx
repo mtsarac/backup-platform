@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
@@ -17,7 +17,8 @@ const state = vi.hoisted(() => ({
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backups/hooks', () => ({ useBackups: (filters: BackupRunFilters) => { state.filters.push(filters); return { data: state.page, isPending: false, isFetching: false, error: null } } }))
-vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [{ id: 'job-id', name: 'Günlük SQL yedeği' }], isPending: false, error: null }) }))
+vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [{ id: 'job-id', name: 'Günlük SQL yedeği' }, { id: 'old-job', name: 'Eski iş', archivedAt: '2026-10-01T00:00:00Z' }], isPending: false, error: null }) }))
+vi.mock('./backup-detail-page', () => ({ BackupDetailPage: () => { const { id } = useParams(); return <p>detail {id}</p> } }))
 vi.mock('@/features/agents/hooks', () => ({ useAgents: () => ({ data: [{ agentId: 'agent-id', hostName: 'SQL ajanı' }], isPending: false, error: null }) }))
 
 beforeEach(() => {
@@ -194,5 +195,27 @@ describe('run history URL state', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/?status=Failed&from=2026-10-01')
     fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+  })
+})
+
+describe('history side panel', () => {
+  const mountRun = (url: string) => render(<MemoryRouter initialEntries={[url]}><Routes><Route path="/backup-runs" element={<BackupsPage />} /><Route path="/backup-runs/:id" element={<BackupsPage />} /></Routes></MemoryRouter>)
+
+  it('opens the selected attempt beside the list, keeps the filters in the row links and marks the open row', () => {
+    mountRun('/backup-runs/run-id?status=Succeeded')
+    expect(screen.getByRole('region', { name: 'Yedekleme denemesi' })).toHaveTextContent('detail run-id')
+    expect(screen.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id?status=Succeeded')
+    expect(screen.queryByRole('columnheader', { name: 'Başlangıç' })).not.toBeInTheDocument()
+  })
+
+  it('shows no panel without a selected attempt', () => {
+    mountRun('/backup-runs')
+    expect(screen.queryByRole('region', { name: 'Yedekleme denemesi' })).not.toBeInTheDocument()
+  })
+
+  it('lists an archived job in the job filter with a removed suffix', () => {
+    mountRun('/backup-runs')
+    expect(within(screen.getByRole('combobox', { name: 'İş' })).getByRole('option', { name: 'Eski iş (kaldırıldı)' })).toBeInTheDocument()
   })
 })

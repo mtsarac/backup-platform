@@ -3,7 +3,7 @@ import type { BackupJob, BackupJobInput, Occurrence } from './types'
 import type { BackupJobHealth } from './health'
 
 const jobPath = (tenantId: string, id?: string) => tenantPath(tenantId, `backup-jobs${id ? `/${encodeURIComponent(id)}` : ''}`)
-export const getBackupJobs = (tenantId: string, signal?: AbortSignal) => apiRequest<BackupJob[]>(jobPath(tenantId), { signal })
+export const getBackupJobs = (tenantId: string, signal?: AbortSignal, includeArchived = false) => apiRequest<BackupJob[]>(`${jobPath(tenantId)}${includeArchived ? `?${new URLSearchParams({ includeArchived: 'true' })}` : ''}`, { signal })
 export const getBackupJob = (tenantId: string, id: string, signal?: AbortSignal) => apiRequest<BackupJob>(jobPath(tenantId, id), { signal })
 export const getBackupJobHealth = (tenantId: string, id: string, signal?: AbortSignal) => apiRequest<BackupJobHealth>(`${jobPath(tenantId, id)}/health`, { signal })
 export const getOccurrences = (tenantId: string, id: string, signal?: AbortSignal) => apiRequest<Occurrence[]>(`${jobPath(tenantId, id)}/schedule/occurrences?limit=10`, { signal })
