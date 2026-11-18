@@ -74,6 +74,18 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
             jobs.Where(job => job.NextOccurrenceAt is not null).OrderBy(job => job.NextOccurrenceAt).Take(5).ToArray());
     }
 
+    // shortcut: one narrow row per run of the last ~16 days is read and bucketed in memory (a zone's midnights cannot be cut in SQL portably); push it into SQL if a tenant's run count makes this heavy.
+    public async Task<BackupHealthTimelineView> GetHealthTimelineAsync(TenantId tenantId, TimeZoneInfo zone, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null)
+            .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new HealthTimelineJobRow(job.Id, job.Name, job.CreatedAt)).ToListAsync(cancellationToken);
+        var since = BackupHealthTimeline.RunsSince(now);
+        var runs = await context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId && run.CreatedAt >= since)
+            .Select(run => new HealthTimelineRunRow(run.JobId, run.CreatedAt, run.Status)).ToListAsync(cancellationToken);
+        return new(zone.Id, BackupHealthTimeline.Build(zone, now, jobs, runs));
+    }
+
     private static IQueryable<BackupRun> Filter(IQueryable<BackupRun> query, BackupRunQuery filter)
     {
         if (filter.JobId is { } jobId) query = query.Where(run => run.JobId == jobId);
