@@ -55,7 +55,7 @@ describe('platform failure messages', () => {
 
   it('keeps generic wording for codeless 403 and 404', () => {
     expect(errorMessage(new ApiError(403))).toBe('Bu işlem için yetkiniz yok.')
-    expect(errorMessage(new ApiError(404, { error: 'something_else' }))).toBe("Kayıt bulunamadı veya bu çalışma alanı kapsamında erişilemiyor.")
+    expect(errorMessage(new ApiError(404))).toBe("Kayıt bulunamadı veya bu çalışma alanı kapsamında erişilemiyor.")
   })
 })
 
@@ -158,6 +158,11 @@ describe('unknown failure code', () => {
     expect(description.unknown).toBe(true)
     expect(description.technical.map(item => item.value)).toEqual(['some_new_backend_code'])
     expect(errorMessage(new ApiError(409, { error: 'some_new_backend_code' }))).toBe(unknownSentence)
+    for (const status of [404, 500]) {
+      const error = new ApiError(status, { error: 'some_new_backend_code' })
+      expect(errorMessage(error)).toBe(unknownSentence)
+      expect(describeError(error).unknown).toBe(true)
+    }
   })
 
   it('never shows an unsafe code at all', () => {

@@ -209,6 +209,7 @@ export function errorMessage(error: unknown, scope?: ErrorScope): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return tx('Oturumunuz sona erdi. Yeniden giriş yapın.')
     const code = error.reason ?? error.code
+    if (code && !knownMessage(code, scope)) return unknownFailure()
     if (scope && isRequestFailure(error)) return failureMessage(code, scope)
     if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
     if (error.status === 403) return tx('Bu işlem için yetkiniz yok.')
@@ -320,11 +321,11 @@ export function describeError(error: unknown, scope?: ErrorScope): ErrorDescript
   if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), actionKind, technical }
   const uncertain = tx("Mevcut yedekleriniz etkilenmedi; işlemin tamamlanıp tamamlanmadığını listeden kontrol edin.")
   if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), actionKind: 'retry', technical }
+  if (error.status !== 401 && key && !knownMessage(key, scope)) return { what, dataImpact: uncertain, action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', unknown: true, technical }
   if (error.status === 401) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Giriş yaptıktan sonra işlemi tekrarlayın."), technical }
   if (error.status === 403) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical }
   if (error.status === 404) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
   if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), actionKind: 'retry', technical }
-  if (key && !knownMessage(key, scope && isRequestFailure(error) ? scope : undefined)) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', unknown: true, technical }
   return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: actionKind ? actionSentence(actionKind) : tx("Bilgileri kontrol edip tekrar deneyin."), actionKind, technical }
 }
 
