@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { createMemoryRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
@@ -18,10 +18,17 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJobs: vi.fn(), startJobRun: vi.fn() }))
+/** Stands in for the storage wizard: it hands back exactly what the real one does. */
+function StorageWizardStub() {
+  const navigate = useNavigate()
+  const { returnTo, returnState } = useLocation().state as { returnTo: string; returnState: unknown }
+  return <><button onClick={() => void navigate(returnTo, { state: { returnState, storageConnectionId: 'conn-central' } })}>Bu depolamayı kullan</button><button onClick={() => void navigate(returnTo, { state: { returnState } })}>Vazgeç</button></>
+}
 function makeRouter(route = '/tenants/tenant-a/backup-jobs/new', initialEntries = [route]) {
   return createMemoryRouter(createRoutesFromElements(<Route element={<><nav><Link to="/tenants/tenant-a/agents">Computers</Link></nav><Outlet /></>}>
     <Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} />
     <Route path="/tenants/:tenantId/backup-jobs" element={<p>Job listesi</p>} />
+    <Route path="/tenants/:tenantId/storage/connections/new" element={<StorageWizardStub />} />
     <Route path="/tenants/:tenantId/agents" element={<p>Computer list</p>} />
   </Route>), { initialEntries })
 }
@@ -31,6 +38,11 @@ function page(cache: QueryClient, route = '/tenants/tenant-a/backup-jobs/new') {
 function renderPage(route?: string) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return { ...render(page(cache, route)), cache }
+}
+function renderPageWithRouter() {
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  const router = makeRouter()
+  return { ...render(<QueryClientProvider client={cache}><RouterProvider router={router} /></QueryClientProvider>), router }
 }
 async function submit() {
   await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
@@ -341,6 +353,17 @@ describe('iş formu', () => {
     expect(cache.getQueryData(['tenant', 'tenant-a', 'storage-connections', 'list'])).toEqual({ items: [makeConnection(), makeManaged({ administrativelyDisabled: true })] })
     expect(screen.getByRole('heading', { name: 'Yeni yedekleme işi' })).toBeInTheDocument()
     expect(saveBackupJob).toHaveBeenCalledTimes(1)
+  })
+  it.each([['Bu depolamayı kullan', 'Managed Storage'], ['Vazgeç', 'Varsayılan bağlantı']])('"Yeni depolama ekle" opens the storage wizard and "%s" returns to the review with the draft kept', async (button, target) => {
+    const { router } = renderPageWithRouter()
+    await reach(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Yeni depolama ekle' }))
+    fireEvent.click(await screen.findByRole('button', { name: button }))
+    expect(await screen.findByText('ERP backup')).toBeInTheDocument()
+    expect(await screen.findByText(target)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kaydet' })).toBeInTheDocument()
+    expect(router.state.location.search).toBe('')
+    expect(sessionStorage.length + localStorage.length).toBe(0)
   })
   it('liste isteği başarısızsa varsayılan sahte başarıya dönüşmez ve tekrar yüklenebilir', async () => {
     vi.mocked(getTenantConnections).mockRejectedValueOnce(new ApiError(503)).mockResolvedValue({ items: [makeConnection()] })
