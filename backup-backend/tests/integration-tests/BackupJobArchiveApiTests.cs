@@ -175,29 +175,42 @@ public sealed class BackupJobArchiveApiTests(PostgreSqlFixture fixture) : IClass
         Assert.Equal(HttpStatusCode.NotFound, manual.StatusCode);
     }
 
+    private static string StatusOf(JsonElement run) => run.GetProperty("status").GetString()!;
+
     [Fact]
-    public async Task ArchivedJobsNeverRetryFailedRunsOrDispatchAlreadyQueuedAttempts()
+    public async Task ArchivingCancelsQueuedAndRetryPendingRunsAndKeepsTheirAttemptHistory()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(Start));
         var job = await scenario.CreateJobAsync();
-        var failedRun = await scenario.StartRunAsync(job);
+        var retryRun = await scenario.StartRunAsync(job);
         await scenario.FailNextAsync("DatabaseUnavailable");
+        Assert.Equal("RetryPending", StatusOf(await scenario.RunAsync(retryRun)));
         var queuedJob = await scenario.CreateJobAsync();
         var queuedRun = await scenario.StartRunAsync(queuedJob);
+        var control = await scenario.CreateJobAsync();
+        var controlRun = await scenario.StartRunAsync(control);
         await ArchiveOkAsync(scenario, job);
         await ArchiveOkAsync(scenario, queuedJob);
 
-        using var retry = await scenario.RetryRawAsync(failedRun);
+        var retried = await scenario.RunAsync(retryRun);
+        Assert.Equal("Cancelled", StatusOf(retried));
+        Assert.Equal(["Failed"], BackupApiScenario.AttemptsOf(retried).Select(attempt => attempt.GetProperty("status").GetString()));
+        var queued = await scenario.RunAsync(queuedRun);
+        Assert.Equal("Cancelled", StatusOf(queued));
+        Assert.Single(BackupApiScenario.AttemptsOf(queued));
+        Assert.Equal("Pending", StatusOf(await scenario.RunAsync(controlRun)));
+
+        using var retry = await scenario.RetryRawAsync(retryRun);
         Assert.Equal(HttpStatusCode.Conflict, retry.StatusCode);
+        Assert.Equal("job_archived", AgentWorld.ReadJson(retry).GetProperty("reason").GetString());
         scenario.Clock.Advance(TimeSpan.FromMinutes(5));
         Assert.Equal(0, await scenario.ScanRetriesAsync());
-        Assert.Single(BackupApiScenario.AttemptsOf(await scenario.RunAsync(failedRun)));
+        Assert.Equal(controlRun, (await scenario.ClaimAsync()).RunId); // only the job that was not archived is dispatched
         Assert.Null(await scenario.PollAsync());
-        Assert.Single(BackupApiScenario.AttemptsOf(await scenario.RunAsync(queuedRun)));
     }
 
     [Fact]
-    public async Task AFailureAfterArchivingDoesNotRetryButOtherJobsStillRetry()
+    public async Task AnAttemptThatFailsAfterArchivingEndsTheRunCancelledInsteadOfRetrying()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(Start));
         var job = await scenario.CreateJobAsync();
@@ -205,17 +218,69 @@ public sealed class BackupJobArchiveApiTests(PostgreSqlFixture fixture) : IClass
         var claim = await scenario.ClaimAsync();
         await scenario.StartAttemptAsync(claim);
         await ArchiveOkAsync(scenario, job);
+        Assert.Equal("Running", StatusOf(await scenario.RunAsync(run))); // an attempt already running is not interrupted
         using (var failure = await scenario.FailRawAsync(claim, "DatabaseUnavailable"))
             Assert.Equal(HttpStatusCode.NoContent, failure.StatusCode);
 
-        var controlJob = await scenario.CreateJobAsync();
-        var controlRun = await scenario.StartRunAsync(controlJob);
-        await scenario.FailNextAsync("DatabaseUnavailable");
+        var after = await scenario.RunAsync(run);
+        Assert.Equal("Cancelled", StatusOf(after));
+        Assert.Equal(["Failed"], BackupApiScenario.AttemptsOf(after).Select(attempt => attempt.GetProperty("status").GetString()));
+        scenario.Clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(0, await scenario.ScanRetriesAsync());
+        Assert.Null(await scenario.PollAsync());
+    }
+
+    [Fact]
+    public async Task AnAttemptLostAfterArchivingEndsTheRunCancelledAndAnotherJobsLostAttemptStillRetries()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(Start));
+        var job = await scenario.CreateJobAsync();
+        var run = await scenario.StartRunAsync(job);
+        await scenario.StartAttemptAsync(await scenario.ClaimAsync());
+        await ArchiveOkAsync(scenario, job);
+
+        scenario.Clock.Advance(TimeSpan.FromSeconds(121)); // the 120 s lease ran out without a renewal
+        await scenario.ExpireStaleAsync();
+        var control = await scenario.CreateJobAsync();
+        var controlRun = await scenario.StartRunAsync(control);
+        await scenario.StartAttemptAsync(await scenario.ClaimAsync()); // the agent runs one backup at a time: only now is its slot free
+        scenario.Clock.Advance(TimeSpan.FromSeconds(121));
+        await scenario.ExpireStaleAsync();
+
+        var lost = await scenario.RunAsync(run);
+        Assert.Equal("Cancelled", StatusOf(lost));
+        Assert.Equal(["AgentLost"], BackupApiScenario.AttemptsOf(lost).Select(attempt => attempt.GetProperty("status").GetString()));
+        Assert.Equal("RetryPending", StatusOf(await scenario.RunAsync(controlRun)));
         scenario.Clock.Advance(TimeSpan.FromMinutes(5));
         Assert.Equal(1, await scenario.ScanRetriesAsync());
-        Assert.Single(BackupApiScenario.AttemptsOf(await scenario.RunAsync(run)));
-        Assert.Equal(2, BackupApiScenario.AttemptsOf(await scenario.RunAsync(controlRun)).Count);
         Assert.Equal(controlRun, (await scenario.ClaimAsync()).RunId);
+    }
+
+    [Fact]
+    public async Task ArchivingRacingWithAFailingAttemptNeverLeavesARetryBehindWhicheverWins()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(Start));
+        for (var round = 0; round < 6; round++)
+        {
+            var job = await scenario.CreateJobAsync();
+            var run = await scenario.StartRunAsync(job);
+            var claim = await scenario.ClaimAsync();
+            await scenario.StartAttemptAsync(claim);
+
+            var failing = scenario.FailRawAsync(claim, "DatabaseUnavailable");
+            var archiving = ArchiveAsync(scenario, job);
+            using var failed = await failing;
+            using var archived = await archiving;
+
+            Assert.Equal(HttpStatusCode.NoContent, failed.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, archived.StatusCode);
+            var after = await scenario.RunAsync(run);
+            Assert.Equal("Cancelled", StatusOf(after));
+            Assert.Single(BackupApiScenario.AttemptsOf(after));
+        }
+        scenario.Clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(0, await scenario.ScanRetriesAsync());
+        Assert.Null(await scenario.PollAsync());
     }
 
     [Fact]

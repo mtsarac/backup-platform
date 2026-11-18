@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
 import { StatusPill } from '@/components/data/status-pill'
@@ -55,7 +55,7 @@ function DashboardAttention({ data }: { data: PlatformSummary }) {
     {items.length > 0 && <ul aria-label={tx("Dikkat gerektirenler")} className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
       {items.map((item) => <li key={item.key}>
         <Link className="flex min-h-control items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-2" to={item.to}>
-          <span className="min-w-0 break-words">{item.text}</span>
+          <span className="flex min-w-0 items-center gap-2"><AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-warning" /><span className="min-w-0 break-words">{item.text}</span></span>
           <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
         </Link>
       </li>)}

@@ -475,6 +475,9 @@ public sealed record DatabaseRestoreResult
 /// </summary>
 public static class RestoreReasonCodes
 {
+    /// <summary>The database server's certificate could not be verified.</summary>
+    public const string ServerCertificateUntrusted = "server-certificate-untrusted";
+
     /// <summary>NewDatabase was requested and a database of that name already exists.</summary>
     public const string TargetDatabaseExists = "target-database-exists";
 

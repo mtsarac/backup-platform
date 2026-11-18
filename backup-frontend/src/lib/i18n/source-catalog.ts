@@ -2461,7 +2461,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Eksik kopyaları onarmak için sonuçları inceleyin.": {"tr":"Eksik kopyaları onarmak için sonuçları inceleyin.","en":"Review the results to repair the missing copies."},
   "Yöneticinize danışın": {"tr":"Yöneticinize danışın","en":"Ask your administrator"},
   "İlk yedeğinizi oluşturun": {"tr":"İlk yedeğinizi oluşturun","en":"Create your first backup"},
-  "Bu tenant'ın henüz üyesi yok; yukarıdan bir kullanıcı ekleyin.": {"tr":"Bu çalışma alanının henüz üyesi yok; yukarıdan bir kullanıcı ekleyin.","en":"This workspace has no members yet; add a user above."},
+  "İlk üyeyi ekle": {"tr":"İlk üyeyi ekle","en":"Add the first member"},
   "Bu filtrelerde Backup dosyası yok; filtreleri temizleyin veya bir Backup Job çalıştırın.": {"tr":"Bu filtrelere uygun yedekleme dosyası yok; filtreleri temizleyin veya bir yedekleme işi çalıştırın.","en":"There are no backup files for these filters; clear the filters or run a backup job."},
   "Ana Sayfa": {"tr":"Ana Sayfa","en":"Home"},
   "{0} · Yedeklerinizin durumu": {"tr":"{0} · Yedeklerinizin durumu","en":"{0} · Status of your backups"},

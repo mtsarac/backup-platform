@@ -127,7 +127,7 @@ public sealed class BackupScheduleService(
     public async Task<bool> ArchiveAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken, UserId actor)
     {
         var now = time.GetUtcNow();
-        if (await schedules.ModifyJobAsync(tenantId, jobId, target => target.Archive(now), cancellationToken, actor, now) is null) return false;
+        if (await schedules.ArchiveJobAsync(tenantId, jobId, actor, now, cancellationToken) is null) return false;
         await TrySynchronizeAsync(tenantId, jobId, cancellationToken);
         return true;
     }

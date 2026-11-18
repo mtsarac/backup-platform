@@ -68,7 +68,7 @@ describe('PlatformAdminRoute guard', () => {
     expect(within(nav).getByRole('link', { name: "Depolama" })).toHaveAttribute('href', '/platform/storage')
     expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
     expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
-    expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()
+    expect(within(nav.closest('aside')!).getByText("Platform Yöneticisi")).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Platform Operatörü/ })).toHaveAttribute('href', '/account')
     expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()

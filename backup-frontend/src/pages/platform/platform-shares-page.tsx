@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Filters } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
@@ -81,15 +81,14 @@ export function PlatformSharesPage() {
         onClear={tenantId || status ? () => update({ tenantId: '', status: '' }) : undefined}
       >
         <TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-muted">{tx('Durum')}</label>
+        <FilterField label={tx('Durum')}>
           <Select value={status} onChange={(e) => update({ status: e.target.value })}>
             <option value="">{tx('Tümü')}</option>
             <option value="Active">{tx('Aktif')}</option>
             <option value="Expired">{tx('Süresi doldu')}</option>
             <option value="Revoked">{tx('İptal edildi')}</option>
           </Select>
-        </div>
+        </FilterField>
       </Filters>
 
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>

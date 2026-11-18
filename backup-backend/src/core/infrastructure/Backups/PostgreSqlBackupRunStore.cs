@@ -587,6 +587,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
+        // The attempt ended (failed, lost) after its job was archived: the run it would have retried or resumed is cancelled instead.
+        if (!run.IsTerminal && run.Status is BackupStatus.RetryPending or BackupStatus.Paused
+            && await context.BackupJobs.AsNoTracking().AnyAsync(job => job.TenantId == run.TenantId && job.Id == run.JobId && job.ArchivedAt != null, cancellationToken))
+            BackupAudit.CancelRunOfArchivedJob(context, run, null, command.Now);
         BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
         // No flags (a store built by hand) means no gate; the API always registers them.
         if (!wasTerminal && run.Status == BackupStatus.Succeeded && (flags?.IsEnabled(Features.SizeAnomaly) ?? true)) await EvaluateSizeAnomalyAsync(context, transaction, run, command.Now, cancellationToken);
