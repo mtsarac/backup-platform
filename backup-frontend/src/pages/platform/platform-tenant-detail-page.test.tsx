@@ -45,6 +45,15 @@ beforeEach(() => {
 })
 
 describe('platform tenant detail', () => {
+  it('offers one action to add the first member', async () => {
+    vi.mocked(api.getMemberships).mockResolvedValue(paged([]))
+    mount('people')
+    expect(await screen.findByText("Bu çalışma alanının henüz üyesi yok.")).toBeInTheDocument()
+    expect(screen.queryByText('Kayıt bulunamadı.')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'İlk üyeyi ekle' }))
+    expect(screen.getByRole('searchbox', { name: 'Kullanıcı ara' })).toHaveFocus()
+  })
+
   it('keeps active keys non-retirable and recovery removal name-confirmed in security', async () => {
     vi.mocked(encryptionApi.getTenantEncryption).mockResolvedValue(makeTenantEncryption({
       tenantRecovery: { keyId: 'tenant-recovery-id', keyVersion: 2, createdAt: '2026-10-19T10:00:00Z' },

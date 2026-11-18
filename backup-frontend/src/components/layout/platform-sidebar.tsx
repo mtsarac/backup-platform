@@ -1,6 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { ArrowLeft, Bell, Building2, CreditCard, HardDrive, LayoutDashboard, Monitor, MonitorCog, ScrollText, Share2, ShieldCheck, Sliders, Users } from 'lucide-react'
 import { platformPaths } from '@/features/platform/paths'
+import { Badge } from '@/components/ui/badge'
 import { AccountLink } from './account-link'
 import { SidebarFrame, type NavGroup } from './nav'
 
@@ -28,5 +29,5 @@ export function PlatformSidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
     ] },
     { items: [{ label: tx("Çalışma alanı arayüzüne dön"), to: '/', icon: ArrowLeft, end: true }] },
   ]
-  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Platform menüsü")} label={tx("Platform gezinme menüsü")} brand={{ icon: ShieldCheck, title: tx("Platform Yönetimi"), caption: tx("Tüm müşteriler") }} groups={groups} footer={<AccountLink />} />
+  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Platform menüsü")} label={tx("Platform gezinme menüsü")} brand={{ icon: ShieldCheck, title: tx("Platform Yönetimi"), caption: tx("Tüm müşteriler") }} groups={groups} footer={<div className="space-y-2"><div className="px-3"><Badge tone="warning">{tx("PlatformAdmin")}</Badge></div><AccountLink /></div>} />
 }
