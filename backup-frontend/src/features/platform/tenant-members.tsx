@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { Users } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
@@ -19,7 +19,7 @@ import { QueryState } from '@/components/data/query-state'
 import { Select } from '@/components/ui/text-input'
 
 
-function AddMemberForm({ tenantId }: { tenantId: string }) {
+function AddMemberForm({ tenantId, formRef }: { tenantId: string; formRef: RefObject<HTMLDivElement | null> }) {
   useLanguage()
   const [userSearch, setUserSearch] = useState('')
   const [userId, setUserId] = useState('')
@@ -33,7 +33,7 @@ function AddMemberForm({ tenantId }: { tenantId: string }) {
     add.mutate(userId, { onSuccess: () => { setUserId(''); setAdded(chosen?.displayName ?? '') } })
   }
   return <Section title={tx("Üye ekle")} description={tx("Var olan bir kullanıcıyı bu çalışma alanına ekleyin. Kullanıcı hesabı burada oluşturulmaz.")}>
-    <div className="space-y-4">
+    <div ref={formRef} className="space-y-4">
       <div className="flex max-w-xl"><SearchForm label={tx("Kullanıcı ara")} value={userSearch} onSearch={(value) => { setUserSearch(value); setUserId('') }} placeholder={tx("Ad veya kullanıcı adı")} /></div>
       <form onSubmit={submit} className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
         <Field label={tx("Kullanıcı")}>{(control) => <Select {...control} value={userId} onChange={(event) => setUserId(event.target.value)} disabled={users.isPending || users.isPlaceholderData}>
@@ -56,6 +56,7 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
   const query = usePlatformMemberships(tenantId, { page, pageSize: LIST_PAGE_SIZE })
   const remove = useRemoveMembership(tenantId)
   const [selected, setSelected] = useState<PlatformMembership | null>(null)
+  const formRef = useRef<HTMLDivElement>(null)
   const data = query.data
   const columns: Column<PlatformMembership>[] = [
     { key: 'name', header: tx('Ad'), wrap: true, render: (member) => <span className="font-medium">{member.displayName}</span> },
@@ -63,11 +64,11 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={tx("{0} üyeliğini kaldır", { "0": member.displayName })} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
   ]
   return <div className="space-y-6">
-    <AddMemberForm tenantId={tenantId} />
+    <AddMemberForm tenantId={tenantId} formRef={formRef} />
     <Section title={tx("Üyelikler")} description={tx("Üyeliği kaldırmak kullanıcı hesabını silmez.")} flush className="overflow-hidden">
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (data.totalCount === 0
-          ? <EmptyState icon={Users} message={tx("Bu tenant'ın henüz üyesi yok; yukarıdan bir kullanıcı ekleyin.")} />
+          ? <EmptyState icon={Users} message={tx("Bu tenant'ın henüz üyesi yok.")} action={<Button onClick={() => formRef.current?.querySelector('input')?.focus()}>{tx("İlk üyeyi ekle")}</Button>} />
           : <DataList className={bareListClass} rows={data.items} columns={columns} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} />)}
       </QueryState>
     </Section>

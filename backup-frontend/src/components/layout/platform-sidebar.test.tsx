@@ -18,6 +18,7 @@ describe('Platform sidebar', () => {
   it('groups every platform page under plain-language headings with unchanged URLs', () => {
     renderPlatform(<PlatformSidebar />)
     expect(links('Genel bakış')).toEqual([['Platform özeti', '/platform']])
+    expect(within(nav().closest('aside')!).getByText('Platform Yöneticisi')).toBeInTheDocument()
     expect(links('Müşteriler')).toEqual([
       ['Çalışma alanları', '/platform/tenants'],
       ['Kullanıcılar', '/platform/users'],
