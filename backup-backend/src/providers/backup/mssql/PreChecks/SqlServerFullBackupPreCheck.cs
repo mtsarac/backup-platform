@@ -25,6 +25,7 @@ public static class SqlServerPreCheckReasons
     public const string ConnectionTimeout = "connection-timeout";
     public const string ConnectionSettingsInvalid = "connection-settings-invalid";
     public const string ConnectionFailed = "connection-failed";
+    public const string ServerCertificateUntrusted = "server-certificate-untrusted";
     public const string AuthenticationFailed = "authentication-failed";
     public const string InstanceMismatch = "instance-mismatch";
     public const string MetadataUnavailable = "metadata-unavailable";
@@ -366,6 +367,7 @@ internal static class SqlServerFullBackupPreCheck
         DatabaseFailureKind.Unreachable => SqlServerPreCheckReasons.ServerUnreachable,
         DatabaseFailureKind.Timeout => SqlServerPreCheckReasons.ConnectionTimeout,
         DatabaseFailureKind.InvalidConfiguration => SqlServerPreCheckReasons.ConnectionSettingsInvalid,
+        DatabaseFailureKind.ServerCertificateUntrusted => SqlServerPreCheckReasons.ServerCertificateUntrusted,
         _ => SqlServerPreCheckReasons.ConnectionFailed
     };
 

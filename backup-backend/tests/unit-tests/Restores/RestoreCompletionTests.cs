@@ -15,7 +15,7 @@ public sealed class RestoreCompletionTests
         "BackupInvalid", "BackupTypeUnsupported", "IncompatibleVersion", "FileMappingFailed",
         "PreCheckFailed", "TargetDatabaseExists", "TargetDatabaseNotFound", "TargetInUse", "TargetProtected", "InsufficientDiskSpace",
         "SqlRestoreFailed", "DatabaseUnavailable", "OperationTimedOut", "AuthenticationFailed", "PermissionDenied",
-        "InvalidConfiguration", "UnsupportedCapability", "StagingInvalid", "InternalError", "VerificationFailed"
+        "InvalidConfiguration", "UnsupportedCapability", "StagingInvalid", "InternalError", "VerificationFailed", "ServerCertificateUntrusted"
     ];
 
     public static TheoryData<string> AgentReportableCodes

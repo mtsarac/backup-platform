@@ -422,6 +422,7 @@ public sealed class BackupTaskWorkerTests
     [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.AuthenticationFailed, "AuthenticationFailed")]
     [InlineData(BackupFailureKind.SqlBackupFailed, BackupFailureCause.PermissionDenied, "PermissionDenied")]
     [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.StagingInvalid, "StagingInvalid")]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.ServerCertificateUntrusted, "ServerCertificateUntrusted")]
     [InlineData(BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageAuthenticationFailed, "StorageAuthenticationFailed")]
     [InlineData(BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageHostKeyMismatch, "StorageHostKeyMismatch")]
     [InlineData(BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageUnavailable, "StorageUnavailable")]

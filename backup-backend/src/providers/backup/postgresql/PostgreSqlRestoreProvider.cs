@@ -202,6 +202,7 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider, IResto
                 DatabaseFailureKind.PermissionDenied => (PostgreSqlReasons.PermissionDenied, BackupFailureCause.PermissionDenied),
                 DatabaseFailureKind.Timeout => (PostgreSqlReasons.ConnectionTimeout, BackupFailureCause.Timeout),
                 DatabaseFailureKind.InvalidConfiguration => (PostgreSqlReasons.ConnectionSettingsInvalid, BackupFailureCause.Unclassified),
+                DatabaseFailureKind.ServerCertificateUntrusted => (PostgreSqlReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted),
                 _ => (PostgreSqlReasons.ServerUnreachable, BackupFailureCause.DatabaseUnavailable)
             };
             return new(kind, stage, code, provider.Message, cause);

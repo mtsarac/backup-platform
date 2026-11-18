@@ -69,6 +69,7 @@ public sealed class SqlServerPreCheckTests
     [InlineData(DatabaseFailureKind.Timeout, SqlServerPreCheckReasons.ConnectionTimeout)]
     [InlineData(DatabaseFailureKind.InvalidConfiguration, SqlServerPreCheckReasons.ConnectionSettingsInvalid)]
     [InlineData(DatabaseFailureKind.Unexpected, SqlServerPreCheckReasons.ConnectionFailed)]
+    [InlineData(DatabaseFailureKind.ServerCertificateUntrusted, SqlServerPreCheckReasons.ServerCertificateUntrusted)]
     public void UnreachableServerFailsReachabilityAndSkipsEverythingElse(DatabaseFailureKind kind, string reason)
     {
         var failure = new DatabaseProviderException(kind, "user safe text");

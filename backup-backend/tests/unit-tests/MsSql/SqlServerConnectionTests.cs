@@ -101,6 +101,8 @@ public sealed class SqlServerConnectionTests
     [InlineData("Connect", 300, DatabaseFailureKind.PermissionDenied)]
     [InlineData("Connect", 53, DatabaseFailureKind.Unreachable)]
     [InlineData("Connect", 40, DatabaseFailureKind.Unreachable)]
+    [InlineData("Connect", 12345, DatabaseFailureKind.Unreachable)] // an unlisted number stays the generic "unreachable"
+    [InlineData("Connect", -2146893019, DatabaseFailureKind.ServerCertificateUntrusted)] // SEC_E_UNTRUSTED_ROOT: the pre-login TLS handshake rejected the certificate
     [InlineData("Command", 10054, DatabaseFailureKind.Unreachable)]
     [InlineData("Command", -1, DatabaseFailureKind.Unreachable)]
     [InlineData("Command", -2, DatabaseFailureKind.Timeout)]

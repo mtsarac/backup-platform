@@ -197,6 +197,19 @@ public sealed class BackupOrchestratorMappingTests
     }
 
     [Fact]
+    public void ViewOfAnUntrustedServerCertificateNamesItAndIsNotRetried()
+    {
+        var run = NewRun();
+        Fail(run, BackupFailureCodes.ServerCertificateUntrusted, Now);
+
+        var view = BackupOrchestrator.ToView(run);
+
+        Assert.Equal(BackupFailureCodes.ServerCertificateUntrusted, view.ReasonCode);
+        Assert.Equal("NotRetryable", view.Retry.State);
+        Assert.Contains("certificate", view.Reason!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ViewOfAnExhaustedRunReportsMaxAttemptsAsTotalAttemptsUsed()
     {
         var run = NewRun(Policy(maxAttempts: 2));

@@ -33,11 +33,13 @@ public sealed class SqlServerFailureCausesTests
     [InlineData(SqlServerPreCheckReasons.DatabaseSuspect, BackupFailureCause.Unclassified)]
     [InlineData(SqlServerPreCheckReasons.ExtensionFailed, BackupFailureCause.Unclassified)]
     [InlineData("a-reason-nobody-knows", BackupFailureCause.Unclassified)]
+    [InlineData(SqlServerPreCheckReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted)]
     public void PreCheckReasonsMapToCauses(string reason, BackupFailureCause cause) =>
         Assert.Equal(cause, SqlServerFailureCauses.ForPreCheckReason(reason));
 
     [Theory]
     [InlineData(SqlServerBackupReasons.ServerUnavailable, BackupFailureCause.DatabaseUnavailable)]
+    [InlineData(SqlServerBackupReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted)]
     [InlineData(SqlServerBackupReasons.ConnectionLost, BackupFailureCause.DatabaseUnavailable)]
     [InlineData(SqlServerBackupReasons.BackupTimeout, BackupFailureCause.Timeout)]
     [InlineData(SqlServerBackupReasons.VerifyTimeout, BackupFailureCause.Timeout)]
@@ -64,6 +66,7 @@ public sealed class SqlServerFailureCausesTests
     [InlineData(DatabaseFailureKind.Timeout, BackupFailureCause.Timeout)]
     [InlineData(DatabaseFailureKind.InvalidConfiguration, BackupFailureCause.InvalidConfiguration)]
     [InlineData(DatabaseFailureKind.Unexpected, BackupFailureCause.DatabaseUnavailable)]
+    [InlineData(DatabaseFailureKind.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted)]
     public void AFailedConnectionCheckCarriesTheCause(DatabaseFailureKind kind, BackupFailureCause cause)
     {
         var failure = new DatabaseProviderException(kind, "user safe text");
