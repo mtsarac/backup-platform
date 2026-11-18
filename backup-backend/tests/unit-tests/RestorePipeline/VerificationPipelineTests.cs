@@ -68,6 +68,21 @@ public sealed class VerificationPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task AnUntrustedServerCertificateDuringVerificationIsReportedAsTheCertificateFailure()
+    {
+        _h.Provider.Verify = (_, _) => Task.FromResult(new RestoreVerificationReport(
+            [new RestoreVerificationCheck(RestoreVerificationCheck.DatabaseOnline, false, "server-certificate-untrusted", "The server certificate could not be verified.")]));
+
+        var result = await _h.RunAsync(_h.VerificationRequest());
+
+        Assert.Equal(DatabaseRestoreStatus.Failed, result.Status);
+        Assert.Equal("ServerCertificateUntrusted", result.Failure!.Code);
+        Assert.Equal(RestoreExecutionStage.Verifying, result.Failure.Stage);
+        Assert.Equal("server-certificate-untrusted", result.Failure.ReasonCode);
+        Assert.Single(_h.Provider.Drops);
+    }
+
+    [Fact]
     public async Task ACancelledRestoreStillDropsWhatItCreatedOnATokenThatIsNotCancelled()
     {
         using var cancel = new CancellationTokenSource();
