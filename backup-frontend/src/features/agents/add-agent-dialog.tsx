@@ -5,18 +5,17 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { ErrorNotice } from '@/components/ui/notice'
 import { Fact, Facts } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
-import { Tabs } from '@/components/ui/tabs'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useLanguage, tx } from '@/lib/i18n'
 import { CopyButton } from '@/components/ui/copy-button'
-import { type ErrorDescription, accessDenied, describeError } from '@/lib/api/failure-messages'
+import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
 import { createEnrollmentToken, getAgentDistribution, getEnrollmentTokenStatus, revokeEnrollmentToken } from './api'
 import { agentQueryKeys } from './hooks'
 import { enrollmentCommands, httpsServerOrigin } from './enrollment-commands'
-import type { AgentPlatform, InstallationMode } from './enrollment-commands'
+import type { AgentPlatform } from './enrollment-commands'
 import type { AgentDistribution } from './api'
 import { useEnrollmentMonitor } from './use-enrollment-monitor'
 import { formatDateTime } from '@/lib/format'
@@ -29,7 +28,6 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   const [distribution, setDistribution] = useState<AgentDistribution | null>(null)
   // The platform administrator owns the server address; tenants only consume it.
   const server = httpsServerOrigin(distribution?.serverUrl ?? '')
-  const [mode, setMode] = useState<InstallationMode>('interactive')
   const [distributionError, setDistributionError] = useState<ErrorDescription | null>(null)
   const [name, setName] = useState('')
   const [ticket, setTicket] = useState<{ tokenId: string; expiresAt: string } | null>(null)
@@ -56,7 +54,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   }, [monitor.phase, client, tenantId])
   function close() { request.current?.abort(); setSecret(''); setTicket(null); onClose() }
   async function create() {
-    if (pending || !server) return
+    if (pending || !server || !name.trim() || !distribution?.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64']) return
     const controller = new AbortController()
     request.current = controller
     setPending(true); setError(null); setSecret('')
@@ -82,42 +80,49 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   const labels = { Waiting: tx('Komutun çalıştırılması bekleniyor'), Checking: tx('Kayıt anahtarı gizlendi; kayıt durumu doğrulanıyor'), Enrolled: tx('Kayıt tamamlandı'), Connecting: tx('Bilgisayar bağlanıyor'), Online: tx('Çevrimiçi. Kurulum tamamlandı.'), Expired: tx('Kayıt anahtarının süresi doldu'), Revoked: tx('Kayıt anahtarı iptal edildi'), Consumed: tx('Kayıt anahtarı kullanıldı; bilgisayar bilgisi bulunamadı') }
   const view = monitor.phase === 'Enrolled' || monitor.phase === 'Connecting' || monitor.phase === 'Online' ? 'connect' : step
   const packageReady = Boolean(distribution?.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'])
-  const command = packageReady ? enrollmentCommands(platform, server, secret, name, mode, language) : ''
+  const command = packageReady ? enrollmentCommands(platform, server, secret, name, language) : ''
   return <Dialog.Root open onOpenChange={(open) => { if (!open) close() }}>
     <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
       <Dialog.Popup initialFocus={nameRef} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
         <Dialog.Title className="text-lg font-semibold text-text-heading">{tx("Yedekleme bilgisayarı ekle")}</Dialog.Title>
         <Dialog.Description className="text-sm text-text-muted">{tx("Yedekleri alacak bilgisayara küçük bir program kurulur.")}</Dialog.Description>
         <Stepper steps={[tx('Bilgisayar'), tx('Kurulum'), tx('Bağlantı')]} current={view === 'computer' ? 0 : view === 'install' ? 1 : 2} />
-        {view === 'computer' && <form id="add-agent" className="space-y-4" onSubmit={(event) => { event.preventDefault(); setStep('install') }}>
+        {view === 'computer' && <form id="add-agent" className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (name.trim() && server && packageReady) setStep('install') }}>
           <section className="space-y-4">
             <h2 className="font-medium text-text-heading">{tx("Hangi bilgisayara kurulacak?")}</h2>
             <p className="text-sm text-text-muted"><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}{tx("Ad, bilgisayarı listede tanımanızı sağlar; işletim sistemi doğru kurulum komutunu seçmemize yarar.")}</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={tx("Bilgisayarın adı")} hint={mode === 'automatic' ? tx("Tek komutla kurulum için ad gereklidir.") : tx("İsteğe bağlı; boş bırakırsanız kurulum sırasında sorulur.")}>{(control) => <TextInput {...control} ref={nameRef} disabled={pending} value={name} maxLength={200} onChange={event => setName(event.target.value)} />}</Field>
+              <Field label={tx("Bilgisayarın adı")} hint={tx("Tek komutla kurulum için ad gereklidir.")}>{(control) => <TextInput {...control} ref={nameRef} required disabled={pending} value={name} maxLength={200} onChange={event => setName(event.target.value)} />}</Field>
               <Field label={tx("İşletim sistemi")}>{(control) => <Select {...control} disabled={pending} value={platform} onChange={event => setPlatform(event.target.value as AgentPlatform)}><option>Windows</option><option>Linux</option></Select>}</Field>
             </div>
           </section>
-          {distribution && !server && <Notice tone="warning">{tx("Sunucu adresi henüz ayarlanmadı. Platform yöneticisi, Yedekleme bilgisayarı ayarları sayfasında sunucu HTTPS adresini belirlemeden kurulum komutu oluşturulamaz.")}</Notice>}
+          {distribution && !server && <ErrorNotice what={tx("Sunucu HTTPS adresi ayarlanmamış.")} dataImpact={tx("Mevcut yedekleriniz etkilenmedi.")} action={tx("Platform yöneticinizden sunucu HTTPS adresini ayarlamasını isteyin.")} />}
+          {distribution && server && !packageReady && <ErrorNotice what={tx("Bu işletim sistemi için kurulum paketi yayımlanmamış.")} dataImpact={tx("Mevcut yedekleriniz etkilenmedi.")} action={tx("Platform yöneticinizden kurulum paketini yayımlamasını isteyin.")} />}
           {distributionError && <ErrorNotice {...distributionError} />}
         </form>}
         {view === 'install' && <section className="space-y-3">
           <h2 className="font-medium text-text-heading">{tx("Kurulum komutunu bilgisayarda çalıştırın")}</h2>
-          <Tabs label={tx('Kurulum şekli')} value={mode} onChange={setMode} idPrefix="agent-install-mode" items={[{ value: 'interactive', label: tx('Adım adım kurulum') }, { value: 'automatic', label: tx('Tek komutla kurulum') }]} />
-          <Card tone="subtle" role="tabpanel" id={`agent-install-mode-panel-${mode}`} aria-labelledby={`agent-install-mode-tab-${mode}`} className="space-y-2 text-sm text-text-muted">
-            <p>{mode === 'interactive' ? tx('Kurulum eksik bilgileri sorar. Kayıt anahtarını istendiğinde yapıştırın; komut anahtarı içermez.') : tx('Kurulum her şeyi soru sormadan yapar; komut kayıt anahtarını içerir. Kopyalamadan önce bilgisayarın adını girin.')}</p>
+          <Card tone="subtle" className="space-y-2 text-sm text-text-muted">
+            <p>{tx('Komut programı kurar, bilgisayarı kaydeder ve bağlar; soru sormaz. Kayıt anahtarını içerir.')}</p>
             <p>{platform === 'Windows' ? tx('Hedef bilgisayarda PowerShell’i yönetici olarak açın.') : tx('Hedef bilgisayarda yönetici (sudo) yetkisi olan bir terminal açın. Kurulum bir sistem hizmeti oluşturur.')}</p>
             {!distribution && !distributionError && <p>{tx('Kurulum dosyalarının hazır olup olmadığı denetleniyor…')}</p>}
             {distributionError && <ErrorNotice {...distributionError} />}
-            {distribution && !packageReady && <ErrorNotice {...accessDenied(tx('Bu işletim sistemi için kurulum paketi yayımlanmamış. Yöneticinizle iletişime geçin.'))} />}
+            {distribution && !packageReady && <ErrorNotice what={tx("Bu işletim sistemi için kurulum paketi yayımlanmamış.")} dataImpact={tx("Mevcut yedekleriniz etkilenmedi.")} action={tx("Platform yöneticinizden kurulum paketini yayımlamasını isteyin.")} />}
           </Card>
           {!ticket && <p className="text-sm text-text-muted">{tx("Anahtarı oluşturduğunuzda komut burada görünür.")}</p>}
           {ticket && secret && <div className="space-y-3">
-            {mode === 'interactive' && <><Field label={tx('Tek kullanımlık kayıt anahtarı')}>{control => <TextArea {...control} readOnly value={secret} rows={2} />}</Field><CopyButton value={secret} label={tx('Kayıt anahtarını kopyala')} /></>}
+            <details className="space-y-2 text-sm">
+              <summary className="cursor-pointer font-medium">{tx('Başka yollarla kur')}</summary>
+              <div className="space-y-2 pt-2">
+                <Field label={tx('Tek kullanımlık kayıt anahtarı')}>{control => <TextArea {...control} readOnly value={secret} rows={2} />}</Field>
+                <CopyButton value={secret} label={tx('Kayıt anahtarını kopyala')} />
+                <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
+                <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/${platform === 'Windows' ? 'win-x64' : 'linux-x64'}`} download>{platform === 'Windows' ? tx('Windows zip paketini indir') : tx('Linux tar.gz paketini indir')}</a></p>
+              </div>
+            </details>
             <Field label={tx("Tek kullanımlık kurulum komutu")}>{(control) => <TextArea {...control} readOnly rows={4} value={command} className="resize-none break-all font-mono text-sm" />}</Field>
             <CopyButton value={command} label={tx("Kurulum komutunu kopyala")} />
-            {mode === 'automatic' && !name.trim() && <Notice tone="warning">{tx('Tek komutla kurulum komutunu oluşturmak için bilgisayarın adını girin.')}</Notice>}
-            <p className="text-sm text-text-muted">{tx('Anahtarı paylaşmayın; günlüklere, ayar dosyalarına veya komut geçmişine kaydetmeyin. Kapatıldıktan sonra tekrar gösterilmez.')} {tx('Son kullanma:')} {formatDateTime(ticket.expiresAt, tx('Henüz bildirilmedi'))}</p>
+            <p className="text-sm text-text-muted">{tx('Bu anahtar tek kullanımlıktır ve süresi dolar.')} {tx('Anahtarı paylaşmayın; günlüklere, ayar dosyalarına veya komut geçmişine kaydetmeyin. Kapatıldıktan sonra tekrar gösterilmez.')} {tx('Son kullanma:')} {formatDateTime(ticket.expiresAt, tx('Henüz bildirilmedi'))}</p>
           </div>}
           {ticket && <>
             <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text">{labels[monitor.phase]}</p>
@@ -143,8 +148,8 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           {view === 'install' && <Button variant="outline" disabled={pending} onClick={() => setStep('computer')}>{tx("Geri")}</Button>}
           <Dialog.Close render={<Button variant="outline" />}>{monitor.phase === 'Online' ? tx('Tamam') : tx('Kapat')}</Dialog.Close>
           {monitor.paused && <Button variant="outline" onClick={monitor.retry}>{tx("Takibi tekrar dene")}</Button>}
-          {view === 'computer' && <Button type="submit" form="add-agent" disabled={!server}>{tx("İleri")}</Button>}
-          {view === 'install' && <Button disabled={pending || !server} onClick={() => void create()}>{pending ? tx('Oluşturuluyor…') : ticket ? tx('Yeni kayıt anahtarı oluştur') : tx('Kayıt anahtarı oluştur')}</Button>}
+          {view === 'computer' && <Button type="submit" form="add-agent" disabled={!server || !packageReady || !name.trim()}>{tx("İleri")}</Button>}
+          {view === 'install' && <Button disabled={pending || !server || !packageReady || !name.trim()} onClick={() => void create()}>{pending ? tx('Oluşturuluyor…') : ticket ? tx('Yeni kayıt anahtarı oluştur') : tx('Kayıt anahtarı oluştur')}</Button>}
         </div>
       </Dialog.Popup>
     </Dialog.Portal>

@@ -35,26 +35,22 @@ function mount() {
   return { client, close, ...view }
 }
 /** Walks the plain steps: which computer, then the key and command. Automatic mode is the one-command variant. */
-async function issue(mode: 'guided' | 'automatic' = 'automatic') {
+async function issue() {
   await act(async () => {})
   const name = screen.getByRole('textbox', { name: 'Bilgisayarın adı' }) as HTMLInputElement
   if (!name.value) fireEvent.change(name, { target: { value: 'Backup agent' } })
   fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
-  if (mode === 'automatic') fireEvent.click(screen.getByRole('tab', { name: 'Tek komutla kurulum' }))
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" })) })
 }
 
 describe('Enrollment commands', () => {
   it('uses HTTPS one-line installers and shell-escapes names and keys for both platforms', () => {
+    expect(enrollmentCommands('Windows', 'https://backend.example', 'token', 'Office')).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\\install.ps1"')
     expect(enrollmentCommands('Windows', 'https://backend.example', "token'$()", "O'Brien")).toContain("-Token 'token''$()' -AgentName 'O''Brien' -NonInteractive -Language tr")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', "O'Brien")).toContain("--name 'O'\\''Brien' --non-interactive --language tr")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', "O'Brien")).toContain("curl --proto '=https'")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', '')).toBe('')
-    for (const platform of ['Windows', 'Linux'] as const) {
-      const guided = enrollmentCommands(platform, 'https://backend.example', 'never-in-command', '', 'interactive', 'en')
-      expect(guided).not.toContain('never-in-command')
-      expect(guided).toContain(platform === 'Windows' ? '-Interactive -Language en' : '--interactive --language en')
-    }
+    expect(enrollmentCommands('Windows', 'https://backend.example', 'token', '  ')).toBe('')
   })
   it('derives only secure origins and never generates an insecure command', () => {
     for (const value of ['http://backend.example', 'https://user:pass@backend.example', 'https://backend.example/api', 'https://backend.example?token=x']) expect(httpsServerOrigin(value)).toBe('')
@@ -63,9 +59,19 @@ describe('Enrollment commands', () => {
 })
 
 describe('Adding a backup computer', () => {
+  it('requires a name and defaults to Windows without an installation mode switch', async () => {
+    mount()
+    await act(async () => {})
+    expect(screen.getByRole('combobox', { name: 'İşletim sistemi' })).toHaveValue('Windows')
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
+    fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(screen.queryByRole('tab', { name: /kurulum/i })).not.toBeInTheDocument()
+  })
   it('asks which computer first, creates no key until the user asks for one, and can step back', async () => {
     mount()
     await act(async () => {})
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     expect(screen.getByRole('heading', { name: 'Yedekleme bilgisayarı ekle' })).toBeInTheDocument()
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Bilgisayar')
     expect(screen.getByText(/Neden soruluyor/)).toBeInTheDocument()
@@ -80,8 +86,22 @@ describe('Adding a backup computer', () => {
     vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: null, packages: { 'win-x64': true, 'linux-x64': true } })
     mount()
     await act(async () => {})
-    expect(screen.getByText(/Platform yöneticisi, Yedekleme bilgisayarı ayarları sayfasında sunucu HTTPS adresini belirlemeden kurulum komutu oluşturulamaz/)).toBeVisible()
+    expect(screen.getByText('Sunucu HTTPS adresi ayarlanmamış.')).toBeVisible()
+    expect(screen.getByText('Mevcut yedekleriniz etkilenmedi.')).toBeVisible()
+    expect(screen.getByText('Platform yöneticinizden sunucu HTTPS adresini ayarlamasını isteyin.')).toBeVisible()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+  })
+  it('explains instead of offering a command when no installation package is published for the system', async () => {
+    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': false, 'linux-x64': true } })
+    mount()
+    await act(async () => {})
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
+    expect(screen.getByText('Bu işletim sistemi için kurulum paketi yayımlanmamış.')).toBeVisible()
+    expect(screen.getByText('Platform yöneticinizden kurulum paketini yayımlamasını isteyin.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    fireEvent.change(screen.getByRole('combobox', { name: 'İşletim sistemi' }), { target: { value: 'Linux' } })
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeEnabled()
   })
   it('creates an enrollment token without sending lifetime', async () => {
     mount()

@@ -90,7 +90,7 @@ describe('Tenant sidebar', () => {
 
   it.each([
     ['Ana sayfa', ''], ['Bilgisayarlar', '/agents'], ['Bilgisayarlar', '/agents/databases'], ['Bilgisayarlar', '/agents/a1'], ['Bilgisayarlar', '/enrollment'], ['Bilgisayarlar', '/discovery/instances/i1'],
-    ['Depolama', '/storage'], ['Depolama', '/storage/usage'], ['Ayarlar', '/settings'], ['Ayarlar', '/settings/recovery-key'], ['Ayarlar', '/settings/bandwidth'],
+    ['Depolama', '/storage'], ['Depolama', '/storage/connections/c1'], ['Ayarlar', '/settings'], ['Ayarlar', '/settings/recovery-key'], ['Ayarlar', '/settings/bandwidth'],
   ])('marks only %s current on %s', (label, path) => {
     render(<MemoryRouter initialEntries={[`${base}${path}`]}><Sidebar /></MemoryRouter>)
     expect(within(nav()).getAllByRole('link', { current: 'page' }).map((link) => link.textContent)).toEqual([label])
