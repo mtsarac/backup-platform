@@ -16,6 +16,7 @@ import { Disclosure } from '@/components/ui/disclosure'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
 import { PageHeader } from '@/components/ui/page-header'
+import { AgentsTabs } from '@/features/agents/agents-tabs'
 import { oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useAgents } from '@/features/agents/hooks'
 import { useDiscoveryAgents, useDiscoveryInstances } from '@/features/discovery/hooks'
@@ -79,7 +80,8 @@ export function DiscoveryPage() {
     <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => !scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
   </>
   return <div className="space-y-6">
-    <PageHeader title={tx("Veritabanı bulma")} description={tx("Yedekleme bilgisayarlarınızda bulunan veritabanları ve hangilerinin yedeklenebileceği.")} />
+    <PageHeader title={tx("Bulunan veritabanları")} description={tx("Yedekleme bilgisayarlarınızda bulunan veritabanları ve hangilerinin yedeklenebileceği.")} />
+    <AgentsTabs />
     {body}
   </div>
 }

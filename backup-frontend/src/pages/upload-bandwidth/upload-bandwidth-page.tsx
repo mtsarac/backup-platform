@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Notice } from '@/components/ui/notice'
-import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -84,7 +83,7 @@ export function UploadBandwidthPage() {
   ]
   const newProfile = canAdmin ? <Button size="sm" onClick={() => setEditingProfile('new')}>{tx("Yeni Profil")}</Button> : null
   return <div className="space-y-6">
-    <PageHeader title={tx("Yükleme bant genişliği")} description={tx("{0} · Yedeklerin ne kadar hızlı yükleneceğini sınırlayın.", { "0": tenant.name })} />
+    <p className="text-body text-text-muted">{tx("{0} · Yedeklerin ne kadar hızlı yükleneceğini sınırlayın.", { "0": tenant.name })}</p>
     {!canAdmin && <Notice tone="warning">{tx("Hız sınırlarını yalnızca yöneticiler değiştirebilir. Yöneticinize danışın.")}</Notice>}
     <Tabs label={tx("Hız sınırı kapsamı")} idPrefix="bandwidth" value={tab} onChange={setTab} items={[{ value: 'tenant', label: tx('Çalışma alanı') }, { value: 'agents', label: tx('Yedekleme bilgisayarları') }, { value: 'jobs', label: tx('Yedekleme işleri') }, { value: 'profiles', label: tx('Profiller') }]} />
     <div role="tabpanel" id={`bandwidth-panel-${tab}`} aria-labelledby={`bandwidth-tab-${tab}`}>

@@ -18,6 +18,7 @@ public static class BackupEndpoints
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
         tenant.MapPost("/backup-jobs", CreateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-jobs", ListJobsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-jobs/health-timeline", GetHealthTimelineAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPut("/backup-jobs/{jobId:guid}", UpdateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
         tenant.MapDelete("/backup-jobs/{jobId:guid}", ArchiveJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
         tenant.MapGet("/dashboard", GetDashboardAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -114,6 +115,20 @@ public static class BackupEndpoints
 
     private static async Task<IResult> ListJobsAsync(bool? includeArchived, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken) =>
         Results.Ok(await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), includeArchived ?? false, cancellationToken));
+
+    /// <summary>The home page strip. The client always names its zone: a missing or unknown one is refused rather than guessed as UTC, which would hide the mistake.</summary>
+    private static async Task<IResult> GetHealthTimelineAsync(string? timeZone, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(timeZone) || !TimeZoneInfo.TryConvertIanaIdToWindowsId(timeZone, out _))
+            return Results.BadRequest(new { error = "invalid_request", field = "timeZone", code = "invalid_value" });
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZone ?? ""); }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
+        {
+            return Results.BadRequest(new { error = "invalid_request", field = "timeZone", code = "invalid_value" });
+        }
+        return Results.Ok(await store.GetHealthTimelineAsync(tenant.TenantId!, zone, time.GetUtcNow(), cancellationToken));
+    }
 
     /// <summary>An archived job never changes again, so every route that would change one answers the same 409.</summary>
     private static async ValueTask<object?> ArchivedJobConflictAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)

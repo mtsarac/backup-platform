@@ -21,7 +21,7 @@ import type { DatabaseLogin } from '@/features/backup-jobs/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
 import { describeError, failureMessage } from '@/lib/api/failure-messages'
-import { discoveryPath } from '@/lib/routes'
+import { discoveredDatabasesPath } from '@/lib/routes'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 
@@ -123,7 +123,7 @@ export function InstanceDetailPage() {
   const computer = instance && (agents.data?.find(item => item.agentId === instance.agentId)?.hostName || tx('Adsız bilgisayar'))
   const needsLogin = instance && instance.access !== 'Authenticated'
   return <div className="space-y-6">
-    <PageHeader crumbs={[{ label: tx('Veritabanı bulma'), to: discoveryPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
+    <PageHeader crumbs={[{ label: tx('Bulunan veritabanları'), to: discoveredDatabasesPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
       description={instance && <>{tx("Bilgisayar")}: <Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(instance.agentId)}`}>{computer}</Link></>}
       meta={<>
         {instance && <StatusPill domain="access" status={instance.access} />}
