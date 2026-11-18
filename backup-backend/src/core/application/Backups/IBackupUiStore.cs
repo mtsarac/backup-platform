@@ -19,4 +19,6 @@ public interface IBackupUiStore
     Task<BackupRunPage> ListRunsAsync(TenantId tenantId, BackupRunQuery query, CancellationToken cancellationToken);
     Task<BackupRunView?> GetRunAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken);
     Task<BackupDashboardView> GetDashboardAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>The last 14 local days of every non-archived job, cut at the given zone's midnights.</summary>
+    Task<BackupHealthTimelineView> GetHealthTimelineAsync(TenantId tenantId, TimeZoneInfo zone, DateTimeOffset now, CancellationToken cancellationToken);
 }
