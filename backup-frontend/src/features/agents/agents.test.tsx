@@ -36,7 +36,7 @@ function mount(content: ReactNode, path = '/tenants/tenant-a/agents') {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true } })
+  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
   Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
   vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([])
   vi.mocked(api.getAgents).mockResolvedValue([agent])

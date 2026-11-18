@@ -41,7 +41,7 @@ export function revokeEnrollmentToken(tenantId: string, tokenId: string, signal?
 
 export interface AgentDistribution {
   serverUrl: string | null
-  packages: { 'win-x64': boolean; 'linux-x64': boolean }
+  packages: { 'win-x64': boolean; 'linux-x64': boolean; 'win-x64-setup': boolean }
 }
 export function getAgentDistribution(signal?: AbortSignal) {
   return apiRequest<AgentDistribution>('agent-dist/status', { signal })
