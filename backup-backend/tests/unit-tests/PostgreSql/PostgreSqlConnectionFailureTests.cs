@@ -67,4 +67,11 @@ public sealed class PostgreSqlConnectionFailureTests
         Assert.Equal((PostgreSqlReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted), (backup.ReasonCode, backup.Cause));
         Assert.Equal((PostgreSqlReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted), (restore.ReasonCode, restore.Cause));
     }
+
+    [Fact]
+    public void VerificationReportsAnUntrustedCertificateRatherThanAGenericFailure()
+    {
+        var error = new DatabaseProviderException(DatabaseFailureKind.ServerCertificateUntrusted, "certificate rejected");
+        Assert.Equal("server-certificate-untrusted", BackupPlatform.BackupProviders.PostgreSql.Restore.PostgreSqlRestoreVerifier.ReasonFor(error, "unexpected"));
+    }
 }

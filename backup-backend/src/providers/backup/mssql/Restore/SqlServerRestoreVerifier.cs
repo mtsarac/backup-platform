@@ -30,6 +30,7 @@ internal static class SqlServerVerificationReasons
         DatabaseFailureKind.PermissionDenied => PermissionDenied,
         DatabaseFailureKind.AuthenticationFailed => AuthenticationFailed,
         DatabaseFailureKind.Unreachable => ConnectionFailed,
+        DatabaseFailureKind.ServerCertificateUntrusted => RestoreReasonCodes.ServerCertificateUntrusted,
         _ => UnexpectedError
     };
 }
