@@ -58,6 +58,7 @@ public static class AuditActions
     public const string BackupJobRetentionChanged = "backup_job.retention_changed";
     public const string BackupJobEnabled = "backup_job.enabled";
     public const string BackupJobDisabled = "backup_job.disabled";
+    public const string BackupJobArchived = "backup_job.archived";
 
     // Backup run lifecycle events
     public const string BackupRunTriggered = "backup_run.triggered";

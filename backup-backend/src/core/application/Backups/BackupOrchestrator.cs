@@ -21,7 +21,7 @@ public sealed record CreateBackupJobRequest(string Name, Guid AgentId, BackupExe
 public sealed record UpdateBackupJobRequest(string Name, Guid AgentId, BackupExecutionConfiguration Configuration, BackupRetryPolicyRequest? RetryPolicy = null, string? OverlapPolicy = null,
     BackupScheduleRequest? Schedule = null, bool RemoveSchedule = false, BackupRetentionPolicyRequest? Retention = null, bool? Enabled = null);
 public sealed record BackupLastRunView(Guid Id, string Status, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, string? ReasonCode);
-public sealed record BackupJobView(Guid Id, Guid AgentId, string Name, string BackupType, string OverlapPolicy, BackupRetryPolicyView RetryPolicy, bool Enabled, DateTimeOffset CreatedAt, BackupExecutionConfiguration Configuration, BackupScheduleView? Schedule = null, BackupRetentionPolicyView? Retention = null, BackupLastRunView? LastRun = null, string? AgentName = null, DateTimeOffset? NextOccurrenceAt = null);
+public sealed record BackupJobView(Guid Id, Guid AgentId, string Name, string BackupType, string OverlapPolicy, BackupRetryPolicyView RetryPolicy, bool Enabled, DateTimeOffset CreatedAt, BackupExecutionConfiguration Configuration, BackupScheduleView? Schedule = null, BackupRetentionPolicyView? Retention = null, BackupLastRunView? LastRun = null, string? AgentName = null, DateTimeOffset? NextOccurrenceAt = null, DateTimeOffset? ArchivedAt = null);
 /// <summary>A run. <see cref="ScheduledFor"/> and <see cref="ScheduleDelaySeconds"/> are set for scheduled runs only: the instant the schedule asked for, and how long after it the run was actually created.</summary>
 public sealed record BackupRunView(Guid Id, Guid JobId, Guid AgentId, string Status, string BackupType, string TriggerType, BackupExecutionConfiguration Configuration, int CurrentAttemptNumber, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, DateTimeOffset? CancellationRequestedAt, string? ReasonCode, string? Reason, BackupRetryView Retry, IReadOnlyList<BackupAttemptView> Attempts, DateTimeOffset? ScheduledFor = null, double? ScheduleDelaySeconds = null, DateTimeOffset? ClaimDeadline = null, BackupRetentionPolicyView? Retention = null, string? JobName = null, string? AgentName = null, BackupReplicationView? Replication = null, string? SizeAnomalyStatus = null, double? SizeAnomalyDeviationRatio = null, long? SizeAnomalyBaselineBytes = null)
 {
@@ -392,7 +392,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         r.StorageConnectionId == Guid.Empty ? null : r.StorageConnectionId);
 
     public static BackupJobView ToView(BackupJob job, DateTimeOffset now) => new(job.Id, job.AgentId.Value, job.Name, job.BackupType, job.OverlapPolicy.ToString(),
-        ToView(job.RetryPolicy), job.Enabled, job.CreatedAt, ToWire(job.Configuration), job.Schedule is null ? null : ToView(job, job.Schedule, now), ToView(job.RetentionPolicy));
+        ToView(job.RetryPolicy), job.Enabled, job.CreatedAt, ToWire(job.Configuration), job.Schedule is null ? null : ToView(job, job.Schedule, now), ToView(job.RetentionPolicy), ArchivedAt: job.ArchivedAt);
 
     private static BackupScheduleView ToView(BackupJob job, BackupSchedule schedule, DateTimeOffset now) => new(schedule.Enabled, schedule.CronExpression,
         schedule.TimeZoneId, schedule.MissedRunGracePeriod.TotalSeconds, job.OverlapPolicy.ToString(), schedule.EffectiveFrom,
