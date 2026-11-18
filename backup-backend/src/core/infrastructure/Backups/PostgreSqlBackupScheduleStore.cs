@@ -195,6 +195,36 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
         }
     }
 
+    public async Task<BackupJob?> ArchiveJobAsync(TenantId tenantId, Guid jobId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId).Select(job => job.AgentId).SingleOrDefaultAsync(cancellationToken);
+            if (owner is null) return null;
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, owner, cancellationToken)) return null;
+            // Under the agent lock every start, claim, retry and completion of the job is serialised with this: nothing can queue a run behind the archive.
+            var job = await context.BackupJobs.SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
+            if (job is null) return null;
+            if (job.AgentId != owner) continue;
+            var before = BackupAudit.Capture(job);
+            job.Archive(now);
+            BackupAudit.RecordJobChanges(context, job, before, actor, now);
+            var waiting = await PostgreSqlBackupRunStore.Runs(context).Where(run => run.TenantId == tenantId && run.JobId == jobId &&
+                (run.Status == BackupStatus.Pending || run.Status == BackupStatus.RetryPending || run.Status == BackupStatus.Paused)).ToListAsync(cancellationToken);
+            foreach (var run in waiting)
+            {
+                var attemptWasTerminal = run.CurrentAttempt.IsTerminal;
+                BackupAudit.CancelRunOfArchivedJob(context, run, actor, now);
+                BackupAudit.RecordCompletion(context, run, false, attemptWasTerminal, now);
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return job;
+        }
+    }
+
     /// <summary>Active and recently seen. Liveness is the persisted last sign of life against the server clock, never a connection that may have dropped a moment ago.</summary>
     private async Task<bool> AgentAvailableAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, DateTimeOffset now, CancellationToken cancellationToken)
     {

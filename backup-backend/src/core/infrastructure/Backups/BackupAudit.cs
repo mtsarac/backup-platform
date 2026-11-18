@@ -44,6 +44,21 @@ internal static class BackupAudit
 
     internal static AuditActorKind ActorKind(UserId? actor) => actor is null || actor == UserId.System ? AuditActorKind.System : AuditActorKind.User;
 
+    /// <summary>
+    /// A run of an archived job that is queued, waiting for a retry or paused never runs again, so it ends Cancelled (its earlier attempts stay as they were).
+    /// Leased and running attempts are left alone; the run is cancelled when such an attempt ends without succeeding. The caller records the completion audit.
+    /// </summary>
+    internal static void CancelRunOfArchivedJob(PlatformDbContext context, BackupRun run, UserId? actor, DateTimeOffset now)
+    {
+        if (run.IsTerminal || run.Status is not (BackupStatus.Pending or BackupStatus.RetryPending or BackupStatus.Paused)) return;
+        run.RequestCancellation(now);
+        context.AuditEvents.Add(AuditEvent.Record(now, actor ?? UserId.System, ActorKind(actor), AuditActions.BackupRunCancelRequested, run.TenantId,
+            "backup_run", run.Id.ToString("D"), new Dictionary<string, object?>
+            {
+                ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["result"] = "requested", ["reason"] = "job_archived"
+            }));
+    }
+
     internal static void RecordCompletion(PlatformDbContext context, BackupRun run, bool wasTerminal, bool attemptWasTerminal, DateTimeOffset now)
     {
         if (!attemptWasTerminal && run.CurrentAttempt.IsTerminal)

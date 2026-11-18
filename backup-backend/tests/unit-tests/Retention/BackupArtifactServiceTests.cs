@@ -32,6 +32,7 @@ public sealed class BackupArtifactServiceTests
         public Task<IReadOnlyList<BackupJob>> ListScheduledJobsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ExpireUnclaimedRunsAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<BackupScheduleOccurrence>> ListOccurrencesAsync(TenantId tenantId, Guid jobId, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BackupJob?> ArchiveJobAsync(TenantId tenantId, Guid jobId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private static BackupJob Job(TenantId tenant, BackupRetentionPolicy policy) =>

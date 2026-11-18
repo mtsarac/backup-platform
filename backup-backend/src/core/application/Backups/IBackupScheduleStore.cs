@@ -43,6 +43,12 @@ public interface IBackupScheduleStore
 
     /// <summary>Applies <paramref name="change"/> to the job under the agent lock and saves it. Null when the job does not exist.</summary>
     Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null);
+
+    /// <summary>
+    /// Archives the job and, in the same transaction under the agent lock, cancels every run of it that is queued, waiting for a retry or paused: their earlier
+    /// attempts stay as history and nothing of the job is ever dispatched again. Null when the job does not exist; throws <see cref="BackupJobArchivedException"/> when it already is archived.
+    /// </summary>
+    Task<BackupJob?> ArchiveJobAsync(TenantId tenantId, Guid jobId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 }
 
 /// <summary>A one-shot wake-up the scheduler should hold for a job.</summary>
