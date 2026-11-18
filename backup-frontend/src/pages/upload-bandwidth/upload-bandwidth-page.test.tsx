@@ -43,6 +43,8 @@ beforeEach(() => {
   vi.mocked(setUploadBandwidth).mockResolvedValue({ scope: 'agent', scopeId: 'agent-b', bytesPerSecond: null })
 })
 
+const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
 describe('upload bandwidth page', () => {
   it('shows tenant, agent and job limits in a friendly unit, Unlimited for missing ones, and never a raw bytes-per-second value', async () => {
     mount()
@@ -55,7 +57,7 @@ describe('upload bandwidth page', () => {
     expect(row('SQL-01')).not.toHaveTextContent(rawRate)
     expect(row('SQL-02')).toHaveTextContent('Sınırsız')
     await openTab(/^Yedekleme işleri$/)
-    expect(await screen.findByRole('row', { name: /^Günlük ERP/ })).toHaveTextContent('16 KB/sn')
+    expect(await screen.findByRole('row', { name: /^Günlük ERP/ })).toHaveTextContent('0,128 Mbit/sn')
     expect(row('Günlük ERP')).not.toHaveTextContent(rawRate)
   })
 
@@ -97,8 +99,7 @@ describe('upload bandwidth page', () => {
     const details = within(dialog).getByText('Teknik ayrıntılar').closest('details')!
     expect(details).not.toHaveAttribute('open')
     expect(within(details).getByText('1.250.000 B/sn')).toBeInTheDocument()
-    fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '2,5' } })
-    fireEvent.change(within(dialog).getByLabelText('Birim'), { target: { value: 'MB/s' } })
+    fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '20' } })
     expect(within(details).getByText('2.500.000 B/sn')).toBeInTheDocument()
     expect(within(dialog).queryByText(rawRate, { ignore: 'details *' })).not.toBeInTheDocument()
   })
@@ -109,8 +110,7 @@ describe('upload bandwidth page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-02 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByLabelText("Sınırsız (sınır yok)"))
-    fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '2,5' } })
-    fireEvent.change(within(dialog).getByLabelText('Birim'), { target: { value: 'MB/s' } })
+    fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '20' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(setUploadBandwidth).toHaveBeenCalledWith('tenant-a', { scope: 'agent', id: 'agent-b' }, 2_500_000))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -122,7 +122,7 @@ describe('upload bandwidth page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('Hız sınırı')).toHaveValue('10')
-    expect(within(dialog).getByLabelText('Birim')).toHaveValue('Mbit/s')
+    expect(within(dialog).queryByLabelText('Birim')).not.toBeInTheDocument()
     fireEvent.click(within(dialog).getByLabelText("Sınırsız (sınır yok)"))
     expect(within(dialog).getByLabelText('Hız sınırı')).toBeDisabled()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
@@ -165,22 +165,22 @@ describe('upload bandwidth page', () => {
   })
 
   it('creates an explicit pause window as zero and round-trips it without showing an unlimited or zero-rate label', async () => {
-    const profile = { id: 'pause-profile', name: 'Mesai molası', timeZoneId: 'UTC', windows: [{ dayOfWeek: 1, startTime: '09:00:00', endTime: '18:00:00', bytesPerSecond: 0 }] }
+    const profile = { id: 'pause-profile', name: 'Mesai molası', timeZoneId: browserZone, windows: [{ dayOfWeek: 1, startTime: '09:00:00', endTime: '18:00:00', bytesPerSecond: 0 }] }
     vi.mocked(saveBandwidthProfile).mockResolvedValue(profile)
     mount()
     await openTab(/^Profiller$/)
     fireEvent.click(await screen.findByRole('button', { name: 'Yeni Profil' }))
     let dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Profil Adı'), { target: { value: profile.name } })
-    fireEvent.change(within(dialog).getByLabelText('Zaman Dilimi (IANA)'), { target: { value: 'UTC' } })
+    expect(within(dialog).queryByLabelText(/Zaman Dilimi/)).not.toBeInTheDocument()
     fireEvent.change(within(dialog).getByLabelText('Pencere Davranışı'), { target: { value: 'pause' } })
     expect(within(dialog).getByLabelText('Hız Limiti')).toBeDisabled()
-    expect(within(dialog).getByLabelText('Hız Birimi')).toBeDisabled()
+    expect(within(dialog).queryByLabelText('Hız Birimi')).not.toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: /Pencereyi Listeye Ekle/ }))
     expect(within(dialog).getByText(/09:00 - 18:00 → Aktarımı Duraklat/)).toBeInTheDocument()
     vi.mocked(getBandwidthProfiles).mockResolvedValue([profile])
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
-    await waitFor(() => expect(saveBandwidthProfile).toHaveBeenCalledWith('tenant-a', { id: undefined, name: profile.name, timeZoneId: 'UTC', windows: profile.windows }))
+    await waitFor(() => expect(saveBandwidthProfile).toHaveBeenCalledWith('tenant-a', { id: undefined, name: profile.name, timeZoneId: browserZone, windows: profile.windows }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(await screen.findByText('Pazartesi 09:00–18:00: Aktarımı Duraklat')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }))

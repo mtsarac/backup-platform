@@ -2,7 +2,6 @@ import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Section } from '@/components/ui/section'
-import { Disclosure } from '@/components/ui/disclosure'
 
 export function FormGrid({ children }: { children: ReactNode }) {
   useLanguage()
@@ -13,12 +12,6 @@ export function FormGrid({ children }: { children: ReactNode }) {
 export function Question({ title, why, children, headingLevel, compact }: { title: string; why: string; children?: ReactNode; headingLevel?: 2 | 3; compact?: boolean }) {
   useLanguage()
   return <Section title={title} headingLevel={headingLevel} className={compact ? '[&>div:first-child]:border-0 [&>div:first-child]:pb-0 [&>div:nth-child(2)]:pt-2' : undefined} description={compact ? undefined : <><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}{why}</>}>{children}</Section>
-}
-
-/** Collapsed-by-default settings with safe defaults; opens when one of its fields has an error. */
-export function Advanced({ open, title, children }: { open?: boolean; title?: string; children: ReactNode }) {
-  useLanguage()
-  return <Disclosure open={open} title={title ?? tx("Teknik ayrıntılar")}><FormGrid>{children}</FormGrid></Disclosure>
 }
 
 /** A ready-made choice for a setting: exactly one option is pressed, or none when the current value is custom. */

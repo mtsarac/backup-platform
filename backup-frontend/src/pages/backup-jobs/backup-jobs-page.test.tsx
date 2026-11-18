@@ -1,182 +1,220 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
-import { setViewport } from '@/test/viewport'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { BackupJobsPage } from './backup-jobs-page'
-import { getBackupJobs, startJobRun } from '@/features/backup-jobs/api'
+import { archiveBackupJob, getBackupJobHealth, getBackupJobs, getHealthTimeline, setJobEnabled, startJobRun } from '@/features/backup-jobs/api'
+import { healthyJobHealth } from '@/features/backup-jobs/test-fixtures'
+import { getAgents } from '@/features/agents/api'
+import { getBackup, getBackups } from '@/features/backups/api'
+import { makeRun } from '@/features/backups/test-data'
 import { ApiError } from '@/lib/api/client'
+import type { Agent } from '@/features/agents/types'
 import type { BackupJob } from '@/features/backup-jobs/types'
+import type { BackupJobHealth } from '@/features/backup-jobs/health'
 
-const job: BackupJob = { id: 'job-a', name: 'Queue job', agentId: 'agent-a', configuration: { engine: 'mssql', database: 'ERP', host: 'sql', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' }, retryPolicy: { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0 }, overlapPolicy: 'Queue', schedule: null, enabled: true, backupType: 'mssql-full', createdAt: '2026-10-06T10:00:00Z' }
+const schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'UTC', missedRunGraceSeconds: 1800, overlapPolicy: 'Skip' } as const
+const job = { id: 'job-a', name: 'Muhasebe', agentId: 'agent-a', agentName: 'Ofis', enabled: true, configuration: { engine: 'mssql', database: 'ERP' }, schedule, lastRun: null } as unknown as BackupJob
+const other = { ...job, id: 'job-b', name: 'Satış', configuration: { engine: 'mssql', database: 'CRM' } } as BackupJob
+const critical: BackupJobHealth = { ...healthyJobHealth, state: 'Critical', factors: { ...healthyJobHealth.factors, freshness: { ...healthyJobHealth.factors.freshness, score: 0, reason: 'backup_stale' } } }
 
-const permissions = vi.hoisted(() => ({ canOperate: true }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, ...permissions }) }))
-vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn(), getBackupJob: vi.fn(), getOccurrences: vi.fn(), saveBackupJob: vi.fn(), setJobEnabled: vi.fn(), startJobRun: vi.fn() }))
+const permissions = vi.hoisted(() => ({ canOperate: true, canAdmin: true }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', ...permissions }) }))
+vi.mock('@/features/backup-jobs/api')
+vi.mock('@/features/agents/api')
+vi.mock('@/features/backups/api')
+
+const agent = (connectivity: Agent['connectivity']) => [{ agentId: 'agent-a', connectivity }] as Agent[]
+function mount(url = '/tenants/tenant-a/backup-jobs/job-a') {
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={[url]}>
+    <Routes><Route path="/tenants/:tenantId/backup-jobs/:id?" element={<BackupJobsPage />} /></Routes><LocationProbe />
+  </MemoryRouter></QueryClientProvider>)
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  permissions.canOperate = true
-  vi.mocked(getBackupJobs).mockResolvedValue([job])
+  Object.assign(permissions, { canOperate: true, canAdmin: true })
+  vi.mocked(getBackupJobs).mockResolvedValue([job, other])
+  vi.mocked(getBackupJobHealth).mockResolvedValue(healthyJobHealth)
+  vi.mocked(getHealthTimeline).mockResolvedValue({ jobs: [] })
+  vi.mocked(getAgents).mockResolvedValue(agent('online'))
+  vi.mocked(getBackups).mockResolvedValue({ items: [], totalCount: 1, page: 1, pageSize: 1 })
   vi.mocked(startJobRun).mockResolvedValue({ id: 'run-a' })
 })
-it('does not create a second Queue-policy run when double-click follows a fast success', async () => {
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
-  const button = await screen.findByRole('button', { name: 'Şimdi çalıştır' })
+
+it('opens the job with the list beside it and marks it current', async () => {
+  mount()
+  expect(await screen.findByRole('link', { name: /Muhasebe/, current: 'page' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-a')
+  expect(screen.getByRole('link', { name: /Satış/ })).not.toHaveAttribute('aria-current')
+  expect(await screen.findByRole('heading', { name: 'Muhasebe' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Tüm denemeler' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?jobId=job-a')
+})
+
+it('shows no job detail until one is chosen, and the way back on a narrow screen', async () => {
+  mount('/tenants/tenant-a/backup-jobs')
+  expect(await screen.findByText('Ayrıntıları görmek için bir iş seçin.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('link', { name: /Satış/ }))
+  expect(await screen.findByRole('link', { name: 'İşlere dön' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs')
+})
+
+it.each([
+  ['Critical and stale', { health: critical }, 'Dikkat gerekiyor'],
+  ['offline computer', { connectivity: 'offline' as const }, 'Dikkat gerekiyor'],
+  ['healthy', {}, 'Güncel'],
+  ['paused', { jobs: [{ ...job, enabled: false }, other], health: critical }, 'Durduruldu'],
+  ['manual', { jobs: [{ ...job, schedule: null }, other], health: critical }, 'Elle çalışır'],
+  ['no success yet', { total: 0, health: critical }, 'İlk yedek bekleniyor'],
+  ['running', { jobs: [{ ...job, lastRun: { id: 'run-r', status: 'Running', createdAt: '', startedAt: null, completedAt: null, reasonCode: null } }, other] }, 'Çalışıyor %35'],
+])('says one sentence for the status: %s', async (_name, setup: { health?: BackupJobHealth; connectivity?: Agent['connectivity']; jobs?: BackupJob[]; total?: number }, label) => {
+  if (setup.health) vi.mocked(getBackupJobHealth).mockResolvedValue(setup.health)
+  if (setup.connectivity) vi.mocked(getAgents).mockResolvedValue(agent(setup.connectivity))
+  if (setup.jobs) vi.mocked(getBackupJobs).mockResolvedValue(setup.jobs)
+  if (setup.total !== undefined) vi.mocked(getBackups).mockResolvedValue({ items: [], totalCount: setup.total, page: 1, pageSize: 1 })
+  vi.mocked(getBackup).mockResolvedValue(makeRun({ id: 'run-r' }))
+  mount()
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(label))
+})
+
+it('gives the reason and the matching action when the computer is offline', async () => {
+  vi.mocked(getAgents).mockResolvedValue(agent('offline'))
+  mount()
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Yedekleme bilgisayarı çevrimdışı.'))
+  expect(screen.getByRole('link', { name: 'Bilgisayarı kontrol et' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
+})
+
+it('starts a backup with "Şimdi yedekle" and links to the new attempt; a double click starts one', async () => {
+  mount()
+  const button = await screen.findByRole('button', { name: 'Şimdi yedekle' })
   fireEvent.click(button, { detail: 1 })
   expect(await screen.findByRole('link', { name: 'Denemeyi aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-a')
   fireEvent.click(button, { detail: 2 })
   expect(startJobRun).toHaveBeenCalledTimes(1)
-  cache.clear()
-})
-it.each([
-  ['storage_connection_disabled', /(?:yeni backup başlatılamaz|yeni yedekleme başlatılamaz)/],
-  ['storage_connection_unavailable', /(?:Hedef depolama bağlantısı bulunamadı|yeni backup başlatılamaz|yeni yedekleme başlatılamaz)/],
-  ['quota_size_unknown', /(?:kesin depolama kotasında|kesin depolama kotası kapsamında)/],
-  ['quota_bounded_upload_unsupported', /(?:Agent, yükleme öncesinde|Yedekleme bilgisayarı, yükleme öncesinde)/],
-])('Şimdi çalıştır, %s reddini Türkçe gösterir', async (code, text) => {
-  vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'admission_denied', code }))
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
-  fireEvent.click(await screen.findByRole('button', { name: 'Şimdi çalıştır' }), { detail: 1 })
-  expect(await screen.findByRole('alert')).toHaveTextContent(text)
-  cache.clear()
+  expect(startJobRun).toHaveBeenCalledWith('tenant-a', 'job-a', expect.any(String))
 })
 
-it('sayfalar 25 iş gösterir; durum ve arama değişiklikleri ilk sayfaya döner', async () => {
-  vi.mocked(getBackupJobs).mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...job, id: `job-${index}`, name: `İş ${index}`, agentName: 'SQL Agent', enabled: index % 2 === 0 })))
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
-  expect(await screen.findByText('İş 0')).toBeInTheDocument()
-  expect(screen.getAllByRole('row')).toHaveLength(26)
-  expect(screen.queryByText('İş 25')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
-  expect(screen.getByText('İş 25')).toBeInTheDocument()
-  expect(screen.queryByText('İş 0')).not.toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Durum'), { target: { value: 'enabled' } })
-  expect(screen.getByText('İş 0')).toBeInTheDocument()
-  expect(screen.queryByText('İş 25')).not.toBeInTheDocument()
-  expect(screen.getByText('30 kayıt · Sayfa 1 / 2')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
-  fireEvent.change(screen.getByLabelText("İş, yedekleme bilgisayarı veya veritabanı ara"), { target: { value: 'SQL Agent' } })
-  expect(screen.getByText('İş 0')).toBeInTheDocument()
-  expect(screen.getByText('30 kayıt · Sayfa 1 / 2')).toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText("İş, yedekleme bilgisayarı veya veritabanı ara"), { target: { value: 'İş 2' } })
-  expect(screen.getByText('İş 2')).toBeInTheDocument()
-  expect(screen.queryByText('İş 0')).not.toBeInTheDocument()
-  cache.clear()
-})
-
-it('shows each job as a card with its name, status, key fields and actions on a phone', async () => {
-  setViewport(false)
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
-  const card = within(await screen.findByRole('listitem'))
-  expect(screen.queryByRole('table')).not.toBeInTheDocument()
-  expect(card.getByRole('heading', { name: /Queue job/ })).toBeInTheDocument()
-  expect(card.getByText('ERP')).toBeInTheDocument()
-  expect(card.getAllByRole('term').length).toBeLessThanOrEqual(3)
-  expect(card.getByRole('button', { name: 'Şimdi çalıştır' })).toBeInTheDocument()
-  cache.clear()
-})
-
-const scheduled: BackupJob = { ...job, id: 'job-b', name: 'Nightly', agentName: 'Ofis PC', schedule: { enabled: true, cronExpression: '17 3 * * 2', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 600, overlapPolicy: 'Skip' }, configuration: { ...job.configuration, encryptionPolicy: 'Required' }, lastRun: { id: 'run-z', status: 'Failed', createdAt: '2026-10-01T08:00:00Z', startedAt: null, completedAt: null, reasonCode: null } }
-
-function mount() {
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
-}
-
-it('lists name, status, database, computer and last result, and keeps schedule and encryption off the list', async () => {
-  vi.mocked(getBackupJobs).mockResolvedValue([scheduled])
-  mount()
-  const row = within(await screen.findByRole('row', { name: /Nightly/ }))
-  expect(row.getByRole('link', { name: 'Nightly' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-b/edit')
-  expect(row.getByText('Etkin')).toBeInTheDocument()
-  expect(row.getByText('ERP')).toBeInTheDocument()
-  expect(row.getByText('Ofis PC')).toBeInTheDocument()
-  expect(row.getByRole('link', { name: /Başarısız/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-z')
-  for (const header of ['Zamanlama', 'Şifreleme']) expect(screen.queryByRole('columnheader', { name: header })).not.toBeInTheDocument()
-  expect(screen.queryByText('17 3 * * 2')).not.toBeInTheDocument()
-  expect(screen.queryByText(/Zorunlu/)).not.toBeInTheDocument()
-})
-
-it('explains in plain words what running and disabling a job do, tied to the buttons', async () => {
-  mount()
-  const run = await screen.findByRole('button', { name: 'Şimdi çalıştır' })
-  expect(run).toHaveAccessibleDescription(/\S/)
-  // Open contextual menu to check disable button accessibility description
-  fireEvent.click(screen.getByRole('button', { name: /Diğer işlemler/i }))
-  const disable = await screen.findByRole('menuitem', { name: 'Devre dışı bırak' })
-  expect(disable).toHaveAccessibleDescription(/\S/)
-  expect(disable.getAttribute('aria-describedby')).not.toBe(run.getAttribute('aria-describedby'))
-})
-
-it('sends someone without permission to their administrator instead of showing actions', async () => {
+it('hides the actions from someone who cannot operate, keeping the status', async () => {
   permissions.canOperate = false
   mount()
-  const row = within(await screen.findByRole('row', { name: /Queue job/ }))
-  expect(row.getByText('Yöneticinize danışın')).toBeInTheDocument()
-  expect(row.queryByRole('button')).not.toBeInTheDocument()
-  expect(screen.queryByRole('link', { name: 'Düzenle' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('link', { name: /Yeni iş/ })).not.toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Güncel'))
+  expect(screen.queryByRole('button', { name: 'Şimdi yedekle' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Zamanlamayı/ })).not.toBeInTheDocument()
 })
 
-it('an empty list has exactly one primary action', async () => {
+it.each([
+  ['storage_connection_disabled', /yeni yedekleme başlatılamaz/],
+  ['quota_size_unknown', /kesin depolama kotası/],
+])('explains a refused start (%s) in Turkish with the code under technical details', async (code, text) => {
+  vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'admission_denied', code }))
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Şimdi yedekle' }), { detail: 1 })
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(text)
+  expect(within(alert).queryByText(code)).toBeNull()
+  await userEvent.click(within(alert).getByRole('button', { name: 'Teknik ayrıntılar' }))
+  expect(within(await screen.findByRole('dialog')).getByText(code)).toBeVisible()
+})
+
+it('points to the running attempt when another one already runs', async () => {
+  vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'run_already_active', activeRunId: 'run-x' }))
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Şimdi yedekle' }), { detail: 1 })
+  expect(await screen.findByRole('link', { name: 'Süren denemeyi aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-x')
+})
+
+it('pauses the schedule and resumes it, as separate actions', async () => {
+  vi.mocked(setJobEnabled).mockResolvedValue(job)
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Zamanlamayı durdur' }))
+  await waitFor(() => expect(setJobEnabled).toHaveBeenCalledWith('tenant-a', 'job-a', false))
+})
+
+it('resumes a paused job with "Zamanlamayı sürdür"', async () => {
+  vi.mocked(getBackupJobs).mockResolvedValue([{ ...job, enabled: false }])
+  vi.mocked(setJobEnabled).mockResolvedValue(job)
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Zamanlamayı sürdür' }))
+  await waitFor(() => expect(setJobEnabled).toHaveBeenCalledWith('tenant-a', 'job-a', true))
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Durduruldu'))
+})
+
+it('archives only after the name is typed, then the job leaves the list', async () => {
+  vi.mocked(archiveBackupJob).mockResolvedValue(undefined)
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Diğer' }))
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Korunan veriyi kaldır…' }))
+  const dialog = within(await screen.findByRole('dialog'))
+  expect(dialog.getByText('Yedekleriniz silinmez; bu iş artık çalışmaz ve listede görünmez.')).toBeInTheDocument()
+  const confirm = dialog.getByRole('button', { name: 'Korunan veriyi kaldır' })
+  expect(confirm).toBeDisabled()
+  vi.mocked(getBackupJobs).mockResolvedValue([other])
+  await userEvent.type(dialog.getByLabelText(/Onaylamak için adı yazın/), 'Muhasebe')
+  expect(confirm).toBeEnabled()
+  fireEvent.click(confirm)
+  await waitFor(() => expect(archiveBackupJob).toHaveBeenCalledWith('tenant-a', 'job-a'))
+  await waitFor(() => expect(screen.queryByRole('link', { name: /Muhasebe/ })).not.toBeInTheDocument())
+  expect(screen.getByTestId('location')).toHaveTextContent(/^\/tenants\/tenant-a\/backup-jobs$/)
+})
+
+it('offers removal only to administrators', async () => {
+  permissions.canAdmin = false
+  mount()
+  await screen.findByRole('heading', { name: 'Muhasebe' })
+  expect(screen.queryByRole('button', { name: 'Diğer' })).not.toBeInTheDocument()
+})
+
+it('shows no score breakdown or change summary', async () => {
+  mount()
+  await screen.findByRole('status')
+  expect(screen.queryByText(/\/ 100/)).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Yedekleme sağlığı' })).not.toBeInTheDocument()
+  expect(screen.queryByText(/Değişen bölümler/)).not.toBeInTheDocument()
+})
+
+it('says the job was not found for an unknown id', async () => {
+  mount('/tenants/tenant-a/backup-jobs/missing')
+  expect(await screen.findByText('Yedekleme işi bulunamadı.')).toBeInTheDocument()
+})
+
+it('an empty account offers the one action to create a job', async () => {
   vi.mocked(getBackupJobs).mockResolvedValue([])
-  mount()
-  await screen.findByText('Henüz yedekleme işi oluşturulmadı.')
-  expect(screen.getAllByRole('link', { name: /oluştur|Yeni/ })).toHaveLength(1)
+  mount('/tenants/tenant-a/backup-jobs')
+  expect(await screen.findByText('Henüz yedekleme işi oluşturulmadı.')).toBeInTheDocument()
+  expect(screen.getAllByRole('link', { name: 'Yedekleme işi oluştur' })).toHaveLength(1)
 })
 
-it('on a phone shows the status beside the name and three key fields', async () => {
-  setViewport(false)
-  vi.mocked(getBackupJobs).mockResolvedValue([scheduled])
-  mount()
-  const card = within(await screen.findByRole('listitem'))
-  expect(card.getByText('Etkin')).toBeInTheDocument()
-  expect(card.getAllByRole('term')).toHaveLength(3)
-  expect(card.getByText('Ofis PC')).toBeInTheDocument()
-  expect(card.queryByText('17 3 * * 2')).not.toBeInTheDocument()
+it('an empty account sends someone without permission to their administrator', async () => {
+  permissions.canOperate = false
+  vi.mocked(getBackupJobs).mockResolvedValue([])
+  mount('/tenants/tenant-a/backup-jobs')
+  expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Yedekleme işi oluştur' })).not.toBeInTheDocument()
 })
 
-function mountAt(url: string) {
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={[url]}><BackupJobsPage /><LocationProbe /></MemoryRouter></QueryClientProvider>)
-}
-
-it('keeps search, status and page in the URL, so a refreshed or shared link shows the same list', async () => {
-  vi.mocked(getBackupJobs).mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...job, id: `job-${index}`, name: `İş ${index}`, enabled: index % 2 === 0 })))
-  mountAt('/?state=disabled&search=İş&page=2')
-  expect(await screen.findByLabelText('Durum')).toHaveValue('disabled')
-  expect(screen.getByLabelText('İş, yedekleme bilgisayarı veya veritabanı ara')).toHaveValue('İş')
-  expect(screen.getByText('30 kayıt · Sayfa 2 / 2')).toBeInTheDocument()
-  expect(screen.getAllByRole('row')).toHaveLength(6)
-})
-
-it('writes filter changes to the URL and drops the page; clearing removes them; typing replaces instead of piling up history', async () => {
-  vi.mocked(getBackupJobs).mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...job, id: `job-${index}`, name: `İş ${index}`, enabled: true })))
-  mountAt('/?page=2')
-  fireEvent.change(await screen.findByLabelText('Durum'), { target: { value: 'disabled' } })
-  expect(screen.getByTestId('location')).toHaveTextContent('/?state=disabled')
-  fireEvent.change(screen.getByLabelText('Durum'), { target: { value: 'all' } })
-  fireEvent.change(screen.getByLabelText('İş, yedekleme bilgisayarı veya veritabanı ara'), { target: { value: 'İş 5' } })
-  expect(screen.getByTestId('location')).toHaveTextContent(/^\/\?search=%C4%B0%C5%9F\+5$/)
+it('an empty filter result offers "Filtreleri temizle", and filters live in the URL', async () => {
+  mount('/tenants/tenant-a/backup-jobs?search=yok')
+  expect(await screen.findByText('Aramanızla eşleşen iş yok.')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
-  expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+  expect(screen.getByTestId('location')).toHaveTextContent(/^\/tenants\/tenant-a\/backup-jobs$/)
+  expect(await screen.findByRole('link', { name: /Muhasebe/ })).toBeInTheDocument()
 })
 
-it('ignores an unknown status value in the URL', async () => {
-  mountAt('/?state=nonsense')
-  expect(await screen.findByLabelText('Durum')).toHaveValue('all')
-  expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+it('filters by state and search', async () => {
+  vi.mocked(getBackupJobs).mockResolvedValue([job, { ...other, enabled: false }])
+  mount('/tenants/tenant-a/backup-jobs')
+  fireEvent.change(await screen.findByLabelText('Durum'), { target: { value: 'disabled' } })
+  expect(screen.queryByRole('link', { name: /Muhasebe/ })).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: /Satış/ })).toBeInTheDocument()
+  expect(screen.getByTestId('location')).toHaveTextContent('state=disabled')
 })
 
-it('links a job that has run to its own run history', async () => {
-  vi.mocked(getBackupJobs).mockResolvedValue([scheduled])
-  mount()
-  const row = within(await screen.findByRole('row', { name: /Nightly/ }))
-  expect(row.getByRole('link', { name: 'Tüm denemeler' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?jobId=job-b')
+it('a failed load says what happened and keeps the code under technical details', async () => {
+  vi.mocked(getBackupJobs).mockRejectedValue(new ApiError(503, { error: 'storage_unavailable' }))
+  mount('/tenants/tenant-a/backup-jobs')
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Mevcut yedekleriniz etkilenmedi')
+  expect(within(alert).queryByText('storage_unavailable')).toBeNull()
 })

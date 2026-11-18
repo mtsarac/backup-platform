@@ -1,20 +1,17 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
-import { Advanced, Question } from '@/features/backup-jobs/job-form-fields'
+import { Question } from '@/features/backup-jobs/job-form-fields'
 import { fieldKit } from '@/features/backup-jobs/job-field-kit'
-import type { BackupConfiguration } from '@/features/backup-jobs/types'
 import { encryptionPolicies, type EncryptionPolicy } from '@/features/artifact-encryption/types'
 import { policyDescriptions, policyLabels } from '@/features/artifact-encryption/labels'
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 
-const policies = [['Disabled', 'Off — kapalı'], ['Preferred', 'IfSupported — destekleniyorsa'], ['Required', 'Required — zorunlu']] as const
-
-/** Question: whether backups are encrypted. Copy-only, checksum and compression stay under the technical details. */
+/** Question: whether backups are encrypted; copy-only, checksum and compression are pinned, not asked. */
 export function ProtectionStep({ form, headingLevel }: { form: JobFormState; headingLevel?: 2 | 3 }) {
   useLanguage()
   const { errors, setConfiguration: onChange } = form
   const { configuration } = form.values
-  const { check, select } = fieldKit(errors)
+  const { select } = fieldKit(errors)
   return <>
     <Question compact={Boolean(form.job)} headingLevel={headingLevel} title={tx("Yedekler şifrelensin mi?")} why={tx("Şifreli bir yedek, dosya yanlış ellere geçse bile okunamaz.")}>
       <div className="min-w-0 space-y-1">
@@ -23,12 +20,5 @@ export function ProtectionStep({ form, headingLevel }: { form: JobFormState; hea
         {configuration.encryptionPolicy === 'Required' && <p className="text-sm text-text-muted">{tx('Kurtarma için kendi anahtarınızı ekleyebilirsiniz.')} <Link className="text-primary underline" to={`/tenants/${form.tenantId}/settings/recovery-key`}>{tx('Kurtarma anahtarı')}</Link></p>}
       </div>
     </Question>
-    {form.job && <Advanced open={['configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy'].some(name => Boolean(errors[name] ?? errors[name.split('.').at(-1) ?? name]))}>
-      {configuration.engine === 'mssql' && check(tx('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)'), configuration.copyOnly, copyOnly => onChange({ ...configuration, copyOnly }))}
-      {configuration.engine !== 'file-system' && select('configuration.checksumPolicy', configuration.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)'), configuration.checksumPolicy, policies, value => onChange({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
-      {select('configuration.compressionPolicy', tx('Sıkıştırma (Compression)'), configuration.compressionPolicy, policies, value => onChange({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
-      {configuration.engine === 'postgres' && <p className="text-sm text-text-muted md:col-span-2">{tx("pg_dump custom arşivi mevcut yedek zincirini değiştirmez; COPY_ONLY uygulanmaz. data_checksums sunucunun sayfa doğrulamasıdır: Required yalnızca etkin kümelerde çalışır, Preferred desteklenmiyorsa uyarır. Arşiv ve replikalar her durumda SHA-256 ile doğrulanır. Sıkıştırma pg_dump arşiv sıkıştırmasıdır.")}</p>}
-      {configuration.engine === 'file-system' && <p className="text-sm text-text-muted md:col-span-2">{tx('Dosya içeriği ve manifest SHA-256 ile her zaman doğrulanır. Dosya izinleri ve zaman damgaları geri yüklenir; kopya yedek ve veritabanı sayfa doğrulaması uygulanmaz.')}</p>}
-    </Advanced>}
   </>
 }
