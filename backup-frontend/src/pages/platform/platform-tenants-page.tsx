@@ -46,11 +46,11 @@ export function PlatformTenantsPage() {
   const [created, setCreated] = useState('')
   const data = query.data
   const columns: Column<PlatformTenant>[] = [
-    { key: 'name', card: 'title', header: tx('Çalışma alanı'), wrap: true, render: (tenant) => <Link className={`${linkClass} inline-flex min-h-6 pointer-coarse:min-h-11 items-center font-semibold`} to={platformPaths.tenant(tenant.tenantId)}>{tenant.name}</Link> },
+    { key: 'name', card: 'title', header: tx('Çalışma alanı'), wrap: true, render: (tenant) => <Link className={`${linkClass} inline-flex min-h-6 items-center font-semibold`} to={platformPaths.tenant(tenant.tenantId)}>{tenant.name}</Link> },
     { key: 'members', header: tx('Kişiler'), render: (tenant) => tenant.memberCount },
     { key: 'agents', header: tx('Yedekleme bilgisayarları'), render: (tenant) => tenant.agentCount },
     { key: 'enrollment', card: 'status', header: tx('Bilgisayar kaydı'), render: (tenant) => <StatusPill level={tenant.enrollmentEnabled ? 'safe' : 'neutral'}>{tenant.enrollmentEnabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</StatusPill> },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (tenant) => <Link className={`${linkClass} inline-flex min-h-6 pointer-coarse:min-h-11 items-center font-medium`} to={`/tenants/${encodeURIComponent(tenant.tenantId)}`}>{tx('Yönet')}</Link> },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (tenant) => <Link className={`${linkClass} inline-flex min-h-6 items-center font-medium`} to={`/tenants/${encodeURIComponent(tenant.tenantId)}`}>{tx('Yönet')}</Link> },
   ]
   const newTenant = <Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />{tx("Yeni tenant")}</Button>
   return <div className="space-y-6">

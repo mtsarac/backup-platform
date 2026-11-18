@@ -141,7 +141,7 @@
   --text-body--line-height: 1.45;
 }
 
-/* The top bar is sticky: keep keyboard focus and anchors from scrolling underneath it (rem, so it follows the text-size setting). */
+/* The top bar is sticky: keep keyboard focus and anchors from scrolling underneath it. */
 html {
   scroll-padding-top: 8rem;
 }
@@ -172,40 +172,18 @@ body {
     text-wrap: balance;
   }
 
-  /* Targets: 24 px with a mouse (WCAG 2.2 AA, 2.5.8), 44 px on touch. Shared buttons and inputs set their own 36 px. */
+  /* Targets: at least 24 px (WCAG 2.2 AA, 2.5.8). Shared buttons and inputs take their height from --spacing-control. */
   [data-slot="button"], button, summary {
     min-height: 1.5rem;
     min-width: 1.5rem;
   }
 
-  /* Standalone links are a 24 px target with a mouse; links inside a paragraph keep their line box (running text). */
+  /* Standalone links are a 24 px target; links inside a paragraph keep their line box (running text). */
   a[href]:not(p a, .sr-only) {
     display: inline-flex;
     align-items: center;
     min-height: 1.5rem;
     overflow-wrap: anywhere;
-  }
-
-  @media (pointer: coarse) {
-    [data-slot="button"], button, summary {
-      min-height: 2.75rem;
-      min-width: 2.75rem;
-    }
-
-    input:not([type="checkbox"]):not([type="radio"]), select, textarea {
-      min-height: 2.75rem;
-    }
-
-    /* Standalone links get the same target as buttons; links inside a paragraph keep their line box (running text). */
-    a[href]:not(p a, .sr-only) {
-      min-height: 2.75rem;
-      min-width: 2.75rem;
-    }
-
-    /* A checkbox or radio is only as tappable as its label. */
-    label:has(> input:is([type="checkbox"], [type="radio"])) {
-      min-height: 2.75rem;
-    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -221,37 +199,4 @@ body {
 :focus-visible {
   outline: 3px solid var(--ring);
   outline-offset: 2px;
-}
-
-/* High-contrast mode: toggled by the A11y toolbar via .hc on <html>. */
-:root.hc {
-  --foreground: #000000;
-  --card-foreground: #000000;
-  --popover-foreground: #000000;
-  --muted-foreground: #101b1a;
-  --text: #000000;
-  --text-heading: #000000;
-  --text-muted: #101b1a;
-  --border: #101b1a;
-  --border-strong: #101b1a;
-  --input: #101b1a;
-  --primary: #0a3f43;
-  --primary-hover: #062a2d;
-  --ring: #0a3f43;
-}
-
-:root.dark.hc {
-  --foreground: #ffffff;
-  --card-foreground: #ffffff;
-  --popover-foreground: #ffffff;
-  --muted-foreground: #f8fafc;
-  --text: #ffffff;
-  --text-heading: #ffffff;
-  --text-muted: #f8fafc;
-  --border: #dbe7e5;
-  --border-strong: #dbe7e5;
-  --input: #dbe7e5;
-  --primary: #9fe6ea;
-  --primary-hover: #c4f0f2;
-  --ring: #c4f0f2;
 }
