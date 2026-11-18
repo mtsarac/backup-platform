@@ -11,6 +11,7 @@ import { StorageStep } from '@/features/backup-jobs/steps/storage-step'
 import { ScheduleStep } from '@/features/backup-jobs/steps/schedule-step'
 import { ProtectionStep } from '@/features/backup-jobs/steps/protection-step'
 import { ReviewStep } from '@/features/backup-jobs/steps/summary-step'
+import { LiveSummary } from '@/features/backup-jobs/live-summary'
 import { useJobForm } from '@/features/backup-jobs/use-job-form'
 
 /** Creates backup jobs one question group at a time; existing jobs are edited on a single page instead (`JobEditForm`). */
@@ -51,27 +52,32 @@ export function JobWizard({ prefill }: { prefill?: JobPrefill }) {
   }}>
     <Stepper steps={jobSteps.map(item => stepLabel(item))} current={index} />
     <h2 ref={headingRef} tabIndex={-1} className="sr-only">{tx("Adım")}{' '}{index + 1} / {jobSteps.length}: {stepLabel(step)}</h2>
-    {step === 'source' && <SourceStep form={form} />}
-    {step === 'storage' && <StorageStep form={form} />}
-    {step === 'schedule-protection' && <>
-      <section aria-labelledby="wizard-schedule" className="space-y-5">
-        <h2 id="wizard-schedule" className="text-lg font-semibold text-text-heading">{tx("Zamanlama")}</h2>
-        <ScheduleStep form={form} headingLevel={3} advancedTitle={tx("Zamanlama teknik ayrıntıları")} />
-      </section>
-      <section aria-labelledby="wizard-protection" className="space-y-5 border-t border-border pt-5">
-        <h2 id="wizard-protection" className="text-lg font-semibold text-text-heading">{tx("Koruma")}</h2>
-        <ProtectionStep form={form} headingLevel={3} advancedTitle={tx("Koruma teknik ayrıntıları")} />
-      </section>
-    </>}
-    {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} />}
-    {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
-      control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{[...new Set(errorSteps.map(wizardStepOf))].map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": stepLabel(item) })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button type="button" variant="outline" disabled={index === 0 || save.isPending} onClick={() => go(jobSteps[index - 1])}>{tx("Geri")}</Button>
-      <div className="flex flex-wrap items-center gap-3">
-        <DiscardChangesLink to={form.listPath} dirty={form.dirty} />
-        {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || form.cannotSave}>{save.isPending ? tx('Kaydediliyor…') : form.failedCount > 0 ? tx('Başarısızları yeniden dene') : tx('Kaydet')}</Button> : <Button key="next" type="submit">{tx("İleri")}</Button>}
+    <div className={last ? undefined : 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]'}>
+      <div className="min-w-0 space-y-5">
+        {step === 'source' && <SourceStep form={form} />}
+        {step === 'storage' && <StorageStep form={form} />}
+        {step === 'schedule-protection' && <>
+          <section aria-labelledby="wizard-schedule" className="space-y-5">
+            <h2 id="wizard-schedule" className="text-lg font-semibold text-text-heading">{tx("Zamanlama")}</h2>
+            <ScheduleStep form={form} headingLevel={3} />
+          </section>
+          <section aria-labelledby="wizard-protection" className="space-y-5 border-t border-border pt-5">
+            <h2 id="wizard-protection" className="text-lg font-semibold text-text-heading">{tx("Koruma")}</h2>
+            <ProtectionStep form={form} headingLevel={3} />
+          </section>
+        </>}
+        {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} />}
+        {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
+          control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{[...new Set(errorSteps.map(wizardStepOf))].map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": stepLabel(item) })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button type="button" variant="outline" disabled={index === 0 || save.isPending} onClick={() => go(jobSteps[index - 1])}>{tx("Geri")}</Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <DiscardChangesLink to={form.listPath} dirty={form.dirty} />
+            {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || form.cannotSave}>{save.isPending ? tx('Kaydediliyor…') : form.failedCount > 0 ? tx('Başarısızları yeniden dene') : tx('Kaydet')}</Button> : <Button key="next" type="submit">{tx("İleri")}</Button>}
+          </div>
+        </div>
       </div>
+      {!last && <LiveSummary form={form} position={`${index + 1} / ${jobSteps.length}`} label={stepLabel(step)} />}
     </div>
   </form>
 }

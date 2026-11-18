@@ -74,6 +74,20 @@ beforeEach(() => {
   vi.mocked(getOccurrences).mockResolvedValue([])
 })
 describe('iş formu', () => {
+  it('creates a scheduled job with the prescribed defaults', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
+    renderPage()
+    await reach(3)
+    await submit()
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1]).toMatchObject({
+      enabled: true, overlapPolicy: 'Skip',
+      schedule: { enabled: true, cronExpression: '0 2 * * *', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, missedRunGraceSeconds: 1800, overlapPolicy: 'Skip' },
+      retryPolicy: { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 600, backoff: 'Exponential', jitter: 0.2 },
+      retention: { enabled: true, keepForSeconds: 2592000, deleteGracePeriodSeconds: 86400 },
+      configuration: { encryptionPolicy: 'Optional', trustServerCertificate: false, destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }] },
+    })
+  })
   it('localizes the protocol mismatch enum in the computer picker and review without translating its name', async () => {
     vi.mocked(getAgents).mockResolvedValueOnce([{
       agentId: 'agent-a', hostName: 'SQL Agent', status: 'Active', connectivity: 'online', operationalStatus: 'VersionMismatch',

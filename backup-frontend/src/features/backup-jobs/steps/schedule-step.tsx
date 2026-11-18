@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/text-input'
 import { DurationField } from './duration-field'
 
 /** Questions: when the job runs on its own and how long backups are kept. Cron, time zone, overlap, retry and exact retention seconds stay under the technical details. */
-export function ScheduleStep({ form, advancedTitle, headingLevel }: { form: JobFormState; advancedTitle?: string; headingLevel?: 2 | 3 }) {
+export function ScheduleStep({ form, headingLevel }: { form: JobFormState; headingLevel?: 2 | 3 }) {
   useLanguage()
   const { values, errors, canAdmin, nextRun, set } = form
   const { scheduled, schedule, overlap, retry, retention } = values
@@ -48,25 +48,25 @@ export function ScheduleStep({ form, advancedTitle, headingLevel }: { form: JobF
           {customRetention && <option value="custom">{tx('{0} saniye', { '0': retention.keepForSeconds })}</option>}
         </Select>}</Field> : <PresetChoice label={tx("Saklama süresi")} disabled={!canAdmin} options={[
           ...retentionPresets.map(([seconds]) => ({ text: keepForLabel(seconds), pressed: retention.enabled && retention.keepForSeconds === seconds, onSelect: () => setRetention({ ...retention, enabled: true, keepForSeconds: seconds }) })),
-          { text: tx('Süresiz'), pressed: !retention.enabled, onSelect: () => setRetention({ ...retention, enabled: false }) },
+          { text: tx('Hiç silinmesin'), pressed: !retention.enabled, onSelect: () => setRetention({ ...retention, enabled: false }) },
         ]} />}
         {customRetention && <p className="text-sm text-text-muted md:col-span-2">{tx("Özel bir saklama süresi kullanılıyor ({0}); ayrıntıları aşağıdaki Teknik ayrıntılar bölümünde görebilirsiniz.", { '0': form.job ? tx('{0} saniye', { '0': retention.keepForSeconds }) : keepForLabel(retention.keepForSeconds) })}</p>}
         {form.job && <p className="text-sm text-text-muted md:col-span-2">{tx("Politika değişikliği mevcut yedeklerin son kullanma tarihini değiştirmez.")}</p>}
       </FormGrid>
     </Question>
-    <Advanced title={advancedTitle} open={['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.maxAttempts', 'retryPolicy.initialDelaySeconds', 'retryPolicy.maxDelaySeconds', 'retryPolicy.backoff', 'retryPolicy.jitter', 'retention.keepForSeconds', 'retention.deleteGracePeriodSeconds'].some(name => Boolean(errors[name] ?? errors[`schedule.${name}`] ?? errors[name.split('.').at(-1) ?? name]))}>
+    {form.job && <Advanced open={['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.maxAttempts', 'retryPolicy.initialDelaySeconds', 'retryPolicy.maxDelaySeconds', 'retryPolicy.backoff', 'retryPolicy.jitter', 'retention.keepForSeconds', 'retention.deleteGracePeriodSeconds'].some(name => Boolean(errors[name] ?? errors[`schedule.${name}`] ?? errors[name.split('.').at(-1) ?? name]))}>
       {scheduled && text('cronExpression', tx('Cron ifadesi'), schedule.cronExpression, cronExpression => setSchedule({ ...schedule, cronExpression }))}
       {scheduled && text('timeZone', tx('Saat dilimi (IANA / sistem adı)'), schedule.timeZone, timeZone => setSchedule({ ...schedule, timeZone }))}
-      {scheduled && (form.job ? <DurationField name="missedRunGraceSeconds" label={tx('Kaçırılan çalışma toleransı')} value={schedule.missedRunGraceSeconds} error={errors.missedRunGraceSeconds ?? errors['schedule.missedRunGraceSeconds']} onChange={value => setSchedule({ ...schedule, missedRunGraceSeconds: value })} /> : number('missedRunGraceSeconds', tx('Kaçırılan çalışma toleransı (saniye)'), schedule.missedRunGraceSeconds, value => setSchedule({ ...schedule, missedRunGraceSeconds: value ?? 0 })))}
+      {scheduled && <DurationField name="missedRunGraceSeconds" label={tx('Kaçırılan çalışma toleransı')} value={schedule.missedRunGraceSeconds} error={errors.missedRunGraceSeconds ?? errors['schedule.missedRunGraceSeconds']} onChange={value => setSchedule({ ...schedule, missedRunGraceSeconds: value })} />}
       {scheduled && check(tx('Zamanlama etkin'), schedule.enabled, value => setSchedule({ ...schedule, enabled: value }))}
       {select('overlapPolicy', tx('Önceki çalışma sürerken yeni zamanlama'), overlap, [['Skip', tx('Atla')], ['Queue', tx('Kuyruğa al')]], value => set({ overlap: value as 'Skip' | 'Queue' }))}
       {number('retryPolicy.maxAttempts', tx('Toplam deneme sayısı'), retry.maxAttempts, value => setRetry({ ...retry, maxAttempts: value ?? 0 }))}
-      {form.job ? <DurationField name="retryPolicy.initialDelaySeconds" label={tx('İlk gecikme')} value={retry.initialDelaySeconds} error={errors['retryPolicy.initialDelaySeconds'] ?? errors.initialDelaySeconds} onChange={value => setRetry({ ...retry, initialDelaySeconds: value })} /> : number('retryPolicy.initialDelaySeconds', tx('İlk gecikme (saniye)'), retry.initialDelaySeconds, value => setRetry({ ...retry, initialDelaySeconds: value ?? 0 }))}
-      {form.job ? <DurationField name="retryPolicy.maxDelaySeconds" label={tx('En uzun gecikme')} value={retry.maxDelaySeconds} error={errors['retryPolicy.maxDelaySeconds'] ?? errors.maxDelaySeconds} onChange={value => setRetry({ ...retry, maxDelaySeconds: value })} /> : number('retryPolicy.maxDelaySeconds', tx('En uzun gecikme (saniye)'), retry.maxDelaySeconds, value => setRetry({ ...retry, maxDelaySeconds: value ?? 0 }))}
+      <DurationField name="retryPolicy.initialDelaySeconds" label={tx('İlk gecikme')} value={retry.initialDelaySeconds} error={errors['retryPolicy.initialDelaySeconds'] ?? errors.initialDelaySeconds} onChange={value => setRetry({ ...retry, initialDelaySeconds: value })} />
+      <DurationField name="retryPolicy.maxDelaySeconds" label={tx('En uzun gecikme')} value={retry.maxDelaySeconds} error={errors['retryPolicy.maxDelaySeconds'] ?? errors.maxDelaySeconds} onChange={value => setRetry({ ...retry, maxDelaySeconds: value })} />
       {select('retryPolicy.backoff', tx('Gecikme stratejisi'), retry.backoff, [['Fixed', tx('Fixed — sabit')], ['Exponential', tx('Exponential — üstel')]], backoff => setRetry({ ...retry, backoff }))}
       {number('retryPolicy.jitter', tx('Rastgele gecikme oranı (jitter)'), retry.jitter, value => setRetry({ ...retry, jitter: value ?? 0 }))}
-      {form.job ? <DurationField name="retention.keepForSeconds" label={tx('Saklama süresi')} value={retention.keepForSeconds} error={errors['retention.keepForSeconds'] ?? errors.keepForSeconds} onChange={value => setRetention({ ...retention, keepForSeconds: value })} disabled={!canAdmin} /> : number('retention.keepForSeconds', tx('KeepFor — saklama süresi (saniye)'), retention.keepForSeconds, value => setRetention({ ...retention, keepForSeconds: value ?? 0 }), !canAdmin)}
-      {form.job ? <DurationField name="retention.deleteGracePeriodSeconds" label={tx('Silme bekleme süresi')} value={retention.deleteGracePeriodSeconds} error={errors['retention.deleteGracePeriodSeconds'] ?? errors.deleteGracePeriodSeconds} onChange={value => setRetention({ ...retention, deleteGracePeriodSeconds: value })} disabled={!canAdmin} /> : number('retention.deleteGracePeriodSeconds', tx('DeleteGracePeriod — silme bekleme süresi (saniye)'), retention.deleteGracePeriodSeconds, value => setRetention({ ...retention, deleteGracePeriodSeconds: value ?? 0 }), !canAdmin)}
-    </Advanced>
+      <DurationField name="retention.keepForSeconds" label={tx('Saklama süresi')} value={retention.keepForSeconds} error={errors['retention.keepForSeconds'] ?? errors.keepForSeconds} onChange={value => setRetention({ ...retention, keepForSeconds: value })} disabled={!canAdmin} />
+      <DurationField name="retention.deleteGracePeriodSeconds" label={tx('Silme bekleme süresi')} value={retention.deleteGracePeriodSeconds} error={errors['retention.deleteGracePeriodSeconds'] ?? errors.deleteGracePeriodSeconds} onChange={value => setRetention({ ...retention, deleteGracePeriodSeconds: value })} disabled={!canAdmin} />
+    </Advanced>}
   </>
 }

@@ -46,12 +46,12 @@ function FileSourceGroup({ configuration, errors, onChange, edit }: GroupProps &
     {text('configuration.database', edit ? tx('Dosya kaynağı adı') : tx('Dosya kaynağı referansı'), configuration.database, database => onChange({ ...configuration, database }))}
     {edit ? <p className="text-sm text-text-muted md:col-span-2">{tx('Bu ad, yedekleme bilgisayarında yapılandırılmış dosya kaynağıdır; fiziksel kök yol sunucudan seçilemez. Tüm kaynağı seçmek için . kullanın.')}</p> : fileSourceHelp}
     <FilePathList id="configuration.files.paths" label={tx('Yedeklenecek dosya ve klasörler')} paths={files.paths} error={pathError('configuration.files.paths') ?? errors['configuration.files']} onChange={paths => onChange({ ...configuration, files: { ...files, paths } })} />
-    {edit ? <div className="md:col-span-2"><Disclosure title={tx('Dosya filtreleri')} open={Boolean(pathError('configuration.files.includes') || pathError('configuration.files.excludes') || errors['configuration.files.symlinkPolicy'])}><FormGrid>{fileSourceHelp}{filters}</FormGrid></Disclosure></div> : filters}
+    {edit && <div className="md:col-span-2"><Disclosure title={tx('Dosya filtreleri')} open={Boolean(pathError('configuration.files.includes') || pathError('configuration.files.excludes') || errors['configuration.files.symlinkPolicy'])}><FormGrid>{fileSourceHelp}{filters}</FormGrid></Disclosure></div>}
   </FormGrid>
 }
 
 /** Which database server and how to connect (SQL Server / PostgreSQL); port and TLS settings live in the step's technical details. */
-function DatabaseSourceGroup({ configuration, errors, onChange }: GroupProps) {
+function DatabaseSourceGroup({ configuration, errors, onChange, edit }: GroupProps & { edit: boolean }) {
   useLanguage()
   const { text, check } = fieldKit(errors)
   const isPg = configuration.engine === 'postgres'
@@ -61,7 +61,7 @@ function DatabaseSourceGroup({ configuration, errors, onChange }: GroupProps) {
     {!(!isPg && configuration.integratedSecurity) && <DatabaseLoginFields idPrefix="configuration-login" login={configuration.databaseLogin} hasStored={Boolean(configuration.databaseCredentialReference)}
       errors={{ userName: errors['configuration.databaseLogin.userName'], password: errors['configuration.databaseLogin.password'] }}
       onChange={databaseLogin => onChange({ ...configuration, databaseLogin })} />}
-    {!isPg && check(tx('Windows kimlik doğrulaması (integrated security)'), configuration.integratedSecurity, integratedSecurity => onChange({ ...configuration, integratedSecurity, databaseLogin: null, databaseCredentialReference: integratedSecurity ? null : configuration.databaseCredentialReference }))}
+    {edit && !isPg && check(tx('Windows kimlik doğrulaması (integrated security)'), configuration.integratedSecurity, integratedSecurity => onChange({ ...configuration, integratedSecurity, databaseLogin: null, databaseCredentialReference: integratedSecurity ? null : configuration.databaseCredentialReference }))}
     <p className="text-sm text-text-muted md:col-span-2">{isPg ? tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır.") : tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır; aynı makinedeki diğer SQL Server sürümlerinin ve kullanıcıların girişleri birbirine karışmaz.")}</p>
     {isPg && <p className="text-sm text-text-muted md:col-span-2">{tx("Full Backup, pg_dump custom-format mantıksal arşividir; WAL/PITR veya fiziksel küme yedeği değildir. Database adı en fazla 63 UTF-8 byte olabilir. PostgreSQL kullanıcı adı ve parolası gerekir.")}</p>}
   </FormGrid>
@@ -141,17 +141,16 @@ export function SourceStep({ form }: { form: JobFormState }) {
     {manual ? <Question compact={Boolean(job)} title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
       {!job && <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => set({ sourceMode: 'discovery' })}>{tx("Otomatik keşiften seç")}</Button>}
       {!job && <EngineGroup engine={configuration.engine} onEngine={form.changeEngine} />}
-      {isFiles ? <FileSourceGroup key={configuration.engine} {...group} edit={Boolean(job)} /> : <DatabaseSourceGroup key={configuration.engine} {...group} />}
+      {isFiles ? <FileSourceGroup key={configuration.engine} {...group} edit={Boolean(job)} /> : <DatabaseSourceGroup key={configuration.engine} {...group} edit={Boolean(job)} />}
     </Question>
     : <Question compact={Boolean(job)} title={tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
       {picked ? <DiscoveredSource form={form} /> : <DiscoverySourceChoice form={form} />}
       {sourceError && <p role="alert" className="mt-3 text-sm text-error">{sourceError}</p>}
     </Question>}
-    {(!job || !isFiles) && <Advanced open={withErrors('enabled', 'configuration.port')}>
-      {!job && check(tx('İş etkin'), values.enabled, enabled => set({ enabled }))}
-      {manual && !isFiles && number('configuration.port', isPg ? tx('Port (varsayılan 5432)') : tx('Port (isteğe bağlı)'), configuration.port, port => setConfiguration({ ...configuration, port }))}
-      {manual && !isFiles && check(tx('Bağlantıyı şifrele'), configuration.encrypt, encrypt => setConfiguration({ ...configuration, encrypt }))}
-      {manual && !isFiles && check(tx('Sunucu sertifikasına güven'), configuration.trustServerCertificate, trustServerCertificate => setConfiguration({ ...configuration, trustServerCertificate }))}
+    {job && !isFiles && <Advanced open={withErrors('configuration.port')}>
+      {number('configuration.port', isPg ? tx('Port (varsayılan 5432)') : tx('Port (isteğe bağlı)'), configuration.port, port => setConfiguration({ ...configuration, port }))}
+      {check(tx('Bağlantıyı şifrele'), configuration.encrypt, encrypt => setConfiguration({ ...configuration, encrypt }))}
+      {check(tx('Sunucu sertifikasına güven'), configuration.trustServerCertificate, trustServerCertificate => setConfiguration({ ...configuration, trustServerCertificate }))}
     </Advanced>}
   </>
 }

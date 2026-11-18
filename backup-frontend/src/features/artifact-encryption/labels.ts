@@ -3,13 +3,13 @@ import type { ArtifactFormat, EncryptionPolicy, RecipientType } from './types'
 
 export const policyLabels: Record<EncryptionPolicy, string> = {
   get Off() { return tx("Kapalı · şifrelenmez") },
-  get Optional() { return tx("İsteğe bağlı · mümkünse şifrele") },
-  get Required() { return tx("Zorunlu · şifrelenemezse başarısız") },
+  get Optional() { return tx("İsteğe bağlı") },
+  get Required() { return tx("Gerekli") },
 }
 export const policyDescriptions: Record<EncryptionPolicy, string> = {
   get Off() { return tx("Yedek dosyası düz (v1-plain) olarak yazılır. Mevcut davranış korunur.") },
-  get Optional() { return tx("Yedek, Agent'ta şifrelenir (v2-bpe). Agent şifreleyemezse düz dosya (v1-plain) olarak kabul edilir; yedek reddedilmez.") },
-  get Required() { return tx("Yedek yalnızca şifreli (v2-bpe) gelirse kabul edilir. Düz dosya gelirse çalıştırma başarısız olur ve dosya yayımlanmaz. Üçüncü taraf depolama için önerilir.") },
+  get Optional() { return tx("Yedek şifrelenir.") },
+  get Required() { return tx("Yedek şifrelenir; şifrelenmemiş sonuç başarısız sayılır.") },
 }
 
 export const formatLabels: Record<ArtifactFormat, string> = {

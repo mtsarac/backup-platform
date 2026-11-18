@@ -170,12 +170,11 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
         {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-error">{fieldError}</p>}
         <p id="storage-connection-help" className="text-xs text-text-muted">{tx("Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.")}</p>
       </div>
-      <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">{tx("Depolama yürütme konumu")}</span><p className="text-sm">{executionLocationLabel(primary.storageExecutionLocation)}</p><p className="text-xs text-text-muted">{tx("Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.")}</p></div>
       </>}
       {pending && <p role="status" className="text-sm">{tx("Depolama bağlantıları yükleniyor…")}</p>}
       {error ? <div role="alert" className="text-sm text-error">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</Button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
 
-      <Disclosure className="border-t border-border pt-4 md:col-span-2" open={Boolean(fieldError || replicaError || replicationError)} title={<>{tx("Replikasyon Hedefleri (Multi-Storage Replication)")} <span className="text-xs font-normal">· {tx("Toplam")}{' '}{destinations.length}{' '}{tx("hedef")}</span></>}>
+      <Disclosure className="border-t border-border pt-4 md:col-span-2" open={Boolean(fieldError || replicaError || replicationError)} title={<>{tx("Başka hedef ekle")} <span className="text-xs font-normal">· {tx("Toplam")}{' '}{destinations.length}{' '}{tx("hedef")}</span></>}>
         <div className="space-y-3">
         <p className="text-xs text-text-muted">{tx("Bu yedekleme işinin birden fazla depolama konumuna kopyalanmasını yapılandırın.")}</p>
         {replicationError && <p id="replication-error" role="alert" className="text-sm text-error">{replicationError}</p>}

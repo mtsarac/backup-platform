@@ -16,10 +16,10 @@ export interface JobPrefill { instance: DiscoveryInstanceDetail; databases: stri
 export type Engine = BackupConfiguration['engine']
 export const defaultFiles: FileBackupPolicy = { paths: ['.'], includes: ['**'], excludes: [], symlinkPolicy: 'Skip' }
 
-const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' }
-const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 3600, overlapPolicy: 'Skip' }
-const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 }
-const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 }
+const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Optional' }
+const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, missedRunGraceSeconds: 1800, overlapPolicy: 'Skip' }
+const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 600, backoff: 'Exponential', jitter: 0.2 }
+const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 2592000, deleteGracePeriodSeconds: 86400 }
 
 export function initialValues(job?: BackupJob, prefill?: JobPrefill): JobValues {
   // The PostgreSQL dump has no COPY_ONLY switch, so the saved flag is not resubmitted.
@@ -27,7 +27,7 @@ export function initialValues(job?: BackupJob, prefill?: JobPrefill): JobValues 
   return {
     name: job?.name ?? '', agentId: job?.agentId ?? prefill?.instance.agentId ?? '', enabled: job?.enabled ?? true,
     configuration: saved ?? (prefill?.databases.length ? discoveredConfiguration(initialConfiguration, prefill.instance, prefill.databases) : initialConfiguration),
-    scheduled: Boolean(job?.schedule), schedule: job?.schedule ?? initialSchedule, overlap: job?.overlapPolicy ?? 'Skip',
+    scheduled: job ? Boolean(job.schedule) : true, schedule: job?.schedule ?? initialSchedule, overlap: job?.overlapPolicy ?? 'Skip',
     retry: job?.retryPolicy ?? initialRetry, retention: job?.retention ?? initialRetention, selected: prefill?.databases ?? [], sourceMode: job ? 'manual' : 'discovery',
   }
 }
