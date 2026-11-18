@@ -14,8 +14,6 @@ import { DiscoveryPage } from './pages/discovery/discovery-page'
 import { InstanceDetailPage } from './pages/discovery/instance-detail-page'
 import { UploadBandwidthPage } from './pages/upload-bandwidth/upload-bandwidth-page'
 import { StorageLayout } from './pages/storage/storage-layout'
-import { StorageUsageTab } from './pages/storage/storage-usage-tab'
-import { StorageProvidersTab } from './pages/storage/storage-providers-tab'
 import { ConnectionList } from './features/storage-connections/connection-list'
 import { ConnectionDetail } from './features/storage-connections/connection-detail'
 import { ConnectionWizard } from './features/storage-connections/connection-wizard'
@@ -63,8 +61,6 @@ export const tenantRoutes = <>
   <Route path="backup-runs/:id" element={<BackupDetailPage />} />
   <Route path="storage" element={<StorageLayout />}>
     <Route index element={<ConnectionList />} />
-    <Route path="usage" element={<StorageUsageTab />} />
-    <Route path="providers" element={<StorageProvidersTab />} />
   </Route>
   <Route path="storage/connections/new" element={<ConnectionWizard />} />
   <Route path="storage/connections/:connectionId" element={<ConnectionDetail />} />
