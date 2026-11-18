@@ -122,7 +122,10 @@ public enum BackupFailureCause
     StorageAuthenticationFailed,
 
     /// <summary>An SFTP destination presented a host key that does not match the pinned fingerprint; no credentials were sent.</summary>
-    StorageHostKeyMismatch
+    StorageHostKeyMismatch,
+
+    /// <summary>The database server's TLS certificate could not be verified as trusted; the connection was refused before any login.</summary>
+    ServerCertificateUntrusted
 }
 
 /// <summary>

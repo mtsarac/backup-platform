@@ -31,7 +31,8 @@ public sealed class BackupFailureCodesTests
         BackupFailureCodes.EncryptionRequired,
         BackupFailureCodes.StagingInvalid,
         BackupFailureCodes.StorageAuthenticationFailed,
-        BackupFailureCodes.StorageHostKeyMismatch
+        BackupFailureCodes.StorageHostKeyMismatch,
+        BackupFailureCodes.ServerCertificateUntrusted
     ];
 
     public static TheoryData<string> RetryableAgentCodes => new(Retryable);
@@ -42,7 +43,8 @@ public sealed class BackupFailureCodesTests
     [
         "PreCheckFailed", "SqlBackupFailed", "VerificationFailed", "HashFailed", "StorageWriteFailed", "ReplicaVerificationFailed", "InternalError",
         "DatabaseUnavailable", "OperationTimedOut", "StorageUnavailable", "DatabaseNotFound", "InvalidConfiguration", "UnsupportedCapability",
-        "AuthenticationFailed", "PermissionDenied", "StagingInvalid", "QuotaExceeded", "EncryptionRequired", "SnapshotFailed", "StorageAuthenticationFailed", "StorageHostKeyMismatch"
+        "AuthenticationFailed", "PermissionDenied", "StagingInvalid", "QuotaExceeded", "EncryptionRequired", "SnapshotFailed", "StorageAuthenticationFailed", "StorageHostKeyMismatch",
+        "ServerCertificateUntrusted"
     ];
 
     private static IEnumerable<string> AllDeclaredCodes() => typeof(BackupFailureCodes)

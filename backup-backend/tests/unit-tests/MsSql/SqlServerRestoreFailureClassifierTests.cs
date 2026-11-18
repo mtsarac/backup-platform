@@ -241,6 +241,7 @@ public sealed class SqlServerRestoreFailureClassifierTests
     [InlineData(DatabaseFailureKind.InvalidConfiguration, SqlServerRestoreReasons.ConnectionSettingsInvalid, BackupFailureCause.InvalidConfiguration)]
     [InlineData(DatabaseFailureKind.Unreachable, SqlServerRestoreReasons.ServerUnavailable, BackupFailureCause.DatabaseUnavailable)]
     [InlineData(DatabaseFailureKind.Unexpected, SqlServerRestoreReasons.UnexpectedError, BackupFailureCause.Unclassified)]
+    [InlineData(DatabaseFailureKind.ServerCertificateUntrusted, SqlServerRestoreReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted)]
     public void AConnectionFailureKeepsItsUserSafeMessageAndMapsItsKindToAReasonAndCause(DatabaseFailureKind kind, string reason, BackupFailureCause cause)
     {
         var info = SqlServerRestoreFailureClassifier.FromConnection(new DatabaseProviderException(kind, "user safe text."));
@@ -256,6 +257,7 @@ public sealed class SqlServerRestoreFailureClassifierTests
     [InlineData(DatabaseFailureKind.PermissionDenied, SqlServerRestoreReasons.PermissionDenied)]
     [InlineData(DatabaseFailureKind.Unreachable, SqlServerRestoreReasons.ConnectionLost)]
     [InlineData(DatabaseFailureKind.Unexpected, SqlServerRestoreReasons.RestoreFailed)]
+    [InlineData(DatabaseFailureKind.ServerCertificateUntrusted, SqlServerRestoreReasons.ServerCertificateUntrusted)]
     public void AProviderExceptionWithoutAnEngineErrorFallsBackToItsKind(DatabaseFailureKind kind, string reason) =>
         Assert.Equal(reason, SqlServerRestoreFailureClassifier.Classify(SqlServerRestoreStatement.Restore, new DatabaseProviderException(kind, "m.")).ReasonCode);
 }

@@ -350,6 +350,7 @@ internal sealed partial class SqlServerFullBackupExecutor(ILogger logger, TimePr
         {
             DatabaseFailureKind.AuthenticationFailed => SqlServerBackupReasons.AuthenticationFailed,
             DatabaseFailureKind.PermissionDenied => SqlServerBackupReasons.PermissionDenied,
+            DatabaseFailureKind.ServerCertificateUntrusted => SqlServerBackupReasons.ServerCertificateUntrusted,
             _ => SqlServerBackupReasons.ServerUnavailable
         };
         state.Fail(BackupFailureKind.PreCheckFailed, BackupExecutionStage.Preparing, reason, exception.Message);

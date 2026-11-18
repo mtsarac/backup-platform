@@ -34,6 +34,8 @@ public static class BackupFailureCodes
     public const string StorageHostKeyMismatch = "StorageHostKeyMismatch";
     /// <summary>A job whose policy is Required produced (or reported) an artifact that is not encrypted. Never retried: another attempt would be given the same instruction.</summary>
     public const string EncryptionRequired = "EncryptionRequired";
+    /// <summary>The database server's TLS certificate could not be verified as trusted. Never retried: only the owner's decision to trust the server (or a fixed certificate) changes the outcome.</summary>
+    public const string ServerCertificateUntrusted = "ServerCertificateUntrusted";
 
     // Outcomes that are not agent-reported failures.
     public const string Cancelled = "Cancelled";
@@ -63,6 +65,7 @@ public static class BackupFailureCodes
         [StorageAuthenticationFailed] = false,
         [StorageHostKeyMismatch] = false,
         [EncryptionRequired] = false,
+        [ServerCertificateUntrusted] = false,
         [StagingInvalid] = false,
         // VSS and the volume managers fail transiently (another snapshot set in progress, a writer not answering); a new attempt takes a new snapshot.
         [SnapshotFailed] = true

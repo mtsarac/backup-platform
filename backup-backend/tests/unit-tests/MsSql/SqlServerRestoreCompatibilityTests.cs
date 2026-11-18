@@ -127,6 +127,7 @@ public sealed class SqlServerRestoreCompatibilityTests
     [InlineData(SqlServerRestoreReasons.ConnectionSettingsInvalid, BackupFailureCause.InvalidConfiguration)]
     [InlineData(SqlServerRestoreReasons.DatabaseNameInvalid, BackupFailureCause.InvalidConfiguration)]
     [InlineData(SqlServerRestoreReasons.AuthenticationFailed, BackupFailureCause.AuthenticationFailed)]
+    [InlineData(SqlServerRestoreReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted)]
     [InlineData(SqlServerRestoreReasons.PermissionDenied, BackupFailureCause.PermissionDenied)]
     [InlineData(SqlServerRestoreReasons.RestorePermissionDenied, BackupFailureCause.PermissionDenied)]
     [InlineData(RestoreReasonCodes.TargetDatabaseMissing, BackupFailureCause.DatabaseNotFound)]

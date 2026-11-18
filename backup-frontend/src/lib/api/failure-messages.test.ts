@@ -103,6 +103,15 @@ describe('three-part error description', () => {
     expect([login, hostKey]).not.toContain(failureMessage('AuthenticationFailed'))
   })
 
+  it('names an untrusted server certificate instead of showing the raw code, for backups and restores alike', () => {
+    for (const scope of [undefined, 'restore' as const]) {
+      const message = failureMessage('ServerCertificateUntrusted', scope)
+      expect(message).toMatch(/sertifikası doğrulanamadı/)
+      expect(message).not.toContain('ServerCertificateUntrusted')
+      expect(message).not.toBe(failureMessage('DatabaseUnavailable'))
+    }
+  })
+
   it('looks up a bare failure code in the scope too', () => {
     expect(failureMessage('NotClaimed', 'restore')).toContain('Hedef değiştirilmedi')
   })

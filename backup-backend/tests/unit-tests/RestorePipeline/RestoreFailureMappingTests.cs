@@ -38,6 +38,7 @@ public sealed class RestoreFailureMappingTests
     [InlineData(BackupFailureCause.PermissionDenied, "PermissionDenied")]
     [InlineData(BackupFailureCause.StagingInvalid, "StagingInvalid")]
     [InlineData(BackupFailureCause.StorageUnavailable, "StorageUnavailable")]
+    [InlineData(BackupFailureCause.ServerCertificateUntrusted, "ServerCertificateUntrusted")]
     [InlineData(BackupFailureCause.Unclassified, null)]
     public void EveryClassifiedCauseHasItsPlatformCodeAndAnUnclassifiedOneSaysNothing(BackupFailureCause cause, string? expected)
     {

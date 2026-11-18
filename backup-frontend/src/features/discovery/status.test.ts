@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canCreateJob, databaseAvailability, databaseSelectable, isScanActive, supportsDiscovery } from './status'
+import { canCreateJob, databaseAvailability, databaseSelectable, isScanActive, plainReasonText, supportsDiscovery } from './status'
 import { makeDatabase, makeInstance } from './test-fixtures'
 
 describe('canCreateJob', () => {
@@ -73,5 +73,11 @@ describe('databaseAvailability', () => {
   })
   it('is unavailable for every database of an unusable instance, without repeating the server reason per row', () => {
     expect(databaseAvailability(makeDatabase(), makeInstance({ access: 'CredentialsRequired' }))).toEqual({ kind: 'unavailable', reason: null })
+  })
+})
+describe('discovery reason wording', () => {
+  it('tells an untrusted server certificate from a failed login on a server that answered', () => {
+    expect(plainReasonText('server_certificate_untrusted')).toMatch(/sertifikası doğrulanamadı/)
+    expect(plainReasonText('server_certificate_untrusted')).not.toBe(plainReasonText('connection_failed'))
   })
 })
