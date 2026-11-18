@@ -24,7 +24,7 @@ export function DatabaseTable({ instance, selected = [], onChange }: { instance:
       return <StatusPill level={db.isSystem ? 'neutral' : 'attention'}>{tx("Yedeklenemez")}</StatusPill>
     } },
     { key: 'why', header: tx('Neden'), wrap: true, render: db => databaseAvailability(db, instance).reason ?? <span className="text-text-muted">—</span> },
-    { key: 'jobs', header: tx('Yedekleme işi'), wrap: true, render: db => db.jobs.length === 0 ? <span className="text-text-muted">—</span> : <ul className="space-y-0.5">{db.jobs.map(job => <li key={job.id}><Link className={linkClass} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}/edit`}>{job.name}</Link></li>)}</ul> },
+    { key: 'jobs', header: tx('Yedekleme işi'), wrap: true, render: db => db.jobs.length === 0 ? <span className="text-text-muted">—</span> : <ul className="space-y-0.5">{db.jobs.map(job => <li key={job.id}><Link className={linkClass} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}`}>{job.name}</Link></li>)}</ul> },
   ]
   return <DataList rows={instance.databases} columns={columns} keyExtractor={db => db.name} caption={tx("Veritabanları")} emptyMessage={tx("Bu sunucuda listelenmiş veritabanı yok.")} />
 }
