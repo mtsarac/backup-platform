@@ -46,6 +46,7 @@ beforeEach(() => {
 describe('upload bandwidth page', () => {
   it('shows tenant, agent and job limits in a friendly unit, Unlimited for missing ones, and never a raw bytes-per-second value', async () => {
     mount()
+    expect(screen.getByText('Acme A.Ş. · Yedeklerin ne kadar hızlı yükleneceğini sınırlayın.')).toBeInTheDocument()
     expect(await screen.findByTestId('tenant-limit')).toHaveTextContent('100 Mbit/sn')
     expect(screen.getByTestId('tenant-limit')).not.toHaveTextContent(rawRate)
     await openTab(/^Yedekleme bilgisayarları$/)

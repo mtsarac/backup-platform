@@ -9,6 +9,7 @@ export function EncryptionPage() {
   useLanguage()
   const { tenantId, tenant, canAdmin } = useTenant()
   return <div className="space-y-6">
+    <p className="text-body text-text-muted">{tx("Şifreli yedeklerinizin korumasını inceleyin.")}</p>
     {canAdmin
       ? <EncryptionContent key={tenantId} tenantId={tenantId} tenantName={tenant.name} />
       : <AccessDenied what={tx("Şifreleme korumasını yalnızca çalışma alanı sahibi veya yöneticisi görüntüleyebilir.")} />}
