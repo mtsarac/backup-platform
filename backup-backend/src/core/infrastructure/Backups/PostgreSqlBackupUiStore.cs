@@ -8,16 +8,16 @@ namespace BackupPlatform.Infrastructure.Backups;
 
 public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> options) : IBackupUiStore
 {
-    public async Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, bool includeArchived, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return await ReadJobsAsync(context, tenantId, null, now, cancellationToken);
+        return await ReadJobsAsync(context, tenantId, null, includeArchived, now, cancellationToken);
     }
 
     public async Task<BackupJobView?> GetJobAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return (await ReadJobsAsync(context, tenantId, jobId, now, cancellationToken)).SingleOrDefault();
+        return (await ReadJobsAsync(context, tenantId, jobId, true, now, cancellationToken)).SingleOrDefault();
     }
 
     public async Task<BackupRunPage> ListRunsAsync(TenantId tenantId, BackupRunQuery filter, CancellationToken cancellationToken)
@@ -42,7 +42,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
     public async Task<BackupDashboardView> GetDashboardAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var jobs = await ReadJobsAsync(context, tenantId, null, now, cancellationToken);
+        var jobs = await ReadJobsAsync(context, tenantId, null, false, now, cancellationToken);
         var runs = context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId);
         var since = now.AddHours(-24);
         var active = await runs.CountAsync(run => run.Status == BackupStatus.Pending || run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running || run.Status == BackupStatus.RetryPending || run.Status == BackupStatus.Paused, cancellationToken);
@@ -96,9 +96,9 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         return query;
     }
 
-    private static async Task<IReadOnlyList<BackupJobView>> ReadJobsAsync(PlatformDbContext context, TenantId tenantId, Guid? jobId, DateTimeOffset now, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<BackupJobView>> ReadJobsAsync(PlatformDbContext context, TenantId tenantId, Guid? jobId, bool includeArchived, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var rows = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && (jobId == null || job.Id == jobId))
+        var rows = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && (jobId == null || job.Id == jobId) && (includeArchived || job.ArchivedAt == null))
             .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new
             {
                 Job = job,
