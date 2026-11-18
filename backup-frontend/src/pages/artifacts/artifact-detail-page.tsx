@@ -150,7 +150,7 @@ function ArtifactDetail({ id }: { id: string }) {
         title={artifact?.databaseName ? tx("{0} · Yedek dosyası", { "0": artifact.databaseName }) : tx('Yedek dosyası')}
         meta={artifact && <>
           <StatusPill status={artifactState(artifact)} />
-          {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
+          {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs/${artifact.jobId}`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
           {artifact.runId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-runs/${artifact.runId}`}>{tx("Yedekleme denemesini aç")}</Link>}
         </>}
         actions={artifact && <>

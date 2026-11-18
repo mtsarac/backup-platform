@@ -96,7 +96,7 @@ export function DashboardPage() {
                 <Row label={tx("Etkin yedekleme denemeleri")} value={data.runs.active} /><Row label={tx("Etkin yedekleme işleri")} value={data.jobs.enabled} /><Row label={tx("Planlı yedekleme işleri")} value={data.jobs.scheduled} /><Row label={tx("Silinmeyi bekleyen yedek dosyaları")} value={data.artifacts.deletePending} />
               </dl></Section>
               <Section title={tx("Sonraki planlı yedeklemeler")}>{data.upcomingJobs.length
-                ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? formatDateTime(job.schedule.nextOccurrenceAt) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
+                ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? formatDateTime(job.schedule.nextOccurrenceAt) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
                 : <p className="text-sm text-text-muted">{tx("Etkin zamanlama yok.")}</p>}</Section>
             </div>
             </Disclosure>

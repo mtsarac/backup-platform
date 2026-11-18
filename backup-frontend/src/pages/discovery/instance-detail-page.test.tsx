@@ -81,7 +81,7 @@ describe('instance detail page', () => {
     expect(screen.getByLabelText('Covered seç')).toBeDisabled()
     expect(screen.getByText('Sistem veritabanı; yedeklenmez.')).toBeInTheDocument()
     expect(screen.getByText('Zaten bir yedekleme işi koruyor.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Covered job' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-9/edit')
+    expect(screen.getByRole('link', { name: 'Covered job' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-9')
     expect(screen.getByRole('button', { name: /Yedekleme işi oluştur/ })).toBeDisabled()
     fireEvent.click(screen.getByLabelText('ERP seç'))
     fireEvent.click(screen.getByLabelText('CRM seç'))

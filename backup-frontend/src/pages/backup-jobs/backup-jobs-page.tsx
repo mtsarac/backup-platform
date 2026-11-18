@@ -1,111 +1,116 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
-import { Select, TextInput } from '@/components/ui/text-input'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Menu } from '@base-ui/react/menu'
-import { Plus, DatabaseBackup } from 'lucide-react'
-import { DataList } from '@/components/data/data-list'
-import type { Column } from '@/components/data/data-list'
-import { Pagination } from '@/components/data/pagination'
+import { ArrowLeft, DatabaseBackup, Plus } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
-import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Card } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters } from '@/components/ui/filters'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
-import { useTenant } from '@/features/tenancy/use-tenant'
-import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
-import type { BackupJob } from '@/features/backup-jobs/types'
-import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { linkClass } from '@/components/ui/form-styles'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { Select, TextInput } from '@/components/ui/text-input'
+import { useAgents } from '@/features/agents/hooks'
+import { archiveBackupJob, getBackupJobHealth, getHealthTimeline } from '@/features/backup-jobs/api'
+import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
+import { jobStatus, jobStatusLabel, jobStatusLevel } from '@/features/backup-jobs/job-status'
+import type { BackupJob } from '@/features/backup-jobs/types'
+import { useBackup, useBackups } from '@/features/backups/hooks'
+import { isActiveRun } from '@/features/backups/presentation'
+import { useListParams } from '@/features/platform/use-list-params'
+import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
+import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 
-const pageSize = LIST_PAGE_SIZE
-const [runHint, disableHint, enableHint] = ['job-run-hint', 'job-disable-hint', 'job-enable-hint']
+function JobDetail({ job }: { job: BackupJob }) {
+  const { tenantId, canOperate, canAdmin } = useTenant()
+  const navigate = useNavigate()
+  const client = useQueryClient()
+  const base = `/tenants/${tenantId}`
+  const [confirm, setConfirm] = useState(false)
+  const [startedRun, setStartedRun] = useState<string>()
+  const [actionError, setActionError] = useState<unknown>(null)
+  const health = useQuery({ queryKey: ['tenant', tenantId, 'backup-jobs', job.id, 'health'], queryFn: ({ signal }) => getBackupJobHealth(tenantId, job.id, signal) })
+  const timeline = useQuery({ queryKey: ['tenant', tenantId, 'backup-jobs', 'health-timeline'], queryFn: ({ signal }) => getHealthTimeline(tenantId, signal) })
+  const agents = useAgents(tenantId)
+  const successes = useBackups({ status: 'Succeeded', jobId: job.id, page: 1, pageSize: 1 })
+  const active = Boolean(job.lastRun && isActiveRun(job.lastRun.status))
+  const lastRun = useBackup(active ? job.lastRun!.id : '')
+  const run = useRunBackupJob()
+  const toggle = useToggleBackupJob()
+  const archive = useMutation({ mutationFn: () => archiveBackupJob(tenantId, job.id), onSuccess: async () => {
+    await Promise.all(['backup-jobs', 'dashboard', 'backup-runs'].map(key => client.invalidateQueries({ queryKey: ['tenant', tenantId, key] })))
+    navigate(`${base}/backup-jobs`)
+  } })
+  const days = timeline.data?.jobs.find(item => item.jobId === job.id)?.days ?? []
+  const offline = agents.data?.find(agent => agent.agentId === job.agentId)?.connectivity === 'offline'
+  const failedRecently = days.some(day => day.status === 'Failed')
+  const hasSucceeded = (successes.data?.totalCount ?? 0) > 0
+  const status = health.data && timeline.data && successes.data && agents.data
+    ? jobStatus({ job, health: health.data, failedRecently, hasSucceeded, offline, running: active }) : undefined
+  const reasons = health.data ? Object.values(health.data.factors).map(factor => factor.reason) : []
+  const reason = status !== 'attention' ? null
+    : offline ? tx('Yedekleme bilgisayarı çevrimdışı.')
+    : !hasSucceeded && failedRecently ? tx('İlk yedek alınamadı.')
+    : reasons.includes('backup_stale') || reasons.includes('backup_missing') ? tx('Son başarılı yedek, planlanan periyodu aştı.')
+    : reasons.includes('capacity_critical') ? tx('Depolama alanı doluyor')
+    : reasons.includes('no_verified_replica') || reasons.includes('replicas_missing') ? tx('Kullanılabilir doğrulanmış kopya yok.')
+    : reasons.includes('restore_failed') ? tx('Son izole geri yükleme testi başarısız oldu.') : null
+  const overlap = actionError instanceof ApiError && actionError.status === 409 && actionError.activeRunId
+  return <section aria-label={tx('İş ayrıntıları')} className="min-w-0 space-y-5 rounded-lg border border-border bg-surface p-4">
+    <Link className={`inline-flex items-center gap-1 text-sm md:hidden ${linkClass}`} to={`${base}/backup-jobs`}><ArrowLeft aria-hidden="true" className="size-4" />{tx('İşlere dön')}</Link>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="text-lg font-semibold text-text-heading">{job.name}</h2><p className="text-sm text-text-muted">{job.agentName} · {job.configuration.database}</p></div>
+      {canAdmin && <Menu.Root><Menu.Trigger className={buttonVariants({ variant: 'outline' })}>{tx('Diğer')}</Menu.Trigger><Menu.Portal><Menu.Positioner sideOffset={4} className="z-50"><Menu.Popup className="rounded-lg border border-border bg-surface-raised p-1 shadow-overlay"><Menu.Item className="cursor-pointer rounded-sm px-3 py-2 text-sm hover:bg-surface-2" onClick={() => setConfirm(true)}>{tx('Korunan veriyi kaldır…')}</Menu.Item></Menu.Popup></Menu.Positioner></Menu.Portal></Menu.Root>}
+    </div>
+    <div role="status" className="space-y-1">
+      {status && <p className="font-medium"><StatusPill level={jobStatusLevel[status]}>{jobStatusLabel(status, lastRun.data?.attempts.at(-1)?.progressPercent)}</StatusPill></p>}
+      {reason && <p className="text-sm text-text-muted">{reason}</p>}
+    </div>
+    {(health.isError || timeline.isError || agents.isError || successes.isError) && <ErrorNotice title={tx('Sağlık bilgisi alınamadı.')} error={health.error ?? timeline.error ?? agents.error ?? successes.error} />}
+    {actionError !== null && (overlap
+      ? <ErrorNotice title={tx('İşlem tamamlanamadı')} what={tx('Başka bir yedekleme denemesi sürdüğü için yenisi başlatılmadı.')} dataImpact={tx('Süren deneme kesintisiz devam ediyor; yedekleriniz değişmedi.')} action={tx('Süren denemenin bitmesini bekleyin.')}
+        control={<Link className={linkClass} to={`${base}/backup-runs/${overlap}`}>{tx('Süren denemeyi aç')}</Link>} />
+      : <ErrorNotice title={tx('İşlem tamamlanamadı')} error={actionError} />)}
+    {startedRun && <Notice tone="success" title={tx('Yedekleme denemesi başlatıldı')}><Link className={linkClass} to={`${base}/backup-runs/${startedRun}`}>{tx('Denemeyi aç')}</Link></Notice>}
+    {canOperate && <div className="flex flex-wrap gap-2">
+      <Button disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx('Şimdi yedekle')}</Button>
+      <Button variant="outline" disabled={toggle.isPending} onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}>{job.enabled ? tx('Zamanlamayı durdur') : tx('Zamanlamayı sürdür')}</Button>
+      {offline && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/agents/${job.agentId}`}>{tx('Bilgisayarı kontrol et')}</Link>}
+      {!offline && reasons.includes('capacity_critical') && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/storage`}>{tx('Depolamayı yönet')}</Link>}
+    </div>}
+    <Link className={`inline-block text-sm ${linkClass}`} to={`${base}/backup-runs?jobId=${encodeURIComponent(job.id)}`}>{tx('Tüm denemeler')}</Link>
+    <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title={tx('Korunan veriyi kaldır…')} name={job.name} pending={archive.isPending} error={archive.error} confirmLabel={tx('Korunan veriyi kaldır')} onConfirm={() => archive.mutate()} consequence={{ what: tx('Yedekleriniz silinmez; bu iş artık çalışmaz ve listede görünmez.'), who: job.name, reversible: tx('Bu işlem geri alınamaz.') }} />
+  </section>
+}
 
 export function BackupJobsPage() {
   useLanguage()
+  const { id } = useParams()
   const { tenantId, canOperate } = useTenant()
   const jobs = useBackupJobs()
-  const run = useRunBackupJob()
-  const toggle = useToggleBackupJob()
-  const { page, get, update } = useListParams()
+  const { get, update } = useListParams()
   const search = get('search')
-  const state = oneOf(get('state'), ['enabled', 'disabled'])
-  const [actionError, setActionError] = useState<unknown>(null)
-  const [startedRun, setStartedRun] = useState<string>()
+  const state = get('state')
   const base = `/tenants/${tenantId}`
   const all = jobs.data ?? []
-  const newJob = <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx("Yeni iş")}</Link>
-  const columns: Column<BackupJob>[] = [
-    { key: 'name', card: 'title', header: tx('İş adı'), wrap: true, render: job => <Link to={`${base}/backup-jobs/${job.id}/edit`} className={`block font-medium ${linkClass}`}>{job.name}</Link> },
-    { key: 'status', card: 'status', header: tx('Durum'), render: job => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
-    { key: 'database', header: tx('Veritabanı'), wrap: true, render: job => job.configuration.database },
-    { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: job => job.agentName || tx('Yedekleme bilgisayarı bulunamadı') },
-    { key: 'last', header: tx('Son sonuç'), wrap: true, render: job => job.lastRun ? <div className="space-y-1">
-      <Link to={`${base}/backup-runs/${job.lastRun.id}`} className="block space-y-1 text-primary hover:underline"><StatusPill status={job.lastRun.status} /><span className="block text-sm"><RelativeTime value={job.lastRun.createdAt} /></span></Link>
-      <Link to={`${base}/backup-runs?jobId=${encodeURIComponent(job.id)}`} className={`block text-sm ${linkClass}`}>{tx("Tüm denemeler")}</Link>
-    </div> : <span className="text-text-muted">{tx("Henüz çalıştırılmadı")}</span> },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: job => canOperate ? <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" aria-describedby={runHint} disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx("Şimdi çalıştır")}</Button>
-      <Menu.Root>
-        <Menu.Trigger
-          aria-label={tx("Diğer işlemler: {0}", { "0": job.name })}
-          className="flex size-control items-center justify-center rounded-lg border border-border bg-surface text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="text-xs" aria-hidden="true">▾</span>
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-            <Menu.Popup className="min-w-36 rounded-lg border border-border bg-surface-raised p-1 shadow-overlay focus-visible:outline-none">
-              <Menu.Item
-                render={<Link to={`${base}/backup-jobs/${job.id}/edit`} />}
-                className="block w-full cursor-pointer rounded-sm px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
-              >
-                {tx("Düzenle")}
-              </Menu.Item>
-              <Menu.Item
-                disabled={toggle.isPending}
-                onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}
-                aria-describedby={job.enabled ? disableHint : enableHint}
-                className="block w-full cursor-pointer rounded-sm px-2.5 py-1.5 text-left text-sm text-text hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none disabled:opacity-50"
-              >
-                {job.enabled ? tx("Devre dışı bırak") : tx("Etkinleştir")}
-              </Menu.Item>
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.Root>
-    </div> : <span className="text-text-muted">{tx("Yöneticinize danışın")}</span> },
-  ]
-  const overlap = actionError instanceof ApiError && actionError.status === 409 && actionError.activeRunId
+  const selected = all.find(job => job.id === id)
   const filtered = all.filter(job => (!state || job.enabled === (state === 'enabled')) && `${job.name} ${job.configuration.database} ${job.agentName ?? ''}`.toLocaleLowerCase(currentLocale()).includes(search.toLocaleLowerCase(currentLocale())))
-  const current = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)))
-  const filtering = search !== '' || state !== undefined
-  return <div className="space-y-6">
-    {actionError !== null && (overlap
-      ? <ErrorNotice title={tx("İşlem tamamlanamadı")} what={tx("Başka bir yedekleme denemesi sürdüğü için yenisi başlatılmadı.")} dataImpact={tx("Süren deneme kesintisiz devam ediyor; yedekleriniz değişmedi.")} action={tx("Süren denemenin bitmesini bekleyin.")}
-        control={<Link className={linkClass} to={`${base}/backup-runs/${overlap}`}>{tx("Süren denemeyi aç")}</Link>} />
-      : <ErrorNotice title={tx("İşlem tamamlanamadı")} error={actionError} />)}
-    {startedRun && <Notice tone="success" title={tx("Yedekleme denemesi başlatıldı")}>{tx("Yedekleme denemesi kuyruğa alındı.")}{' '}<Link className={linkClass} to={`${base}/backup-runs/${startedRun}`}>{tx("Denemeyi aç")}</Link></Notice>}
-    <QueryState isPending={jobs.isPending} error={jobs.error}>
-      {all.length === 0 ? <Card padding="none"><EmptyState icon={DatabaseBackup} message={tx("Henüz yedekleme işi oluşturulmadı.")} canAct={canOperate} action={<Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx("İlk yedeğinizi oluşturun")}</Link>} /></Card> : <div className="space-y-4">
-        {canOperate && <div className="flex justify-end">{newJob}</div>}
-        <div className="sr-only">
-          <p id={runHint}>{tx("Şimdi çalıştır: yedekleme hemen başlar; zamanlanmış çalışmalar etkilenmez.")}</p>
-          <p id={disableHint}>{tx("Devre dışı bırak: zamanlanmış yedekleme durur, mevcut yedekler silinmez.")}</p>
-          <p id={enableHint}>{tx("Etkinleştir: zamanlanmış yedekleme yeniden başlar.")}</p>
+  const filtering = Boolean(search || state)
+  const create = <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx('Yedekleme işi oluştur')}</Link>
+  return <QueryState isPending={jobs.isPending} error={jobs.error}>
+    {all.length === 0 ? <EmptyState icon={DatabaseBackup} message={tx('Henüz yedekleme işi oluşturulmadı.')} canAct={canOperate} action={create} />
+      : <div className="grid gap-4 md:grid-cols-[minmax(14rem,1fr)_minmax(0,2fr)]">
+        <div className={id ? 'hidden space-y-3 md:block' : 'space-y-3'}>
+          {canOperate && create}
+          <TextInput type="search" value={search} aria-label={tx('İş, yedekleme bilgisayarı veya veritabanı ara')} onChange={event => update({ search: event.target.value }, { replace: true })} />
+          <Select value={state || 'all'} aria-label={tx('Durum')} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx('Tümü')}</option><option value="enabled">{tx('Etkin')}</option><option value="disabled">{tx('Devre dışı')}</option></Select>
+          {filtered.length ? <ul className="divide-y divide-border rounded-lg border border-border bg-surface">{filtered.map(job => <li key={job.id}><Link aria-current={job.id === id ? 'page' : undefined} className="block px-4 py-3 hover:bg-surface-2 aria-[current=page]:bg-surface-2" to={`${base}/backup-jobs/${encodeURIComponent(job.id)}`}><span className="block font-medium">{job.name}</span><span className="text-sm text-text-muted">{job.agentName} · {job.configuration.database}</span></Link></li>)}</ul>
+            : <EmptyState message={tx('Aramanızla eşleşen iş yok.')} onClearFilters={filtering ? () => update({ search: '', state: '' }) : undefined} />}
         </div>
-        <Filters label={tx("Yedekleme işi filtreleri")} onClear={filtering && filtered.length > 0 ? () => update({ search: '', state: '' }) : undefined}>
-          <FilterField label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")}><TextInput type="search" value={search} aria-label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")} onChange={event => update({ search: event.target.value }, { replace: true })} /></FilterField>
-          <FilterField label={tx("Durum")}><Select value={state ?? 'all'} aria-label={tx("Durum")} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="enabled">{tx("Etkin")}</option><option value="disabled">{tx("Devre dışı")}</option></Select></FilterField>
-        </Filters>
-        <DataList rows={filtered.slice((current - 1) * pageSize, current * pageSize)} columns={columns} keyExtractor={job => job.id} emptyMessage={tx("Aramanızla eşleşen iş yok.")} onClearFilters={filtering ? () => update({ search: '', state: '' }) : undefined} />
-        {filtered.length > pageSize && <Pagination label={tx("Yedekleme işi sayfaları")} page={current} pageSize={pageSize} totalCount={filtered.length} onPageChange={next => update({ page: next })} />}
+        {selected ? <JobDetail key={selected.id} job={selected} /> : id ? <p>{tx('Yedekleme işi bulunamadı.')}</p> : <p className="hidden text-sm text-text-muted md:block">{tx('Ayrıntıları görmek için bir iş seçin.')}</p>}
       </div>}
-    </QueryState>
-  </div>
+  </QueryState>
 }

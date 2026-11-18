@@ -23,7 +23,7 @@ function verdict(state: BackupHealthState): { level: StatusLevel; title: string;
 function RecommendationList({ items, base, label = tx("Öneriler") }: { items: Recommendation[]; base: string; label?: string }) {
   return items.length > 0 && <ul aria-label={label} className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
     {items.map(item => <li key={item.jobId}>
-      <Link to={`${base}/backup-jobs/${item.jobId}/edit`} className="flex min-h-control items-center justify-between gap-3 px-4 py-2.5 text-body hover:bg-surface-2">
+      <Link to={`${base}/backup-jobs/${item.jobId}`} className="flex min-h-control items-center justify-between gap-3 px-4 py-2.5 text-body hover:bg-surface-2">
         <span className="min-w-0 break-words"><span className="font-medium text-text-heading">{item.jobName}</span>: {item.message}</span>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-text-muted" />
       </Link>
