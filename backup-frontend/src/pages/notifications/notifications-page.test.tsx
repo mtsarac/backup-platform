@@ -10,7 +10,6 @@ import * as api from '@/features/notifications/api'
 import type { NotificationChannel, NotificationDelivery, NotificationPolicy } from '@/features/notifications/types'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { ApiError } from '@/lib/api/client'
-import { tx } from '@/lib/i18n'
 import { NotificationsPage } from './notifications-page'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Acme' }, canAdmin: true, canOperate: true }))
@@ -114,74 +113,25 @@ describe('URL state', () => {
 })
 
 describe('policy', () => {
-  it('offers no SMS channel kind while the SMS feature is off', async () => {
+  it('saves fixed visible notification types and thresholds', async () => {
     setFeatureFlags({})
-    mount()
-    await screen.findByLabelText('Bildirimler etkin')
-    expect(screen.getByLabelText(tx('Webhook'))).toBeInTheDocument()
-    expect(screen.queryByLabelText('SMS')).not.toBeInTheDocument()
-  })
-
-  it('offers the size-anomaly event only while the sizeAnomaly feature is on', async () => {
-    setFeatureFlags({})
-    const { unmount } = mount()
-    await screen.findByLabelText('Bildirimler etkin')
-    expect(screen.queryByLabelText('Boyut Anomalisi')).not.toBeInTheDocument()
-    unmount()
-    setFeatureFlags({ sizeAnomaly: true })
-    mount()
-    expect(await screen.findByLabelText('Boyut Anomalisi')).toBeInTheDocument()
-  })
-
-  it('warns when a selected email/sms transport is unavailable', async () => {
-    setFeatureFlags({ sms: true })
-    const user = userEvent.setup()
-    mount()
-    await screen.findByLabelText('Bildirimler etkin')
-    expect(screen.queryByText(/aktarımı platform tarafından yapılandırılmamış/)).not.toBeInTheDocument()
-    await user.click(screen.getByLabelText('SMS'))
-    expect(screen.getByText(/SMS aktarımı platform tarafından yapılandırılmamış/)).toBeInTheDocument()
-  })
-
-  it('keeps numeric thresholds only in the collapsed edit form, without a second read-only copy', async () => {
-    const user = userEvent.setup()
-    mount()
-    await screen.findByLabelText('Bildirimler etkin')
-    const details = screen.getByText('Teknik ayrıntılar').closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    await user.click(screen.getByText('Teknik ayrıntılar'))
-    expect(within(details).getByRole('textbox', { name: /Hatırlatma aralığı/ })).toHaveValue('24')
-    expect(within(details).queryByRole('button', { name: /Kopyala:.*Hatırlatma/ })).not.toBeInTheDocument()
-  })
-
-  it('blocks out-of-range thresholds with a field error and no request', async () => {
-    const user = userEvent.setup()
-    mount()
-    await user.click(await screen.findByText('Teknik ayrıntılar'))
-    const stale = screen.getByRole('textbox', { name: /(?:güncel değil|güncelliğini yitirme) eşiği/i })
-    await user.clear(stale)
-    await user.type(stale, '721')
-    await user.click(screen.getByText('Teknik ayrıntılar'))
-    await user.click(screen.getByRole('button', { name: 'Politikayı kaydet' }))
-    expect(screen.getByText('1 ile 720 arasında bir tam sayı girin.')).toBeVisible()
-    expect(api.updatePolicy).not.toHaveBeenCalled()
-  })
-
-  it('saves the whole policy body', async () => {
-    vi.mocked(api.updatePolicy).mockResolvedValue(policy({ enabled: true, reminderIntervalHours: 0, updatedAt: '2026-10-14T10:00:00Z' }))
+    vi.mocked(api.updatePolicy).mockResolvedValue(policy())
     const user = userEvent.setup()
     mount()
     await user.click(await screen.findByLabelText('Bildirimler etkin'))
-    await user.click(screen.getByText('Teknik ayrıntılar'))
-    const reminder = screen.getByRole('textbox', { name: /Hatırlatma aralığı/ })
-    await user.clear(reminder)
-    await user.type(reminder, '0')
     await user.click(screen.getByRole('button', { name: 'Politikayı kaydet' }))
     await waitFor(() => expect(api.updatePolicy).toHaveBeenCalledWith('tenant-a', {
-      enabled: true, eventTypes: ['backup_failed', 'agent_offline'], minimumSeverity: 'warning', channelKinds: ['email', 'webhook'], recoveryNotifications: true,
-      staleAfterHours: 48, agentOfflineAfterMinutes: 15, reminderIntervalHours: 0, maxNotificationsPerHour: 30,
+      enabled: true, eventTypes: ['backup_failed', 'backup_stale', 'agent_offline', 'quota_critical', 'replica_degraded', 'storage_capacity_critical'],
+      minimumSeverity: 'warning', channelKinds: ['email', 'webhook'], recoveryNotifications: true,
+      staleAfterHours: 48, agentOfflineAfterMinutes: 15, reminderIntervalHours: 24, maxNotificationsPerHour: 30,
     }))
-    expect(await screen.findByText('Politika kaydedildi.')).toBeInTheDocument()
+  })
+  it('shows only the enabled and recovery switches', async () => {
+    mount()
+    await screen.findByLabelText('Bildirimler etkin')
+    expect(screen.getByLabelText('Düzelme bildirimleri gönder')).toBeInTheDocument()
+    for (const hidden of ['SMS', 'Boyut Anomalisi', /güncel değil eşiği/, /Asgari önem/, /Hatırlatma aralığı/]) expect(screen.queryByLabelText(hidden)).not.toBeInTheDocument()
+    expect(screen.queryByText('Teknik ayrıntılar')).not.toBeInTheDocument()
   })
 })
 
@@ -255,8 +205,7 @@ describe('channels', () => {
     expect(dialog.getByText(/JSON/)).toBeInTheDocument()
     await user.type(dialog.getByLabelText('Ad'), 'Yeni')
     await user.type(dialog.getByLabelText("Web kancası adresi"), 'https://hooks.example.com/abc')
-    await user.selectOptions(dialog.getByLabelText('Kimlik doğrulama'), 'hmac')
-    const input = dialog.getByLabelText(/HMAC imza anahtarı/)
+    const input = dialog.getByLabelText('Gizli anahtar')
     expect(input).toHaveAttribute('type', 'password')
     await user.type(input, SECRET)
     await user.click(dialog.getByRole('button', { name: 'Kanal ekle' }))
@@ -267,40 +216,29 @@ describe('channels', () => {
     expect(JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))).not.toContain(SECRET)
   })
 
-  it('sets a webhook secret from a password input that is cleared on submit', async () => {
+  it('sets a webhook secret from the edit dialog through a password input cleared on submit', async () => {
+    vi.mocked(api.updateChannel).mockResolvedValue(channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', authentication: 'bearer', hasSecret: true }))
     vi.mocked(api.setChannelSecret).mockResolvedValue(channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', authentication: 'bearer', hasSecret: true }))
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
-    await openChannelDetails(user, 'Pager')
-    await user.click(await screen.findByRole('button', { name: /Pager kanalı: (?:secret|gizli anahtar) ayarla/ }))
-    const secretDialog = await screen.findByRole('dialog', { name: /Pager: .* ayarla/ })
-    const dialog = within(secretDialog)
-    const input = dialog.getByLabelText("Yeni gizli anahtar") as HTMLInputElement
+    await user.click(await screen.findByRole('button', { name: 'Pager kanalı: düzenle' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.queryByLabelText('Kimlik doğrulama')).not.toBeInTheDocument()
+    const input = dialog.getByLabelText('Gizli anahtar') as HTMLInputElement
     expect(input.type).toBe('password')
     await user.type(input, SECRET)
-    await user.click(dialog.getByRole('button', { name: "Gizli anahtarı kaydet" }))
+    await user.click(dialog.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(api.setChannelSecret).toHaveBeenCalledWith('tenant-a', 'c-hook', SECRET))
-    await waitFor(() => expect(secretDialog).not.toBeInTheDocument())
     expect(document.body.innerHTML).not.toContain(SECRET)
   })
 
-  it('clears a submitted secret after failure and requires fresh entry before retry', async () => {
-    vi.mocked(api.setChannelSecret).mockRejectedValue(new ApiError(503, { error: 'service_unavailable' }))
+  it('offers no separate new-secret action', async () => {
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
     await openChannelDetails(user, 'Pager')
-    await user.click(screen.getByRole('button', { name: /Pager kanalı: gizli anahtar ayarla/ }))
-    const dialog = within(await screen.findByRole('dialog'))
-    const input = dialog.getByLabelText('Yeni gizli anahtar')
-    await user.type(input, SECRET)
-    await user.click(dialog.getByRole('button', { name: 'Gizli anahtarı kaydet' }))
-    expect(await dialog.findByRole('alert')).toBeInTheDocument()
-    expect(input).toHaveValue('')
-    expect(dialog.getByRole('button', { name: 'Gizli anahtarı kaydet' })).toBeDisabled()
-    expect(document.body.innerHTML).not.toContain(SECRET)
-    await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map(mutation => mutation.state.variables))).not.toContain(SECRET))
+    expect(screen.queryByRole('button', { name: /secret ayarla|gizli anahtar ayarla/i })).not.toBeInTheDocument()
   })
 
   it('does not retain a new channel secret after a failed creation', async () => {
@@ -313,8 +251,7 @@ describe('channels', () => {
     await user.selectOptions(dialog.getByLabelText('Tür'), 'webhook')
     await user.type(dialog.getByLabelText('Ad'), 'Yeni')
     await user.type(dialog.getByLabelText('Web kancası adresi'), 'https://hooks.example.com/abc')
-    await user.selectOptions(dialog.getByLabelText('Kimlik doğrulama'), 'hmac')
-    const input = dialog.getByLabelText(/HMAC imza anahtarı/)
+    const input = dialog.getByLabelText('Gizli anahtar')
     await user.type(input, SECRET)
     await user.click(dialog.getByRole('button', { name: 'Kanal ekle' }))
     expect(await dialog.findByRole('alert')).toBeInTheDocument()
@@ -350,24 +287,6 @@ describe('channels', () => {
     await user.type(deletion.getByRole('textbox'), 'Ops mailbox')
     await user.click(confirm)
     await waitFor(() => expect(api.deleteChannel).toHaveBeenCalledWith('tenant-a', 'c-mail'))
-  })
-
-  it('requires a consequence confirmation before saving webhook authentication off', async () => {
-    vi.mocked(api.updateChannel).mockResolvedValue(channel({ id: 'c-hook', kind: 'webhook', authentication: 'none', hasSecret: false }))
-    const user = userEvent.setup()
-    mount()
-    await openTab(user, 'Kanallar')
-    await user.click(await screen.findByRole('button', { name: 'Pager kanalı: düzenle' }))
-    await user.selectOptions(screen.getByLabelText('Kimlik doğrulama'), 'none')
-    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
-    const confirmation = within(await screen.findByRole('dialog', { name: /Kimlik doğrulama kapatılsın mı/ }))
-    expect(confirmation.getByText(/kayıtlı gizli anahtarı siler/)).toBeInTheDocument()
-    expect(api.updateChannel).not.toHaveBeenCalled()
-    await user.click(confirmation.getByRole('button', { name: 'Vazgeç' }))
-    expect(api.updateChannel).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
-    await user.click(within(await screen.findByRole('dialog', { name: /Kimlik doğrulama kapatılsın mı/ })).getByRole('button', { name: 'Kimlik doğrulamayı kapat' }))
-    await waitFor(() => expect(api.updateChannel).toHaveBeenCalledWith('tenant-a', 'c-hook', { authentication: 'none' }))
   })
 
   it('toggles enablement', async () => {
