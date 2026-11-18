@@ -134,7 +134,7 @@ describe('run detail controls and attention', () => {
     state.query.data = failed
     state.retry.mutateAsync.mockResolvedValue(makeRun({ status: 'Pending' }))
     renderDetail()
-    expect(within(screen.getByRole('alert')).getByText(/Yeniden dene/)).toBeInTheDocument()
+    expect(within(screen.getByRole('alert')).getByRole('button', { name: 'Bilgileri düzelt' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
     await screen.findByText('Yeni deneme sıraya alındı.')
     expect(state.retry.mutateAsync).toHaveBeenCalledTimes(1)
@@ -199,7 +199,7 @@ describe('run detail controls and attention', () => {
     const alert = within(screen.getByRole('alert'))
     expect(alert.getByText('İşlem için gerekli izinler bulunmuyor.')).toBeInTheDocument()
     expect(alert.getByText(/Verileriniz için:/)).toBeInTheDocument()
-    expect(alert.getByText(/Ne yapmalı:/).closest('p')).toHaveTextContent(/Yeniden dene/)
+    expect(alert.getByText(/Ne yapmalı:/).closest('p')).toHaveTextContent('Bağlantı bilgilerini kontrol edip düzeltin.')
     expect(screen.queryByText('PermissionDenied')).not.toBeInTheDocument()
     await userEvent.click(alert.getByRole('button', { name: 'Teknik ayrıntılar' }))
     expect(within(await screen.findByRole('dialog')).getByText('PermissionDenied')).toBeInTheDocument()

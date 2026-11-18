@@ -25,7 +25,7 @@ describe('QueryState', () => {
   it('offers one retry action that reloads the failed data', async () => {
     const fetcher = vi.fn().mockRejectedValueOnce(new ApiError(500)).mockResolvedValueOnce('Yedekler')
     render(<QueryClientProvider client={new QueryClient()}><Loader fetcher={fetcher} /></QueryClientProvider>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Tekrar dene' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Yeniden dene' }))
     expect(await screen.findByText('Yedekler')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

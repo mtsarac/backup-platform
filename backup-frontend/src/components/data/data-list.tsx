@@ -25,7 +25,9 @@ interface DataListProps<T> {
   rows: readonly T[]
   columns: readonly Column<T>[]
   keyExtractor: (row: T) => string
-  emptyMessage?: string
+  /** Why the list is empty and what to do about it: one sentence, written for the screen. There is no generic default. */
+  emptyMessage: string
+  onClearFilters?: () => void
   className?: string
   /** Names the list for assistive tech (the table caption, the card list label). */
   caption?: string
@@ -115,7 +117,7 @@ function Table<T>({ rows, columns, keyExtractor, className, caption }: ListProps
  * One list for every page: a table on large screens, cards below them so phones never scroll sideways.
  * Cards show the title, the status and a few key fields; mark the rest of a row `card: 'hidden'`.
  */
-export function DataList<T>({ rows, columns, keyExtractor, emptyMessage = tx('Kayıt bulunamadı.'), className, caption, search }: DataListProps<T>) {
+export function DataList<T>({ rows, columns, keyExtractor, emptyMessage, onClearFilters, className, caption, search }: DataListProps<T>) {
   useLanguage()
   const large = useLargeScreen()
   const [query, setQuery] = useState('')
@@ -133,7 +135,7 @@ export function DataList<T>({ rows, columns, keyExtractor, emptyMessage = tx('Ka
         </Filters>
       )}
       {visible.length === 0
-        ? <div className={cn(cardClass, className)}><EmptyState message={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} /></div>
+        ? <div className={cn(cardClass, className)}><EmptyState message={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} onClearFilters={needle ? () => { setQuery(''); setPage(1) } : onClearFilters} /></div>
         : <List rows={visible} columns={columns} keyExtractor={keyExtractor} className={className} caption={caption} />}
       {search && matches.length > PAGE_SIZE && <Pagination label={tx("{0} sayfaları", { "0": search.label })} page={current} pageSize={PAGE_SIZE} totalCount={matches.length} onPageChange={setPage} />}
     </div>

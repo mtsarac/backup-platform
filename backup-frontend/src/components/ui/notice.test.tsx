@@ -14,12 +14,15 @@ describe('ErrorNotice', () => {
   })
 
   it('keeps the technical code collapsed and copyable', async () => {
-    render(<ErrorNotice error={new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded' })} />)
+    render(<ErrorNotice error={new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded', message: 'Storage is full.' })} />)
     expect(screen.queryByText('quota_exceeded')).toBeNull()
+    expect(screen.queryByText('Storage is full.')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('quota_exceeded')).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
+    expect(within(dialog).getByText('Storage is full.')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Kopyala: Sunucu mesajı' })).toBeInTheDocument()
   })
 
   it('accepts the three parts directly for failures that are not API errors', () => {
@@ -33,8 +36,45 @@ describe('ErrorNotice', () => {
   it('offers the one action as a button when the caller can retry', async () => {
     const retry = vi.fn()
     render(<ErrorNotice error={new Error('offline')} onRetry={retry} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Tekrar dene' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
     expect(retry).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    ['DatabaseUnavailable', undefined, 'Bilgisayarı kontrol et'],
+    ['AuthenticationFailed', undefined, 'Bilgileri düzelt'],
+    ['StorageHostKeyMismatch', undefined, 'Bilgileri düzelt'],
+    ['QuotaExceeded', undefined, 'Depolamayı yönet'],
+    ['ScheduleGraceExpired', undefined, 'Şimdi yedekle'],
+    ['SqlRestoreFailed', 'restore', 'Yeniden dene'],
+  ] as const)('offers the one action of its class for %s and nothing else', async (failureCode, scope, label) => {
+    const act = vi.fn()
+    render(<ErrorNotice failureCode={failureCode} scope={scope} onAction={act} onRetry={act} />)
+    expect(screen.getAllByRole('button').filter(button => button.textContent === label)).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Tekrar dene' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: label }))
+    expect(act).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the screen retry when the class action has no handler', async () => {
+    const retry = vi.fn()
+    render(<ErrorNotice failureCode="DatabaseUnavailable" onRetry={retry} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
+    expect(retry).toHaveBeenCalledOnce()
+  })
+
+  it('shows a code it has no wording for as a fixed sentence plus an open, copyable code', () => {
+    render(<ErrorNotice failureCode="brand_new_backend_code" />)
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Beklenmeyen bir sorun oluştu. Biraz sonra yeniden deneyin; sürerse aşağıdaki kodu destek ekibine iletin.')
+    expect(within(alert).getByText('brand_new_backend_code')).toBeVisible()
+    expect(within(alert).getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
+    expect(alert.textContent?.split('brand_new_backend_code').length).toBe(2)
+  })
+
+  it('keeps a known code out of the text and behind the closed technical details', () => {
+    render(<ErrorNotice failureCode="StorageAuthenticationFailed" />)
+    expect(screen.getByRole('alert')).not.toHaveTextContent('StorageAuthenticationFailed')
   })
 
   it('shows an optional title above the message', () => {

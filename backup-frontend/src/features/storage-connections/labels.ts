@@ -42,9 +42,16 @@ const testMessages: Record<string, string> = {
   get network_unavailable() { return tx("Depolama sunucusuna ağ üzerinden ulaşılamıyor.") },
 }
 
-/** The backend's `message` is a fixed English sentence: show Turkish by stable `code`, and the backend text only for a code the UI does not know. */
+/** Test results use stable codes; unknown backend messages must not leak into the primary text. */
 export function testMessage(test: Pick<ConnectionTest, 'code' | 'message'>): string {
-  return test.code && Object.hasOwn(testMessages, test.code) ? testMessages[test.code] : (test.message || tx('Unknown storage test result.'))
+  return test.code && Object.hasOwn(testMessages, test.code) ? testMessages[test.code] : tx('Unknown storage test result.')
+}
+
+export function testTechnical(test: Pick<ConnectionTest, 'code' | 'message'>): TechnicalItem[] {
+  return [
+    ...(test.code ? [{ label: tx('Hata kodu'), value: test.code }] : []),
+    ...(test.message ? [{ label: tx('Sunucu mesajı'), value: test.message }] : []),
+  ]
 }
 
 /** Known capability identifiers get a Turkish word; anything else is shown by its raw identifier so nothing is hidden. */

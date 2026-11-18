@@ -198,6 +198,7 @@ export function SharesTable({
         />
       )}
       <DataList
+        emptyMessage={tx('Henüz paylaşım yapılmamış.')}
         rows={shares}
         columns={columns}
         keyExtractor={(share) => share.id}
@@ -302,6 +303,7 @@ export function DownloadAttemptsTable({
   return (
     <div className="space-y-3">
       <DataList
+        emptyMessage={tx('Henüz indirme girişimi kaydı yok.')}
         rows={attempts}
         columns={columns}
         keyExtractor={(attempt) => attempt.id}

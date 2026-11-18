@@ -2,6 +2,7 @@ import { tx } from '@/lib/i18n'
 import { ApiError } from './client'
 import { isWebAuthnSupported } from '@/features/auth/webauthn'
 import type { TechnicalItem } from '@/components/ui/technical-details'
+import { codeMessages } from './failure-code-messages'
 
 const messages: Record<string, string> = {
   get identity_taken() { return tx('Kullanıcı adı veya e-posta zaten kullanılıyor.') },
@@ -157,7 +158,7 @@ const messages: Record<string, string> = {
   get too_weak() { return tx("RSA anahtarı en az 4096 bit olmalıdır.") },
 }
 // Wording that differs from the shared table where the failure happens (restore) or where a shared code means something else (connections).
-export type ErrorScope = 'restore' | 'storageConnection'
+export type ErrorScope = 'restore' | 'storageConnection' | 'delete'
 const scopedMessages: Record<ErrorScope, Record<string, string>> = {
   restore: {
   get ReplicaUnavailable() { return tx("Replica geri yükleme için kullanılamıyor.") }, get ArtifactTransferFailed() { return tx("Artifact aktarımı tamamlanamadı.") },
@@ -182,15 +183,22 @@ const scopedMessages: Record<ErrorScope, Record<string, string>> = {
     get concurrent_update() { return tx('Bağlantı başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.') },
     get rotation_test_failed() { return tx('Yeni kimlik bilgisi veya sunucu parmak izi doğrulanamadı. Mevcut bağlantı ve kimlik bilgisi korunuyor.') },
   },
+  delete: {
+    get unexpected() { return tx('Silme beklenmeyen bir nedenle tamamlanamadı.') },
+  },
 }
 // Codes whose text must win over the generic 403/404 wording.
 const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true, decrypt_not_permitted: true, key_not_found: true, artifact_not_found: true }
 const lookup = (table: Record<string, string>, code: string) => Object.hasOwn(table, code) ? table[code] : undefined
+const knownMessage = (code: string, scope?: ErrorScope) => (scope && lookup(scopedMessages[scope], code)) ?? lookup(messages, code) ?? lookup(codeMessages, code)
+const isPlainCode = (code: string) => /^[A-Za-z0-9_.-]{1,80}$/.test(code)
+
+/** The fixed sentence for a code the UI has no wording for: the code itself stays in the technical details, never in the sentence. */
+const unknownFailure = () => tx('Beklenmeyen bir sorun oluştu. Biraz sonra yeniden deneyin; sürerse aşağıdaki kodu destek ekibine iletin.')
 
 export function failureMessage(code?: string | null, scope?: ErrorScope): string {
   if (!code) return tx('İşlem başarısız oldu.')
-  const known = (scope && lookup(scopedMessages[scope], code)) ?? lookup(messages, code)
-  return known ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? tx("İşlem başarısız oldu ({0}).", { "0": code }) : tx('İşlem başarısız oldu.'))
+  return knownMessage(code, scope) ?? unknownFailure()
 }
 
 /** Failures that carry a request body the user can fix: the scoped wording applies only there, never to auth, missing-resource or server failures. */
@@ -211,13 +219,38 @@ export function errorMessage(error: unknown, scope?: ErrorScope): string {
   return tx('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.')
 }
 
+/** The one action a failure offers, by the kind of problem; the screen supplies what it does. */
+export type FailureAction = 'checkComputer' | 'fixCredentials' | 'manageStorage' | 'backupNow' | 'retry'
+export const actionLabel = (action: FailureAction): string => ({
+  checkComputer: tx('Bilgisayarı kontrol et'), fixCredentials: tx('Bilgileri düzelt'), manageStorage: tx('Depolamayı yönet'), backupNow: tx('Şimdi yedekle'), retry: tx('Yeniden dene'),
+})[action]
+const actionSentence = (action: FailureAction): string => ({
+  checkComputer: tx('Bilgisayarın açık ve ağa bağlı olduğundan emin olun.'),
+  fixCredentials: tx('Bağlantı bilgilerini kontrol edip düzeltin.'),
+  manageStorage: tx('Depolama alanı açın veya yeni bir depolama ekleyin.'),
+  backupNow: tx('Yedeklemeyi şimdi elle başlatın.'),
+  retry: tx('Ayrıntıları kontrol edip yeniden deneyin.'),
+})[action]
+
+const codeClasses: Record<Exclude<FailureAction, 'retry'>, readonly string[]> = {
+  checkComputer: ['DatabaseUnavailable', 'OperationTimedOut', 'AgentLost', 'agent_unavailable', 'StorageUnavailable', 'storage_unavailable', 'timeout', 'network_unavailable', 'network_denied', 'ConnectionFailed', 'download_agent_unavailable', 'LeaseLost'],
+  fixCredentials: ['AuthenticationFailed', 'PermissionDenied', 'StorageAuthenticationFailed', 'StorageHostKeyMismatch', 'authentication_failed', 'host_key_mismatch', 'access_denied', 'secret_unavailable', 'credentials_required', 'credential_unavailable', 'rotation_test_failed', 'InvalidConfiguration', 'invalid_configuration', 'DatabaseNotFound'],
+  manageStorage: ['quota_exceeded', 'QuotaExceeded', 'quota_size_unknown', 'insufficient_space'],
+  backupNow: ['ScheduleGraceExpired'],
+}
+const classOfCode = new Map(Object.entries(codeClasses).flatMap(([action, codes]) => codes.map(code => [code, action as FailureAction] as const)))
+
 export interface ErrorDescription {
   /** What happened. */
   what: string
   /** What it means for the user's data. */
   dataImpact: string
-  /** The one thing to do next. */
+  /** The one thing to do next, as a sentence. */
   action: string
+  /** The kind of action the notice offers as its one button; none when the failure has no single safe action. */
+  actionKind?: FailureAction
+  /** A code the UI has no wording for: the notice opens its technical details so the code can be copied for support. */
+  unknown?: boolean
   /** Raw code, status and field: for the collapsed technical details only. */
   technical: TechnicalItem[]
 }
@@ -246,20 +279,23 @@ function technicalItems(error: unknown): TechnicalItem[] {
   if (!(error instanceof ApiError)) return []
   const code = error.reason ?? error.code
   const items: TechnicalItem[] = []
-  if (code && /^[A-Za-z0-9_.-]{1,80}$/.test(code)) items.push({ label: tx("Hata kodu"), value: code })
+  if (code && isPlainCode(code)) items.push({ label: tx("Hata kodu"), value: code })
+  if (error.backendMessage) items.push({ label: tx("Sunucu mesajı"), value: error.backendMessage })
   items.push({ label: tx("HTTP durumu"), value: String(error.status) })
-  if (error.field && /^[A-Za-z0-9_.-]{1,80}$/.test(error.field)) items.push({ label: tx("Alan"), value: error.field })
+  if (error.field && isPlainCode(error.field)) items.push({ label: tx("Alan"), value: error.field })
   return items
 }
 
 /** A failure reported as a bare code (a run, a replica, a restore), not as a failed request. */
 export function describeFailure(code: string | null | undefined, scope?: ErrorScope): ErrorDescription {
   const what = failureMessage(code, scope)
-  const technical = code && /^[A-Za-z0-9_.-]{1,80}$/.test(code) ? [{ label: tx("Hata kodu"), value: code }] : []
+  const technical = code && isPlainCode(code) ? [{ label: tx("Hata kodu"), value: code }] : []
   const key = code ?? ''
-  if (Object.hasOwn(guidance, key)) return { what, dataImpact: guidance[key].dataImpact(), action: guidance[key].action(), technical }
-  if (scope === 'restore') return { what, dataImpact: tx("Yedeğiniz değişmedi; hedef veritabanının durumunu kontrol edin."), action: tx("Ayrıntıları kontrol edip geri yüklemeyi yeniden deneyin."), technical }
-  return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Ayrıntıları kontrol edip yeniden deneyin."), technical }
+  if (key && !knownMessage(key, scope)) return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', unknown: true, technical }
+  const actionKind = key === 'ServerCertificateUntrusted' ? undefined : classOfCode.get(key) ?? (scope === 'restore' ? 'retry' : undefined)
+  if (Object.hasOwn(guidance, key)) return { what, dataImpact: guidance[key].dataImpact(), action: guidance[key].action(), actionKind, technical }
+  if (scope === 'restore') return { what, dataImpact: tx("Yedeğiniz değişmedi; hedef veritabanının durumunu kontrol edin."), action: actionKind && actionKind !== 'retry' ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip geri yüklemeyi yeniden deneyin."), actionKind, technical }
+  return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: actionKind ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip yeniden deneyin."), actionKind, technical }
 }
 
 /** A permission wall is a failure too: nothing was changed, and the way forward is a person who can grant access. */
@@ -279,15 +315,17 @@ export function describeError(error: unknown, scope?: ErrorScope): ErrorDescript
   const what = errorMessage(error, scope)
   const technical = technicalItems(error)
   const key = error instanceof ApiError ? error.reason ?? error.code ?? '' : ''
+  const actionKind = classOfCode.get(key)
   const known = Object.hasOwn(guidance, key) ? guidance[key] : undefined
-  if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), technical }
+  if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), actionKind, technical }
   const uncertain = tx("Mevcut yedekleriniz etkilenmedi; işlemin tamamlanıp tamamlanmadığını listeden kontrol edin.")
-  if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), technical }
+  if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), actionKind: 'retry', technical }
   if (error.status === 401) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Giriş yaptıktan sonra işlemi tekrarlayın."), technical }
   if (error.status === 403) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical }
   if (error.status === 404) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
-  if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), technical }
-  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Bilgileri kontrol edip tekrar deneyin."), technical }
+  if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), actionKind: 'retry', technical }
+  if (key && !knownMessage(key, scope && isRequestFailure(error) ? scope : undefined)) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', unknown: true, technical }
+  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: actionKind ? actionSentence(actionKind) : tx("Bilgileri kontrol edip tekrar deneyin."), actionKind, technical }
 }
 
 /** A passkey step that failed in the browser (cancelled prompt, no support, wrong origin) or on the server; none of these is a server fault worth a raw 500 message. */

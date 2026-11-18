@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './client'
-import { describeError, errorMessage, failureMessage } from './failure-messages'
+import { changeLanguage } from '@/lib/i18n/runtime'
+import { actionLabel, describeError, describeFailure, errorMessage, failureMessage } from './failure-messages'
 
 describe('platform failure messages', () => {
   it.each([
@@ -114,5 +115,86 @@ describe('three-part error description', () => {
 
   it('looks up a bare failure code in the scope too', () => {
     expect(failureMessage('NotClaimed', 'restore')).toContain('Hedef değiştirilmedi')
+  })
+})
+
+const unknownSentence = 'Beklenmeyen bir sorun oluştu. Biraz sonra yeniden deneyin; sürerse aşağıdaki kodu destek ekibine iletin.'
+
+describe('failure classes', () => {
+  it.each([
+    ['DatabaseUnavailable', undefined, 'Bilgisayarı kontrol et'],
+    ['agent_unavailable', undefined, 'Bilgisayarı kontrol et'],
+    ['OperationTimedOut', undefined, 'Bilgisayarı kontrol et'],
+    ['AuthenticationFailed', undefined, 'Bilgileri düzelt'],
+    ['StorageAuthenticationFailed', undefined, 'Bilgileri düzelt'],
+    ['authentication_failed', undefined, 'Bilgileri düzelt'],
+    ['StorageHostKeyMismatch', undefined, 'Bilgileri düzelt'],
+    ['QuotaExceeded', undefined, 'Depolamayı yönet'],
+    ['quota_exceeded', undefined, 'Depolamayı yönet'],
+    ['ScheduleGraceExpired', undefined, 'Şimdi yedekle'],
+    ['SqlRestoreFailed', 'restore', 'Yeniden dene'],
+    ['TargetInUse', 'restore', 'Yeniden dene'],
+  ] as const)('offers the one action of its class for %s', (code, scope, label) => {
+    const { actionKind } = describeFailure(code, scope)
+    expect(actionKind && actionLabel(actionKind)).toBe(label)
+  })
+
+  it('offers no class action for an untrusted server certificate; trusting it is a separate, explicit step', () => {
+    expect(describeFailure('ServerCertificateUntrusted').actionKind).toBeUndefined()
+  })
+
+  it('says all three parts for a known code and keeps the raw code out of them', () => {
+    const { what, dataImpact, action, technical } = describeFailure('StorageAuthenticationFailed')
+    for (const part of [what, dataImpact, action]) expect(part).not.toContain('StorageAuthenticationFailed')
+    expect(technical.map(item => item.value)).toEqual(['StorageAuthenticationFailed'])
+  })
+})
+
+describe('unknown failure code', () => {
+  it('falls back to one fixed sentence with the code kept for support, never in the sentence', () => {
+    expect(failureMessage('some_new_backend_code')).toBe(unknownSentence)
+    const description = describeFailure('some_new_backend_code')
+    expect(description.what).toBe(unknownSentence)
+    expect(description.unknown).toBe(true)
+    expect(description.technical.map(item => item.value)).toEqual(['some_new_backend_code'])
+    expect(errorMessage(new ApiError(409, { error: 'some_new_backend_code' }))).toBe(unknownSentence)
+  })
+
+  it('never shows an unsafe code at all', () => {
+    expect(describeFailure('<b>x</b>').technical).toEqual([])
+  })
+})
+
+describe('backend codes that had no mapping', () => {
+  const codes = [
+    'authentication_failed', 'invalid_configuration', 'timeout', 'network_denied', 'network_unavailable', 'secret_unavailable', 'host_key_mismatch', 'insufficient_space',
+    'delivery_not_failed', 'feature_disabled',
+    'credential_unavailable', 'provider_unavailable', 'scan_failed', 'scan_timeout', 'too_many_databases',
+    'download_unavailable', 'download_already_started', 'download_lease_rejected', 'download_invalid_configuration', 'download_source_missing', 'download_source_inaccessible',
+    'download_integrity_mismatch', 'download_agent_unavailable', 'download_cancelled', 'download_internal_error', 'cancelled_by_revocation',
+    'storage_target_unknown', 'invalid_location', 'delete_not_supported', 'delete_not_verified',
+    'LeaseLost', 'DestinationNotConfigured', 'repair_not_found',
+    'CapacityUnavailable', 'TargetNotFound', 'ConnectionFailed', 'capacity_not_found',
+    'protocol_incompatible', 'protocol_missing', 'rate_limited', 'lease_conflict', 'destination_not_authorized', 'destination_unavailable', 'source_unavailable', 'source_inaccessible', 'unsupported_provider', 'agent_direct_required', 'attempt_not_terminal',
+    'share_not_found', 'share_expired', 'share_revoked', 'already_revoked', 'cannot_shorten', 'duration_exceeded', 'invalid_duration', 'missing_expiry', 'no_downloadable_replica', 'invalid_artifact',
+    'invalid_cursor', 'invalid_limit', 'invalid_status', 'invalid_result', 'invalid_tenant', 'invalid_date_range', 'invalid_report_period',
+    'invalid_password', 'password_same_as_current', 'invalid_token', 'email_not_verifiable', 'email_recovery_unavailable', 'last_platform_admin', 'invalid_recovery_key',
+    'google_drive_authorization_unavailable', 'forbidden', 'unauthorized', 'retry_not_allowed', 'invalid_run_state', 'invalid_schedule', 'agent_cannot_restore', 'invalid_lifetime', 'invalid_server_url',
+  ]
+
+  it.each(codes)('maps %s to a Turkish and an English sentence, not to the unexpected-problem fallback', (code) => {
+    const turkish = failureMessage(code)
+    changeLanguage('en')
+    const english = failureMessage(code)
+    changeLanguage('tr')
+    for (const text of [turkish, english]) {
+      expect(text).not.toMatch(/Beklenmeyen bir sorun|unexpected problem/i)
+      expect(text).not.toContain(code)
+    }
+    expect(english).not.toBe(turkish)
+  })
+
+  it('words a repeated delete failure code in the delete scope, not as a plan limit', () => {
+    expect(failureMessage('unexpected', 'delete')).not.toBe(failureMessage('unexpected'))
   })
 })

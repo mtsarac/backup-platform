@@ -28,9 +28,10 @@ describe('StatusPill', () => {
   })
 
 
-  it('shows an unknown status as neutral text, never hiding it', () => {
+  it('shows an unknown status as unknown', () => {
     render(<StatusPill status="SomethingNew" />)
-    expect(screen.getByText('SomethingNew').closest('span')).toHaveClass('text-text-muted')
+    expect(screen.getByText('Bilinmiyor')).toBeInTheDocument()
+    expect(screen.queryByText('SomethingNew')).not.toBeInTheDocument()
   })
 
   it('uses a custom label for a computed state', () => {

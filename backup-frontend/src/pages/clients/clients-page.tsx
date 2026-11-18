@@ -52,7 +52,7 @@ export function ClientsPage() {
     </Filters>}
     <QueryState isPending={query.isPending} error={query.error}>
       {empty ? <Card padding="none"><EmptyState icon={Server} message={tx("Henüz yedekleme bilgisayarı eklenmedi.")} canAct={canAdmin} action={addButton} /></Card>
-        : <DataList rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} caption={tx("Yedekleme bilgisayarları")} emptyMessage={filtered ? tx('Filtrelere uygun bilgisayar bulunamadı.') : tx('Henüz yedekleme bilgisayarı eklenmedi.')} />}
+        : <DataList rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} caption={tx("Yedekleme bilgisayarları")} emptyMessage={filtered ? tx('Filtrelere uygun bilgisayar bulunamadı.') : tx('Henüz yedekleme bilgisayarı eklenmedi.')} onClearFilters={filtered ? () => update({ search: '', connectivity: '' }) : undefined} />}
     </QueryState>
     {canAdmin && addingTenant === tenantId && <AddAgentDialog key={tenantId} tenantId={tenantId} onClose={() => setAddingTenant(null)} />}
   </div>

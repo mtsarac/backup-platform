@@ -43,7 +43,7 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={keys.isPending} error={keys.error}>
       {keys.data && <div className="space-y-3">
         {keys.data.items.length === 0 && <div className="px-5 pt-4"><Notice tone="info">{tx("Bu tenant henüz şifreli yedek almadı; ilk şifreli çalıştırmada etkin bir anahtar oluşturulur.")}</Notice></div>}
-        {keys.data.items.length > 0 && <DataList className={bareListClass} rows={keys.data.items} columns={columns} keyExtractor={key => String(key.version)} />}
+        {keys.data.items.length > 0 && <DataList className={bareListClass} rows={keys.data.items} columns={columns} keyExtractor={key => String(key.version)} emptyMessage={tx("Henüz şifreleme anahtarı yok.")} />}
       </div>}
     </QueryState>
     <ConfirmDialog open={rotating} onClose={() => setRotating(false)} title={tx("Anahtar döndürülsün mü?")}

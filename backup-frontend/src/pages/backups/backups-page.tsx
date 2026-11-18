@@ -53,7 +53,7 @@ export function BackupsPage() {
 
   return (
     <div className="space-y-6">
-      <Filters label={tx("Yedekleme filtreleri")} onClear={filtering ? clearFilters : undefined}>
+      <Filters label={tx("Yedekleme filtreleri")} onClear={filtering && backups.data?.totalCount !== 0 ? clearFilters : undefined}>
         <FilterField label={tx("Durum")}>
           <Select aria-label={tx("Durum")} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}>
             <option value="">{tx("Tüm durumlar")}</option>
@@ -93,10 +93,10 @@ export function BackupsPage() {
       <QueryState isPending={backups.isPending} error={backups.error}>
         {backups.data && (backups.data.totalCount === 0
           ? <Card padding="none">{filtering
-            ? <EmptyState icon={Activity} message={tx("Bu filtrelere uygun yedekleme denemesi bulunamadı.")} />
+            ? <EmptyState icon={Activity} message={tx("Bu filtrelere uygun yedekleme denemesi bulunamadı.")} onClearFilters={clearFilters} />
             : <EmptyState icon={Activity} message={tx("Henüz yedekleme denemesi yok. Bir yedekleme işi çalıştığında burada görünür.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs`}>{tx("Yedekleme işlerine git")}</Link>} />}</Card>
           : <>
-            <DataList rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} />
+            <DataList rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} emptyMessage={tx("Henüz yedekleme denemesi yok.")} />
             <Pagination label={tx("Yedekleme sayfaları")} page={page} pageSize={pageSize} totalCount={backups.data.totalCount} disabled={backups.isFetching} onPageChange={(next) => update({ page: next })} />
           </>)}
       </QueryState>

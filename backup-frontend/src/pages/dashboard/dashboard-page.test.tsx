@@ -177,7 +177,7 @@ describe('dashboard loading and failure', () => {
   it('offers a retry when the data could not be loaded', () => {
     state.error = new Error('network')
     renderDashboard()
-    expect(screen.getAllByRole('button', { name: 'Tekrar dene' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Yeniden dene' }).length).toBeGreaterThan(0)
   })
 
   it.each([['Degraded', 'Yedeklerinizden bazıları dikkat istiyor'], ['Critical', 'Yedeklerinizde acil bir sorun var']])('tells the user to open the listed jobs when the state is %s', (backendState, title) => {

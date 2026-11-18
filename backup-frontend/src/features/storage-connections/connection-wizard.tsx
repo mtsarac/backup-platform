@@ -19,7 +19,7 @@ import { useGoogleOAuth } from './use-google-oauth'
 import { useCreateTenantConnection, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
 import { CapabilityChips } from './connection-parts'
 import { connectionPath } from '@/lib/routes'
-import { errorField, executionLocationLabel, tenantCreateState, testMessage, testModeLabel, topologyLabel, configurationSummary } from './labels'
+import { errorField, executionLocationLabel, tenantCreateState, testMessage, testTechnical, testModeLabel, topologyLabel, configurationSummary } from './labels'
 import { ProviderIcon } from './provider-icon'
 import { ProviderFields } from './provider-form'
 import type { ConnectionView, ProviderDescriptor } from './types'
@@ -165,7 +165,7 @@ function ConnectionWizardForm() {
           {testing && <Notice tone="info" title={tx("Bağlantı test ediliyor…")}>{tx("Küçük bir test dosyası yazılıp okunur ve silinir; mevcut yedekleriniz değişmez.")}</Notice>}
           {Boolean(ops.test.error) && !testing && <ErrorNotice title={tx("Test tamamlanamadı")} error={ops.test.error} scope="storageConnection" />}
           {test?.status === 'Succeeded' && <Notice tone="success" title={tx("Bağlantı çalışıyor")}>{testMessage(test)}</Notice>}
-          {test?.status === 'Failed' && <ErrorNotice title={tx("Test başarısız")} what={testMessage(test)} dataImpact={tx("Bağlantı kaydedildi ama henüz doğrulanmadı; yedekler bu depolamaya yazılamayabilir.")} action={tx("Ayarları düzeltip yeniden test edin.")} />}
+          {test?.status === 'Failed' && <ErrorNotice title={tx("Test başarısız")} what={testMessage(test)} dataImpact={tx("Bağlantı kaydedildi ama henüz doğrulanmadı; yedekler bu depolamaya yazılamayabilir.")} action={tx("Ayarları düzeltip yeniden test edin.")} technical={testTechnical(test)} />}
           {test?.status === 'NotTestable' && <Notice tone="info" title={tx("Bu depolamayı yedekleme bilgisayarı denetler")}>{testMessage(test)}</Notice>}
           <div className="flex flex-wrap gap-2">
             {google && !testing && test?.status !== 'Succeeded' && <Button disabled={googleConnect.isPending} onClick={() => authorizeGoogle(created)}><ExternalLink aria-hidden="true" className="size-4" />{googleConnect.isPending ? tx('Yönlendiriliyor…') : tx('Google Hesabını Bağla')}</Button>}

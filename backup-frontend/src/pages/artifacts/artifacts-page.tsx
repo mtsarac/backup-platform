@@ -7,6 +7,7 @@ import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { Card } from '@/components/ui/card'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
@@ -69,8 +70,8 @@ export function ArtifactsPage() {
       {invalidDates && <Notice tone="warning">{tx("Bitiş tarihi başlangıç tarihinden önce olamaz.")}</Notice>}
       {!invalidDates && <QueryState isPending={query.isPending} error={query.error}>
         {query.data?.items.length === 0
-          ? <Card padding="none"><EmptyState icon={Archive} message={tx("Bu filtrelerde Backup dosyası yok; filtreleri temizleyin veya bir Backup Job çalıştırın.")} /></Card>
-          : <DataList rows={query.data?.items ?? []} columns={columns} keyExtractor={(artifact) => artifact.id} />}
+          ? <Card padding="none"><EmptyState icon={Archive} message={tx("Bu filtrelerde Backup dosyası yok; filtreleri temizleyin veya bir Backup Job çalıştırın.")} onClearFilters={filtering ? () => update({ state: '', from: '', to: '' }) : undefined} action={!filtering && <Link className={buttonVariants()} to={`${base}/backup-jobs`}>{tx("Yedekleme işlerine git")}</Link>} /></Card>
+          : <DataList rows={query.data?.items ?? []} columns={columns} keyExtractor={(artifact) => artifact.id} emptyMessage={tx("Henüz yedek dosyası yok.")} />}
       </QueryState>}
       {query.data && !invalidDates && query.data.totalCount > 0 && <Pagination label={tx("Backup sayfalama")} page={filter.page} pageSize={filter.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
     </div>

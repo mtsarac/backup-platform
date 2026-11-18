@@ -46,9 +46,9 @@ describe('presentation helpers', () => {
     expect(text).toMatch(/[ıİşŞğĞüÜöÖçÇ]|\./)
   })
 
-  it('falls back to the backend message only for an unknown or missing code', () => {
-    expect(testMessage({ code: 'brand_new', message: 'Something new.' })).toBe('Something new.')
-    expect(testMessage({ code: null, message: 'No code.' })).toBe('No code.')
+  it('uses a translated fallback rather than the backend message for an unknown or missing code', () => {
+    expect(testMessage({ code: 'brand_new', message: 'Something new.' })).toBe('Depolama testinin sonucu belirlenemedi.')
+    expect(testMessage({ code: null, message: 'No code.' })).toBe('Depolama testinin sonucu belirlenemedi.')
   })
 
   it('states the secret presence and never a value', () => {

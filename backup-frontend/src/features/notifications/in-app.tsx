@@ -6,6 +6,7 @@ import { Link, useInRouterContext } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { linkClass } from '@/components/ui/form-styles'
 import { ErrorNotice } from '@/components/ui/notice'
+import { EmptyState } from '@/components/ui/empty-state'
 import { QueryState } from '@/components/data/query-state'
 import { AuthContext } from '@/features/auth/auth-context'
 import { TenantContext } from '@/features/tenancy/tenant-context'
@@ -85,7 +86,7 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
       <Bell aria-hidden="true" className="size-4" />{tx('Bildirimler')} {unread > 0 && <span>({unread})</span>}
     </Button>
     {open && <section id="in-app-notifications" aria-label={tx('Bildirimler')} className="absolute right-0 z-20 mt-2 max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-auto rounded-lg border border-border bg-surface-raised p-4 shadow-overlay">
-      <QueryState isPending={list.isPending} error={list.error} empty={list.data?.length === 0}>
+      <QueryState isPending={list.isPending} error={list.error} empty={list.data?.length === 0} emptyState={<EmptyState message={tx("Henüz bildiriminiz yok.")} />}>
         {markRead.error && <ErrorNotice error={markRead.error} />}
         <ul className="space-y-3" aria-live="polite">{list.data?.map((item) => {
           const href = shareHref(item, auth?.user?.role, tenant?.tenantId)

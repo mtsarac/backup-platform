@@ -95,7 +95,7 @@ function RestoreDetail({ id }: { id: string }) {
     {artifact.error && <p className="mt-1 text-sm text-text-muted">{tx("Yedek dosyasının ayrıntıları yüklenemedi; geri yükleme kaydı yine de kullanılabilir.")}</p>}
   </Fact>
   return <div className="space-y-6">
-    <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore} onRetry={() => void query.refetch()}>
+    <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore} emptyState={<EmptyState message={tx("Bu geri yükleme bulunamadı. Geri yüklemeler listesinden yeniden seçin.")} />} onRetry={() => void query.refetch()}>
       {restore && <>
         <PageHeader title={`${restore.purpose === 'Verification' ? tx('Geri yükleme testi') : restore.purpose === 'Precheck' ? tx('Geri yükleme ön kontrolü') : restore.purpose === 'Discovery' ? tx('Hedef veritabanı bulma') : tx('Geri yükleme')} · ${restore.databaseName}`}
           crumbs={[{ label: tx('Geri yüklemeler'), to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}

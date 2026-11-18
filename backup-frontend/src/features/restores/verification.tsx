@@ -35,7 +35,7 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
       {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" />
         : rows.length === 0 && !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
       {formOpen && canOperate && <VerificationForm tenantId={tenantId} artifactId={artifact.id} onClose={() => setFormOpen(false)} />}
-      {rows.length > 0 && <DataList caption={tx("Son restore testleri")} rows={rows} keyExtractor={row => row.id} columns={[
+      {rows.length > 0 && <DataList caption={tx("Son restore testleri")} emptyMessage={tx("Henüz test edilmedi.")} rows={rows} keyExtractor={row => row.id} columns={[
         { key: 'outcome', header: tx('Sonuç'), card: 'status', render: row => <>{row.verificationOutcome ? <StatusPill domain="verification" status={row.verificationOutcome} /> : <StatusPill status={row.status} />}{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</> },
         { key: 'started', header: tx('Başlangıç'), render: row => formatDateTime(row.startedAt ?? row.createdAt) },
         { key: 'duration', header: tx('Süre'), render: row => row.completedAt ? formatDuration(row.startedAt, row.completedAt) : '—' },

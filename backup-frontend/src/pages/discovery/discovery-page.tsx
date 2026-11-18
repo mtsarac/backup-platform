@@ -74,7 +74,7 @@ export function DiscoveryPage() {
         ? <Card padding="none"><EmptyState icon={Radar} message={filtered ? tx("Seçilen filtrelere uyan veritabanı sunucusu bulunamadı.") : tx("Bu bilgisayarlarda henüz veritabanı bulunamadı. Bilgisayar kartındaki \"Yeniden tara\" ile yeniden arayabilirsiniz.")} canAct={filtered || canOperate} action={filtered
           ? <Button onClick={() => update({ agentId: '', engine: '', includeMissing: '' })}>{tx("Filtreleri temizle")}</Button>
           : <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx("Yeni yedekleme işi")}</Link>} /></Card>
-        : <DataList rows={instances.data.items} columns={columns} keyExtractor={item => item.id} caption={tx("Bulunan veritabanı sunucuları")} />)}
+        : <DataList rows={instances.data.items} columns={columns} keyExtractor={item => item.id} caption={tx("Bulunan veritabanı sunucuları")} emptyMessage={tx("Bu bilgisayarlarda henüz veritabanı bulunamadı.")} />)}
     </QueryState>
     <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => !scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
   </>

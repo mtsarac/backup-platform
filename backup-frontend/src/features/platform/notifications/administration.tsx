@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
@@ -40,7 +41,7 @@ export function NotificationAdministration() {
       <QueryState isPending={retention.isPending} error={retention.error}>{retention.data && <RetentionForm key={retention.data.retentionDays} retention={retention.data} />}</QueryState>
     </Section>
     <Section title={tx('Başarısız bildirim gönderimleri')}>
-      <QueryState isPending={failed.isPending} error={failed.error} empty={failed.data?.totalCount === 0}>
+      <QueryState isPending={failed.isPending} error={failed.error} empty={failed.data?.totalCount === 0} emptyState={<EmptyState message={tx("Başarısız bildirim gönderimi yok.")} />}>
         {retry.error && <ErrorNotice error={retry.error} />}
         <ul className="space-y-3">{failed.data?.items.map((item) => <li key={item.id}><Card as="article" className="space-y-2">
           <h3 className="font-medium">{eventTypeLabels[item.eventType as keyof typeof eventTypeLabels] ?? item.eventType} · {item.subjectName}</h3>

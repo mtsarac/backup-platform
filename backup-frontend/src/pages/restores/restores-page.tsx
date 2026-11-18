@@ -58,7 +58,7 @@ export function RestoresPage() {
     when,
   ]
   return <div className="space-y-6">
-    <Filters label={tx("Geri yükleme filtreleri")} onClear={filtering ? clearFilters : undefined}>
+    <Filters label={tx("Geri yükleme filtreleri")} onClear={filtering && query.data?.items.length !== 0 ? clearFilters : undefined}>
       <FilterField label={tx("Liste türü")}><Select aria-label={tx("Liste türü")} value={verification ? 'tests' : 'restores'} onChange={(event) => update({ view: event.target.value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })}><option value="restores">{tx("Geri yüklemeler")}</option><option value="tests">{tx("Geri yükleme testleri")}</option></Select></FilterField>
       <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</Select></FilterField>
     </Filters>
@@ -75,8 +75,8 @@ export function RestoresPage() {
       {query.data?.items.length === 0
         ? <Card data-testid="restores-empty" padding="none"><EmptyState icon={History} canAct={filtering || canOperate}
           message={filtering ? tx("Bu filtrelere uyan geri yükleme yok.") : verification ? tx("Henüz geri yükleme testi yapılmadı.") : tx("Henüz geri yükleme yapılmadı.")}
-          action={!filtering && <Link className={buttonVariants()} to={`${base}/artifacts`}>{tx("Yedek dosyalarını aç")}</Link>} /></Card>
-        : <DataList rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} />}
+          onClearFilters={filtering ? clearFilters : undefined} action={!filtering && <Link className={buttonVariants()} to={`${base}/artifacts`}>{tx("Yedek dosyalarını aç")}</Link>} /></Card>
+        : <DataList rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} emptyMessage={tx("Henüz geri yükleme yapılmadı.")} />}
       {query.data && query.data.totalCount > 0 && <Pagination label={tx("Geri yükleme sayfaları")} page={query.data.page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
     </QueryState>
   </div>

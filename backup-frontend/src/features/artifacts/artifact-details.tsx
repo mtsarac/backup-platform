@@ -117,7 +117,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
         </div>
         {replica.waitingForAgent && <Notice tone="warning">{tx("Fiziksel silme için Agent bekleniyor. Agent yeniden bağlandığında silme işlemi devam edecek.")}</Notice>}
         {replica.status === 'Deleted' && <p className="text-sm text-text-muted">{tx("Fiziksel dosya kaldırıldı. Silinme:")}{' '}{formatDateTime(replica.deletedAt)}</p>}
-        {replica.deleteFailureCode && !replica.waitingForAgent && <ErrorNotice title={tx("Silme tamamlanamadı")} {...describeFailure(replica.deleteFailureCode)} dataImpact={tx("Bu kopya depolamada duruyor; diğer kopyalar etkilenmedi.")} action={tx("Depolama bağlantısını kontrol edip silmeyi yeniden deneyin.")} />}
+        {replica.deleteFailureCode && !replica.waitingForAgent && <ErrorNotice title={tx("Silme tamamlanamadı")} {...describeFailure(replica.deleteFailureCode, 'delete')} dataImpact={tx("Bu kopya depolamada duruyor; diğer kopyalar etkilenmedi.")} action={tx("Depolama bağlantısını kontrol edip silmeyi yeniden deneyin.")} />}
         <Facts columns={3}>
           {replica.storageTarget !== undefined && <Fact label={tx("Depolama hedefi")}>{replica.storageTarget}</Fact>}
           <Fact label={tx("Oluşturulma")}>{formatDateTime(replica.createdAt)}</Fact>

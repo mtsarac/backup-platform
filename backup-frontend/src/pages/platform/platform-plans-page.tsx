@@ -69,7 +69,7 @@ export function PlatformPlansPage() {
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.items.length === 0 ? <ListEmpty message={filtered ? tx('Filtreye uygun plan bulunamadı.') : tx("Henüz plan yok.")} />
-          : <DataList rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} />}
+          : <DataList rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={tx("Henüz plan yok.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Plan sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
     </QueryState>

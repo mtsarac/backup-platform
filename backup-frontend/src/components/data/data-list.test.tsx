@@ -23,19 +23,19 @@ const columns: Column<Job>[] = [
 describe('DataList', () => {
   it('is a table on a large screen', () => {
     setViewport(true)
-    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} />)
+    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toContain('Şifreleme')
   })
 
   it('is a table when the browser cannot report its width', () => {
-    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} />)
+    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     expect(screen.getByRole('table')).toBeInTheDocument()
   })
 
   it('becomes cards on a narrow screen with the title, status, key fields and actions', () => {
     setViewport(false)
-    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} />)
+    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     const cards = screen.getAllByRole('listitem')
     expect(cards).toHaveLength(2)
@@ -50,7 +50,7 @@ describe('DataList', () => {
 
   it('labels each card field with its column header', () => {
     setViewport(false)
-    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} />)
+    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     const first = within(screen.getAllByRole('listitem')[0])
     expect(first.getByText('Veritabanı').nextElementSibling).toHaveTextContent('accounting')
   })
@@ -58,7 +58,7 @@ describe('DataList', () => {
   it('keeps the first three fields visible and puts remaining fields into an accessible details section', () => {
     setViewport(false)
     const many: Column<Job>[] = [...columns.slice(0, 5), { key: 'extra', header: 'Fazladan', render: () => 'ekstra değer' }]
-    render(<DataList rows={jobs} columns={many} keyExtractor={job => job.id} />)
+    render(<DataList rows={jobs} columns={many} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     const first = within(screen.getAllByRole('listitem')[0])
     // Primary fields are immediately present
     expect(first.getAllByRole('term')).toHaveLength(4) // 3 primary terms + 1 secondary inside details
@@ -69,7 +69,7 @@ describe('DataList', () => {
 
   it('leaves columns marked hidden out of cards', () => {
     setViewport(false)
-    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} />)
+    render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     expect(screen.queryByText('Açık')).not.toBeInTheDocument()
   })
 
@@ -88,7 +88,7 @@ describe('DataList', () => {
 
     it('filters rows and pages them in groups of 25', () => {
       setViewport(true)
-      render(<DataList rows={many} columns={columns} keyExtractor={job => job.id} search={search} />)
+      render(<DataList rows={many} columns={columns} keyExtractor={job => job.id} search={search} emptyMessage="Hiç iş yok." />)
       expect(screen.getAllByRole('row')).toHaveLength(26)
       fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
       expect(screen.getAllByRole('row')).toHaveLength(6)
@@ -103,11 +103,14 @@ describe('DataList', () => {
       fireEvent.change(screen.getByRole('searchbox', { name: 'İş ara' }), { target: { value: 'zzz' } })
       expect(screen.queryByRole('table')).not.toBeInTheDocument()
       expect(screen.getByText('Aramayla eşleşen kayıt yok.')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+      expect(screen.getByRole('table')).toBeInTheDocument()
+      expect(screen.getByRole('searchbox', { name: 'İş ara' })).toHaveValue('')
     })
 
     it('searches and shows cards on a narrow screen', () => {
       setViewport(false)
-      render(<DataList rows={many} columns={columns} keyExtractor={job => job.id} search={search} />)
+      render(<DataList rows={many} columns={columns} keyExtractor={job => job.id} search={search} emptyMessage="Hiç iş yok." />)
       fireEvent.change(screen.getByRole('searchbox', { name: 'İş ara' }), { target: { value: 'iş 07' } })
       expect(screen.getAllByRole('listitem')).toHaveLength(1)
     })

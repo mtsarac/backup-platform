@@ -1,7 +1,7 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { History } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { RelativeTime } from '@/components/data/relative-time'
@@ -82,6 +82,7 @@ export function BackupDetailPage() {
 function BackupDetail({ id }: { id: string }) {
   useLanguage()
   const { tenantId, canOperate } = useTenant()
+  const navigate = useNavigate()
   const query = useBackup(id)
   const actions = useBackupActions(id)
   const [notice, setNotice] = useState('')
@@ -112,6 +113,7 @@ function BackupDetail({ id }: { id: string }) {
   ]
   const latest = run?.attempts.at(-1)
   const failureCode = run && (run.reasonCode ?? run.retry.lastFailureCode ?? (run.status === 'AgentLost' ? 'AgentLost' : null))
+  const failure = describeFailure(failureCode)
 
   return (
     <div className="space-y-6">
@@ -126,7 +128,7 @@ function BackupDetail({ id }: { id: string }) {
           {canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => { actions.cancel.reset(); setConfirmCancel(true) }}>{actions.cancel.isPending ? tx('İletiliyor…') : tx('İptal et')}</Button>}
         </>}
       />
-      <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run}>
+      <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run} emptyState={<EmptyState icon={History} message={tx("Bu yedekleme denemesi bulunamadı. Yedekleme denemeleri listesinden yeniden seçin.")} />}>
         {run && <>
           <ConfirmDialog open={confirmCancel && canOperate && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
             consequence={{
@@ -146,8 +148,15 @@ function BackupDetail({ id }: { id: string }) {
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
               <SizeAnomalyComparison run={run} />
-              {(run.status === 'Failed' || run.status === 'AgentLost') && <ErrorNotice title={tx("Yedekleme denemesi başarısız oldu")} {...describeFailure(failureCode)}
-                action={canOperate ? tx("Sorunu giderdikten sonra “Yeniden dene” ile yeni bir deneme başlatın.") : tx("Yöneticinize danışın.")} />}
+              {(run.status === 'Failed' || run.status === 'AgentLost') && <ErrorNotice title={tx("Yedekleme denemesi başarısız oldu")} {...failure}
+                action={canOperate ? failure.action : tx("Yöneticinize danışın.")}
+                onAction={canOperate && failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
+                  if (failure.actionKind === 'checkComputer') navigate(`/tenants/${tenantId}/agents/${run.agentId}`)
+                  else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}/edit`)
+                  else if (failure.actionKind === 'manageStorage') navigate(`/tenants/${tenantId}/storage`)
+                  else if (failure.actionKind === 'backupNow' && canRetryRun(run.status)) void perform('retry')
+                } : undefined}
+                onRetry={canOperate && canRetryRun(run.status) ? () => void perform('retry') : undefined} />}
               {run.status === 'RetryPending' && <Notice tone="warning">{tx("Otomatik yeniden deneme bekleniyor. Sonraki deneme:")}{' '}{formatDateTime(run.retry.nextAttemptAt)}. {describeFailure(run.retry.lastFailureCode).what}</Notice>}
               {run.status === 'CancellationRequested' && <Notice tone="warning">{tx("İptal istendi; yedekleme denemesi henüz iptal edilmiş değildir. Yedekleme bilgisayarı sonucu bildirdiğinde durum güncellenir.")}</Notice>}
               {run.status === 'Paused' && <Notice tone="warning">{run.pauseReason === 'PausedByNetworkError' ? tx('Ağ kesintisi nedeniyle aktarım duraklatıldı. Bağlantıyı kontrol edip Devam Et ile sürdürün.') : tx('Aktarım duraklatıldı. Hazırlanmış yedek korunur; Devam Et ile aynı baytlardan sürdürülür.')}</Notice>}

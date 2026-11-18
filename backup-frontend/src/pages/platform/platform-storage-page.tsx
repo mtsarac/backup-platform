@@ -222,7 +222,7 @@ export function PlatformStoragePage() {
                 ? <ListEmpty message={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} action={!filtered
                   ? <Link className={buttonVariants()} to={platformPaths.tenants}>{tx("Çalışma alanlarını görüntüle")}</Link>
                   : undefined} />
-                : <DataList caption={tx("Depolama kullanımı")} className={bareListClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} />}
+                : <DataList caption={tx("Depolama kullanımı")} className={bareListClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} />}
             </Section>
             {data.totalCount > 0 && (
               <Pagination
