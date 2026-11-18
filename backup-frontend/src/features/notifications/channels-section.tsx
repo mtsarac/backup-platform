@@ -8,7 +8,7 @@ import { Section, Fact, Facts } from '@/components/ui/section'
 import { Card } from '@/components/ui/card'
 import { QueryState } from '@/components/data/query-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { AddChannelDialog, ChannelSecretDialog, EditChannelDialog } from './channel-dialogs'
+import { AddChannelDialog, EditChannelDialog } from './channel-dialogs'
 import { useClearChannelSecret, useDeleteChannel, useNotificationChannels, useSetChannelEnabled, useTestChannel } from './hooks'
 import { authenticationLabels, kindLabels } from './labels'
 import type { NotificationChannel } from './types'
@@ -16,7 +16,7 @@ import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 
-type Dialog = 'edit' | 'secret' | 'clearSecret' | 'delete'
+type Dialog = 'edit' | 'clearSecret' | 'delete'
 
 function ChannelCard({ channel }: { channel: NotificationChannel }) {
   useLanguage()
@@ -54,7 +54,6 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
     ]}>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" aria-label={label(channel.enabled ? tx('devre dışı bırak') : tx('etkinleştir'))} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: channel.id, enabled: !channel.enabled })}>{channel.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
-        {usesSecret && <Button variant="outline" aria-label={label(tx('secret ayarla'))} onClick={() => { setDialog('secret') }}>{channel.hasSecret ? tx('Secret yenile') : tx('Secret ayarla')}</Button>}
         {usesSecret && channel.hasSecret && <Button variant="outline" aria-label={label(tx('secret temizle'))} onClick={() => { clearSecret.reset(); setDialog('clearSecret') }}>{tx("Secret temizle")}</Button>}
         <Button variant="destructive" aria-label={label(tx('sil'))} onClick={() => { remove.reset(); setDialog('delete') }}>{tx("Sil")}</Button>
       </div>
@@ -63,7 +62,6 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
     {test.error && <ErrorNotice error={test.error} />}
     {test.isSuccess && <Notice tone="success">{unconfirmed ? tx('Onay isteği adrese gönderilmek üzere kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.') : tx('Test bildirimi kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.')}</Notice>}
     {dialog === 'edit' && <EditChannelDialog channel={channel} onClose={close} />}
-    {dialog === 'secret' && <ChannelSecretDialog channel={channel} onClose={close} />}
     <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={tx("“{0}” secret’ı temizlensin mi?", { "0": channel.name })} confirmLabel={tx("Secret’ı temizle")}
       consequence={{
         what: tx("Kayıtlı gizli değer silinir; yeniden ayarlanana kadar bu kanala yapılan gönderimler başarısız olur."),

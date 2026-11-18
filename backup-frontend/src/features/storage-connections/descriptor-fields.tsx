@@ -11,7 +11,9 @@ function configLabel(field: ConfigField, providerType?: string) {
     if (field.name === 'authenticationType') return tx("Giriş yöntemi")
     if (field.name === 'remoteBaseDirectory') return tx("Yedeklerin saklanacağı klasör")
     if (field.name === 'hostKeyFingerprint') return tx("Sunucunun güvenlik parmak izi (SHA256)")
+    if (field.name === 'host') return tx("Sunucu adresi")
   }
+  if (providerType === 'local' && field.name === 'volume') return tx("Disk adı")
   return tx(field.label)
 }
 
@@ -19,14 +21,16 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
   useLanguage()
   const prefix = useId()
   const visibleFields = editableConfigFields(providerType, fields)
-  return <>{visibleFields.map((field) => {
+  return <div className="flex flex-wrap gap-x-3 gap-y-5">{visibleFields.map((field) => {
     const id = `${prefix}-${field.name}`
     const invalid = invalidName === field.name
+    // The port sits small next to the server address; everything else takes a full row.
+    const width = providerType === 'sftp' && field.name === 'host' ? 'min-w-48 flex-1' : providerType === 'sftp' && field.name === 'port' ? 'w-28' : 'w-full'
     if (field.kind === 'Boolean') {
-      return <CheckField key={field.name} id={id} label={configLabel(field, providerType)} checked={values[field.name] === true} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.checked)} />
+      return <CheckField key={field.name} className={width} id={id} label={configLabel(field, providerType)} checked={values[field.name] === true} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.checked)} />
     }
     if (providerType === 'sftp' && field.name === 'authenticationType') {
-      return <div key={field.name} className="space-y-1 text-sm">
+      return <div key={field.name} className={`space-y-1 text-sm ${width}`}>
         <label htmlFor={id} className="block font-medium text-text-heading">{configLabel(field, providerType)}</label>
         <Select id={id} value={String(values[field.name] ?? 'password')} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.value)}>
           <option value="password">{tx("Parola")}</option>
@@ -34,14 +38,15 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
         </Select>
       </div>
     }
-    return <div key={field.name} className="space-y-1 text-sm">
+    return <div key={field.name} className={`space-y-1 text-sm ${width}`}>
       <label htmlFor={id} className="block font-medium text-text-heading">{configLabel(field, providerType)}</label>
       <TextInput id={id} type={field.kind === 'Number' ? 'number' : 'text'} value={String(values[field.name] ?? '')} maxLength={field.kind === 'Text' ? field.maxLength ?? undefined : undefined}
         required={field.required} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.value)} />
       {field.required && <span className="block text-sm text-text-muted">{tx("Zorunlu alan.")}</span>}
-      {providerType === 'sftp' && field.name === 'hostKeyFingerprint' && <span className="block text-sm text-text-muted">{tx("SHA256 sunucu anahtarı parmak izini güvenilir bir kanaldan alın ve doğrulayarak girin. Otomatik keşif veya ilk bağlantıda güven yoktur; uyuşmazlık bağlantıyı engeller.")}</span>}
+      {providerType === 'sftp' && field.name === 'hostKeyFingerprint' && <span className="block text-sm text-text-muted">{tx("Sunucu yöneticinizden parmak izini isteyin ya da ssh-keygen -lf çıktısını yapıştırın. Örnek: SHA256:AbCd…")}</span>}
+      {providerType === 'local' && field.name === 'volume' && <span className="block text-sm text-text-muted">{tx("Yedekleme bilgisayarında tanımlı disk adı")}</span>}
     </div>
-  })}</>
+  })}</div>
 }
 
 /** Only newly entered values live in caller state. Stored credentials are never prefilled. */
