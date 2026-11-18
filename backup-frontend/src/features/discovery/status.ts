@@ -35,6 +35,7 @@ const reasonLabels: Record<string, string> = {
   get authentication_failed() { return tx("Kimlik doğrulaması başarısız.") },
   get unreachable() { return tx("Sunucuya bağlanılamadı.") },
   get connection_failed() { return tx("Sunucu yanıt veriyor ancak oturum açılamadı (şifreleme ayarını kontrol edin).") },
+  get server_certificate_untrusted() { return tx("Sunucunun sertifikası doğrulanamadı.") },
   get unexpected() { return tx("Beklenmeyen hata.") },
   get credentials_required() { return tx("Kimlik bilgisi gerekli.") },
   get not_supported() { return tx("Desteklenmiyor.") },

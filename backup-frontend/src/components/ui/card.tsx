@@ -1,10 +1,10 @@
 import type { ComponentPropsWithoutRef, ElementType } from 'react'
 import { cn } from '@/lib/utils'
 
-/** The one flat work surface: border and spacing carry hierarchy, never a shadow (see `--elevation-card`). */
-export const cardClass = 'rounded-xl border bg-surface shadow-card'
+/** The one flat work surface: border and spacing carry hierarchy, never a shadow (only layers have one). */
+export const cardClass = 'rounded-lg border bg-surface'
 
-const tones = { default: 'border-border', subtle: 'border-border bg-surface-2', danger: 'border-error/40' } as const
+const tones = { default: 'border-border', subtle: 'border-border bg-surface-2', danger: 'border-error-border' } as const
 const paddings = { none: '', md: 'p-4', lg: 'p-6' } as const
 
 type CardProps<T extends ElementType> = { as?: T; tone?: keyof typeof tones; padding?: keyof typeof paddings } & Omit<ComponentPropsWithoutRef<T>, 'as'>

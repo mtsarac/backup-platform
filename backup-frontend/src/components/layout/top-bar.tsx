@@ -2,7 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Menu } from 'lucide-react'
-import { A11yToolbar } from './a11y-toolbar'
+import { ThemeToggle } from './theme-toggle'
 import { LanguageSwitcher } from './language-switcher'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,7 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="hidden items-center gap-2 sm:inline-flex">{badges}</span>
-        <A11yToolbar />
+        <ThemeToggle />
         {user && <InAppNotifications key={user.userId} userId={user.userId} />}
         <LanguageSwitcher />
       </div>
@@ -43,6 +43,6 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
     </div>}
     badges={<>
       {user?.role === 'PlatformAdmin' && <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/platform">{tx('Platform Yönetimi')}</Link>}
-      {user && <Badge tone={user.role === 'PlatformAdmin' ? "warning" : "info"}>{user.role === 'PlatformAdmin' ? tx("Platform Yöneticisi") : tx("UserAdmin")}</Badge>}
+      {user && <Badge tone={user.role === 'PlatformAdmin' ? "warning" : "neutral"}>{user.role === 'PlatformAdmin' ? tx("Platform Yöneticisi") : tx("UserAdmin")}</Badge>}
     </>} />
 }

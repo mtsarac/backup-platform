@@ -9,12 +9,12 @@ export function Stepper({ steps, current }: { steps: readonly string[]; current:
     {steps.map((step, index) => {
       const state = index < current ? 'done' : index === current ? 'current' : 'todo'
       return <li key={step} aria-current={state === 'current' ? 'step' : undefined} className="flex items-center gap-2">
-        <span className={cn('flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold',
-          state === 'done' && 'border-border-strong text-text-muted', state === 'current' && 'border-primary bg-primary text-primary-foreground', state === 'todo' && 'border-border-strong/60 text-text-muted')}>
+        <span className={cn('flex size-6 shrink-0 items-center justify-center rounded-sm border text-xs font-semibold',
+          state === 'done' && 'border-input text-text-muted', state === 'current' && 'border-primary bg-primary text-primary-foreground', state === 'todo' && 'border-border text-text-muted')}>
           {state === 'done' ? <Check aria-hidden="true" className="size-4" /> : index + 1}
         </span>
         <span className={cn('text-sm', state === 'current' ? 'font-semibold text-text-heading' : 'text-text-muted')}>{step}<span className="sr-only">{state === 'done' ? tx(' (tamamlandı)') : state === 'current' ? tx(' (geçerli adım)') : ''}</span></span>
-        {index < steps.length - 1 && <span aria-hidden="true" className="mx-1 hidden h-px w-6 bg-border-strong/50 sm:block" />}
+        {index < steps.length - 1 && <span aria-hidden="true" className="mx-1 hidden h-px w-6 bg-border sm:block" />}
       </li>
     })}
   </ol></nav>

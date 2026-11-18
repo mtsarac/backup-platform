@@ -34,6 +34,7 @@ public static class RestoreAgentFailureCodes
     public const string StagingInvalid = "StagingInvalid";
     public const string InternalError = "InternalError";
     public const string VerificationFailed = "VerificationFailed";
+    public const string ServerCertificateUntrusted = "ServerCertificateUntrusted";
 
     /// <summary>Not a failure: how a cancelled restore is reported (status Cancelled).</summary>
     public const string Cancelled = "Cancelled";
@@ -45,7 +46,7 @@ public static class RestoreAgentFailureCodes
         BackupInvalid, BackupTypeUnsupported, IncompatibleVersion, FileMappingFailed,
         PreCheckFailed, TargetDatabaseExists, TargetDatabaseNotFound, TargetInUse, TargetProtected, InsufficientDiskSpace,
         SqlRestoreFailed, DatabaseUnavailable, OperationTimedOut, AuthenticationFailed, PermissionDenied,
-        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError, VerificationFailed
+        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError, VerificationFailed, ServerCertificateUntrusted
     ];
 }
 
@@ -145,6 +146,7 @@ internal static class RestoreFailureMapping
         BackupFailureCause.Unsupported => RestoreAgentFailureCodes.UnsupportedCapability,
         BackupFailureCause.AuthenticationFailed => RestoreAgentFailureCodes.AuthenticationFailed,
         BackupFailureCause.PermissionDenied => RestoreAgentFailureCodes.PermissionDenied,
+        BackupFailureCause.ServerCertificateUntrusted => RestoreAgentFailureCodes.ServerCertificateUntrusted,
         BackupFailureCause.StagingInvalid => RestoreAgentFailureCodes.StagingInvalid,
         BackupFailureCause.StorageUnavailable => RestoreAgentFailureCodes.StorageUnavailable,
         _ => null

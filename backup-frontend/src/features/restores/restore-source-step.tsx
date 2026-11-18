@@ -41,7 +41,7 @@ export function RestoreSourceStep({ instancePrefix, engineName, targets, activeA
           </Select>
 
           {activeAgent && (
-            <div className={`rounded-md p-3 text-sm ${activeAgent.sourceEligible && activeAgent.canRestore ? 'bg-success-subtle text-success' : 'bg-error-subtle text-error'}`}>
+            <div className={`rounded-lg p-3 text-sm ${activeAgent.sourceEligible && activeAgent.canRestore ? 'bg-success-subtle text-success' : 'bg-error-subtle text-error'}`}>
               {activeAgent.sourceEligible && activeAgent.canRestore ? (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">

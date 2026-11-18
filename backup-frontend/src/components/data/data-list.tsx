@@ -66,11 +66,11 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
             </dl>
           )}
           {secondaryFields.length > 0 && (
-            <details className="group rounded-md border border-border/60 bg-surface-2/40 px-3 py-2 text-sm">
-              <summary className="cursor-pointer select-none font-medium text-text-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+            <details className="group rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm">
+              <summary className="cursor-pointer select-none font-medium text-text-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {tx('Diğer detaylar ({0})', { '0': String(secondaryFields.length) })}
               </summary>
-              <dl className="mt-3 grid gap-x-6 gap-y-2 border-t border-border/40 pt-2 sm:grid-cols-2">
+              <dl className="mt-3 grid gap-x-6 gap-y-2 border-t border-border pt-2 sm:grid-cols-2">
                 {secondaryFields.map((column) => (
                   <div key={column.key} className="min-w-0">
                     <dt className="text-sm text-text-muted">{column.header}</dt>
@@ -80,7 +80,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
               </dl>
             </details>
           )}
-          {actions.length > 0 && <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-11 [&_button]:min-w-11">{actions.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
+          {actions.length > 0 && <div className="flex flex-wrap items-center gap-2">{actions.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
         </Card>
       ))}
     </ul>
@@ -99,9 +99,9 @@ function Table<T>({ rows, columns, keyExtractor, className, caption }: ListProps
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={keyExtractor(row)} className="border-b border-border last:border-b-0 hover:bg-surface-2/70">
+            <tr key={keyExtractor(row)} className="border-b border-border last:border-b-0 hover:bg-surface-2">
               {columns.map((column) => (
-                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-8 [&_button]:py-1 [&_button]:text-sm pointer-coarse:[&_button]:min-h-11', column.card === 'actions' ? 'whitespace-nowrap [&_.flex-wrap]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
+                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-control [&_button]:py-1 [&_button]:text-sm', column.card === 'actions' ? 'whitespace-nowrap [&_.flex-wrap]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
               ))}
             </tr>
           ))}

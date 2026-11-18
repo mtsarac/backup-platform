@@ -232,7 +232,7 @@ export function SecurityPage() {
               className="mx-auto flex size-48 items-center justify-center rounded-lg border border-border bg-white p-2 [&>svg]:size-full"
               dangerouslySetInnerHTML={{ __html: setupData.qrSvg }}
             />
-            <div className="rounded-lg border border-border bg-surface-muted p-3 text-center">
+            <div className="rounded-lg border border-border bg-surface-2 p-3 text-center">
               <span className="block text-xs font-medium text-text-muted">{tx('Gizli anahtar')}</span>
               <code className="select-all font-mono text-sm font-semibold tracking-wider text-text-heading">
                 {setupData.manualEntryKey}
@@ -269,13 +269,13 @@ export function SecurityPage() {
 
       {/* Issued Recovery Codes Modal */}
       {codesModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-xl border border-border bg-surface p-6 shadow-overlay">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4">
+          <div className="w-full max-w-md space-y-4 rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
             <h2 className="text-lg font-semibold text-text-heading">{tx('Kurtarma kodlarınız')}</h2>
             <Notice tone="warning">
               {tx('Bu kodlar yalnızca bir kez gösterilir. Kimlik doğrulama cihazınıza erişiminizi kaybederseniz hesabınıza erişmek için bu kodları kullanabilirsiniz.')}
             </Notice>
-            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-surface-muted p-4 font-mono text-sm">
+            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-surface-2 p-4 font-mono text-sm">
               {issuedCodes.map((code) => (
                 <span key={code} className="select-all text-text-heading">
                   {code}

@@ -8,6 +8,7 @@ public static class SqlServerBackupReasons
     public const string BackupNotSupported = "backup-not-supported";
     public const string RequiredOptionUnsupported = "required-option-unsupported";
     public const string ServerUnavailable = "server-unavailable";
+    public const string ServerCertificateUntrusted = "server-certificate-untrusted";
     public const string AuthenticationFailed = "authentication-failed";
     public const string StagedFileMissing = "staged-file-missing";
     public const string VerifyPermissionDenied = "verify-permission-denied";

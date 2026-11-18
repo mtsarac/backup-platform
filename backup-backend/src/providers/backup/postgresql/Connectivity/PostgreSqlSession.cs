@@ -125,15 +125,22 @@ internal sealed partial class PostgreSqlSession : IAsyncDisposable
         return null;
     }
 
-    // Npgsql has no dedicated type for "server refused SSL"; certificate failures surface as AuthenticationException.
-    private static bool IsTlsFailure(Exception exception)
+    // Npgsql has no dedicated type for "server refused SSL"; a rejected server certificate surfaces as an AuthenticationException somewhere in the chain.
+    private static bool IsCertificateFailure(Exception exception)
     {
         for (var e = exception; e is not null; e = e.InnerException)
-            if (e is System.Security.Authentication.AuthenticationException || e is NpgsqlException && e.Message.Contains("SSL/TLS", StringComparison.Ordinal)) return true;
+            if (e is System.Security.Authentication.AuthenticationException) return true;
         return false;
     }
 
-    private static DatabaseProviderException Translate(ILogger logger, string phase, Exception exception, bool timedOut)
+    private static bool IsTlsFailure(Exception exception)
+    {
+        for (var e = exception; e is not null; e = e.InnerException)
+            if (e is NpgsqlException && e.Message.Contains("SSL/TLS", StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    internal static DatabaseProviderException Translate(ILogger logger, string phase, Exception exception, bool timedOut)
     {
         var sqlState = Find(exception)?.SqlState;
         LogFailure(logger, exception.GetType().Name, sqlState ?? "none", phase);
@@ -153,8 +160,10 @@ internal sealed partial class PostgreSqlSession : IAsyncDisposable
             _ when sqlState is not null && !sqlState.StartsWith("08", StringComparison.Ordinal)
                 && sqlState is not ("57P01" or "57P02" or "57P03" or "53300") =>
                 new DatabaseProviderException(DatabaseFailureKind.Unexpected, "The server returned an unexpected error. Details are in the agent log.", exception),
+            _ when IsCertificateFailure(exception) =>
+                new DatabaseProviderException(DatabaseFailureKind.ServerCertificateUntrusted, "The server's TLS certificate could not be verified.", exception),
             _ when IsTlsFailure(exception) =>
-                new DatabaseProviderException(DatabaseFailureKind.InvalidConfiguration, "A TLS connection could not be established: the server has no TLS or its certificate is not trusted. Change the encryption settings or fix the server certificate.", exception),
+                new DatabaseProviderException(DatabaseFailureKind.InvalidConfiguration, "A TLS connection could not be established. Change the encryption settings or check that the server offers TLS.", exception),
             _ when exception is NpgsqlException or SocketException or IOException or System.Security.Authentication.AuthenticationException
                     || exception.InnerException is SocketException or IOException =>
                 new DatabaseProviderException(DatabaseFailureKind.Unreachable, "The server could not be reached or the connection was lost.", exception),

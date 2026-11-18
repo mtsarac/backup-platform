@@ -39,6 +39,8 @@ public static class RestoreFailureCodes
     public const string InternalError = "InternalError";
     /// <summary>The backup restored, but the restored database did not pass the engine's integrity or data-read checks.</summary>
     public const string VerificationFailed = "VerificationFailed";
+    /// <summary>The database server's TLS certificate could not be verified as trusted; a restore may be requested again with the owner's explicit decision to trust it.</summary>
+    public const string ServerCertificateUntrusted = "ServerCertificateUntrusted";
 
     // Outcomes that are not agent-reported failures.
     public const string Cancelled = "Cancelled";
@@ -52,7 +54,7 @@ public static class RestoreFailureCodes
         BackupInvalid, BackupTypeUnsupported, IncompatibleVersion, FileMappingFailed,
         PreCheckFailed, TargetDatabaseExists, TargetDatabaseNotFound, TargetInUse, TargetProtected, InsufficientDiskSpace,
         SqlRestoreFailed, DatabaseUnavailable, OperationTimedOut, AuthenticationFailed, PermissionDenied,
-        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError, VerificationFailed
+        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError, VerificationFailed, ServerCertificateUntrusted
     };
 
     /// <summary>Codes an agent may report together with a Failed outcome.</summary>

@@ -8,10 +8,10 @@ const levels: Record<StatusLevel, { icon: LucideIcon; className: string }> = {
   safe: { icon: CheckCircle2, className: 'in-data-[slot=page-meta]:bg-success-subtle text-success' },
   attention: { icon: AlertTriangle, className: 'in-data-[slot=page-meta]:bg-warning-subtle text-warning' },
   urgent: { icon: OctagonAlert, className: 'in-data-[slot=page-meta]:bg-error-subtle text-error' },
-  running: { icon: LoaderCircle, className: 'in-data-[slot=page-meta]:bg-info-subtle text-info' },
-  pending: { icon: Clock, className: 'in-data-[slot=page-meta]:bg-muted text-text-muted' },
-  info: { icon: Info, className: 'in-data-[slot=page-meta]:bg-info-subtle text-info' },
-  neutral: { icon: Circle, className: 'in-data-[slot=page-meta]:bg-muted text-text-muted' },
+  running: { icon: LoaderCircle, className: 'in-data-[slot=page-meta]:bg-accent text-primary' },
+  pending: { icon: Clock, className: 'in-data-[slot=page-meta]:bg-neutral-subtle text-text-muted' },
+  info: { icon: Info, className: 'in-data-[slot=page-meta]:bg-neutral-subtle text-neutral' },
+  neutral: { icon: Circle, className: 'in-data-[slot=page-meta]:bg-neutral-subtle text-text-muted' },
 }
 
 type Props = { className?: string } & (
@@ -27,7 +27,7 @@ export function StatusPill({ status, domain = 'general', level, children, classN
   useLanguage()
   const meta = level ? { level, label: undefined } : statusMeta(domain, status)
   const { icon: Icon, className: tone } = levels[meta.level]
-  return <span className={cn('inline-flex max-w-full items-center gap-1.5 rounded-md text-sm font-medium in-data-[slot=page-meta]:px-2 in-data-[slot=page-meta]:py-0.5', tone, className)}>
+  return <span className={cn('inline-flex max-w-full items-center gap-1.5 rounded-full text-sm font-medium in-data-[slot=page-meta]:px-2 in-data-[slot=page-meta]:py-0.5', tone, className)}>
     <Icon aria-hidden="true" className="size-3.5 shrink-0" />
     {children ?? meta.label ?? levelLabel(meta.level)}
   </span>

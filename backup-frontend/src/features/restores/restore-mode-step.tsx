@@ -54,7 +54,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
               type="button"
               aria-pressed={mode === 'NewDatabase'}
               aria-describedby={newDescriptionId}
-              className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'NewDatabase' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-surface'}`}
+              className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'NewDatabase' ? 'border-primary bg-accent ring-1 ring-primary' : 'border-border bg-surface'}`}
               onClick={onSelectNewDatabase}
             >
               <p className="font-semibold text-text-heading">{tx("Yeni bir veritabanı olarak (önerilen)")}</p>

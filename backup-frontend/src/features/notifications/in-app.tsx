@@ -84,7 +84,7 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
     <Button variant="outline" size="sm" aria-expanded={open} aria-controls="in-app-notifications" onClick={() => setOpen(!open)}>
       <Bell aria-hidden="true" className="size-4" />{tx('Bildirimler')} {unread > 0 && <span>({unread})</span>}
     </Button>
-    {open && <section id="in-app-notifications" aria-label={tx('Bildirimler')} className="absolute right-0 z-20 mt-2 max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-auto rounded-lg border border-border bg-surface p-4 shadow-overlay">
+    {open && <section id="in-app-notifications" aria-label={tx('Bildirimler')} className="absolute right-0 z-20 mt-2 max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-auto rounded-lg border border-border bg-surface-raised p-4 shadow-overlay">
       <QueryState isPending={list.isPending} error={list.error} empty={list.data?.length === 0}>
         {markRead.error && <ErrorNotice error={markRead.error} />}
         <ul className="space-y-3" aria-live="polite">{list.data?.map((item) => {

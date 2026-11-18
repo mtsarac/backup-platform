@@ -23,7 +23,7 @@ describe('StatusPill', () => {
     render(<><StatusPill status="Succeeded" /><StatusPill status="Failed" /><StatusPill status="Running" /><StatusPill status="Pending" /></>)
     expect(screen.getByText('Başarılı').closest('span')).toHaveClass('text-success')
     expect(screen.getByText('Başarısız').closest('span')).toHaveClass('text-error')
-    expect(screen.getByText('Çalışıyor').closest('span')).toHaveClass('text-info')
+    expect(screen.getByText('Çalışıyor').closest('span')).toHaveClass('text-primary')
     expect(screen.getByText('Sırada bekliyor').closest('span')).toHaveClass('text-text-muted')
   })
 

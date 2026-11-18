@@ -311,6 +311,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.OperationTimedOut => "A restore operation timed out.",
         RestoreFailureCodes.AuthenticationFailed => "The database credentials were rejected.",
         RestoreFailureCodes.PermissionDenied => "A required permission is missing.",
+        RestoreFailureCodes.ServerCertificateUntrusted => "The database server's certificate could not be verified.",
         RestoreFailureCodes.VerificationFailed => "The backup restored, but the restored database did not pass its integrity or data-read checks.",
         RestoreFailureCodes.InvalidConfiguration => "The restore configuration is invalid.",
         RestoreFailureCodes.UnsupportedCapability => "The agent or the database does not support a requested restore capability.",

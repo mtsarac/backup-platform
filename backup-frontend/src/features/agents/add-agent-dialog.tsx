@@ -84,8 +84,8 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   const packageReady = Boolean(distribution?.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'])
   const command = packageReady ? enrollmentCommands(platform, server, secret, name, mode, language) : ''
   return <Dialog.Root open onOpenChange={(open) => { if (!open) close() }}>
-    <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-40 bg-black/50" />
-      <Dialog.Popup initialFocus={nameRef} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-xl">
+    <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+      <Dialog.Popup initialFocus={nameRef} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
         <Dialog.Title className="text-lg font-semibold text-text-heading">{tx("Yedekleme bilgisayarı ekle")}</Dialog.Title>
         <Dialog.Description className="text-sm text-text-muted">{tx("Yedekleri alacak bilgisayara küçük bir program kurulur.")}</Dialog.Description>
         <Stepper steps={[tx('Bilgisayar'), tx('Kurulum'), tx('Bağlantı')]} current={view === 'computer' ? 0 : view === 'install' ? 1 : 2} />
