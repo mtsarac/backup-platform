@@ -23,6 +23,7 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
+ShowLanguageDialog=auto
 DisableReadyPage=yes
 WizardStyle=modern
 Compression=lzma2
@@ -138,7 +139,7 @@ function InitializeSetup(): Boolean;
 begin
   ServerUrl := ReadEmbeddedServer();
   Result := ServerUrl <> '';
-  if not Result then MsgBox(CustomMessage('NoServer'), mbError, MB_OK);
+  if not Result then SuppressibleMsgBox(CustomMessage('NoServer'), mbError, MB_OK, IDOK);
 end;
 
 procedure InitializeWizard();
@@ -161,21 +162,22 @@ begin
   Message := InputError(InputPage.Values[0], InputPage.Values[1]);
   if Message <> '' then
   begin
-    MsgBox(Message, mbError, MB_OK);
+    SuppressibleMsgBox(Message, mbError, MB_OK, IDOK);
     Result := False;
   end;
 end;
 
 procedure Fail(const Message: String);
 begin
-  MsgBox(CustomMessage('Failed') + #13#10#13#10 + Message, mbCriticalError, MB_OK);
+  Log('Setup failed: ' + Message);
+  SuppressibleMsgBox(CustomMessage('Failed') + #13#10#13#10 + Message, mbCriticalError, MB_OK, IDOK);
   Abort;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Key, Name, Message, Parameters, Language: String;
-  ErrorText: AnsiString;
+  ErrorLines: TArrayOfString;
   Code: Integer;
 begin
   if CurStep <> ssInstall then Exit;
@@ -191,12 +193,12 @@ begin
   // The error text goes to a file relative to the working directory so no path has to be quoted into the command.
   Parameters := '-NoProfile -ExecutionPolicy Bypass -Command "try { & ''.\install.ps1'' -NonInteractive -Server ''' + ServerUrl +
     ''' -Token ''' + Key + ''' -AgentName ''' + Name + ''' -Language ' + Language +
-    ' *> $null } catch { [IO.File]::WriteAllText(''install-error.txt'', $_.Exception.Message) ; exit 1 } ; exit 0"';
+    ' *> $null } catch { Set-Content -Path ''install-error.txt'' -Value $_.Exception.Message -Encoding UTF8 ; exit 1 } ; exit 0"';
   if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Parameters, ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, Code) then
     Fail(SysErrorMessage(Code));
   if Code <> 0 then
   begin
-    if LoadStringFromFile(ExpandConstant('{tmp}\install-error.txt'), ErrorText) then Message := UTF8ToString(ErrorText)
+    if LoadStringsFromFile(ExpandConstant('{tmp}\install-error.txt'), ErrorLines) and (GetArrayLength(ErrorLines) > 0) then Message := ErrorLines[0]
     else Message := SysErrorMessage(Code);
     Fail(Message);
   end;
