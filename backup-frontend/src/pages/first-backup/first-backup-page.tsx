@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AccessDenied } from '@/components/auth/access-denied'
 import { QueryState } from '@/components/data/query-state'
 import { linkClass } from '@/components/ui/form-styles'
@@ -13,6 +13,7 @@ import { DataStep } from '@/features/first-backup/data-step'
 import { autoJobName, awaitingCapabilities, CAPABILITY_POLL_MS, defaultSettings, firstBackupJobInput, type FirstBackupItem, type FirstBackupSettings } from '@/features/first-backup/first-backup-model'
 import { ProgressStep, ReadyStep } from '@/features/first-backup/progress-step'
 import { SummaryStep, type ItemResult } from '@/features/first-backup/summary-step'
+import { discoveredDatabasesPath } from '@/lib/routes'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
 type Step = 'computer' | 'data' | 'summary'
@@ -25,6 +26,7 @@ export function FirstBackupPage() {
   const { tenantId, canOperate, canAdmin } = useTenant()
   const base = `/tenants/${tenantId}`
   const agents = useAgents(tenantId, false, list => awaitingCapabilities(list) ? CAPABILITY_POLL_MS : false)
+  const navigate = useNavigate()
   const save = useSaveBackupJob()
   const { run } = useRunBackupJob()
   const [step, setStep] = useState<Step | null>(null)
@@ -39,9 +41,11 @@ export function FirstBackupPage() {
   if (step === null && agents.data && !agents.isFetching) setStep(agents.data.length ? 'data' : 'computer')
 
   const itemName = (item: FirstBackupItem) => names[item.key]?.trim() || autoJobName(item.database)
+  /** The Discovery page knows how to scan the new computer and what to do with what it finds. */
   async function computerOnline() {
-    await agents.refetch()
-    setStep('data')
+    const list = (await agents.refetch()).data ?? []
+    const added = list.find(agent => agent.connectivity === 'online') ?? list[0]
+    navigate(discoveredDatabasesPath(tenantId), { state: { addedAgentId: added?.agentId } })
   }
   async function create(startFirstBackup: boolean) {
     setPending(true)

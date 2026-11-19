@@ -2,6 +2,10 @@
 export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   // computer-flow: add-computer step and the computer shown on "Ne yedeklensin"
   "Bilgisayar hazırlanıyor…": { tr: "Bilgisayar hazırlanıyor…", en: "Preparing the computer…" },
+  "Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.": { tr: "Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.", en: "Computer added. Scanning for databases takes a few seconds." },
+  "Yedeklemek istediğiniz veritabanını seçin.": { tr: "Yedeklemek istediğiniz veritabanını seçin.", en: "Choose the database you want to back up." },
+  "Bilgisayarda veritabanı sunucusu bulundu. Yedek alabilmek için sunucuyu açıp giriş bilgilerini girin:": { tr: "Bilgisayarda veritabanı sunucusu bulundu. Yedek alabilmek için sunucuyu açıp giriş bilgilerini girin:", en: "A database server was found on the computer. To back it up, open the server and enter its login details:" },
+  "Bu bilgisayarda veritabanı bulunamadı; dosya yedeklemek veya elle eklemek için": { tr: "Bu bilgisayarda veritabanı bulunamadı; dosya yedeklemek veya elle eklemek için", en: "No database was found on this computer. To back up files or add one by hand," },
   "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.": { tr: "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.", en: "The computer is reporting what can be backed up; this takes a few seconds." },
   "Yedekleme bilgisayarı:": { tr: "Yedekleme bilgisayarı:", en: "Backup computer:" },
   "Listede bilgisayarı bu adla tanırsınız.": { tr: "Listede bilgisayarı bu adla tanırsınız.", en: "You will recognize the computer by this name in the list." },
