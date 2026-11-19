@@ -1,7 +1,7 @@
 // UI-01: login -> tenant -> dashboard -> job wizard -> run -> artifact -> restore wizard -> restored DB verified -> cleanup, all through the real UI (owner A, host-e2e PostgreSQL job to local storage).
 const L = require('./lib.cjs');
 
-const N = String(Date.now() % 1e6), RESUME = process.env.RESUME_ARTIFACT;
+const N = String(Date.now() % 1e6), RESUME = process.env.RESUME_RUN;
 const JOB = process.env.RESUME_JOB || 'gap-ui-01-' + N, DB = 'gap_ui_01_' + N;
 const steps = []; const note = (k, v) => { steps.push([k, v]); console.log('  ·', k, v); };
 (async () => {
@@ -9,14 +9,14 @@ const steps = []; const note = (k, v) => { steps.push([k, v]); console.log('  ·
   const shots = [];
   let ok = true, err = '';
   try {
-    if (RESUME) { const base0 = await L.login(p, 'a'); await p.goto(base0 + '/artifacts/' + RESUME, { waitUntil: 'networkidle' }); await p.waitForSelector('text=Geri yüklenebilir'); }
+    if (RESUME) { const base0 = await L.login(p, 'a'); await p.goto(base0 + '/backup-runs/' + RESUME, { waitUntil: 'networkidle' }); await p.getByRole('link', { name: 'Geri yükle' }).waitFor(); }
     else {
     await p.goto(L.BASE + '/', { waitUntil: 'networkidle' });
     note('redirect to login', p.url().endsWith('/login'));
     shots.push(await L.shot(p, 'UI-01-01-login'));
     const base = await L.login(p, 'a');
     note('landed', base.replace(L.BASE, '').replace(L.ST.a.tenantId, '<tenantA>'));
-    await p.waitForSelector('text=Genel Bakış'); await p.waitForLoadState('networkidle');
+    await p.waitForSelector('text=Ana sayfa'); await p.waitForLoadState('networkidle');
     shots.push(await L.shot(p, 'UI-01-02-dashboard'));
     await p.getByRole('link', { name: 'Yeni yedekleme işi' }).first().click();
     await p.waitForURL(/backup-jobs\/new$/);
@@ -31,32 +31,26 @@ const steps = []; const note = (k, v) => { steps.push([k, v]); console.log('  ·
     await p.getByLabel('Veritabanı kullanıcı adı').fill(c.user);
     shots.push(await L.shot(p, 'UI-01-03-wizard-source'));            // before the password is typed
     await p.getByLabel('Veritabanı parolası').fill(c.password);
-    await p.getByText('Teknik ayrıntılar').first().click();
-    note('defaults encrypt/trust', [await p.getByLabel('Bağlantıyı şifrele').isChecked(), await p.getByLabel('Sunucu sertifikasına güven').isChecked()].join('/'));
-    await p.getByLabel('Bağlantıyı şifrele').uncheck(); await p.getByLabel('Sunucu sertifikasına güven').check();
-    await p.getByRole('button', { name: 'İleri' }).click(); await p.waitForSelector('text=Adım 2 / 5');
+    await p.getByRole('button', { name: 'İleri' }).click(); await p.waitForSelector('text=Adım 2 / 4');
     shots.push(await L.shot(p, 'UI-01-04-wizard-storage'));
-    await p.getByRole('button', { name: 'İleri' }).click(); await p.waitForSelector('text=Adım 3 / 5');
+    await p.getByRole('button', { name: 'İleri' }).click(); await p.waitForSelector('text=Adım 3 / 4');
     await p.getByRole('button', { name: 'Elle çalıştır' }).click();
     shots.push(await L.shot(p, 'UI-01-05-wizard-schedule'));
-    await p.getByRole('button', { name: 'İleri' }).click(); await p.waitForSelector('text=Adım 4 / 5');
-    await p.getByRole('button', { name: 'İleri' }).click(); await p.waitForSelector('text=Adım 5 / 5');
+    await p.getByRole('button', { name: 'İleri' }).click(); await p.waitForSelector('text=Adım 4 / 4');
     shots.push(await L.shot(p, 'UI-01-06-wizard-summary'));
     await p.getByRole('button', { name: 'Kaydet' }).click(); await p.waitForURL(/\/backup-jobs$/);
     await p.getByLabel('İş, yedekleme bilgisayarı veya veritabanı ara').fill(JOB); await p.waitForTimeout(600);
     shots.push(await L.shot(p, 'UI-01-07-jobs-list'));
-    await p.getByRole('button', { name: 'Şimdi çalıştır' }).first().click();
+    await p.getByRole('link', { name: new RegExp(JOB) }).first().click();
+    await p.getByRole('button', { name: 'Şimdi yedekle' }).click();
     await p.getByRole('link', { name: 'Denemeyi aç' }).click(); await p.waitForURL(/backup-runs\/[0-9a-f-]{36}$/);
     const runId = p.url().split('/').pop(); note('runId', runId);
     shots.push(await L.shot(p, 'UI-01-08-run-started'));
     await p.waitForSelector('text=Başarılı', { timeout: 900000 }); await p.waitForTimeout(500);
     shots.push(await L.shot(p, 'UI-01-09-run-succeeded'));
-    await p.getByRole('tab', { name: /Denemeler/ }).click();
-    await p.getByRole('link', { name: 'Yedek dosyasını aç' }).click(); await p.waitForURL(/artifacts\/[0-9a-f-]{36}$/);
-    const artifactId = p.url().split('/').pop(); note('artifactId', artifactId);
-    await p.waitForSelector('text=Geri yüklenebilir'); shots.push(await L.shot(p, 'UI-01-10-artifact'));
+    await p.getByRole('link', { name: 'Geri yükle' }).waitFor(); shots.push(await L.shot(p, 'UI-01-10-run-restorable'));
     }
-    await p.getByRole('link', { name: 'Veritabanını geri yükle' }).click(); await p.waitForURL(/restore$/);
+    await p.getByRole('link', { name: 'Geri yükle' }).click(); await p.waitForURL(/restore$/);
     await p.waitForSelector('text=Hangi yedekleme bilgisayarı geri yüklesin?');
     note('restore step1 agent preselected', await p.locator('select').first().inputValue() !== '');
     shots.push(await L.shot(p, 'UI-01-11-restore-source'));
