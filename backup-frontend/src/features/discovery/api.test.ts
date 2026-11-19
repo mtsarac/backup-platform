@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiRequest } from '@/lib/api/client'
-import { getDiscoveryAgents, getDiscoveryInstances, rescanDiscoveryAgent, saveDiscoveryCredential, saveDiscoverySettings, verifyDiscoveryInstance } from './api'
+import { getDiscoveryAgents, getDiscoveryInstances, rescanDiscoveryAgent, saveDiscoveryCredential, verifyDiscoveryInstance } from './api'
 
 vi.mock('@/lib/api/client', async importOriginal => ({ ...(await importOriginal()), apiRequest: vi.fn().mockResolvedValue({}) }))
 beforeEach(() => vi.mocked(apiRequest).mockClear())
@@ -18,13 +18,10 @@ describe('discovery api', () => {
     await verifyDiscoveryInstance('t', 'i')
     const credential = { credentialReference: 'ref', integratedSecurity: false, encrypt: true, trustServerCertificate: false }
     await saveDiscoveryCredential('t', 'i', credential)
-    const settings = { enabled: true, scanIntervalMinutes: 60, includeDocker: false }
-    await saveDiscoverySettings('t', 'a', settings)
     expect(vi.mocked(apiRequest).mock.calls).toEqual([
       ['tenants/t/discovery/agents/a/rescan', { method: 'POST' }],
       ['tenants/t/discovery/instances/i/verify', { method: 'POST' }],
       ['tenants/t/discovery/instances/i/credential', { method: 'PUT', json: credential }],
-      ['tenants/t/discovery/agents/a/settings', { method: 'PUT', json: settings }],
     ])
   })
 })

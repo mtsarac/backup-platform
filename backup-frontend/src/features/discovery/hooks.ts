@@ -2,9 +2,9 @@ import { tx } from '@/lib/i18n'
 import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { getDiscoveryAgents, getDiscoveryInstance, getDiscoveryInstances, rescanDiscoveryAgent, saveDiscoveryCredential, saveDiscoverySettings, verifyDiscoveryInstance } from './api'
+import { getDiscoveryAgents, getDiscoveryInstance, getDiscoveryInstances, rescanDiscoveryAgent, saveDiscoveryCredential, verifyDiscoveryInstance } from './api'
 import { isScanActive, SCAN_POLL_MS } from './status'
-import type { DiscoveryCredentialInput, DiscoveryInstanceFilters, DiscoverySettingsInput } from './types'
+import type { DiscoveryCredentialInput, DiscoveryInstanceFilters } from './types'
 
 export const discoveryKeys = {
   all: (tenantId: string) => ['tenant', tenantId, 'discovery'] as const,
@@ -61,9 +61,4 @@ export function useSaveCredential(id: string) {
   const { tenantId, canOperate } = useTenant()
   const invalidate = useInvalidateDiscovery()
   return useMutation({ mutationFn: (input: DiscoveryCredentialInput) => canOperate ? saveDiscoveryCredential(tenantId, id, input) : denied(), onSuccess: invalidate })
-}
-export function useSaveSettings(agentId: string) {
-  const { tenantId, canAdmin } = useTenant()
-  const invalidate = useInvalidateDiscovery()
-  return useMutation({ mutationFn: (input: DiscoverySettingsInput) => canAdmin ? saveDiscoverySettings(tenantId, agentId, input) : denied(), onSuccess: invalidate })
 }

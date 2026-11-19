@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getAgents } from '@/features/agents/api'
-import { getDiscoveryAgents, getDiscoveryInstances, rescanDiscoveryAgent, saveDiscoverySettings } from '@/features/discovery/api'
+import { getDiscoveryAgents, getDiscoveryInstances, rescanDiscoveryAgent } from '@/features/discovery/api'
 import { legacyAgent, makeInstance, makeStatus, supportedAgent } from '@/features/discovery/test-fixtures'
 import { ApiError } from '@/lib/api/client'
 import { DiscoveryPage } from './discovery-page'
@@ -24,7 +24,6 @@ beforeEach(() => {
   vi.mocked(getAgents).mockResolvedValue([supportedAgent, legacyAgent] as never)
   vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
   vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance(), makeInstance({ id: 'inst-2', displayName: 'Other server', access: 'CredentialsRequired' })] })
-  vi.mocked(saveDiscoverySettings).mockResolvedValue(makeStatus())
 })
 
 describe('discovery page', () => {
@@ -58,17 +57,6 @@ describe('discovery page', () => {
     mount('/?agentId=gone&engine=oracle')
     await screen.findByRole('link', { name: 'SQL Server (default)' })
     expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', {}, expect.anything())
-  })
-  it('shows the scan interval once for administrators and read-only for others', async () => {
-    mount()
-    fireEvent.click((await screen.findAllByText('Teknik ayrıntılar'))[0])
-    expect(screen.getAllByText('Tarama aralığı (dakika)')).toHaveLength(1)
-    expect(screen.getByLabelText('Tarama aralığı (dakika)')).toHaveValue(360)
-    cleanup()
-    Object.assign(access, { canOperate: false, canAdmin: false })
-    mount()
-    fireEvent.click((await screen.findAllByText('Teknik ayrıntılar'))[0])
-    expect(screen.getByText('Tarama aralığı (dakika):')).toBeInTheDocument()
   })
   it('says an offline computer scans when it reconnects', async () => {
     vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'offline' }] as never)
@@ -131,16 +119,17 @@ describe('discovery page', () => {
     expect(screen.queryByRole('button', { name: /yeniden tara/ })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Otomatik tarama açık')).not.toBeInTheDocument()
   })
-  it('lets administrators change scan settings only under technical details', async () => {
+  it('offers nobody scan settings: automatic scans and Docker stay on, the interval is shown read-only', async () => {
     mount()
     await screen.findByRole('region', { name: 'SQL Agent' })
-    expect(screen.queryByLabelText('Tarama ayarları')).not.toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
-    const dialog = screen.getByRole('region', { name: 'Teknik ayrıntılar' })
-    expect(within(dialog).getByLabelText('Tarama ayarları')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Tarama aralığı (dakika)'), { target: { value: '30' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
-    await waitFor(() => expect(saveDiscoverySettings).toHaveBeenCalledWith('tenant-a', 'agent-a', { enabled: true, scanIntervalMinutes: 30, includeDocker: true }))
+    const details = screen.getByRole('region', { name: 'Teknik ayrıntılar' })
+    expect(within(details).queryByLabelText('Tarama ayarları')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Otomatik tarama açık')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Docker/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Tarama aralığı (dakika)')).not.toBeInTheDocument()
+    expect(within(details).getByText(/Tarama aralığı \(dakika\)/)).toBeInTheDocument()
+    expect(within(details).getByText('360')).toBeInTheDocument()
   })
   it('guides a tenant with no computer to add one', async () => {
     vi.mocked(getAgents).mockResolvedValue([])
