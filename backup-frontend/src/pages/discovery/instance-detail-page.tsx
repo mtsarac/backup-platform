@@ -12,10 +12,11 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
 import { useAgents } from '@/features/agents/hooks'
+import { StatusPill } from '@/components/data/status-pill'
 import { AccessPill } from '@/features/discovery/access-pill'
 import { DatabaseTable } from '@/features/discovery/database-table'
 import { useDiscoveryAgents, useDiscoveryInstance, useSaveCredential, useVerifyInstance } from '@/features/discovery/hooks'
-import { canCreateJob, databaseSelectable, engineLabels, plainReasonText, reasonText, sourceLabels, TLS_UNAVAILABLE } from '@/features/discovery/status'
+import { canCreateJob, databaseSelectable, engineLabels, isRescanThrottled, isStaleList, plainReasonText, reasonText, sourceLabels, staleListNote, staleListTitle, TLS_UNAVAILABLE } from '@/features/discovery/status'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { DatabaseLoginFields } from '@/features/backup-jobs/database-login-fields'
 import { loginErrors } from '@/features/backup-jobs/database-login-validation'
@@ -106,7 +107,8 @@ function Databases({ instance }: { instance: DiscoveryInstanceDetail }) {
   if (instance.access === 'CredentialsRequired') return null
   const creatable = canCreateJob(instance)
   const picks = selected.filter(name => instance.databases.some(db => db.name === name && databaseSelectable(db, instance)))
-  return <Section title={tx("Veritabanları")} description={tx("Yedeklenebilir olanları seçip yedekleme işi oluşturabilirsiniz. Sistem veritabanları ve zaten yedeklenenler seçilemez.")} flush
+  const stale = isStaleList(instance)
+  return <Section title={stale ? staleListTitle() : tx("Veritabanları")} description={stale ? staleListNote() : tx("Yedeklenebilir olanları seçip yedekleme işi oluşturabilirsiniz. Sistem veritabanları ve zaten yedeklenenler seçilemez.")} flush
     actions={creatable ? <Button disabled={picks.length === 0} onClick={() => navigate(`/tenants/${tenantId}/backup-jobs/new?${new URLSearchParams([['discoveryInstance', instance.id], ...picks.map(name => ['database', name])])}`)}>{tx("Yedekleme işi oluştur")}{picks.length > 0 ? ` (${picks.length})` : ''}</Button> : undefined}>
     <DatabaseTable instance={instance} selected={picks} onChange={creatable ? setSelected : undefined} />
   </Section>
@@ -151,13 +153,16 @@ export function InstanceDetailPage() {
   // The access result and the last error are of the previous attempt while a new one runs: they come back with the new result.
   const busy = save.isPending || verifying
   const feedbackError = busy ? null : save.error ?? verify.error
+  // A throttled verify is not a failure: one is already queued.
+  const alreadyRequested = isRescanThrottled(feedbackError)
+  const failure = alreadyRequested ? null : feedbackError
   const accessWarning = needsLogin && !busy
-  const warned = instance !== undefined && (instance.presence === 'Missing' || accessWarning || noAddress || Boolean(feedbackError))
+  const warned = instance !== undefined && (instance.presence === 'Missing' || accessWarning || noAddress || Boolean(failure))
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Bulunan veritabanları'), to: discoveredDatabasesPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
       description={instance && <>{tx("Bilgisayar")}: <Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(instance.agentId)}`}>{computer}</Link></>}
       meta={<>
-        {instance && <AccessPill status={instance.access} reasonCode={instance.accessReasonCode} />}
+        {instance && (verifying ? <StatusPill level="neutral">{tx("Doğrulanıyor…")}</StatusPill> : <AccessPill status={instance.access} reasonCode={instance.accessReasonCode} />)}
         {scanning && !verifying && <span role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Tarama sürüyor")}</span>}
       </>} />
     <QueryState isPending={query.isPending} error={query.error}>
@@ -167,8 +172,9 @@ export function InstanceDetailPage() {
           {instance.presence === 'Missing' && <Notice tone="warning" title={tx("Sunucu bulunamadı")}>{tx("Son aramalarda bu veritabanı sunucusu bulunamadı; kaydı silinmedi.")}</Notice>}
           {accessWarning && <AccessNotice instance={instance} save={save} verify={verify} />}
           {noAddress && <Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice>}
-          {feedbackError && <CredentialFeedback error={feedbackError} />}
+          {failure && <CredentialFeedback error={failure} />}
         </section>}
+        {alreadyRequested && <Notice>{tx("Doğrulama zaten isteniyor…")}</Notice>}
         {verifying && <Verifying />}
         <CredentialSection key={instance.id} instance={instance} save={save} verify={verify} needsLogin={needsLogin} />
         <Databases key={`${instance.id}:db`} instance={instance} />

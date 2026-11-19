@@ -14,7 +14,7 @@ import type { Agent } from '@/features/agents/types'
 import { getDiscoveryInstance } from '@/features/discovery/api'
 import { discoveryInstancePath } from '@/lib/routes'
 import { discoveryKeys, useDiscoveryAgents, useDiscoveryInstances, useRescanAgent } from '@/features/discovery/hooks'
-import { canCreateJob, databaseSelectable, engineLabels, isScanActive, supportsDiscovery } from '@/features/discovery/status'
+import { canCreateJob, databaseSelectable, engineLabels, isRescanThrottled, isScanActive, supportsDiscovery } from '@/features/discovery/status'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { autoJobName, awaitingCapabilities, itemKey, type FirstBackupItem } from './first-backup-model'
 
@@ -71,7 +71,8 @@ export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
       ? <Field label={tx('Yedekleme bilgisayarı')}>{control => <Select {...control} value={agentId} onChange={event => { setChosen(event.target.value); onPicked(new Set()); setSearch('') }}>
         {capable.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız bilgisayar')}</option>)}</Select>}</Field>
       : <p className="text-sm text-text-muted">{tx('Yedekleme bilgisayarı:')} <span className="font-medium text-text-heading">{computer?.hostName ?? tx('Adsız bilgisayar')}</span></p>}
-    {rescan.error && <ErrorNotice error={rescan.error} onRetry={() => rescan.mutate(agentId)} />}
+    {/* A throttled scan was just requested: nothing is wrong, the scan state below tells it. */}
+    {rescan.error && !isRescanThrottled(rescan.error) && <ErrorNotice error={rescan.error} onRetry={() => rescan.mutate(agentId)} />}
     {scanning && <p role="status" className="text-sm text-text-muted">{tx('Bilgisayar taranıyor…')}</p>}
     {waitingOffline && <p role="status" className="text-sm text-text-muted">{tx('Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.')}</p>}
     <QueryState isPending={instances.isPending} error={instances.error}>

@@ -10,6 +10,10 @@ export const sourceLabels: Record<string, string> = { get Service() { return tx(
 export const TLS_UNAVAILABLE = 'server_tls_unavailable'
 /** The 429 of a second rescan right after the first: nothing is wrong, the scan is already queued. */
 export const isRescanThrottled = (error: unknown) => error instanceof ApiError && (error.reason ?? error.code) === 'rescan_too_soon'
+/** Without a working login the stored database list is from an earlier scan: shown muted as "last known", with no availability verdict. */
+export const isStaleList = (instance: Pick<DiscoveryInstanceSummary, 'access'>) => instance.access !== 'Authenticated'
+export const staleListTitle = () => tx("Son bilinen liste")
+export const staleListNote = () => tx("Veritabanları listelenemiyor; son başarılı aramadan kalan liste gösteriliyor.")
 export const engineLabels: Record<string, string> = { mssql: 'MSSQL', postgres: 'PostgreSQL' }
 
 // Reason codes are agent-produced fixed codes; unknown ones are shown as the bare code, never as free text.
