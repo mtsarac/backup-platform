@@ -47,6 +47,12 @@ describe('discovery page', () => {
     const row = screen.getByRole('link', { name: 'SQL Server (default)' }).closest('tr')!
     expect(within(row).getByRole('link', { name: 'SQL Agent' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
   })
+  it('does not list servers that belong to a computer that is no longer in the list', async () => {
+    vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance(), makeInstance({ id: 'inst-old', agentId: 'agent-revoked', displayName: 'Old computer server' })] })
+    mount()
+    expect(await screen.findByRole('link', { name: 'SQL Server (default)' })).toBeInTheDocument()
+    expect(screen.queryByText('Old computer server')).not.toBeInTheDocument()
+  })
   it('opens already filtered from the URL and ignores values it does not know', async () => {
     mount('/?agentId=agent-a&engine=mssql&includeMissing=1')
     await screen.findByRole('link', { name: 'SQL Server (default)' })

@@ -48,6 +48,8 @@ export function DiscoveryPage() {
   const engine = oneOf(get('engine'), Object.keys(engineLabels) as DiscoveryEngine[]) ?? ''
   const includeMissing = get('includeMissing') === '1'
   const instances = useDiscoveryInstances({ ...(agentId ? { agentId } : {}), ...(engine ? { engine } : {}), ...(includeMissing ? { includeMissing } : {}) }, agents.isSuccess)
+  // Servers of computers missing from the list (revoked ones are hidden) are leftovers and are not shown.
+  const servers = instances.data?.items.filter(item => agentList.some(agent => agent.agentId === item.agentId))
   const agentName = (id: string) => agentList.find(item => item.agentId === id)?.hostName || tx('Adsız bilgisayar')
   const computersPath = `/tenants/${tenantId}/agents`
   const filtered = Boolean(agentId || engine || includeMissing)
@@ -78,11 +80,11 @@ export function DiscoveryPage() {
     </Filters>
     </Disclosure>
     <QueryState isPending={instances.isPending} error={instances.error}>
-      {instances.data && (instances.data.items.length === 0
+      {servers && (servers.length === 0
         ? <Card padding="none"><EmptyState icon={Radar} message={filtered ? tx("Seçilen filtrelere uyan veritabanı sunucusu bulunamadı.") : tx("Bu bilgisayarlarda henüz veritabanı bulunamadı. Bilgisayar kartındaki \"Yeniden tara\" ile yeniden arayabilirsiniz.")} canAct={filtered || canOperate} action={filtered
           ? <Button onClick={() => update({ agentId: '', engine: '', includeMissing: '' })}>{tx("Filtreleri temizle")}</Button>
           : <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx("Yeni yedekleme işi")}</Link>} /></Card>
-        : <DataList rows={instances.data.items} columns={columns} keyExtractor={item => item.id} caption={tx("Bulunan veritabanı sunucuları")} emptyMessage={tx("Bu bilgisayarlarda henüz veritabanı bulunamadı.")} />)}
+        : <DataList rows={servers} columns={columns} keyExtractor={item => item.id} caption={tx("Bulunan veritabanı sunucuları")} emptyMessage={tx("Bu bilgisayarlarda henüz veritabanı bulunamadı.")} />)}
     </QueryState>
     <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => !scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
   </>
