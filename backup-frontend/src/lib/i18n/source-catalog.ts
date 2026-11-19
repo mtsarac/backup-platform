@@ -1,5 +1,13 @@
 // UI source copy only. Stable wire values and customer-entered names are never catalog lookups.
 export const sourceCatalog: Record<string, { tr: string; en: string }> = {
+  // computer-flow: add-computer step and the computer shown on "Ne yedeklensin"
+  "Bilgisayar hazırlanıyor…": { tr: "Bilgisayar hazırlanıyor…", en: "Preparing the computer…" },
+  "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.": { tr: "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.", en: "The computer is reporting what can be backed up; this takes a few seconds." },
+  "Yedekleme bilgisayarı:": { tr: "Yedekleme bilgisayarı:", en: "Backup computer:" },
+  "Listede bilgisayarı bu adla tanırsınız.": { tr: "Listede bilgisayarı bu adla tanırsınız.", en: "You will recognize the computer by this name in the list." },
+  "Kurulum komutunu oluştur": { tr: "Kurulum komutunu oluştur", en: "Create the installation command" },
+  "Yeni komut oluştur": { tr: "Yeni komut oluştur", en: "Create a new command" },
+  "Beklenenden uzun sürüyor. Komutun bilgisayarda hata vermeden bittiğinden ve bilgisayarın bu sunucuya erişebildiğinden emin olun; bu sayfa beklemeye devam eder.": { tr: "Beklenenden uzun sürüyor. Komutun bilgisayarda hata vermeden bittiğinden ve bilgisayarın bu sunucuya erişebildiğinden emin olun; bu sayfa beklemeye devam eder.", en: "This is taking longer than expected. Make sure the command finished without errors on the computer and that the computer can reach this server; this page keeps waiting." },
   "Depolama bağlantısı ekle": { tr: "Depolama bağlantısı ekle", en: "Add storage connection" },
   "Toplam boyut": { tr: "Toplam boyut", en: "Total size" },
   "Kota": { tr: "Kota", en: "Quota" },
@@ -3368,12 +3376,4 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Geri yüklemeyi dene": { tr: "Geri yüklemeyi dene", en: "Try a restore" },
   "Atla": { tr: "Atla", en: "Skip" },
   "Başlatıldı": { tr: "Başlatıldı", en: "Started" },
-  // computer-flow: add-computer step and the computer shown on "Ne yedeklensin"
-  "Bilgisayar hazırlanıyor…": { tr: "Bilgisayar hazırlanıyor…", en: "Preparing the computer…" },
-  "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.": { tr: "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.", en: "The computer is reporting what can be backed up; this takes a few seconds." },
-  "Yedekleme bilgisayarı:": { tr: "Yedekleme bilgisayarı:", en: "Backup computer:" },
-  "Listede bilgisayarı bu adla tanırsınız.": { tr: "Listede bilgisayarı bu adla tanırsınız.", en: "You will recognize the computer by this name in the list." },
-  "Kurulum komutunu oluştur": { tr: "Kurulum komutunu oluştur", en: "Create the installation command" },
-  "Yeni komut oluştur": { tr: "Yeni komut oluştur", en: "Create a new command" },
-  "Beklenenden uzun sürüyor. Komutun bilgisayarda hata vermeden bittiğinden ve bilgisayarın bu sunucuya erişebildiğinden emin olun; bu sayfa beklemeye devam eder.": { tr: "Beklenenden uzun sürüyor. Komutun bilgisayarda hata vermeden bittiğinden ve bilgisayarın bu sunucuya erişebildiğinden emin olun; bu sayfa beklemeye devam eder.", en: "This is taking longer than expected. Make sure the command finished without errors on the computer and that the computer can reach this server; this page keeps waiting." },
 }
