@@ -23,10 +23,10 @@ function Text([string] $English, [string] $Turkish) {
 function Fail([string] $English, [string] $Turkish) { throw (Text $English $Turkish) }
 function Assert-SafePath([string] $Path) {
     $full = [IO.Path]::GetFullPath($Path)
-    if (-not [IO.Path]::IsPathRooted($Path) -or $full.StartsWith('\\')) { Fail 'Use an absolute local installation path.' 'Mutlak ve yerel bir kurulum yolu kullanın.' }
+    if (-not [IO.Path]::IsPathRooted($Path) -or $full.StartsWith('\\')) { Fail 'Use an absolute local installation path.' 'Mutlak ve yerel bir kurulum yolu kullanin.' }
     for ($current = $full; $current; $current = [IO.Path]::GetDirectoryName($current)) {
         if ((Test-Path -LiteralPath $current) -and ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            Fail 'Installation paths must not contain reparse points.' 'Kurulum yolları yeniden ayrıştırma noktası içermemelidir.'
+            Fail 'Installation paths must not contain reparse points.' 'Kurulum yollari yeniden ayristirma noktasi icermemelidir.'
         }
     }
     return $full
@@ -42,53 +42,53 @@ function New-ProtectedDirectory([string] $Path) {
     $null = [IO.Directory]::CreateDirectory($Path)
     Set-Acl -Path $Path -AclObject $security
 }
-if ($Interactive -and $NonInteractive) { Fail 'Choose only one interaction mode.' 'Yalnızca bir etkileşim kipi seçin.' }
+if ($Interactive -and $NonInteractive) { Fail 'Choose only one interaction mode.' 'Yalnizca bir etkilesim kipi secin.' }
 # SSH/ConPTY has a real console even when Windows reports no interactive desktop session.
 $canPrompt = -not [Console]::IsInputRedirected
 $guided = $Interactive -or (-not $NonInteractive -and $canPrompt -and ([string]::IsNullOrWhiteSpace($Server) -or [string]::IsNullOrWhiteSpace($Token)))
-if ($guided -and -not $canPrompt) { Fail 'Interactive mode requires a terminal.' 'Etkileşimli kip için terminal gerekir.' }
+if ($guided -and -not $canPrompt) { Fail 'Interactive mode requires a terminal.' 'Etkilesimli kip icin terminal gerekir.' }
 if ($guided) {
     Write-Host (Text 'Backup Platform agent installation' 'Backup Platform ajan kurulumu')
-    Write-Host (Text '1. Use a trusted HTTPS server address and a one-time token from Add agent.' '1. Güvenilir HTTPS sunucu adresini ve Ajan ekle ekranındaki tek kullanımlık kayıt anahtarını kullanın.')
+    Write-Host (Text '1. Use a trusted HTTPS server address and a one-time token from Add agent.' '1. Guvenilir HTTPS sunucu adresini ve Ajan ekle ekranindaki tek kullanimlik kayit anahtarini kullanin.')
     if ([string]::IsNullOrWhiteSpace($Server)) { $Server = Read-Host (Text 'Server address' 'Sunucu adresi') }
     if ([string]::IsNullOrWhiteSpace($Token)) {
-        $secure = Read-Host (Text 'Enrollment token (hidden)' 'Kayıt anahtarı (gizli)') -AsSecureString
+        $secure = Read-Host (Text 'Enrollment token (hidden)' 'Kayit anahtari (gizli)') -AsSecureString
         $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
         try { $Token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer); $secure.Dispose() }
     }
-    Write-Host (Text '2. Choose the display name; Enter accepts the machine name.' '2. Görünen adı seçin; Enter tuşu makine adını kabul eder.')
-    if ([string]::IsNullOrWhiteSpace($AgentName)) { $AgentName = Read-Host ((Text 'Agent name' 'Ajan adı') + " [$env:COMPUTERNAME]") }
+    Write-Host (Text '2. Choose the display name; Enter accepts the machine name.' '2. Gorunen adi secin; Enter tusu makine adini kabul eder.')
+    if ([string]::IsNullOrWhiteSpace($AgentName)) { $AgentName = Read-Host ((Text 'Agent name' 'Ajan adi') + " [$env:COMPUTERNAME]") }
 }
 if ([string]::IsNullOrWhiteSpace($AgentName)) { $AgentName = $env:COMPUTERNAME }
 $uri = $null
 if (-not [Uri]::TryCreate($Server, [UriKind]::Absolute, [ref] $uri) -or $uri.Scheme -ne 'https' -or -not $uri.Host -or $uri.UserInfo -or $uri.Query -or $uri.Fragment -or $Server -match '[\s\\\x00-\x1F\x7F]') {
-    Fail 'Use an absolute HTTPS server address without credentials, query or fragment.' 'Kimlik bilgisi, sorgu veya parça içermeyen mutlak HTTPS sunucu adresi kullanın.'
+    Fail 'Use an absolute HTTPS server address without credentials, query or fragment.' 'Kimlik bilgisi, sorgu veya parca icermeyen mutlak HTTPS sunucu adresi kullanin.'
 }
 if ($Token -cnotmatch '^[0-9a-fA-F]{32}\.[A-Za-z0-9_-]{43}$' -or $Token.StartsWith('00000000000000000000000000000000.')) {
-    Fail 'A complete valid enrollment token is required; automatic mode never prompts.' 'Eksiksiz ve geçerli kayıt anahtarı zorunludur; otomatik kip soru sormaz.'
+    Fail 'A complete valid enrollment token is required; automatic mode never prompts.' 'Eksiksiz ve gecerli kayit anahtari zorunludur; otomatik kip soru sormaz.'
 }
 if ([string]::IsNullOrWhiteSpace($AgentName) -or $AgentName.Length -gt 255 -or $AgentName -match '\p{Cc}') {
-    Fail 'Agent name must contain 1-255 characters without control characters.' 'Ajan adı denetim karakteri içermeyen 1-255 karakter olmalıdır.'
+    Fail 'Agent name must contain 1-255 characters without control characters.' 'Ajan adi denetim karakteri icermeyen 1-255 karakter olmalidir.'
 }
 if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') {
-    Fail 'Only Windows x64 is supported.' 'Yalnızca Windows x64 desteklenir.'
+    Fail 'Only Windows x64 is supported.' 'Yalnizca Windows x64 desteklenir.'
 }
 $current = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal $current
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Fail 'Run PowerShell as Administrator.' 'PowerShell uygulamasını yönetici olarak çalıştırın.'
+    Fail 'Run PowerShell as Administrator.' 'PowerShell uygulamasini yonetici olarak calistirin.'
 }
 $Server = $uri.AbsoluteUri.TrimEnd('/')
 $installPath = Assert-SafePath (Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'BackupAgent')
 $storePath = Assert-SafePath (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent')
 if ((Get-Service -Name BackupAgent -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath $installPath) -or (Test-Path -LiteralPath $storePath)) {
-    Fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.' 'Mevcut bir ajan kurulumu bulundu; hiçbir şey değiştirilmedi. Önce mevcut ajanı kaldırın, ardından bu kurulumu yeniden çalıştırın.'
+    Fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin.'
 }
 if ($guided) {
-    Write-Host (Text '3. Installation summary (token hidden)' '3. Kurulum özeti (kayıt anahtarı gizli)')
+    Write-Host (Text '3. Installation summary (token hidden)' '3. Kurulum ozeti (kayit anahtari gizli)')
     Write-Host "  $Server`n  $AgentName`n  $installPath`n  BackupAgent / NT SERVICE\BackupAgent"
-    Write-Host (Text 'Enrollment runs as the service account; the permanent identity is protected for that account.' 'Kayıt hizmet hesabıyla yapılır; kalıcı kimlik bu hesap için korunur.')
+    Write-Host (Text 'Enrollment runs as the service account; the permanent identity is protected for that account.' 'Kayit hizmet hesabiyla yapilir; kalici kimlik bu hesap icin korunur.')
     $answer = Read-Host (Text 'Install? [y/N]' 'Kurulsun mu? [e/H]')
     $accepted = if ($Language -eq 'tr') { '^[eE]$' } else { '^[yY]$' }
     if ($answer -notmatch $accepted) { Write-Host (Text 'Installation cancelled.' 'Kurulum iptal edildi.'); return }
@@ -97,11 +97,11 @@ $work = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) ('Back
 $null = Assert-SafePath $work
 New-ProtectedDirectory $work
 try {
-    Write-Host (Text 'Downloading and validating the agent package...' 'Ajan paketi indiriliyor ve doğrulanıyor...')
+    Write-Host (Text 'Downloading and validating the agent package...' 'Ajan paketi indiriliyor ve dogrulaniyor...')
     $archivePath = Join-Path $work 'agent.zip'
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     try { Invoke-WebRequest -Uri "$Server/api/agent-dist/packages/win-x64" -OutFile $archivePath -UseBasicParsing -MaximumRedirection 0 }
-    catch { Fail 'Package download failed; verify HTTPS trust and package availability.' 'Paket indirilemedi; HTTPS güvenini ve paket kullanılabilirliğini denetleyin.' }
+    catch { Fail 'Package download failed; verify HTTPS trust and package availability.' 'Paket indirilemedi; HTTPS guvenini ve paket kullanilabilirligini denetleyin.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [IO.Compression.ZipFile]::OpenRead($archivePath)
     $entries = @()
@@ -137,7 +137,7 @@ try {
                 try { $source.CopyTo($destination) } finally { $destination.Dispose() }
             } finally { $source.Dispose() }
         }
-    } catch { Fail 'The package is invalid or unsafe; nothing was installed.' 'Paket geçersiz veya güvensiz; kurulum yapılmadı.' }
+    } catch { Fail 'The package is invalid or unsafe; nothing was installed.' 'Paket gecersiz veya guvensiz; kurulum yapilmadi.' }
     finally { $archive.Dispose() }
     # Directory.Move refuses an existing destination; keep the protected ACL on the binary tree.
     [IO.Directory]::Move($package, $installPath)
@@ -151,9 +151,9 @@ try {
         $configuration = Get-CimInstance Win32_Service -Filter "Name='BackupAgent'"
         if ($configuration.StartName -ne 'NT SERVICE\BackupAgent' -or $configuration.StartMode -ne 'Auto') { throw 'Unexpected service configuration.' }
     } catch {
-        Fail 'Service enrollment or activation failed. Any identity and installation were preserved; the token may have been consumed. Check Windows service events and the server before retrying.' 'Hizmet kaydı veya etkinleştirme başarısız. Kimlik ve kurulum korundu; anahtar kullanılmış olabilir. Yeniden denemeden önce Windows hizmet olaylarını ve sunucuyu denetleyin.'
+        Fail 'Service enrollment or activation failed. Any identity and installation were preserved; the token may have been consumed. Check Windows service events and the server before retrying.' 'Hizmet kaydi veya etkinlestirme basarisiz. Kimlik ve kurulum korundu; anahtar kullanilmis olabilir. Yeniden denemeden once Windows hizmet olaylarini ve sunucuyu denetleyin.'
     }
-    Write-Host (Text 'Agent installed; the automatic service is running. Confirm Online in Agents after heartbeat.' 'Ajan kuruldu; otomatik hizmet çalışıyor. Yaşam sinyalinden sonra Ajanlar sayfasında çevrimiçi durumunu doğrulayın.')
+    Write-Host (Text 'Agent installed; the automatic service is running. Confirm Online in Agents after heartbeat.' 'Ajan kuruldu; otomatik hizmet calisiyor. Yasam sinyalinden sonra Ajanlar sayfasinda cevrimici durumunu dogrulayin.')
 } finally {
     $Token = $null
     if (Test-Path -LiteralPath $work) { $null = Assert-SafePath $work; Remove-Item -LiteralPath $work -Recurse -Force }

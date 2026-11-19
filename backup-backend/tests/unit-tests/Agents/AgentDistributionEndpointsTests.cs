@@ -181,7 +181,7 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
     // The refusal over an existing install is the same sentence on both platforms (documented in the root README). The Windows script cannot run here,
     // so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
     private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.";
-    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hiçbir şey değiştirilmedi. Önce mevcut ajanı kaldırın, ardından bu kurulumu yeniden çalıştırın.";
+    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin.";
 
     [Theory]
     [InlineData("install.sh", "refuse_existing() { fail ")]
@@ -203,7 +203,7 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
     [InlineData("--interactive --non-interactive", "Choose only one interaction mode")]
     [InlineData("--insecure", "Unknown installer option")]
     [InlineData("--server https://one.example --server https://two.example", "Duplicate installer option")]
-    [InlineData("--non-interactive --language tr", "Sunucu ve kayıt anahtarı zorunludur")]
+    [InlineData("--non-interactive --language tr", "Sunucu ve kayit anahtari zorunludur")]
     [InlineData("--non-interactive --server http://backup.example --token 11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Invalid HTTPS server address")]
     public async Task Linux_installer_rejects_invalid_automatic_arguments_without_terminal_reads(string arguments, string expectedError)
     {
