@@ -10,7 +10,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false)
   const me = useQuery({ queryKey: ['auth', 'me'], queryFn: async ({ signal }) => {
     try { return await apiRequest<UserProfile>('me', { signal }) }
-    catch (error) { if (error instanceof ApiError && error.status === 401) return null; throw error }
+    catch (error) { if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return null; throw error }
   }, retry: false })
   const memberships = useQuery({ queryKey: ['auth', 'tenants'], queryFn: ({ signal }) => apiRequest<TenantMembership[]>('me/tenants', { signal }), enabled: !!me.data, staleTime: 1_000, retry: false })
   useEffect(() => subscribeSessionExpired(() => {
