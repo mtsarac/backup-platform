@@ -1,10 +1,11 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { Stepper } from '@/components/ui/stepper'
 import { DiscardChangesLink } from '@/features/backup-jobs/discard-changes-link'
-import type { JobPrefill } from '@/features/backup-jobs/job-form-values'
+import type { JobDraft, JobPrefill } from '@/features/backup-jobs/job-form-values'
 import { jobSteps, stepLabel, validateJob, validateStep, wizardStepOf, type JobStep } from '@/features/backup-jobs/job-wizard-model'
 import { SourceStep } from '@/features/backup-jobs/steps/source-step'
 import { StorageStep } from '@/features/backup-jobs/steps/storage-step'
@@ -15,11 +16,12 @@ import { LiveSummary } from '@/features/backup-jobs/live-summary'
 import { useJobForm } from '@/features/backup-jobs/use-job-form'
 
 /** Creates backup jobs one question group at a time; existing jobs are edited on a single page instead (`JobEditForm`). */
-export function JobWizard({ prefill }: { prefill?: JobPrefill }) {
+export function JobWizard({ prefill, draft, storageConnectionId }: { prefill?: JobPrefill; draft?: JobDraft; storageConnectionId?: string }) {
   useLanguage()
-  const form = useJobForm({ prefill })
+  const navigate = useNavigate()
+  const form = useJobForm({ prefill, draft, storageConnectionId })
   const { values, save, saveError, errorSteps, setClientErrors } = form
-  const [index, setIndex] = useState(0)
+  const [index, setIndex] = useState(draft ? jobSteps.indexOf(draft.step) : 0)
   const step = jobSteps[index]
   const mounted = useRef(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -34,6 +36,13 @@ export function JobWizard({ prefill }: { prefill?: JobPrefill }) {
     setClientErrors({})
     setIndex(jobSteps.indexOf(target))
   }
+  // The draft travels in route state only (never the URL or storage). The unsaved-changes guard is lifted first, so the navigation happens after the next render.
+  const [addingStorage, setAddingStorage] = useState(false)
+  useEffect(() => {
+    if (!addingStorage) return
+    const returnState: { draft: JobDraft } = { draft: { values, discovered: form.discovered, step } }
+    void navigate(`/tenants/${form.tenantId}/storage/connections/new`, { state: { returnTo: `/tenants/${form.tenantId}/backup-jobs/new`, returnState } })
+  }, [addingStorage]) // oxlint-disable-line react-hooks/exhaustive-deps -- runs once per click, with the values of that render
   function advance() {
     const found = validateStep(step, values)
     if (Object.keys(found).length) setClientErrors(found)
@@ -66,13 +75,13 @@ export function JobWizard({ prefill }: { prefill?: JobPrefill }) {
             <ProtectionStep form={form} headingLevel={3} />
           </section>
         </>}
-        {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} />}
+        {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} onAddStorage={() => setAddingStorage(true)} />}
         {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
           control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{[...new Set(errorSteps.map(wizardStepOf))].map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": stepLabel(item) })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button type="button" variant="outline" disabled={index === 0 || save.isPending} onClick={() => go(jobSteps[index - 1])}>{tx("Geri")}</Button>
           <div className="flex flex-wrap items-center gap-3">
-            <DiscardChangesLink to={form.listPath} dirty={form.dirty} />
+            <DiscardChangesLink to={form.listPath} dirty={form.dirty && !addingStorage} />
             {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || form.cannotSave}>{save.isPending ? tx('Kaydediliyor…') : form.failedCount > 0 ? tx('Başarısızları yeniden dene') : tx('Kaydet')}</Button> : <Button key="next" type="submit">{tx("İleri")}</Button>}
           </div>
         </div>

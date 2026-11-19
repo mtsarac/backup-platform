@@ -40,10 +40,10 @@ export function StorageBlockedNotice({ onFix }: { onFix?: () => void }) {
 }
 
 /** Last wizard step: everything that will be created. */
-export function ReviewStep({ form, onGo }: { form: JobFormState; onGo: (step: EditSection) => void }) {
+export function ReviewStep({ form, onGo, onAddStorage }: { form: JobFormState; onGo: (step: EditSection) => void; onAddStorage?: () => void }) {
   const { values } = form
   return <>
-    <JobSummary {...summaryInput(form)} onGo={onGo} />
+    <JobSummary {...summaryInput(form)} onGo={onGo} onAddStorage={onAddStorage} />
     {values.selected.length > 1 && <CreatedJobsGroup name={values.name} selected={values.selected} results={form.results} />}
     {form.cannotSave && <StorageBlockedNotice onFix={() => onGo('storage')} />}
   </>

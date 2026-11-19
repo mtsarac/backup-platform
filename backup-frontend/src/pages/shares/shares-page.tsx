@@ -16,12 +16,13 @@ export function SharesPage() {
   const attempts = attemptsQuery.data?.pages.flatMap((page) => page.items) ?? []
   return (
     <div className="space-y-6">
+      <p className="text-sm text-text-muted">{tx('Platform Yöneticisi\'nin bir yedeği süreli indirmesine verdiğiniz izinler. Genellikle destek isterken gerekir.')}</p>
       <QueryState isPending={query.isPending} error={query.error}>
         <SharesTable
           shares={shares}
           canAdmin={canAdmin}
           caption={tx('Paylaşımlarım')}
-          emptyMessage={tx('Henüz paylaşım yapılmamış.')}
+          emptyMessage={tx('Henüz paylaşım yok. Bir yedeğin ayrıntısından Platform Yöneticisi\'ne süreli indirme izni verebilirsiniz.')}
           emptyAction={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx('Yedek dosyalarını aç')}</Link>}
         />
       </QueryState>

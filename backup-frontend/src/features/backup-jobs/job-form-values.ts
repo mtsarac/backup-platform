@@ -1,5 +1,6 @@
 import { discoveredConfiguration } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
+import type { JobStep } from '@/features/backup-jobs/job-wizard-model'
 import type { BackupConfiguration, BackupJob, FileBackupPolicy, RetentionPolicy, RetryPolicy, Schedule } from '@/features/backup-jobs/types'
 
 /** Everything the job form edits, in the shape the wizard and the edit page share. */
@@ -11,6 +12,8 @@ export interface JobValues {
   /** How the source of a new job is chosen: from the discovery inventory (primary) or typed by hand. Existing jobs are always edited by hand. */
   sourceMode: 'discovery' | 'manual'
 }
+/** A half-filled create wizard, carried through route state while the storage wizard is open. */
+export interface JobDraft { values: JobValues; discovered: DiscoveryInstanceDetail | null; step: JobStep }
 export interface JobPrefill { instance: DiscoveryInstanceDetail; databases: string[] }
 
 export type Engine = BackupConfiguration['engine']

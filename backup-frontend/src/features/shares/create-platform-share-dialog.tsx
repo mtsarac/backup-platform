@@ -5,6 +5,8 @@ import { TextInput } from '@/components/ui/text-input'
 import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { useCreatePlatformShare } from '@/features/shares/hooks'
+import { ShareDurationSelect } from '@/features/shares/share-duration-select'
+import { SHARE_DURATION_HOURS } from '@/features/shares/types'
 import { tx, useLanguage } from '@/lib/i18n'
 
 export function CreatePlatformShareDialog({
@@ -31,10 +33,6 @@ export function CreatePlatformShareDialog({
     }
     if (!artifactId) {
       setLocalError(tx('Lütfen bir yedek dosyası seçin.'))
-      return
-    }
-    if (durationHours < 1 || durationHours > 72) {
-      setLocalError(tx('Süre 1 ile 72 saat arasında olmalıdır.'))
       return
     }
 
@@ -88,23 +86,9 @@ export function CreatePlatformShareDialog({
           </p>
         )}
 
-        <Field
-          label={tx('Süre (saat)')}
-          hint={tx('1 ile 72 saat arasında bir süre seçin (varsayılan: 24 saat).')}
-          error={localError}
-        >
-          {(fieldProps) => (
-            <TextInput
-              {...fieldProps}
-              type="number"
-              min={1}
-              max={72}
-              value={durationHours}
-              onChange={(e) => setDurationHours(Number(e.target.value))}
-              required
-            />
-          )}
-        </Field>
+        <ShareDurationSelect label={tx('Süre')} hint={tx('Varsayılan: 24 saat.')} hours={SHARE_DURATION_HOURS} value={durationHours} onChange={setDurationHours} />
+
+        {localError && <p role="alert" className="text-sm text-error">{localError}</p>}
 
         <Field label={tx('Gerekçe (isteğe bağlı)')}>
           {(fieldProps) => (
