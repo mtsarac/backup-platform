@@ -27,12 +27,12 @@ export function defaultSettings(): FirstBackupSettings {
 }
 
 /** One job per picked database, built on the same form model as the create wizard so the pinned values are identical. */
-export function firstBackupJobInput(item: FirstBackupItem, name: string, settings: FirstBackupSettings, canAdmin: boolean): BackupJobInput {
+export function firstBackupJobInput(item: FirstBackupItem, name: string, settings: FirstBackupSettings): BackupJobInput {
   const values = initialValues(undefined, { instance: item.instance, databases: [item.database] })
   return {
     name, agentId: values.agentId, configuration: { ...values.configuration, destinations: settings.destinations, encryptionPolicy: settings.encryptionPolicy },
     retryPolicy: values.retry, overlapPolicy: values.overlap, enabled: values.enabled,
     schedule: settings.scheduled ? { ...values.schedule, cronExpression: settings.cronExpression, overlapPolicy: values.overlap } : null,
-    ...(canAdmin ? { retention: settings.retention } : {}),
+    retention: settings.retention,
   }
 }

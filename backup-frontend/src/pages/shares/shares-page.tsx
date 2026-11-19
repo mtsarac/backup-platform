@@ -9,7 +9,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 
 export function SharesPage() {
   useLanguage()
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const query = useShares(tenantId)
   const attemptsQuery = useTenantDownloadAttempts(tenantId)
   const shares = query.data ?? []
@@ -20,7 +20,6 @@ export function SharesPage() {
       <QueryState isPending={query.isPending} error={query.error}>
         <SharesTable
           shares={shares}
-          canAdmin={canAdmin}
           caption={tx('Paylaşımlarım')}
           emptyMessage={tx('Henüz paylaşım yok. Bir yedeğin ayrıntısından Platform Yöneticisi\'ne süreli indirme izni verebilirsiniz.')}
           emptyAction={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx('Yedek dosyalarını aç')}</Link>}

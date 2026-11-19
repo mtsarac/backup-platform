@@ -10,7 +10,6 @@ import { DataList } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { useTenant } from '@/features/tenancy/use-tenant'
 import { useRestores, useRestoreTargets, useStartRestoreVerification } from './hooks'
 import { verificationCleanupText } from './presentation'
 import { formatDateTime, formatDuration } from '@/lib/format'
@@ -20,7 +19,6 @@ import { statusLabel } from '@/lib/status'
 
 export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: string; artifact: BackupArtifact }) {
   useLanguage()
-  const { canOperate } = useTenant()
   const history = useRestores({ purpose: 'Verification', artifactId: artifact.id, pageSize: 10 })
   if (restoreIneligibility(artifact)) return null
   const rows = history.data?.items ?? []
@@ -29,7 +27,7 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
     <div className="space-y-4">
       {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" onRetry={() => void history.refetch()} />
         : rows.length === 0 && !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
-      {canOperate && <RestoreTestStarter tenantId={tenantId} artifact={artifact} />}
+      <RestoreTestStarter tenantId={tenantId} artifact={artifact} />
       {rows.length > 0 && <DataList caption={tx("Son restore testleri")} emptyMessage={tx("Henüz test edilmedi.")} rows={rows} keyExtractor={row => row.id} columns={[
         { key: 'outcome', header: tx('Sonuç'), card: 'status', render: row => <>{row.verificationOutcome ? <StatusPill domain="verification" status={row.verificationOutcome} /> : <StatusPill status={row.status} />}{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</> },
         { key: 'started', header: tx('Başlangıç'), render: row => formatDateTime(row.startedAt ?? row.createdAt) },

@@ -19,7 +19,6 @@ import { restorePath } from '@/lib/routes'
 /** Detail of a disposable-database restore test: outcome, checks and whether the temporary database is gone. */
 export function VerificationDetail({ restore }: { restore: RestoreView }) {
   useLanguage()
-  const { canOperate } = useTenant()
   const retry = useRetryRestoreCleanup(restore.id)
   const verification = restore.result?.verification
   const cleanup = restore.cleanup
@@ -42,7 +41,7 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
         {cleanup.reason && cleanup.state !== 'Completed' && <TechnicalDetails items={[{ label: tx('Sunucu mesajı'), value: cleanup.reason }]} />}
         {cleanup.needsAttention && <Notice tone="warning">{tx("Otomatik denemeler tükendi. Geçici Database'in elle kaldırılması gerekebilir.")}</Notice>}
         {cleanup.state === 'Pending' && !isActiveRestore(restore.status) && cleanup.nextAttemptAt && <p className="text-xs text-text-muted">{tx("Sonraki deneme:")}{' '}{formatDateTime(cleanup.nextAttemptAt)}</p>}
-        {canOperate && cleanup.state === 'Pending' && cleanup.canRequest && <>
+        {cleanup.state === 'Pending' && cleanup.canRequest && <>
           <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate('')}>{retry.isPending ? tx('İşleniyor…') : tx('Temizliği yeniden dene')}</Button>
           {retry.error && <ErrorNotice error={retry.error} scope="restore" />}
         </>}
@@ -54,7 +53,7 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
 /** Why a restore test failed; an unverifiable server certificate offers to run the test again with it trusted, for that test only. */
 function VerificationFailure({ restore }: { restore: RestoreView }) {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const navigate = useNavigate()
   const start = useStartRestoreVerification()
   const idempotencyKey = useIdempotencyKey()
@@ -71,7 +70,7 @@ function VerificationFailure({ restore }: { restore: RestoreView }) {
     }
   }
   return <div className="space-y-3">
-    <ErrorNotice {...failure} technical={technical} trust={canOperate ? { note: tx("Bu güven yalnızca bu geri yükleme testi için geçerlidir; sertifika kaydedilmez."), pending: start.isPending, onConfirm: () => void retryTrusting() } : undefined} />
+    <ErrorNotice {...failure} technical={technical} trust={{ note: tx("Bu güven yalnızca bu geri yükleme testi için geçerlidir; sertifika kaydedilmez."), pending: start.isPending, onConfirm: () => void retryTrusting() }} />
     {start.error && <ErrorNotice error={start.error} scope="restore" />}
   </div>
 }
@@ -79,7 +78,6 @@ function VerificationFailure({ restore }: { restore: RestoreView }) {
 /** An ordinary replace restore keeps the previous database; only a tenant administrator may ask for its removal. */
 export function RollbackCopyPanel({ restore }: { restore: RestoreView }) {
   useLanguage()
-  const { canAdmin } = useTenant()
   const remove = useRemoveRollbackCopy(restore.id)
   const [open, setOpen] = useState(false)
   const cleanup = restore.cleanup
@@ -89,7 +87,7 @@ export function RollbackCopyPanel({ restore }: { restore: RestoreView }) {
     if (remove.isPending) return
     try { await remove.mutateAsync(name); setOpen(false) } catch { /* shown in dialog */ }
   }
-  return <Section title={tx("Rollback kopyası")} actions={canAdmin && cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setOpen(true) }}>{tx("Rollback kopyasını kaldır")}</Button>}>
+  return <Section title={tx("Rollback kopyası")} actions={cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setOpen(true) }}>{tx("Rollback kopyasını kaldır")}</Button>}>
     <p className="text-sm">{tx("Rollback kopyası saklanıyor:")}{' '}<code className="font-mono">{name}</code>{tx(". Otomatik olarak asla kaldırılmaz.")}</p>
     {cleanup.retainedUntil && <p className="mt-1 text-sm text-text-muted">{tx("Koruma süresi sonu:")}{' '}{formatDateTime(cleanup.retainedUntil)}</p>}
     <ConfirmDialog open={open} onClose={() => setOpen(false)} title={tx("Rollback kopyası kaldırılsın mı?")} confirmLabel={tx("Kalıcı olarak kaldır")} name={name}

@@ -81,10 +81,10 @@ export interface AuditRetentionSettings {
   updatedByUserId?: string | null
 }
 
-export function canManageShare(share: BackupShareView, role?: string, canAdmin?: boolean): boolean {
+export function canManageShare(share: BackupShareView, role?: string): boolean {
   if (share.status !== 'Active') return false
   if (role === 'PlatformAdmin') return true
-  if (role === 'UserAdmin' && canAdmin) {
+  if (role === 'UserAdmin') {
     return share.createdByRole !== 'PlatformAdmin'
   }
   return false
@@ -99,6 +99,6 @@ export function extensionHours(share: Pick<BackupShareView, 'createdAtUtc' | 'ex
   return SHARE_DURATION_HOURS.filter((hours) => hours <= room)
 }
 
-export function canExtendShare(share: BackupShareView, role?: string, canAdmin?: boolean): boolean {
-  return canManageShare(share, role, canAdmin) && extensionHours(share).length > 0
+export function canExtendShare(share: BackupShareView, role?: string): boolean {
+  return canManageShare(share, role) && extensionHours(share).length > 0
 }

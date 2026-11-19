@@ -17,7 +17,7 @@ import { ApiError } from '@/lib/api/client'
 import { useLocation } from 'react-router-dom'
 import { FirstBackupPage } from './first-backup-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api')
 vi.mock('@/features/backup-jobs/api')
@@ -49,7 +49,6 @@ async function toSummary(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'online' }] as never)
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
@@ -344,13 +343,6 @@ describe('first backup flow', () => {
       fireEvent.change(await screen.findByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Ofis' } })
       expect(await screen.findByRole('alert')).toHaveTextContent('Bu işletim sistemi için kurulum paketi yayımlanmamış.')
       expect(screen.getByRole('button', { name: 'Kurulum komutunu oluştur' })).toBeDisabled()
-    })
-
-    it('only a workspace administrator can add a computer', async () => {
-      Object.assign(access, { canAdmin: false })
-      mount()
-      expect(await screen.findByText(/çalışma alanı yöneticisi olmalısınız/)).toBeVisible()
-      expect(screen.queryByRole('textbox', { name: 'Bilgisayarın adı' })).not.toBeInTheDocument()
     })
   })
 

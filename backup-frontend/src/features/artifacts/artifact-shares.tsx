@@ -18,11 +18,9 @@ import type { BackupArtifact } from './types'
 export function ArtifactSharesSection({
   tenantId,
   artifact,
-  canAdmin,
 }: {
   tenantId: string
   artifact: BackupArtifact
-  canAdmin: boolean
 }) {
   useLanguage()
   const { data: rawShares, isPending } = useShares(tenantId, artifact.id)
@@ -39,7 +37,7 @@ export function ArtifactSharesSection({
   const hasDownloadableReplica = artifact.replicas.some(
     (r) => r.verificationState === 'Verified' && r.status === 'Available'
   )
-  const canCreate = canAdmin && hasDownloadableReplica
+  const canCreate = hasDownloadableReplica
 
   function handleSubmit() {
     createMutation.mutate(
@@ -58,18 +56,16 @@ export function ArtifactSharesSection({
     <Section
       title={tx('Paylaşımlar')}
       actions={
-        canAdmin && (
-          <Button
-            size="sm"
-            disabled={!canCreate}
-            onClick={() => {
-                        createMutation.reset()
-              setDialogOpen(true)
-            }}
-          >
-            {tx('Paylaşım oluştur')}
-          </Button>
-        )
+        <Button
+          size="sm"
+          disabled={!canCreate}
+          onClick={() => {
+            createMutation.reset()
+            setDialogOpen(true)
+          }}
+        >
+          {tx('Paylaşım oluştur')}
+        </Button>
       }
     >
       <div className="space-y-4">
@@ -114,9 +110,9 @@ export function ArtifactSharesSection({
                     </td>
                     <td className="py-2 pr-4 text-text-muted">{share.reason || '—'}</td>
                     <td className="py-2 text-right">
-                      {canManageShare(share, user?.role, canAdmin) ? (
+                      {canManageShare(share, user?.role) ? (
                         <div className="flex justify-end gap-2">
-                          {canExtendShare(share, user?.role, canAdmin) && (
+                          {canExtendShare(share, user?.role) && (
                             <Button
                               size="sm"
                               variant="outline"

@@ -18,7 +18,7 @@ import type { RestorePage, RestoreResult, RestoreTargetsResponse, RestoreView } 
 import { PrecheckResults } from './precheck-results'
 import { describeFailure } from '@/lib/api/failure-messages'
 
-const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
+const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 
 vi.mock('./api', () => ({
@@ -220,8 +220,6 @@ const listRestores = (execution: RestorePage) => vi.mocked(RestoreApi.getRestore
 
 beforeEach(() => {
   tenancy.tenantId = 'tenant-a'
-  tenancy.canAdmin = true
-  tenancy.canOperate = true
 
   listRestores(sampleRestorePage)
   vi.mocked(RestoreApi.getRestore).mockResolvedValue(sampleRestore)
@@ -367,18 +365,9 @@ describe('RestoresPage', () => {
       expect(actions[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
 
-    it('sends a viewer to the administrator instead of offering the action', async () => {
-      tenancy.canOperate = false
-      renderWithClient(<RestoresPage />)
-      await screen.findByTestId('restores-empty')
-      expect(emptyActions()).toHaveLength(0)
-      expect(within(screen.getByTestId('restores-empty')).getByText('Yöneticinize danışın')).toBeInTheDocument()
-    })
-
     it('clears an empty filtered history from the filters and then offers the backup files', async () => {
       renderWithClient(<RestoresPage />, '/?status=Failed')
       await screen.findByTestId('restores-empty')
-      expect(within(screen.getByTestId('restores-empty')).queryByText('Yöneticinize danışın')).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
       await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ status: '' }), expect.anything()))
       expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
@@ -422,13 +411,6 @@ describe('RestoreDetailPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Geri yüklemeyi iptal et/i }))
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'İptali onayla' }))
     expect(await within(screen.getByRole('dialog')).findByRole('alert')).toBeInTheDocument()
-  })
-
-  it('offers no cancel action to a viewer', async () => {
-    tenancy.canOperate = false
-    renderWithClient(detailRoutes, '/tenants/tenant-a/restores/restore-1')
-    await screen.findByRole('heading', { name: /Geri yükleme · RestoredSalesDB/ })
-    expect(screen.queryByRole('button', { name: /Geri yüklemeyi iptal et/i })).not.toBeInTheDocument()
   })
 
   it('links back to the restores list by its name and shows the source backup once, not again under the options', async () => {
@@ -558,16 +540,6 @@ describe('RestoreWizardPage', () => {
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(passedPrecheck('precheck-1'))
     vi.mocked(RestoreApi.getRestore).mockImplementation((_tenantId, id) => Promise.resolve(id === 'precheck-1' ? passedPrecheck(id) : sampleRestore))
     vi.mocked(RestoreApi.startRestoreDiscovery).mockResolvedValue({ ...sampleRestore, id: 'discovery-1' })
-  })
-
-  it('refuses a viewer with an explanation and never offers the wizard', async () => {
-    tenancy.canOperate = false
-    renderWithClient(wizardRoutes, wizardUrl)
-    expect(await screen.findByText(/Bu sayfada geri yükleme işlemi yapma yetkiniz yok/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Devam et/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Yedekleme bilgisayarı' })).not.toBeInTheDocument()
-    expect(RestoreApi.startRestorePrecheck).not.toHaveBeenCalled()
-    expect(RestoreApi.startRestore).not.toHaveBeenCalled()
   })
 
   it('names the page after what it restores and links back to the backup file', async () => {

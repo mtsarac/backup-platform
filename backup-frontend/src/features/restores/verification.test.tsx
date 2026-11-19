@@ -13,7 +13,7 @@ import { statusLabel } from '@/lib/status'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import type { RestoreCleanup, RestoreTargetsResponse, RestoreView } from './types'
 
-const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
+const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 vi.mock('./api', () => ({
   getRestores: vi.fn(), getRestore: vi.fn(), getRestoreTargets: vi.fn(), startRestoreVerification: vi.fn(),
@@ -60,8 +60,6 @@ function renderDetail() {
 }
 
 beforeEach(() => {
-  tenancy.canAdmin = true
-  tenancy.canOperate = true
   vi.mocked(RestoreApi.getRestores).mockResolvedValue(page([]))
   vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue(targets)
   vi.mocked(RestoreApi.getRestore).mockResolvedValue(base)
@@ -109,15 +107,13 @@ describe('artifact restore verification', () => {
     expect(screen.queryByRole('button', { name: "Geri yükleme testi başlat" })).not.toBeInTheDocument()
   })
 
-  it('hides the action from viewers and renders history with pending cleanup', async () => {
-    tenancy.canOperate = false
+  it('renders history with pending cleanup', async () => {
     vi.mocked(RestoreApi.getRestores).mockResolvedValue(page([
       { ...base, verificationOutcome: 'Failed', status: 'Failed', cleanup: cleanupOf({ state: 'Pending', attempts: 2 }) },
       { ...base, id: 'ver-0', cleanup: cleanupOf({}) },
     ]))
     renderAt(<ArtifactVerificationSection tenantId="tenant-a" artifact={artifact} />)
     expect(await screen.findByRole('table')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: "Geri yükleme testi başlat" })).not.toBeInTheDocument()
     expect(screen.getAllByText("Başarısız").length).toBeGreaterThan(0)
     expect(screen.getByText("Başarılı")).toBeInTheDocument()
     expect(screen.getByText(/otomatik yeniden denenecek \(deneme 2\)/)).toBeInTheDocument()
@@ -172,14 +168,7 @@ describe('restore verification detail', () => {
     expect(await screen.findByRole('link', { name: label })).toHaveAttribute('href', href)
   })
 
-  it('does not offer operation controls to a viewer or for an untrusted certificate', async () => {
-    tenancy.canOperate = false
-    vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, purpose: 'Execution', status: 'Failed', failureCode: 'DatabaseUnavailable' })
-    const view = renderDetail()
-    await screen.findByRole('heading', { level: 1, name: /Geri yükleme/ })
-    expect(screen.queryByRole('link', { name: 'Bilgisayarı kontrol et' })).not.toBeInTheDocument()
-    view.unmount()
-    tenancy.canOperate = true
+  it('does not offer operation links for an untrusted certificate', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, purpose: 'Execution', status: 'Failed', failureCode: 'ServerCertificateUntrusted' })
     renderDetail()
     await screen.findByRole('heading', { level: 1, name: /Geri yükleme/ })
@@ -242,14 +231,6 @@ describe('rollback copy removal', () => {
     fireEvent.change(screen.getByRole("textbox", { name: /bp_old_SalesDB_1/ }), { target: { value: 'bp_old_SalesDB_1' } })
     fireEvent.click(confirm)
     await waitFor(() => expect(RestoreApi.removeRollbackCopy).toHaveBeenCalledWith('tenant-a', 'ver-1', 'bp_old_SalesDB_1'))
-  })
-
-  it('hides the removal action from non-administrators', async () => {
-    tenancy.canAdmin = false
-    vi.mocked(RestoreApi.getRestore).mockResolvedValue(retained)
-    renderDetail()
-    expect(await screen.findByText(/(?:Otomatik olarak asla kaldırılmaz|otomatik olarak kaldırılmaz)/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: "Geri alma kopyasını kaldır" })).not.toBeInTheDocument()
   })
 })
 
