@@ -179,7 +179,7 @@ describe('discovery page', () => {
     expect(await screen.findByText(/görüntüleme yetkiniz yok/)).toBeInTheDocument()
   })
   it('renders a three-part load error without backend text', async () => {
-    vi.mocked(getDiscoveryInstances).mockRejectedValue(new ApiError(500, { error: 'secret stack' }))
+    vi.mocked(getDiscoveryInstances).mockRejectedValue(new ApiError(500, { message: 'secret stack' }))
     mount()
     expect(await screen.findByText(/Sunucu isteği tamamlayamadı/)).toBeInTheDocument()
     expect(screen.getByText('Verileriniz için:')).toBeInTheDocument()

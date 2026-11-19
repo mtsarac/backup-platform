@@ -313,6 +313,14 @@ describe('RestoresPage', () => {
     expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ artifactId: 'artifact-9' }), expect.anything())
   })
 
+  it('shows plain text, not a dead link, while the backup run is unknown', async () => {
+    vi.mocked(ArtifactApi.getArtifact).mockReturnValue(new Promise(() => {}))
+    listRestores({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
+    renderWithClient(<RestoresPage />)
+    expect(await screen.findByText('SalesDB')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'SalesDB' })).not.toBeInTheDocument()
+  })
+
   it('names the source backup and the backup computer instead of showing ids', async () => {
     listRestores({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
     renderWithClient(<RestoresPage />)

@@ -22,6 +22,17 @@ const job = savedJob
 const other = { ...job, id: 'job-b', name: 'Satış', configuration: { ...job.configuration, database: 'CRM' } } as BackupJob
 const critical: BackupJobHealth = { ...healthyJobHealth, state: 'Critical', factors: { ...healthyJobHealth.factors, freshness: { ...healthyJobHealth.factors.freshness, score: 0, reason: 'backup_stale' } } }
 
+const withReasons = (state: BackupJobHealth['state'], ...reasons: string[]): BackupJobHealth => ({
+  ...healthyJobHealth, state,
+  factors: {
+    ...healthyJobHealth.factors,
+    freshness: { ...healthyJobHealth.factors.freshness, score: 0, reason: reasons[0] ?? 'backup_fresh' },
+    replication: { ...healthyJobHealth.factors.replication, score: reasons[1] ? 0 : 30, reason: reasons[1] ?? 'replicas_verified' },
+  },
+})
+const runningJob = { ...job, lastRun: { id: 'run-r', status: 'Running', createdAt: '', startedAt: null, completedAt: null, reasonCode: null } } as BackupJob
+const schedule = { ...job.schedule!, enabled: true }
+
 const permissions = vi.hoisted(() => ({ canOperate: true, canAdmin: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', ...permissions }) }))
 vi.mock('@/features/backup-jobs/api')
@@ -71,11 +82,18 @@ it.each([
   ['paused', { jobs: [{ ...job, enabled: false }, other], health: critical }, 'Durduruldu'],
   ['manual', { jobs: [{ ...job, schedule: null }, other], health: critical }, 'Elle çalışır'],
   ['no success yet', { total: 0, health: critical }, 'İlk yedek bekleniyor'],
+  ['Degraded and stale', { health: withReasons('Degraded', 'backup_stale') }, 'Dikkat gerekiyor'],
+  ['attention beats a running backup', { jobs: [runningJob, other], health: critical }, 'Dikkat gerekiyor'],
+  ['new job although the backend says Critical', { total: 0, health: withReasons('Critical', 'backup_missing', 'no_verified_replica') }, 'İlk yedek bekleniyor'],
+  ['first backup failed', { total: 0, health: withReasons('Critical', 'backup_missing'), failedDay: true }, 'Dikkat gerekiyor'],
+  ['manual with a real problem', { jobs: [{ ...job, schedule: null }, other], health: withReasons('Degraded', 'schedule_unavailable', 'no_verified_replica') }, 'Dikkat gerekiyor'],
+  ['paused schedule', { jobs: [{ ...job, schedule: { ...schedule, enabled: false } }, other], health: critical }, 'Durduruldu'],
   ['running', { jobs: [{ ...job, lastRun: { id: 'run-r', status: 'Running', createdAt: '', startedAt: null, completedAt: null, reasonCode: null } }, other] }, 'Çalışıyor %35'],
-])('says one sentence for the status: %s', async (_name, setup: { health?: BackupJobHealth; connectivity?: Agent['connectivity']; jobs?: BackupJob[]; total?: number }, label) => {
+])('says one sentence for the status: %s', async (_name, setup: { health?: BackupJobHealth; connectivity?: Agent['connectivity']; jobs?: BackupJob[]; total?: number; failedDay?: boolean }, label) => {
   if (setup.health) vi.mocked(getBackupJobHealth).mockResolvedValue(setup.health)
   if (setup.connectivity) vi.mocked(getAgents).mockResolvedValue(agent(setup.connectivity))
   if (setup.jobs) vi.mocked(getBackupJobs).mockResolvedValue(setup.jobs)
+  if (setup.failedDay) vi.mocked(getHealthTimeline).mockResolvedValue({ jobs: [{ jobId: 'job-a', days: [{ date: '2026-11-18', status: 'Failed', attemptCount: 1 }] }] })
   if (setup.total !== undefined) vi.mocked(getBackups).mockResolvedValue({ items: [], totalCount: setup.total, page: 1, pageSize: 1 })
   vi.mocked(getBackup).mockResolvedValue(makeRun({ id: 'run-r' }))
   mount()
