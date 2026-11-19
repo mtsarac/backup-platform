@@ -13,12 +13,14 @@ function AuthProbe() {
 }
 let authenticated = false
 let secondFactorRequired = false
+let passwordChangeRequired = false
 const passkeyOptions = { challenge: 'AQID', rpId: 'example.com', allowCredentials: [{ id: 'BAU', type: 'public-key' }], userVerification: 'required' }
 let requests: Request[] = []
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 beforeEach(() => {
   authenticated = false
   secondFactorRequired = false
+  passwordChangeRequired = false
   requests = []
   resetAntiforgery()
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -29,6 +31,7 @@ beforeEach(() => {
     if (path === '/api/auth/login') {
       if (secondFactorRequired) return json({ secondFactorRequired: true })
       authenticated = true
+      if (passwordChangeRequired) return json({ passwordChangeRequired: true })
       return new Response(null, { status: 204 })
     }
     if (path === '/api/auth/passkeys/login/options' || path === '/api/auth/passkeys/second-factor/options') return json({ options: passkeyOptions, challengeId: 'challenge-123' })
@@ -116,6 +119,17 @@ describe('cookie session UI', () => {
     expect(cache.getQueryData(['platform', 'summary'])).toBeUndefined()
     expect(requests.find(request => request.url.endsWith('/auth/logout'))?.headers.get('X-CSRF-TOKEN')).toBe('signed-in-token')
     expect(localStorage.getItem('token')).toBeNull()
+    cache.clear()
+  })
+  it('uses a fresh CSRF token for the forced first-login password change', async () => {
+    passwordChangeRequired = true
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={cache}><AuthProvider><AuthProbe /></AuthProvider></QueryClientProvider>)
+    expect(await screen.findByText('Anonymous')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Login'))
+    await waitFor(() => expect(requests.some(request => request.url.endsWith('/auth/login'))).toBe(true))
+    await apiRequest('auth/change-password', { method: 'POST', json: { currentPassword: 'a', newPassword: 'b' } })
+    expect(requests.find(request => request.url.endsWith('/auth/change-password'))?.headers.get('X-CSRF-TOKEN')).toBe('signed-in-token')
     cache.clear()
   })
   it('restores existing cookie session and expires it on resource401, not403', async () => {
