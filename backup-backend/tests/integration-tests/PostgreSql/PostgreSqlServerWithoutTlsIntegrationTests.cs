@@ -40,9 +40,11 @@ public sealed class PostgreSqlServerWithoutTlsIntegrationTests(PostgreSqlProvide
     }
 
     [Theory]
-    [InlineData(RestorePipelinePurpose.Precheck)]
-    [InlineData(RestorePipelinePurpose.Execution)]
-    public async Task RestorePipelineReportsAServerWithoutTls(RestorePipelinePurpose purpose)
+    [InlineData(RestorePipelinePurpose.Precheck, false)]
+    [InlineData(RestorePipelinePurpose.Precheck, true)]
+    [InlineData(RestorePipelinePurpose.Execution, false)]
+    [InlineData(RestorePipelinePurpose.Execution, true)]
+    public async Task RestorePipelineReportsAServerWithoutTls(RestorePipelinePurpose purpose, bool portInHost)
     {
         var tenant = Guid.NewGuid();
         var key = new StorageObjectKey($"{tenant:N}/{Guid.NewGuid():N}/{Guid.NewGuid():N}/{Guid.NewGuid():N}/{ManagedBackupLayout.StagedFileName("source", DateTimeOffset.UtcNow, Guid.NewGuid())}");
@@ -51,9 +53,9 @@ public sealed class PostgreSqlServerWithoutTlsIntegrationTests(PostgreSqlProvide
         await File.WriteAllBytesAsync(path, [1]);
         var storage = new LocalStorageProvider(new LocalStorageOptions(fixture.DirectoryPath));
         var pipeline = new DatabaseRestorePipeline([fixture.Restore], [storage], NullLogger<DatabaseRestorePipeline>.Instance);
-        var connection = new DatabaseConnectionSettings(
-            new DatabaseEndpoint("localhost", fixture.Settings.Endpoint.Port),
-            new DatabaseConnectionOptions(requireEncryption: true, trustServerCertificate: false));
+        // The wizard sends port 5432 by default; a host typed as "localhost:<port>" carries the real one.
+        var endpoint = portInHost ? new DatabaseEndpoint($"localhost:{fixture.Settings.Endpoint.Port}", 5432) : new DatabaseEndpoint("localhost", fixture.Settings.Endpoint.Port);
+        var connection = new DatabaseConnectionSettings(endpoint, new DatabaseConnectionOptions(requireEncryption: true, trustServerCertificate: false));
         var request = new DatabaseRestorePipelineRequest(DatabaseEngineId.PostgreSql, connection, fixture.Credential, fixture.Name(),
             DatabaseRestoreMode.NewDatabase, StagingArea.SameHost(fixture.DirectoryPath), storage.Id, key, tenant, 1,
             new ContentChecksum(ChecksumAlgorithm.Sha256, new string('a', 64)), purpose: purpose);

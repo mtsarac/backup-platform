@@ -1,3 +1,4 @@
+using System.Globalization;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using Npgsql;
 
@@ -32,7 +33,7 @@ internal sealed class PostgreSqlConnectionTarget
     public int ConnectTimeoutSeconds { get; }
     public int CommandTimeoutSeconds { get; }
 
-    /// <exception cref="DatabaseProviderException">The settings cannot form a PostgreSQL connection (named instance, integrated security, no password).</exception>
+    /// <exception cref="DatabaseProviderException">The settings cannot form a PostgreSQL connection (named instance, integrated security, no password, malformed host).</exception>
     public static PostgreSqlConnectionTarget Create(DatabaseConnectionSettings settings, DatabaseCredential credential)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -50,8 +51,29 @@ internal sealed class PostgreSqlConnectionTarget
         var options = settings.Options;
         // Encrypt without trust verifies the certificate chain and the host name; trust accepts any certificate; no encryption is opportunistic.
         var ssl = options.RequireEncryption ? (options.TrustServerCertificate ? SslMode.Require : SslMode.VerifyFull) : SslMode.Prefer;
-        return new PostgreSqlConnectionTarget(settings.Endpoint.Host, settings.Endpoint.Port ?? DefaultPort, password.UserName, password.Password.Reveal(), ssl,
+        var (host, port) = SplitPort(settings.Endpoint.Host, settings.Endpoint.Port ?? DefaultPort);
+        return new PostgreSqlConnectionTarget(host, port, password.UserName, password.Password.Reveal(), ssl,
             (int)options.ConnectTimeout.TotalSeconds, (int)options.CommandTimeout.TotalSeconds);
+    }
+
+    /// <summary>
+    /// A host typed as "name:port" is how Npgsql reads it, but libpq and a plain TCP connect read it as one host name that does not exist. Splitting it here, once,
+    /// keeps every consumer on the same endpoint. The port in the host wins, as it does in Npgsql. A bare IPv6 literal has several colons and is left alone.
+    /// </summary>
+    private static (string Host, int Port) SplitPort(string host, int port)
+    {
+        var colon = host.IndexOf(':');
+        if (colon < 0 || colon != host.LastIndexOf(':'))
+        {
+            return (host, port);
+        }
+
+        if (colon == 0 || !int.TryParse(host.AsSpan(colon + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var embedded) || embedded is < 1 or > 65535)
+        {
+            throw new DatabaseProviderException(DatabaseFailureKind.InvalidConfiguration, "The host must be a name or address, optionally followed by :port.");
+        }
+
+        return (host[..colon], embedded);
     }
 
     public NpgsqlConnectionStringBuilder ToNpgsql(string database) => new()
