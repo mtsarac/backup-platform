@@ -15,7 +15,7 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/discovery/api')
 vi.mock('@/features/agents/api')
 
-function mount(path = '/') {
+function mount(path: string | { pathname: string; state: unknown } = '/') {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[path]}><DiscoveryPage /></MemoryRouter></QueryClientProvider>)
 }
 beforeEach(() => {
@@ -177,5 +177,51 @@ describe('discovery page', () => {
     fireEvent.click(screen.getByLabelText('Bulunamayanları da göster'))
     fireEvent.change(screen.getByLabelText('Bilgisayar'), { target: { value: 'agent-a' } })
     await waitFor(() => expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', { agentId: 'agent-a', engine: 'mssql', includeMissing: true }, expect.anything()))
+  })
+  describe('after a computer was added in the first-backup flow', () => {
+    const added = { pathname: '/', state: { addedAgentId: 'agent-a' } }
+    beforeEach(() => {
+      vi.mocked(getAgents).mockResolvedValue([supportedAgent] as never)
+      vi.mocked(rescanDiscoveryAgent).mockReset().mockResolvedValue(makeStatus())
+    })
+
+    it('scans the computer once and says it is scanning', async () => {
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Running' })] })
+      mount(added)
+      expect(await screen.findByText('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')).toBeInTheDocument()
+      await waitFor(() => expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a'))
+      expect(rescanDiscoveryAgent).toHaveBeenCalledTimes(1)
+    })
+    it('waits for the computer to report what it can do before scanning', async () => {
+      vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, capabilities: [], capabilitiesReportedAt: null }] as never)
+      mount(added)
+      expect(await screen.findByText(/Veritabanları taranıyor/)).toBeVisible()
+      expect(rescanDiscoveryAgent).not.toHaveBeenCalled()
+    })
+    it('sends the user to a server that needs login details', async () => {
+      vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance({ access: 'CredentialsRequired', databaseCounts: { total: 0, user: 0, backupEligible: 0 } })] })
+      mount(added)
+      const notice = (await screen.findByText(/giriş bilgilerini girin/)).closest('[role=status]') as HTMLElement
+      expect(within(notice).getByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
+    })
+    it('offers a backup job from the usable server', async () => {
+      mount(added)
+      expect(await screen.findByText('Yedeklemek istediğiniz veritabanını seçin.')).toBeVisible()
+      expect(screen.getByRole('link', { name: 'Yedekleme işi oluştur' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/new?discoveryInstance=inst-1')
+    })
+    it('offers manual configuration when nothing was found, and the notice can be dismissed', async () => {
+      vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
+      mount(added)
+      expect(await screen.findByText(/veritabanı bulunamadı; dosya yedeklemek/)).toBeVisible()
+      expect(screen.getByRole('link', { name: 'Elle yapılandır' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/new')
+      await userEvent.click(screen.getByRole('button', { name: 'Kapat' }))
+      expect(screen.queryByRole('link', { name: 'Elle yapılandır' })).not.toBeInTheDocument()
+    })
+    it('shows the normal page without the route state', async () => {
+      mount()
+      await screen.findByRole('link', { name: 'SQL Server (default)' })
+      expect(screen.queryByRole('button', { name: 'Kapat' })).not.toBeInTheDocument()
+      expect(rescanDiscoveryAgent).not.toHaveBeenCalled()
+    })
   })
 })

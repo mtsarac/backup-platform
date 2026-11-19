@@ -14,6 +14,7 @@ import { makeDatabase, makeDetail, makeInstance, makeStatus, supportedAgent } fr
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
 import { catalog, makeConnection } from '@/features/storage-connections/test-fixtures'
 import { ApiError } from '@/lib/api/client'
+import { useLocation } from 'react-router-dom'
 import { FirstBackupPage } from './first-backup-page'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
@@ -25,6 +26,7 @@ vi.mock('@/features/restores/api')
 vi.mock('@/features/discovery/api')
 vi.mock('@/features/storage-connections/api')
 
+function LocationState() { return <p>Bulunan veritabanları {JSON.stringify(useLocation().state)}</p> }
 function mount(seed?: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   seed?.(client)
@@ -32,6 +34,7 @@ function mount(seed?: (client: QueryClient) => void) {
     <Route path="/tenants/:tenantId/first-backup" element={<FirstBackupPage />} />
     <Route path="/tenants/:tenantId" element={<p>Ana sayfa içeriği</p>} />
     <Route path="/tenants/:tenantId/backup-jobs/new" element={<p>İş sihirbazı</p>} />
+    <Route path="/tenants/:tenantId/agents/databases" element={<LocationState />} />
   </>), { initialEntries: ['/tenants/tenant-a/first-backup'] })
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return router
@@ -224,7 +227,7 @@ describe('first backup flow', () => {
       expect(commandText()).toContain("sudo bash")
     })
 
-    it('shows the live status, keeps the screen while the computer is only enrolled, and moves on by itself once it is online', async () => {
+    it('shows the live status, keeps the screen while the computer is only enrolled, and opens the discovery page by itself once it is online', async () => {
       vi.mocked(getAgents).mockResolvedValueOnce([])
       mount()
       await issueCommand()
@@ -243,11 +246,8 @@ describe('first backup flow', () => {
       vi.mocked(getAgent).mockResolvedValue(detailOf('online'))
       vi.mocked(getAgents).mockResolvedValue([computer] as never)
       await advance(5_000)
-      expect(await screen.findByRole('heading', { name: 'Ne yedeklensin?' })).toBeVisible()
-      expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Ne yedeklensin')
-      expect(screen.getByText('win11-virtual')).toBeVisible()
-      expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
-      expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
+      expect(await screen.findByText('Bulunan veritabanları {"addedAgentId":"agent-a"}')).toBeVisible()
+      expect(screen.queryByRole('heading', { name: 'Ne yedeklensin?' })).not.toBeInTheDocument()
     })
 
     it('says in a plain sentence, not an error, that a long wait is still going on', async () => {

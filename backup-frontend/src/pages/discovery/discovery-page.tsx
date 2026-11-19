@@ -1,7 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { CheckField } from '@/components/ui/check-field'
 import { Card } from '@/components/ui/card'
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { Radar } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
@@ -25,6 +26,8 @@ import type { DiscoveryEngine, DiscoveryInstanceSummary } from '@/features/disco
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { isForbidden } from '@/lib/api/client'
 import { discoveryInstancePath } from '@/lib/routes'
+import { awaitingCapabilities, CAPABILITY_POLL_MS } from '@/features/first-backup/first-backup-model'
+import { AddedComputerGuide } from './added-computer-guide'
 import { ComputerScanCard } from './computer-scan-card'
 import { Select } from '@/components/ui/text-input'
 
@@ -32,12 +35,16 @@ import { Select } from '@/components/ui/text-input'
 export function DiscoveryPage() {
   useLanguage()
   const { tenantId, canAdmin, canOperate } = useTenant()
-  const agents = useAgents(tenantId)
+  const agents = useAgents(tenantId, false, list => awaitingCapabilities(list) ? CAPABILITY_POLL_MS : false)
+  // Route state from the first-backup flow; lives in history only, so a reload or leaving the page drops it.
+  const added = (useLocation().state as { addedAgentId?: string } | null)?.addedAgentId ?? ''
+  const [dismissed, setDismissed] = useState(false)
   const statuses = useDiscoveryAgents()
   const { get, update } = useListParams()
   const agentList = agents.data ?? []
   // Filters live in the URL so a computer's "found servers" link can open this list already filtered; unknown values are ignored.
-  const agentId = agentList.find(item => item.agentId === get('agentId'))?.agentId ?? ''
+  const guided = Boolean(added) && !dismissed
+  const agentId = agentList.find(item => item.agentId === get('agentId'))?.agentId ?? (guided ? agentList.find(item => item.agentId === added)?.agentId ?? '' : '')
   const engine = oneOf(get('engine'), Object.keys(engineLabels) as DiscoveryEngine[]) ?? ''
   const includeMissing = get('includeMissing') === '1'
   const instances = useDiscoveryInstances({ ...(agentId ? { agentId } : {}), ...(engine ? { engine } : {}), ...(includeMissing ? { includeMissing } : {}) }, agents.isSuccess)
@@ -82,6 +89,7 @@ export function DiscoveryPage() {
   return <div className="space-y-6">
     <PageHeader title={tx("Bulunan veritabanları")} description={tx("Yedekleme bilgisayarlarınızda bulunan veritabanları ve hangilerinin yedeklenebileceği.")} />
     <AgentsTabs />
+    {guided && !agents.isPending && <AddedComputerGuide agent={agentList.find(item => item.agentId === added)} agentId={added} onDismiss={() => setDismissed(true)} />}
     {body}
   </div>
 }
