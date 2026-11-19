@@ -906,6 +906,10 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "SMS ayarlarını kaydet": {"tr":"SMS ayarlarını kaydet","en":"Save SMS settings"},
   "Header değeri": {"tr":"Başlık değeri","en":"Header value"},
   "Ara": {"tr":"Ara","en":"Search"},
+  "Veritabanı ara": {"tr":"Veritabanı ara","en":"Search databases"},
+  "Veritabanı veya sunucu adı": {"tr":"Veritabanı veya sunucu adı","en":"Database or server name"},
+  "Aramaya uyan veritabanı yok.": {"tr":"Aramaya uyan veritabanı yok.","en":"No database matches the search."},
+  "{0} seçili": {"tr":"{0} seçili","en":"{0} selected"},
   "Üye ekle": {"tr":"Üye ekle","en":"Add member"},
 
   "Kullanıcı ara": {"tr":"Kullanıcı ara","en":"Search users"},

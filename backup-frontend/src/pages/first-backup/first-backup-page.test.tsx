@@ -41,7 +41,8 @@ function mount(seed?: (client: QueryClient) => void) {
 }
 const detail = makeDetail({ databases: [makeDatabase({ name: 'Muhasebe' }), makeDatabase({ name: 'CRM' }), makeDatabase({ name: 'master', isSystem: true })] })
 async function toSummary(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByText('Muhasebe')
+  await user.click(await screen.findByRole('checkbox', { name: /Muhasebe/ }))
+  await user.click(screen.getByRole('checkbox', { name: /CRM/ }))
   await user.click(screen.getByRole('button', { name: 'İleri' }))
   await screen.findByRole('heading', { name: 'Özet ve başla' })
 }
@@ -65,19 +66,45 @@ const artifact = { id: 'artifact-1', jobId: 'job-Muhasebe', runId: 'run-job-Muha
 const succeeded = (id: string) => makeRun({ id, status: 'Succeeded', completedAt: '2026-10-06T10:05:00Z', attempts: [{ ...makeRun().attempts[0], status: 'Succeeded', progressStage: 'Completed', progressPercent: 100, artifacts: [artifact as never] }] })
 
 describe('first backup flow', () => {
-  it('starts at "Ne yedeklensin" when a computer exists, scans on its own and lists the found data ticked with generated names', async () => {
+  it('starts at "Ne yedeklensin" when a computer exists, scans on its own and lists the found data with nothing ticked', async () => {
+    const user = userEvent.setup()
     mount()
-    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: /CRM/ })).toBeChecked()
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /CRM/ })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
     expect(screen.queryByText(/master/)).not.toBeInTheDocument()
     expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
+    expect(screen.queryByText(/Muhasebe veritabanı yedeği/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: /Muhasebe/ }))
     expect(screen.getByText(/Muhasebe veritabanı yedeği/)).toBeVisible()
     expect(screen.queryByLabelText('İş adı')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeEnabled()
+  })
+
+  it('filters the found list by database or server name and keeps picks that the filter hides', async () => {
+    const user = userEvent.setup()
+    mount()
+    await user.click(await screen.findByRole('checkbox', { name: /Muhasebe/ }))
+    await user.type(screen.getByRole('searchbox', { name: 'Veritabanı ara' }), 'crm')
+    expect(screen.queryByRole('checkbox', { name: /Muhasebe/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /CRM/ })).toBeVisible()
+    await user.clear(screen.getByRole('searchbox', { name: 'Veritabanı ara' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Veritabanı ara' }), 'yok-böyle-bir-şey')
+    expect(screen.getByText('Aramaya uyan veritabanı yok.')).toBeVisible()
+    await user.clear(screen.getByRole('searchbox', { name: 'Veritabanı ara' }))
+    expect(screen.getByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
+  })
+
+  it('does not wait for another computer\'s scan: only the chosen computer\'s own scan counts', async () => {
+    vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus(), makeStatus({ agentId: 'agent-other', scanState: 'Requested' })] })
+    mount()
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeVisible()
+    expect(screen.queryByText('Bilgisayar taranıyor…')).not.toBeInTheDocument()
   })
 
   it('decides where to start from the fresh list, not from a stale cached one', async () => {
     mount(client => client.setQueryData(['tenant', 'tenant-a', 'agents'], []))
-    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
   })
 
@@ -89,7 +116,7 @@ describe('first backup flow', () => {
     expect(await screen.findByText('Bilgisayar hazırlanıyor…')).toBeVisible()
     expect(screen.queryByText('Otomatik taramayı destekleyen bilgisayar yok.')).not.toBeInTheDocument()
     await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
-    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeVisible()
     expect(screen.getByText('win11-virtual')).toBeVisible()
     expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
     vi.useRealTimers()
@@ -98,6 +125,7 @@ describe('first backup flow', () => {
   it('renames a job only through "Adı değiştir"', async () => {
     const user = userEvent.setup()
     mount()
+    await user.click(await screen.findByRole('checkbox', { name: /Muhasebe/ }))
     await user.click(await screen.findByRole('button', { name: /Muhasebe: Adı değiştir/ }))
     const name = screen.getByLabelText('İş adı')
     await user.clear(name)

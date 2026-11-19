@@ -30,7 +30,7 @@ export function FirstBackupPage() {
   const save = useSaveBackupJob()
   const { run } = useRunBackupJob()
   const [step, setStep] = useState<Step | null>(null)
-  const [picked, setPicked] = useState<ReadonlySet<string> | null>(null)
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   const [names, setNames] = useState<Record<string, string>>({})
   const [items, setItems] = useState<FirstBackupItem[]>([])
   const [settings, setSettings] = useState<FirstBackupSettings>(defaultSettings)
