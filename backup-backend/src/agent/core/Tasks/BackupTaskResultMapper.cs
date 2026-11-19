@@ -29,7 +29,8 @@ public enum BackupTaskFailureCode
     SnapshotFailed,
     StorageAuthenticationFailed,
     StorageHostKeyMismatch,
-    ServerCertificateUntrusted
+    ServerCertificateUntrusted,
+    AgentNotConfigured
 }
 
 internal static class BackupTaskResultMapper
@@ -108,6 +109,7 @@ internal static class BackupTaskResultMapper
             BackupFailureCause.StorageAuthenticationFailed => BackupTaskFailureCode.StorageAuthenticationFailed,
             BackupFailureCause.StorageHostKeyMismatch => BackupTaskFailureCode.StorageHostKeyMismatch,
             BackupFailureCause.ServerCertificateUntrusted => BackupTaskFailureCode.ServerCertificateUntrusted,
+            BackupFailureCause.AgentNotConfigured => BackupTaskFailureCode.AgentNotConfigured,
             _ => MapKind(failure?.Kind)
         };
 

@@ -43,8 +43,11 @@ Windows VSS snapshots (optional, off by default)
   Windows removes it. No other shadow copy on the machine is ever touched.
   Verified on Windows 11. Windows Server has not been verified.
 
-Backup-specific setup is separate from onboarding: staging/storage and SQL Server credentials are documented in
-config\agent.settings.example.json. Never put Agent permanent credentials in that file.
+The installer prepares the working folders so backups run without extra setup: C:\ProgramData\BackupAgentData\staging (SQL Server
+backup files pass through here; a local SQL Server service account is given write access to this folder only) and
+C:\ProgramData\BackupAgentData\backups (backups stored on this computer). Uninstall never deletes them. The newest PostgreSQL client
+tools under Program Files\PostgreSQL are found and configured automatically. Other storage settings and SQL Server credentials are
+documented in config\agent.settings.example.json. Never put Agent permanent credentials in that file.
 
 Limitations of this release
   - A backend that sets AgentDistribution__PackagesDirectory serves this archive plus a guided/automatic one-line installer
