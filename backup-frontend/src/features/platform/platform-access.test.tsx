@@ -53,6 +53,8 @@ describe('PlatformAdminRoute guard', () => {
     renderPlatform(null, { routes: tree, user: tenantOwner })
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Bu alan için yetkiniz yok')
+    expect(alert).toHaveTextContent('Bu alan yalnızca platform yöneticileri içindir.')
+    expect(alert).not.toHaveTextContent(/Yöneticinize danışın|Çalışma alanı yöneticiliği/)
     expect(within(alert).getByRole('link', { name: 'Ana sayfaya dön' })).toHaveAttribute('href', '/')
     expect(screen.queryByRole('navigation', { name: "Platform gezinme menüsü" })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Platform özeti' })).not.toBeInTheDocument()

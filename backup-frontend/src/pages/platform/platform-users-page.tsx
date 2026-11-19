@@ -100,7 +100,7 @@ export function PlatformUsersPage() {
     { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (user) => user.username },
     { key: 'memberships', header: tx('Çalışma alanı üyelikleri'), render: (user) => user.membershipCount },
     { key: 'email', header: tx('E-posta'), wrap: true, render: (user) => user.email },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="space-y-1">
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="min-w-28 space-y-1">
       <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını düzenle', { '0': user.displayName })} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
       <Disclosure key={menuEpoch} title={<>{tx('İşlemler')} <span className="sr-only">{user.displayName} ({user.username})</span></>}>
       <div className="flex flex-wrap gap-2">

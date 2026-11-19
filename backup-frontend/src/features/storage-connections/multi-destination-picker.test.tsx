@@ -187,7 +187,7 @@ describe('MultiDestinationPicker', () => {
       const props = { connections, providers: dummyProviders, pending: false, error: null, existingTarget: true, onChange: () => {}, onRefresh: () => {} }
       const { container, rerender } = render(<MultiDestinationPicker {...props} configuration={configuration} />)
       const options = () => [...container.querySelectorAll<HTMLOptionElement>('#primary-storage-connection option')].map(option => option.textContent ?? '')
-      expect(options()).toHaveLength(2)
+      expect(options()).toHaveLength(1)
       expect(options().every(label => !label.includes(tenantLabel))).toBe(true)
       expect(container.textContent).toContain(`Managed (${platformLabel})`)
       rerender(<MultiDestinationPicker {...props} configuration={{ ...configuration, destinations: configuration.destinations.map(destination => ({ ...destination, isPrimary: !destination.isPrimary })) }} />)
@@ -232,9 +232,9 @@ describe('MultiDestinationPicker', () => {
     } as BackupConfiguration
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={() => {}} onRefresh={() => {}} />)
     const connection = screen.getByLabelText('Depolama bağlantısı')
-    expect(within(connection).getAllByRole('option').map(option => option.getAttribute('value'))).toEqual(['', 'conn-local'])
+    expect(within(connection).getAllByRole('option').map(option => option.getAttribute('value'))).toEqual([''])
     expect(within(screen.getByLabelText('Depolama Sağlayıcısı')).getByRole('option', { name: 'Yerel yedekleme bilgisayarı diski' })).toBeInTheDocument()
-    expect(within(connection).getByRole('option', { name: /Default Local · Yerel yedekleme bilgisayarı diski/ })).toBeInTheDocument()
+    expect(within(connection).getByRole('option', { name: 'Default Local · Kullanılabilir' })).toBeInTheDocument()
   })
 
   it('renders primary destination and allows adding a second destination', () => {
@@ -412,7 +412,7 @@ describe('MultiDestinationPicker', () => {
     const props = { connections: dummyConnections, providers: dummyProviders, pending: false, error: null, existingTarget: true, compact: true, onChange, onRefresh: () => {} }
     const { rerender } = render(<MultiDestinationPicker {...props} configuration={config} />)
     const destination = screen.getByLabelText('Depolama hedefi')
-    expect(destination).toHaveValue(JSON.stringify(['local', 'conn-local']))
+    expect(destination).toHaveValue(JSON.stringify(['local', null]))
     const defaults = within(destination).getAllByRole('option').filter(option => (option as HTMLOptionElement).value.endsWith(',null]'))
     expect(new Set(defaults.map(option => option.textContent)).size).toBe(dummyProviders.length)
     expect(defaults.find(option => (option as HTMLOptionElement).value === JSON.stringify(['sftp', null]))).toHaveTextContent('SFTP')

@@ -46,13 +46,13 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
               <TextInput
                 id={`${instancePrefix}-host`}
                 value={otherTarget.host}
-                onChange={(e) => changeOtherTarget({ ...otherTarget, host: e.target.value })}
+                onChange={(e) => changeOtherTarget({ ...otherTarget, host: e.target.value, databaseCredentialReference: null })}
                 placeholder={isPg ? 'localhost' : tx('localhost veya SQLSERVER')}
               />
             </div>
             {!isPg && <CheckField label={tx("Kullanıcı adı ve parola gerekiyor")} className="sm:col-span-2" checked={!otherTarget.integratedSecurity} onChange={(e) => changeOtherTarget({ ...otherTarget, integratedSecurity: !e.target.checked, databaseCredentialReference: null })} />}
             <CheckField label={tx("Bağlantıyı şifrele")} className="sm:col-span-2" checked={otherTarget.encrypt} onChange={(e) => changeOtherTarget({ ...otherTarget, encrypt: e.target.checked })} />
-            {needsLogin && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={otherTarget.databaseCredentialReference} onPendingChange={onLoginPendingChange} onStored={(reference) => changeOtherTarget({ ...otherTarget, databaseCredentialReference: reference })} />}
+            {needsLogin && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} host={otherTarget.host} reference={otherTarget.databaseCredentialReference} onPendingChange={onLoginPendingChange} onStored={(reference) => changeOtherTarget({ ...otherTarget, databaseCredentialReference: reference })} />}
           </div>
         )}
       </div>
