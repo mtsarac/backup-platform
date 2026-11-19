@@ -101,6 +101,28 @@ describe('first backup flow', () => {
     expect(screen.queryByText('Bilgisayar taranıyor…')).not.toBeInTheDocument()
   })
 
+  it('links servers that need credentials instead of claiming no data was found', async () => {
+    vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [
+      makeInstance({ access: 'CredentialsRequired' }),
+      makeInstance({ id: 'inst-2', displayName: 'PostgreSQL', access: 'CredentialsRequired' }),
+    ] })
+    vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus(), makeStatus({ agentId: 'revoked', scanState: 'Requested' })] })
+    mount()
+    expect(await screen.findByText('Veritabanı sunucusu bulundu ama listelemek için giriş bilgisi gerekiyor.')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
+    expect(screen.getByRole('link', { name: 'PostgreSQL' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-2')
+    expect(screen.queryByText('Veri bulunamadı')).not.toBeInTheDocument()
+  })
+
+  it('explains an offline queued scan without waiting for it forever', async () => {
+    vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'offline' }] as never)
+    vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Requested' })] })
+    mount()
+    expect(await screen.findByText('Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.')).toBeVisible()
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeVisible()
+    expect(screen.queryByText('Bilgisayar taranıyor…')).not.toBeInTheDocument()
+  })
+
   it('decides where to start from the fresh list, not from a stale cached one', async () => {
     mount(client => client.setQueryData(['tenant', 'tenant-a', 'agents'], []))
     expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeVisible()

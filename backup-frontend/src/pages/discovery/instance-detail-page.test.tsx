@@ -29,7 +29,7 @@ function mount() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(getAgents).mockResolvedValue([supportedAgent] as never)
+  vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'online' }] as never)
   vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
   vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail())
   vi.mocked(saveDiscoveryCredential).mockResolvedValue(makeDetail())
@@ -41,6 +41,14 @@ beforeEach(() => {
 const trustTitle = 'Bu sunucunun sertifikasına yine de güven'
 
 describe('instance detail page', () => {
+  it('ignores requested scans of unrelated offline or revoked computers', async () => {
+    vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'online' }, { ...supportedAgent, agentId: 'old', connectivity: 'offline' }] as never)
+    vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus(), makeStatus({ agentId: 'old', scanState: 'Requested' }), makeStatus({ agentId: 'revoked', scanState: 'Requested' })] })
+    mount()
+    await screen.findByText('SQL Server (default)', { selector: 'h1' })
+    expect(screen.queryByText('Tarama sürüyor')).not.toBeInTheDocument()
+    expect(screen.queryByText('Doğrulanıyor…')).not.toBeInTheDocument()
+  })
   it('does not claim no databases exist when credentials are required', async () => {
     vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'CredentialsRequired', databases: [], credential: { bound: false, credentialReference: null, integratedSecurity: false, encrypt: true, trustServerCertificate: false } }))
     mount()

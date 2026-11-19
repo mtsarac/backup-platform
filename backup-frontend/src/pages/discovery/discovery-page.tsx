@@ -58,7 +58,8 @@ export function DiscoveryPage() {
   const filtered = Boolean(urlAgentId || engine || includeMissing)
   // Right after a computer was added there is nothing to list yet: say that the first scan is on its way instead of "nothing found".
   const awaiting = guided && awaitingCapabilities(agentList)
-  const firstScanPending = statuses.scanning || awaiting || (guided && supportsDiscovery(agentList.find(item => item.agentId === added)?.capabilities) && !statuses.data?.items.some(item => item.agentId === added && item.lastScanAt))
+  const addedComputer = agentList.find(item => item.agentId === added)
+  const firstScanPending = (agentId ? statuses.scanningFor(agentId) : statuses.scanning) || awaiting || (guided && addedComputer?.connectivity === 'online' && supportsDiscovery(addedComputer.capabilities) && !statuses.data?.items.some(item => item.agentId === added && item.lastScanAt))
   const scans = agentList.map(agent => {
     const status = statuses.data?.items.find(item => item.agentId === agent.agentId)
     const needsAttention = !supportsDiscovery(agent.capabilities) || agent.connectivity !== 'online' || !status || !status.enabled || status.scanState !== 'Idle' || status.lastOutcome !== 'Completed'

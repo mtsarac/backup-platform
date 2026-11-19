@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { CheckField } from '@/components/ui/check-field'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { linkClass } from '@/components/ui/form-styles'
@@ -137,15 +137,19 @@ export function InstanceDetailPage() {
   const save = useSaveCredential(instanceId)
   const verify = useVerifyInstance()
   const agents = useAgents(tenantId)
-  const { scanning } = useDiscoveryAgents()
   const instance = query.data
+  const { scanning } = useDiscoveryAgents(Boolean(instance), instance?.agentId)
   const computer = instance && (agents.data?.find(item => item.agentId === instance.agentId)?.hostName || tx('Adsız bilgisayar'))
   const needsLogin = instance !== undefined && instance.access !== 'Authenticated'
   const feedbackError = save.error ?? verify.error
   const noAddress = instance !== undefined && instance.access === 'Authenticated' && !canCreateJob(instance) && instance.presence === 'Present'
   const warned = instance !== undefined && (instance.presence === 'Missing' || needsLogin || noAddress || Boolean(feedbackError))
   // The request is accepted at once; the result is there when the computer's scan is over (the page polls while it runs).
-  const verifying = verify.isPending || (verify.isSuccess && scanning)
+  // It also ends as soon as the access result differs from the one the request started from.
+  const result = instance && `${instance.access}|${instance.accessReasonCode}|${instance.databasesCheckedAt}`
+  const requestedFrom = useRef(result)
+  useEffect(() => { if (!verify.isSuccess) requestedFrom.current = result }, [verify.isSuccess, result])
+  const verifying = verify.isPending || (verify.isSuccess && scanning && result === requestedFrom.current)
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Bulunan veritabanları'), to: discoveredDatabasesPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
       description={instance && <>{tx("Bilgisayar")}: <Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(instance.agentId)}`}>{computer}</Link></>}
