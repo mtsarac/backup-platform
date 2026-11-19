@@ -19,6 +19,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { backupJobQueryKeys, useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { notFound } from '@/lib/api/failure-messages'
+import { formatDateTime } from '@/lib/format'
 import { supportsDiscovery } from '@/features/discovery/status'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { linkClass } from '@/components/ui/form-styles'
@@ -50,14 +51,14 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
     {!id ? <><PageHeader title={tx("Yedekleme bilgisayarı bulunamadı")} crumbs={crumbs} /><ErrorNotice {...notFound(tx("Yedekleme bilgisayarı bulunamadı."))} /></> : <QueryState isPending={query.isPending} error={query.error}>
       {agent && <>
         <PageHeader crumbs={crumbs} title={agent.hostName ?? tx('Adsız bilgisayar')}
-          description={<>{tx("Son görülme")}: {agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
+          description={<>{tx("Son görülme")}: {agent.lastSeenAt ? agent.status === 'Revoked' ? formatDateTime(agent.lastSeenAt) : <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
           meta={agent.status === 'Revoked' ? <StatusPill domain="agent" status="Revoked" /> : <><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
           actions={<>
-            {supportsDiscovery(agent.capabilities) && <Link className={buttonVariants({ variant: 'outline' })} to={`${discoveredDatabasesPath(tenantId)}?agentId=${encodeURIComponent(id)}`}>{tx("Bulunan veritabanı sunucuları")}</Link>}
+            {agent.status !== 'Revoked' && supportsDiscovery(agent.capabilities) && <Link className={buttonVariants({ variant: 'outline' })} to={`${discoveredDatabasesPath(tenantId)}?agentId=${encodeURIComponent(id)}`}>{tx("Bulunan veritabanı sunucuları")}</Link>}
             {agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
           </>} />
         {agent.status === 'Active' && agent.connectivity === 'offline' && <Notice tone="warning">{tx("Bu bilgisayar çevrimdışı; yedeklemeler bilgisayar yeniden bağlanana kadar çalışmaz. Bilgisayarın açık olduğunu ve yedekleme programının çalıştığını kontrol edin.")}</Notice>}
-        {supportsDiscovery(agent.capabilities) && <AgentDatabases agentId={id} />}
+        {agent.status !== 'Revoked' && supportsDiscovery(agent.capabilities) && <AgentDatabases agentId={id} />}
         <AgentJobs agentId={id} />
         <AgentTechnicalDetails agent={agent} />
       </>}

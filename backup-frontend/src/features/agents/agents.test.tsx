@@ -239,6 +239,17 @@ describe('Backup computer page', () => {
     expect(within(dialog).getByRole('button', { name: 'İptali onayla' }).className).toBe(trigger.className)
   })
 
+  it('for a revoked computer shows the exact last seen time and no list of databases to back up', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, status: 'Revoked', operationalStatus: 'Revoked', capabilities: supportedAgent.capabilities as AgentDetail['capabilities'], lastSeenAt: new Date(Date.now() - 5000).toISOString() })
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const header = (await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).closest('header')!
+    expect(within(header).queryByText(/şimdi/)).not.toBeInTheDocument()
+    expect(within(header).getByText(/Son görülme: .*\d{4}/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
+    expect(discoveryApi.getDiscoveryInstances).not.toHaveBeenCalled()
+  })
+
   it('updates the page at once after the revoke: one status, and its jobs inactive', async () => {
     let revoked = false
     vi.mocked(api.getAgent).mockImplementation(async () => revoked ? { ...agent, status: 'Revoked', operationalStatus: 'Revoked' } : agent)
