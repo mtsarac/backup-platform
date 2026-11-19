@@ -1,5 +1,4 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { CheckField } from '@/components/ui/check-field'
 import { Card } from '@/components/ui/card'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -10,27 +9,22 @@ import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { AccessDenied } from '@/components/auth/access-denied'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Disclosure } from '@/components/ui/disclosure'
-import { FilterField, Filters } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
 import { PageHeader } from '@/components/ui/page-header'
 import { AgentsTabs } from '@/features/agents/agents-tabs'
-import { oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useAgents } from '@/features/agents/hooks'
 import { useDiscoveryAgents, useDiscoveryInstances } from '@/features/discovery/hooks'
 import { AccessPill } from '@/features/discovery/access-pill'
-import { engineLabels, supportsDiscovery } from '@/features/discovery/status'
-import type { DiscoveryEngine, DiscoveryInstanceSummary } from '@/features/discovery/types'
+import { supportsDiscovery } from '@/features/discovery/status'
+import type { DiscoveryInstanceSummary } from '@/features/discovery/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { isForbidden } from '@/lib/api/client'
 import { discoveryInstancePath } from '@/lib/routes'
 import { awaitingCapabilities, CAPABILITY_POLL_MS } from '@/features/first-backup/first-backup-model'
 import { AddedComputerGuide } from './added-computer-guide'
 import { ComputerScanCard } from './computer-scan-card'
-import { Select } from '@/components/ui/text-input'
 
 
 export function DiscoveryPage() {
@@ -44,21 +38,15 @@ export function DiscoveryPage() {
   useEffect(() => { if (added) navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null }) }, []) // oxlint-disable-line react-hooks/exhaustive-deps -- once, on arrival
   const [dismissed, setDismissed] = useState(false)
   const statuses = useDiscoveryAgents()
-  const { get, update } = useListParams()
   const agentList = agents.data ?? []
-  // Filters live in the URL so a computer's "found servers" link can open this list already filtered; unknown values are ignored.
   const guided = Boolean(added) && !dismissed
-  const urlAgentId = agentList.find(item => item.agentId === get('agentId'))?.agentId ?? ''
-  const agentId = urlAgentId || (guided ? agentList.find(item => item.agentId === added)?.agentId ?? '' : '')
-  const engine = oneOf(get('engine'), Object.keys(engineLabels) as DiscoveryEngine[]) ?? ''
-  const includeMissing = get('includeMissing') === '1'
-  const instances = useDiscoveryInstances({ ...(agentId ? { agentId } : {}), ...(engine ? { engine } : {}), ...(includeMissing ? { includeMissing } : {}) }, agents.isSuccess)
+  // While the guide is open the list narrows to the computer that was just added.
+  const agentId = guided ? agentList.find(item => item.agentId === added)?.agentId ?? '' : ''
+  const instances = useDiscoveryInstances(agentId ? { agentId } : {}, agents.isSuccess)
   // Servers of computers missing from the list (revoked ones are hidden) are leftovers and are not shown.
   const servers = instances.data?.items.filter(item => agentList.some(agent => agent.agentId === item.agentId))
   const agentName = (id: string) => agentList.find(item => item.agentId === id)?.hostName || tx('Adsız bilgisayar')
   const computersPath = `/tenants/${tenantId}/agents`
-  // The added computer the guide narrows the list to is not a filter the user chose.
-  const filtered = Boolean(urlAgentId || engine || includeMissing)
   // Right after a computer was added there is nothing to list yet: say that the first scan is on its way instead of "nothing found".
   const awaiting = guided && awaitingCapabilities(agentList)
   const addedComputer = agentList.find(item => item.agentId === added)
@@ -82,22 +70,14 @@ export function DiscoveryPage() {
   else if (agents.isSuccess && agentList.length === 0) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Henüz yedekleme bilgisayarı yok; veritabanları bir yedekleme bilgisayarında aranır.")} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarı ekle")}</Link>} /></Card>
   else if (agents.isSuccess && !awaiting && !agentList.some(item => supportsDiscovery(item.capabilities))) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Yedekleme bilgisayarlarınızdaki program veritabanı bulmayı desteklemiyor; programı güncelleyin veya veritabanını yedekleme işinde elle girin.")} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarlarına git")}</Link>} /></Card>
   else body = <>
-    <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
-    <Disclosure title={tx("Veritabanı bulma filtreleri")} open={filtered}>
-    <Filters label={tx("Veritabanı bulma filtreleri")} footer={<CheckField label={tx("Bulunamayanları da göster")} checked={includeMissing} onChange={event => update({ includeMissing: event.target.checked ? '1' : '' })} />}>
-      <FilterField label={tx("Veritabanı türü")}><Select aria-label={tx("Veritabanı türü")} className="text-sm" value={engine} onChange={event => update({ engine: event.target.value })}><option value="">{tx("Tümü")}</option><option value="mssql">MSSQL</option><option value="postgres">PostgreSQL</option></Select></FilterField>
-      {agentList.length > 1 && <FilterField label={tx("Bilgisayar")}><Select aria-label={tx("Bilgisayar")} className="text-sm" value={agentId} onChange={event => update({ agentId: event.target.value })}><option value="">{tx("Tümü")}</option>{agentList.map(item => <option key={item.agentId} value={item.agentId}>{item.hostName || tx('Adsız bilgisayar')}</option>)}</Select></FilterField>}
-    </Filters>
-    </Disclosure>
+    <div className="space-y-4">{scans.filter(scan => scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
     <QueryState isPending={instances.isPending} error={instances.error}>
       {servers && (servers.length === 0
-        ? !filtered && firstScanPending ? <Card><p role="status" className="flex items-center justify-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" />{tx("Veritabanları aranıyor…")}</p></Card>
-        : <Card padding="none"><EmptyState icon={Radar} message={filtered ? tx("Seçilen filtrelere uyan veritabanı sunucusu bulunamadı.") : tx("Bu bilgisayarlarda henüz veritabanı bulunamadı. Bilgisayar kartındaki \"Yeniden tara\" ile yeniden arayabilirsiniz.")} action={filtered
-          ? <Button onClick={() => update({ agentId: '', engine: '', includeMissing: '' })}>{tx("Filtreleri temizle")}</Button>
-          : <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx("Yeni yedekleme işi")}</Link>} /></Card>
+        ? firstScanPending ? <Card><p role="status" className="flex items-center justify-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" />{tx("Veritabanları aranıyor…")}</p></Card>
+        : <Card padding="none"><EmptyState icon={Radar} message={tx("Bu bilgisayarlarda henüz veritabanı bulunamadı. Bilgisayar kartındaki \"Yeniden tara\" ile yeniden arayabilirsiniz.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx("Yeni yedekleme işi")}</Link>} /></Card>
         : <DataList rows={servers} columns={columns} keyExtractor={item => item.id} caption={tx("Bulunan veritabanı sunucuları")} emptyMessage={tx("Bu bilgisayarlarda henüz veritabanı bulunamadı.")} />)}
     </QueryState>
-    <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => !scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
+    <div className="space-y-4">{scans.filter(scan => !scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
   </>
   return <div className="space-y-6">
     <PageHeader title={tx("Bulunan veritabanları")} description={tx("Yedekleme bilgisayarlarınızda bulunan veritabanları ve hangilerinin yedeklenebileceği.")} />

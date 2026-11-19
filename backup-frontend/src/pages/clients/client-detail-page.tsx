@@ -1,4 +1,3 @@
-import { discoveredDatabasesPath } from '@/lib/routes'
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -21,7 +20,6 @@ import type { BackupJob } from '@/features/backup-jobs/types'
 import { notFound } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 import { supportsDiscovery } from '@/features/discovery/status'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { linkClass } from '@/components/ui/form-styles'
 import { AgentDatabases } from './agent-databases'
 
@@ -54,7 +52,6 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
           description={<>{tx("Son görülme")}: {agent.lastSeenAt ? agent.status === 'Revoked' ? formatDateTime(agent.lastSeenAt) : <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
           meta={agent.status === 'Revoked' ? <StatusPill domain="agent" status="Revoked" /> : <><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
           actions={<>
-            {agent.status !== 'Revoked' && supportsDiscovery(agent.capabilities) && <Link className={buttonVariants({ variant: 'outline' })} to={`${discoveredDatabasesPath(tenantId)}?agentId=${encodeURIComponent(id)}`}>{tx("Bulunan veritabanı sunucuları")}</Link>}
             {agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
           </>} />
         {agent.status === 'Active' && agent.connectivity === 'offline' && <Notice tone="warning">{tx("Bu bilgisayar çevrimdışı; yedeklemeler bilgisayar yeniden bağlanana kadar çalışmaz. Bilgisayarın açık olduğunu ve yedekleme programının çalıştığını kontrol edin.")}</Notice>}

@@ -29,7 +29,7 @@ describe('discovery page', () => {
   it('links each server to its databases and keeps scan internals collapsed and copyable', async () => {
     mount()
     expect(await screen.findByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
-    expect(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }).parentElement).not.toHaveAttribute('open')
+    expect(screen.queryByText('Veritabanı bulma filtreleri')).not.toBeInTheDocument()
     expect(screen.getByText('Kimlik bilgisi gerekli')).toBeInTheDocument()
     const computer = screen.getByRole('region', { name: 'SQL Agent' })
     expect(within(computer).getByText('Liste güncel')).toBeInTheDocument()
@@ -51,17 +51,6 @@ describe('discovery page', () => {
     mount()
     expect(await screen.findByRole('link', { name: 'SQL Server (default)' })).toBeInTheDocument()
     expect(screen.queryByText('Old computer server')).not.toBeInTheDocument()
-  })
-  it('opens already filtered from the URL and ignores values it does not know', async () => {
-    mount('/?agentId=agent-a&engine=mssql&includeMissing=1')
-    await screen.findByRole('link', { name: 'SQL Server (default)' })
-    expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', { agentId: 'agent-a', engine: 'mssql', includeMissing: true }, expect.anything())
-    expect(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }).parentElement).toHaveAttribute('open')
-    expect(screen.getByLabelText('Veritabanı türü')).toHaveValue('mssql')
-    cleanup()
-    mount('/?agentId=gone&engine=oracle')
-    await screen.findByRole('link', { name: 'SQL Server (default)' })
-    expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', {}, expect.anything())
   })
   it('says an offline computer scans when it reconnects', async () => {
     vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'offline' }] as never)
@@ -129,12 +118,6 @@ describe('discovery page', () => {
       await waitFor(() => expect(screen.queryByText(/Az önce tarama istendi/)).not.toBeInTheDocument(), { timeout: 8000 })
     }, 15000)
   })
-  it('still offers to clear the filters when a chosen filter matches nothing', async () => {
-    vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
-    mount('/?engine=mssql')
-    expect(await screen.findByText(/Seçilen filtrelere uyan/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Filtreleri temizle' })).toBeInTheDocument()
-  })
   it('names a missing TLS in the status of the server row instead of a bare "Hata"', async () => {
     vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance({ access: 'Error', accessReasonCode: 'server_tls_unavailable' })] })
     mount()
@@ -183,15 +166,6 @@ describe('discovery page', () => {
     mount()
     expect(await screen.findByText(/Sunucu isteği tamamlayamadı/)).toBeInTheDocument()
     expect(screen.queryByText(/secret stack/)).not.toBeInTheDocument()
-  })
-  it('passes filters to the API', async () => {
-    mount()
-    await screen.findByRole('link', { name: 'SQL Server (default)' })
-    await userEvent.click(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }))
-    fireEvent.change(screen.getByLabelText('Veritabanı türü'), { target: { value: 'mssql' } })
-    fireEvent.click(screen.getByLabelText('Bulunamayanları da göster'))
-    fireEvent.change(screen.getByLabelText('Bilgisayar'), { target: { value: 'agent-a' } })
-    await waitFor(() => expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', { agentId: 'agent-a', engine: 'mssql', includeMissing: true }, expect.anything()))
   })
   describe('after a computer was added in the first-backup flow', () => {
     const added = { pathname: '/', state: { addedAgentId: 'agent-a' } }
@@ -282,21 +256,18 @@ describe('discovery page', () => {
     it.each([
       ['a scan that is running', { items: [makeStatus({ scanState: 'Running', lastScanAt: null, lastOutcome: null })] }],
       ['no scan report from the computer yet', { items: [] }],
-    ])('shows the scan state, not "no match" with "Filtreleri temizle", for %s', async (_, statuses) => {
+    ])('shows the scan state, not "nothing found", for %s', async (_, statuses) => {
       vi.mocked(getDiscoveryAgents).mockResolvedValue(statuses)
       vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
       mount(added)
       expect(await screen.findByText('Veritabanları aranıyor…')).toBeInTheDocument()
-      expect(screen.queryByText(/Seçilen filtrelere uyan/)).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
-      expect(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }).parentElement).not.toHaveAttribute('open')
+      expect(screen.queryByText(/henüz veritabanı bulunamadı/)).not.toBeInTheDocument()
     })
-    it('says nothing was found, still without a filter button, once the first scan is over', async () => {
+    it('says nothing was found once the first scan is over', async () => {
       vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
       mount(added)
       expect(await screen.findByText(/henüz veritabanı bulunamadı/)).toBeInTheDocument()
       expect(screen.queryByText('Veritabanları aranıyor…')).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
     })
     it('shows the normal page without the route state', async () => {
       mount()

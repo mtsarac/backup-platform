@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ function ScanSummary({ supported, status }: { supported: boolean; status: Discov
     <p className="text-sm text-text-muted">{tx("Bu bilgisayardaki program veritabanı bulmayı desteklemiyor. Programı güncelledikten sonra tarayabilirsiniz.")}</p>
   </div>
   if (!status) return <div className="space-y-1"><StatusPill level="neutral">{tx("Henüz taranmadı")}</StatusPill><p className="text-sm text-text-muted">{tx("Bu bilgisayar henüz taranmadı.")}</p></div>
-  if (status.scanState !== 'Idle') return <span className="flex items-center gap-2" role="status" aria-label={tx("Tarama durumu")}><Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" /><StatusPill domain="scanState" status={status.scanState} /></span>
+  if (status.scanState !== 'Idle') return <span className="flex items-center gap-2" role="status" aria-label={tx("Tarama durumu")}><StatusPill domain="scanState" status={status.scanState} /></span>
   const when = <p className="text-sm text-text-muted">{tx("Son tarama:")}{' '}<RelativeTime value={status.lastScanAt} /></p>
   if (status.lastOutcome === 'Failed') return <div className="space-y-2" role="status" aria-label={tx("Tarama durumu")}><StatusPill level="urgent">{tx("Tarama başarısız")}</StatusPill>{when}<ErrorNotice what={plainReasonText(status.lastFailureCode) ?? tx('Bilgisayara ulaşılamadı ya da tarama tamamlanamadı. Yeniden tarayın.')} action={tx("Yedekleme bilgisayarının açık ve bağlı olduğunu kontrol edip yeniden deneyin.")} /></div>
   if (status.lastOutcome === 'Partial') return <div className="space-y-1" role="status" aria-label={tx("Tarama durumu")}><StatusPill level="attention">{tx("Kısmen tarandı")}</StatusPill>{when}<p className="text-sm text-text">{tx("Bazı kaynaklar taranamadı; bulunan liste eksik olabilir.")}</p></div>
@@ -61,7 +61,7 @@ export function ComputerScanCard({ agent, status }: { agent: Agent; status: Disc
     ...status.sources.map(source => ({ label: tx("Kaynak: {0}", { "0": sourceLabels[source.source] ?? source.source }), value: [source.status, reasonText(source.reasonCode), source.source === 'Docker' && source.status === 'Unavailable' ? tx("container'lar listelenmedi; Docker yok demek değildir") : null].filter(Boolean).join(' · ') })),
   ] : [{ label: tx("Bilgisayar kimliği"), value: agent.agentId }]
   return <Section title={<Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(agent.agentId)}`}>{name}</Link>} actions={<Button variant="outline" size="sm" aria-label={tx("{0} yeniden tara", { "0": name })} disabled={!supported || busy || rescan.isPending} onClick={() => rescan.mutate(agent.agentId)}>
-    {busy || rescan.isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <RefreshCw aria-hidden="true" />}{tx("Yeniden tara")}</Button>}>
+    <RefreshCw aria-hidden="true" />{tx("Yeniden tara")}</Button>}>
     <div className="space-y-3">
       <ScanSummary supported={supported} status={status} />
       {supported && agent.connectivity === 'offline' && <p className="text-sm text-warning">{tx("Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.")}</p>}

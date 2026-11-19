@@ -206,17 +206,17 @@ describe('Backup computer page', () => {
     expect(screen.queryByText('Başka bilgisayarın işi')).not.toBeInTheDocument()
   })
 
-  it('links each job to its details and offers the discovered servers only for a computer that can scan', async () => {
+  it('links each job to its details and lists the discovered databases only for a computer that can scan', async () => {
     vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([{ id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, lastRun: null, nextOccurrenceAt: null }] as never)
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] })
     const view = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     expect(await screen.findByRole('link', { name: 'Muhasebe' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-1')
-    expect(screen.getByRole('link', { name: 'Bulunan veritabanı sunucuları' })).toHaveAttribute('href', '/tenants/tenant-a/agents/databases?agentId=agent-a')
+    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
     view.unmount()
     vi.mocked(api.getAgent).mockResolvedValue(agent)
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
-    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' })).not.toBeInTheDocument()
   })
 
   it('tells the reader what to check when an active computer is offline, and says Bilinmiyor when the connection is unknown', async () => {
