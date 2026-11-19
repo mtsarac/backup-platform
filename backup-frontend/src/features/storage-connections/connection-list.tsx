@@ -13,7 +13,7 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { CapacityPill, HealthBadge } from './connection-parts'
 import { useTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections } from './hooks'
-import { connectionHealth, footprintItems, platformLockState } from './labels'
+import { connectionDisplayName, connectionHealth, footprintItems, platformLockState, showsDefaultBadge } from './labels'
 import { ProviderIcon } from './provider-icon'
 import { connectionPath } from '@/lib/routes'
 import type { ConnectionView } from './types'
@@ -24,14 +24,15 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
   useLanguage()
   const { data: capacity } = useTenantConnectionCapacity(connection.id)
   const path = connectionPath(tenantId, connection.id)
+  const name = connectionDisplayName(connection)
 
-  return <li><article aria-label={connection.name} className="space-y-3 p-5">
+  return <li><article aria-label={name} className="space-y-3 p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
         <ProviderIcon providerType={connection.providerType} />
         <h3 className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-medium text-text-heading">
-          <Link to={path} className="break-words underline-offset-4 hover:underline">{connection.name}</Link>
-          {connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}
+          <Link to={path} className="break-words underline-offset-4 hover:underline">{name}</Link>
+          {showsDefaultBadge(connection) && <Badge tone="accent">{tx("Varsayılan")}</Badge>}
         </h3>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -46,7 +47,7 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
       {capacity && capacity.status !== 'Pending' && capacity.freeBytes != null && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Boş Alan")}</dt><dd className="mt-0.5 text-body text-text">{formatBytes(capacity.freeBytes)}</dd></div>}
     </dl>
     {connection.administrativelyDisabled && <p className="text-sm font-medium text-warning">{tx(platformLockState)}</p>}
-    {connection.permissions.canTest && <div><Button variant="outline" size="sm" aria-label={tx("{0} bağlantısı: test et", { "0": connection.name })} disabled={testing} onClick={onTest}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button></div>}
+    {connection.permissions.canTest && <div><Button variant="outline" size="sm" aria-label={tx("{0} bağlantısı: test et", { "0": name })} disabled={testing} onClick={onTest}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button></div>}
     {testError && <p role="alert" className="text-sm text-error">{testError}</p>}
     <TechnicalDetails items={[...footprintItems(connection, total), { label: tx("Bağlantı kimliği"), value: connection.id }]} />
   </article></li>

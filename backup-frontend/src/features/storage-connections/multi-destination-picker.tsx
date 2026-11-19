@@ -6,7 +6,7 @@ import { ownershipLabel } from '@/features/storage/labels'
 import { errorMessage } from '@/lib/api/failure-messages'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from './job-connection-picker-utils'
-import { executionLocationLabel } from './labels'
+import { connectionDisplayName, executionLocationLabel } from './labels'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Disclosure } from '@/components/ui/disclosure'
@@ -28,6 +28,13 @@ interface Props {
 
 function pickerOwnership(ownership: string) {
   return ownership === 'TenantManaged' ? '' : ownershipLabel(ownership)
+}
+
+/** The "no connection chosen" entry stands for the provider's default connection, so it carries that connection's plain name. */
+function defaultOptionLabel(defaultConnection: ConnectionView | undefined, providerName: string, reason: string | null) {
+  return defaultConnection
+    ? [connectionDisplayName(defaultConnection), pickerOwnership(defaultConnection.ownership), reason ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')
+    : [tx('Varsayılan'), providerName, tx('Bağlantı yok'), reason ?? tx('Kullanılabilir')].join(' · ')
 }
 
 export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, replicaError, replicationError, existingTarget, compact = false, onChange, onRefresh }: Props) {
@@ -133,10 +140,10 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             const defaultConnection = connections.find(connection => connection.providerType === item.providerType && connection.isDefault)
             const unavailable = connectionUnavailableReason(defaultConnection, item)
             return <optgroup key={item.providerType} label={tx(item.displayName)}>
-              <option value={JSON.stringify([item.providerType, null])} disabled={item.availability !== 'Available' || !item.executionLocation || !item.topology || (item.providerType === primary.storageProvider && Boolean(unavailable))}>{tx('Varsayılan ·')} {tx(item.displayName)} · {defaultConnection?.name ?? tx('Bağlantı yok')}{defaultConnection && pickerOwnership(defaultConnection.ownership) ? ` · ${pickerOwnership(defaultConnection.ownership)}` : ''} · {unavailable ?? tx('Kullanılabilir')}</option>
+              <option value={JSON.stringify([item.providerType, null])} disabled={item.availability !== 'Available' || !item.executionLocation || !item.topology || (item.providerType === primary.storageProvider && Boolean(unavailable))}>{defaultOptionLabel(defaultConnection, tx(item.displayName), unavailable)}</option>
               {connections.filter(connection => connection.providerType === item.providerType).map(connection => {
                 const reason = connectionUnavailableReason(connection, item)
-                return <option key={connection.id} value={JSON.stringify([item.providerType, connection.id])} disabled={Boolean(reason)}>{[connection.name, tx(item.displayName), pickerOwnership(connection.ownership), reason ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
+                return <option key={connection.id} value={JSON.stringify([item.providerType, connection.id])} disabled={Boolean(reason)}>{[connectionDisplayName(connection), tx(item.displayName), pickerOwnership(connection.ownership), reason ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
               })}
             </optgroup>
           })}
@@ -159,12 +166,12 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
       <div className="space-y-1">
         <label htmlFor="primary-storage-connection" className="block text-sm font-medium text-text-heading">{tx("Depolama bağlantısı")}</label>
         <Select id="primary-storage-connection" value={primary.storageConnectionId ?? ''} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby="storage-connection-help primary-storage-connection-error" onChange={event => chooseConnection(event.target.value)}>
-          <option value="" disabled={Boolean(defaultReason)}>{tx("Varsayılan ·")}{' '}{tx(provider?.displayName ?? primary.storageProvider)} · {defaultTarget?.name ?? tx('Bağlantı yok')}{defaultTarget && pickerOwnership(defaultTarget.ownership) ? ` · ${pickerOwnership(defaultTarget.ownership)}` : ''}{defaultReason ? ` · ${defaultReason}` : tx(' · Kullanılabilir')}</option>
+          <option value="" disabled={Boolean(defaultReason)}>{defaultOptionLabel(defaultTarget, tx(provider?.displayName ?? primary.storageProvider), defaultReason)}</option>
           {selectedMissing && <option value={primary.storageConnectionId!} disabled>{tx("Mevcut bağlantı ·")}{' '}{primary.storageConnectionId}{' '}{tx("· Bağlantı bulunamadı")}</option>}
           {connections.filter(connection => connection.providerType === primary.storageProvider).map(connection => {
             const descriptor = providers.find(item => item.providerType === connection.providerType)
             const unavailable = connectionUnavailableReason(connection, descriptor)
-            return <option key={connection.id} value={connection.id} disabled={Boolean(unavailable)}>{[connection.name, tx(connection.providerDisplayName), pickerOwnership(connection.ownership), unavailable ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
+            return <option key={connection.id} value={connection.id} disabled={Boolean(unavailable)}>{[connectionDisplayName(connection), tx(connection.providerDisplayName), pickerOwnership(connection.ownership), unavailable ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
           })}
         </Select>
         {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-error">{fieldError}</p>}
@@ -172,7 +179,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
       </div>
       </>}
       {pending && <p role="status" className="text-sm">{tx("Depolama bağlantıları yükleniyor…")}</p>}
-      {error ? <div role="alert" className="text-sm text-error">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</Button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
+      {error ? <div role="alert" className="text-sm text-error">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</Button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": connectionDisplayName(target) }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
 
       <Disclosure className="border-t border-border pt-4 md:col-span-2" open={Boolean(fieldError || replicaError || replicationError)} title={<>{tx("Başka hedef ekle")} <span className="text-xs font-normal">· {tx("Toplam")}{' '}{destinations.length}{' '}{tx("hedef")}</span></>}>
         <div className="space-y-3">
@@ -204,7 +211,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                     )}
                   </div>
                   {!dest.isPrimary && <div className="text-xs text-text-muted">
-                    {destConn ? `${destConn.name}${pickerOwnership(destConn.ownership) ? ` (${pickerOwnership(destConn.ownership)})` : ''}` : (dest.storageConnectionId ? dest.storageConnectionId : tx('Tenant Varsayılanı'))} · {executionLocationLabel(dest.storageExecutionLocation)}
+                    {destConn ? `${connectionDisplayName(destConn)}${pickerOwnership(destConn.ownership) ? ` (${pickerOwnership(destConn.ownership)})` : ''}` : (dest.storageConnectionId ? dest.storageConnectionId : tx('Tenant Varsayılanı'))} · {executionLocationLabel(dest.storageExecutionLocation)}
                   </div>}
                 </div>
 
@@ -265,7 +272,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                   const unavail = connectionUnavailableReason(c, descriptor)
                   const alreadyAdded = destinations.some(d => d.storageProvider === c.providerType && d.storageConnectionId === c.id)
                   return (
-                    <option key={c.id} value={c.id} disabled={Boolean(unavail) || alreadyAdded}>{tx("Replication-Hedef:")}{' '}{c.name} ({tx(c.providerDisplayName)}) {unavail ? `· ${unavail}` : ''} {alreadyAdded ? tx('(Eklendi)') : ''}
+                    <option key={c.id} value={c.id} disabled={Boolean(unavail) || alreadyAdded}>{tx("Replication-Hedef:")}{' '}{connectionDisplayName(c)} ({tx(c.providerDisplayName)}) {unavail ? `· ${unavail}` : ''} {alreadyAdded ? tx('(Eklendi)') : ''}
                     </option>
                   )
                 })}

@@ -49,31 +49,31 @@ async function reachOptionsStep() {
   fireEvent.change(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu'), { target: { value: 'sql' } })
   fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'ERP' } })
   next(2)
-  await screen.findByLabelText('Yedek şifreleme politikası')
+  await screen.findByRole('switch', { name: /^Şifreleme:/ })
 }
 
-describe('encryption policy in the job wizard', () => {
-  it('defaults to Optional and sends it with the configuration', async () => {
+describe('encryption switch in the job wizard', () => {
+  it('starts off ("Kapalı") and sends Off with the configuration', async () => {
     renderWizard()
     await reachOptionsStep()
-    expect(screen.getByLabelText('Yedek şifreleme politikası')).toHaveValue('Optional')
+    expect(screen.getByRole('switch', { name: 'Şifreleme: Kapalı' })).not.toBeChecked()
+    expect(screen.queryByRole('combobox', { name: 'Yedek şifreleme politikası' })).not.toBeInTheDocument()
     next()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.encryptionPolicy).toBe('Optional')
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.encryptionPolicy).toBe('Off')
   })
 
-  it('offers Optional / Required, explains the choice and carries Required into the summary and the request', async () => {
+  it('turning it on sends Required, offers the recovery key link and shows "Açık" in the summary', async () => {
     renderWizard()
     await reachOptionsStep()
-    const select = screen.getByLabelText('Yedek şifreleme politikası')
-    expect([...(select as HTMLSelectElement).options].map(option => option.value)).toEqual(['Optional', 'Required'])
-    expect(screen.getByText('Yedek şifrelenir.')).toBeInTheDocument()
-    fireEvent.change(select, { target: { value: 'Required' } })
-    expect(screen.getByText('Yedek şifrelenir; şifrelenmemiş sonuç başarısız sayılır.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Kurtarma anahtarı' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('switch', { name: 'Şifreleme: Kapalı' }))
+    expect(screen.getByRole('switch', { name: 'Şifreleme: Açık' })).toBeChecked()
+    expect(screen.getByRole('link', { name: 'Kurtarma anahtarı' })).toHaveAttribute('href', '/tenants/tenant-a/settings/recovery-key')
     next()
-    expect(screen.getByText('Gerekli')).toBeInTheDocument()
+    expect(screen.getByText('Açık')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())

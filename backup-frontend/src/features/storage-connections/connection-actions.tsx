@@ -6,7 +6,7 @@ import { EditConnectionDialog, SecretDialog } from './connection-dialogs'
 import { useGoogleDriveDisconnect, type ConnectionOps } from './hooks'
 import { GoogleOAuthNotice } from './google-oauth-flow'
 import { useGoogleOAuth } from './use-google-oauth'
-import { disableEffects, enableEffect } from './labels'
+import { connectionDisplayName, disableEffects, enableEffect } from './labels'
 import type { ConnectionView, ProviderDescriptor, SecretField } from './types'
 import { errorMessage } from '@/lib/api/failure-messages'
 
@@ -30,7 +30,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
   const testing = ops.test.isPending && ops.test.variables?.id === connection.id
   const testError = ops.test.error && ops.test.variables?.id === connection.id ? errorMessage(ops.test.error, 'storageConnection') : undefined
   const close = () => setDialog(null)
-  const label = (text: string) => tx("{0} bağlantısı: {1}", { "0": connection.name, "1": text })
+  const label = (text: string) => tx("{0} bağlantısı: {1}", { "0": ops.scope === 'platform' ? connection.name : connectionDisplayName(connection), "1": text })
   // The platform controls only the lock; tenants control only their own preference.
   const toggledOn = ops.scope === 'platform' ? !connection.administrativelyDisabled : connection.enabled
   const toggleLabel = ops.scope === 'platform' ? (toggledOn ? tx('Platform kilidi koy') : tx('Platform kilidini kaldır')) : (toggledOn ? tx('Devre dışı bırak') : tx('Etkinleştir'))

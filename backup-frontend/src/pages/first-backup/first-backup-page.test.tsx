@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -12,7 +12,7 @@ import { getRestore, getRestores, getRestoreTargets, startRestoreVerification } 
 import { getDiscoveryAgents, getDiscoveryInstance, getDiscoveryInstances, rescanDiscoveryAgent } from '@/features/discovery/api'
 import { makeDatabase, makeDetail, makeInstance, makeStatus, supportedAgent } from '@/features/discovery/test-fixtures'
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
-import { catalog, makeConnection } from '@/features/storage-connections/test-fixtures'
+import { catalog, makeConnection, makeManaged } from '@/features/storage-connections/test-fixtures'
 import { ApiError } from '@/lib/api/client'
 import { useLocation } from 'react-router-dom'
 import { FirstBackupPage } from './first-backup-page'
@@ -143,16 +143,38 @@ describe('first backup flow', () => {
     expect(await screen.findByText('İş sihirbazı')).toBeVisible()
   })
 
-  it('shows where, when and how long with "Değiştir" on each, and only states that backups are encrypted', async () => {
+  it('shows where, when, how long and encryption (off) with "Değiştir" on each', async () => {
     const user = userEvent.setup()
     mount()
     await toSummary(user)
-    expect(screen.getAllByRole('definition').map(row => row.textContent)).toEqual(['Yerel disk', 'Her gün 02:00', '30 gün'])
-    expect(screen.getAllByRole('button', { name: /Değiştir/ })).toHaveLength(3)
-    expect(screen.getByText('Yedekler otomatik şifrelenir.')).toBeVisible()
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/şifre/i)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('definition').map(row => row.textContent)).toEqual(['Yerel disk', 'Her gün 02:00', '30 gün', 'Kapalı'])
+    expect(screen.getByText('Şifreleme')).toBeVisible()
+    expect(screen.getAllByRole('button', { name: /Değiştir/ })).toHaveLength(4)
+    expect(screen.queryByText('Yedekler otomatik şifrelenir.')).not.toBeInTheDocument()
     expect(saveBackupJob).not.toHaveBeenCalled()
+  })
+
+  it('lists the local disk once and the system defaults by their plain names in "Nereye"', async () => {
+    vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
+    const user = userEvent.setup()
+    mount()
+    await toSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Nereye: Değiştir' }))
+    const options = within(screen.getByLabelText('Depolama')).getAllByRole('option').map(option => option.textContent)
+    expect(options).toEqual(['Yerel disk', 'Merkezi depolama'])
+  })
+
+  it('switching encryption on in the summary sends Required; untouched it sends Off', async () => {
+    const user = userEvent.setup()
+    mount()
+    await toSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Şifreleme: Değiştir' }))
+    await user.click(screen.getByRole('switch', { name: 'Şifreleme: Kapalı' }))
+    expect(screen.getByRole('switch', { name: 'Şifreleme: Açık' })).toBeChecked()
+    expect(screen.getAllByRole('definition').map(row => row.textContent)).toEqual(['Yerel disk', 'Her gün 02:00', '30 gün', 'Açık'])
+    await user.click(screen.getByRole('button', { name: 'Sadece oluştur' }))
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(saveBackupJob).mock.calls.map(call => call[1].configuration.encryptionPolicy)).toEqual(['Required', 'Required'])
   })
 
   it('creates one job per pick with the pinned values and starts each first backup', async () => {
@@ -167,7 +189,7 @@ describe('first backup flow', () => {
       agentId: 'agent-a', enabled: true, overlapPolicy: 'Skip', retryPolicy: { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 600, backoff: 'Exponential', jitter: 0.2 },
       schedule: { enabled: true, cronExpression: '0 2 * * *', missedRunGraceSeconds: 1800, overlapPolicy: 'Skip' },
       retention: { enabled: true, keepForSeconds: 30 * 86400, deleteGracePeriodSeconds: 86400 },
-      configuration: { engine: 'mssql', host: 'localhost', port: 1433, database: 'Muhasebe', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Optional', stagingReference: 'default', storagePrefix: '', requiredVerifiedReplicaCount: 1,
+      configuration: { engine: 'mssql', host: 'localhost', port: 1433, database: 'Muhasebe', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off', stagingReference: 'default', storagePrefix: '', requiredVerifiedReplicaCount: 1,
         destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }] },
     })
     expect(inputs[1].configuration.database).toBe('CRM')

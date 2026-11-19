@@ -103,7 +103,7 @@ describe('iş formu', () => {
     expect(vi.mocked(saveBackupJob).mock.calls[0][1]).toMatchObject({
       ...pinned,
       configuration: {
-        ...source, encrypt: true, trustServerCertificate: false, compressionPolicy: 'Preferred', encryptionPolicy: 'Optional', stagingReference: 'default', storagePrefix: '', requiredVerifiedReplicaCount: 1,
+        ...source, encrypt: true, trustServerCertificate: false, compressionPolicy: 'Preferred', encryptionPolicy: 'Off', stagingReference: 'default', storagePrefix: '', requiredVerifiedReplicaCount: 1,
         destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }],
       },
     })
@@ -277,7 +277,7 @@ describe('iş formu', () => {
     renderPage()
     await reach(1)
     expect(await screen.findByText(/Yeni iş veya yeni hedef/)).toHaveTextContent('varsayılan seçimi bu engeli aşmaz')
-    expect(within(screen.getByLabelText('Depolama bağlantısı')).getByRole('option', { name: /Varsayılan/ })).toBeDisabled()
+    expect(within(screen.getByLabelText('Depolama bağlantısı')).getByRole('option', { name: 'Yerel disk · Devre dışı' })).toBeDisabled()
     next(2)
     expect(screen.getByRole('button', { name: 'Kaydet' })).toBeDisabled()
     fireEvent.submit(screen.getByRole('button', { name: 'Kaydet' }).closest('form')!)
@@ -304,7 +304,8 @@ describe('iş formu', () => {
     await reach(1)
     const select = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
-    expect(within(select).getByRole('option', { name: /Local · Yerel yedekleme bilgisayarı diski · Kullanılabilir/ })).toBeEnabled()
+    expect(within(select).getByRole('option', { name: 'Yerel disk · Kullanılabilir' })).toBeEnabled()
+    expect(within(select).getByRole('option', { name: 'Yerel disk · Yerel yedekleme bilgisayarı diski · Kullanılabilir' })).toBeEnabled()
     for (const name of [/Kilitli.*Platform kilidi/, /Kapalı.*Devre dışı/]) {
       expect(within(select).getByRole('option', { name })).toBeDisabled()
     }
@@ -313,7 +314,8 @@ describe('iş formu', () => {
     // Only the connections of the selected provider are listed.
     expect(within(select).queryByRole('option', { name: /Planlanan|Bilinmeyen|Uyumsuz sahiplik|Managed/ })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
-    expect(within(select).getByRole('option', { name: /Managed Storage · Merkezi yönetilen depolama · Platform yönetimli · Kullanılabilir/ })).toBeEnabled()
+    expect(within(select).getByRole('option', { name: 'Merkezi depolama · Platform yönetimli · Kullanılabilir' })).toBeEnabled()
+    expect(within(select).getByRole('option', { name: /Merkezi depolama · Merkezi yönetilen depolama · Platform yönetimli · Kullanılabilir/ })).toBeEnabled()
     expect(within(select).getByRole('option', { name: /Uyumsuz sahiplik.*Desteklenmeyen/ })).toBeDisabled()
     expect(within(select).queryByRole('option', { name: /Kilitli|Kapalı/ })).not.toBeInTheDocument()
   })
@@ -354,7 +356,7 @@ describe('iş formu', () => {
     expect(screen.getByRole('heading', { name: 'Yeni yedekleme işi' })).toBeInTheDocument()
     expect(saveBackupJob).toHaveBeenCalledTimes(1)
   })
-  it.each([['Bu depolamayı kullan', 'Managed Storage'], ['Vazgeç', 'Varsayılan bağlantı']])('"Yeni depolama ekle" opens the storage wizard and "%s" returns to the review with the draft kept', async (button, target) => {
+  it.each([['Bu depolamayı kullan', 'Merkezi depolama'], ['Vazgeç', 'Yerel disk']])('"Yeni depolama ekle" opens the storage wizard and "%s" returns to the review with the draft kept', async (button, target) => {
     const { router } = renderPageWithRouter()
     await reach(3)
     fireEvent.click(screen.getByRole('button', { name: 'Yeni depolama ekle' }))
@@ -482,7 +484,7 @@ describe('adım adım sihirbaz', () => {
     expect(summary.getByText('ERP backup')).toBeInTheDocument()
     expect(summary.getByText('Her gün 02:00')).toBeInTheDocument()
     expect(summary.getByText('30 gün')).toBeInTheDocument()
-    expect(summary.getByText('İsteğe bağlı')).toBeInTheDocument()
+    expect(summary.getByText('Kapalı')).toBeInTheDocument()
     next()
     fireEvent.click(screen.getByRole('button', { name: 'Hiç silinmesin' }))
     expect(within(screen.getByRole('complementary', { name: 'Canlı özet' })).getByText('Adım 3 / 4: Zamanlama ve Koruma')).toBeInTheDocument()
@@ -551,18 +553,15 @@ describe('adım adım sihirbaz', () => {
     await reach(2)
     expect(screen.getByRole('button', { name: '30 gün' })).toBeDisabled()
   })
-  it('encryption defaults to "İsteğe bağlı" and says both choices encrypt; "Gerekli" fails an unencrypted result and links to the recovery key without blocking', async () => {
+  it('encryption defaults to Kapalı; turning it on links to the recovery key without blocking and sends Required', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
     await reach(2)
-    const choice = screen.getByLabelText('Yedek şifreleme politikası')
-    expect(choice).toHaveValue('Optional')
-    expect(within(choice).getAllByRole('option').map(option => option.textContent)).toEqual(['İsteğe bağlı', 'Gerekli'])
-    expect(screen.getByText('Yedek şifrelenir.')).toBeInTheDocument()
-    expect(screen.queryByText(/düz dosya/i)).not.toBeInTheDocument()
+    const choice = screen.getByRole('switch', { name: 'Şifreleme: Kapalı' })
+    expect(choice).not.toBeChecked()
     expect(screen.queryByRole('link', { name: 'Kurtarma anahtarı' })).not.toBeInTheDocument()
-    fireEvent.change(choice, { target: { value: 'Required' } })
-    expect(screen.getByText('Yedek şifrelenir; şifrelenmemiş sonuç başarısız sayılır.')).toBeInTheDocument()
+    fireEvent.click(choice)
+    expect(screen.getByRole('switch', { name: 'Şifreleme: Açık' })).toBeChecked()
     expect(screen.getByRole('link', { name: 'Kurtarma anahtarı' })).toHaveAttribute('href', '/tenants/tenant-a/settings/recovery-key')
     next(1)
     await submit()
@@ -604,7 +603,7 @@ describe('adım adım sihirbaz', () => {
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toBeInTheDocument()
     next(1)
     fireEvent.click(screen.getByRole('button', { name: 'Değiştir: Şifreleme' }))
-    expect(screen.getByLabelText('Yedek şifreleme politikası')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /^Şifreleme:/ })).toBeInTheDocument()
     next()
     fireEvent.click(screen.getByRole('button', { name: 'Değiştir: Bilgisayar' }))
     expect(screen.getByLabelText('Yedekleme bilgisayarı')).toBeInTheDocument()

@@ -8,7 +8,7 @@ import * as connectionApi from '@/features/storage-connections/api'
 import * as artifactApi from '@/features/artifacts/api'
 import type { TenantQuota } from '@/features/storage/types'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { makeConnection } from '@/features/storage-connections/test-fixtures'
+import { makeConnection, makeManaged } from '@/features/storage-connections/test-fixtures'
 import { StorageLayout } from './storage-layout'
 import { ConnectionList } from '@/features/storage-connections/connection-list'
 
@@ -45,5 +45,20 @@ describe('Depolama', () => {
     expect(screen.getByText('Silinemeyen yedek dosyaları')).toBeInTheDocument()
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(artifactApi.listArtifacts).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ state: 'DeleteFailed' }), expect.any(AbortSignal))
+  })
+  it('names the system defaults "Yerel disk" and "Merkezi depolama" and badges only the local default', async () => {
+    vi.mocked(connectionApi.getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
+    mount()
+    expect(await screen.findByRole('article', { name: 'Yerel disk' })).toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'Merkezi depolama' })).toBeInTheDocument()
+    expect(screen.queryByText('Local')).not.toBeInTheDocument()
+    expect(screen.queryByText('Managed Storage')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Varsayılan')).toHaveLength(1)
+  })
+  it('keeps the name of a default the owner renamed', async () => {
+    vi.mocked(connectionApi.getTenantConnections).mockResolvedValue({ items: [makeConnection({ name: 'Ofis diski' })] })
+    mount()
+    expect(await screen.findByRole('article', { name: 'Ofis diski' })).toBeInTheDocument()
+    expect(screen.getByText('Varsayılan')).toBeInTheDocument()
   })
 })
