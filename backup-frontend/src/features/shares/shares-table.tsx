@@ -13,7 +13,7 @@ import { formatBytes, formatDateTime } from '@/lib/format'
 import { describeFailure } from '@/lib/api/failure-messages'
 import { tx, useLanguage } from '@/lib/i18n'
 import { ShareActionDialogs } from './share-dialogs'
-import { canManageShare, type BackupShareView, type DownloadAttemptView } from './types'
+import { canExtendShare, canManageShare, type BackupShareView, type DownloadAttemptView } from './types'
 import { prepareDownload } from '@/features/artifacts/api'
 import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 
@@ -139,6 +139,7 @@ export function SharesTable({
       header: tx('İşlemler'),
       render: (share: BackupShareView) => {
         const canManage = canManageShare(share, user?.role, canAdmin)
+        const canExtend = canExtendShare(share, user?.role, canAdmin)
         const canDownload = user?.role === 'PlatformAdmin' && share.status === 'Active'
         if (!canManage && !canDownload) {
           return '—'
@@ -157,13 +158,15 @@ export function SharesTable({
             )}
             {canManage && (
               <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setExtendTarget(share)}
-                >
-                  {tx('Süreyi uzat')}
-                </Button>
+                {canExtend && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setExtendTarget(share)}
+                  >
+                    {tx('Süreyi uzat')}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"

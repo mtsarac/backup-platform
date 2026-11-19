@@ -214,12 +214,15 @@ function renderWithClient(ui: React.ReactElement, initialRoute = '/') {
   )
 }
 
+/** The list merges two purposes; these are the execution restores and no trial ones. */
+const listRestores = (execution: RestorePage) => vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => filters?.purpose === 'Verification' ? { ...execution, items: [], totalCount: 0 } : execution)
+
 beforeEach(() => {
   tenancy.tenantId = 'tenant-a'
   tenancy.canAdmin = true
   tenancy.canOperate = true
 
-  vi.mocked(RestoreApi.getRestores).mockResolvedValue(sampleRestorePage)
+  listRestores(sampleRestorePage)
   vi.mocked(RestoreApi.getRestore).mockResolvedValue(sampleRestore)
   vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue(sampleTargets)
   vi.mocked(AgentApi.getAgents).mockResolvedValue([
@@ -296,11 +299,11 @@ describe('RestoresPage', () => {
   })
 
   it('filters by computer name while preserving the selected backup and status', async () => {
-    renderWithClient(<RestoresPage />, '/?artifactId=artifact-2&status=Failed&page=3')
+    renderWithClient(<RestoresPage />, '/?artifactId=artifact-2&status=Failed')
     await screen.findByText('RestoredSalesDB')
     await userEvent.type(screen.getByRole('combobox', { name: 'Yedekleme bilgisayarı' }), 'SQL')
     await userEvent.click(await screen.findByRole('option', { name: 'SQL Server Agent 1' }))
-    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ agentId: 'agent-1', artifactId: 'artifact-2', status: 'Failed', page: 1 }), expect.anything()))
+    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ agentId: 'agent-1', artifactId: 'artifact-2', status: 'Failed' }), expect.anything()))
   })
 
   it('names the filtered backup even when it is older than the ones the picker loaded', async () => {
@@ -311,19 +314,20 @@ describe('RestoresPage', () => {
   })
 
   it('names the source backup and the backup computer instead of showing ids', async () => {
-    vi.mocked(RestoreApi.getRestores).mockResolvedValue({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
+    listRestores({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
     renderWithClient(<RestoresPage />)
     expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
     expect(within(screen.getByRole('table')).getByText('SQL Server Agent 1')).toBeInTheDocument()
   })
 
   describe('when there is nothing to list', () => {
-    beforeEach(() => vi.mocked(RestoreApi.getRestores).mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 }))
+    beforeEach(() => listRestores({ items: [], totalCount: 0, page: 1, pageSize: 25 }))
     const emptyActions = () => within(screen.getByTestId('restores-empty')).queryAllByRole('link').concat(within(screen.getByTestId('restores-empty')).queryAllByRole('button'))
 
-    it('offers one way forward: opening the backups to restore one', async () => {
+    it('says why it is empty and offers one way forward: opening the backups to restore one', async () => {
       renderWithClient(<RestoresPage />)
       await screen.findByTestId('restores-empty')
+      expect(within(screen.getByTestId('restores-empty')).getByText('Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.')).toBeInTheDocument()
       const actions = emptyActions()
       expect(actions).toHaveLength(1)
       expect(actions[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
@@ -857,7 +861,7 @@ describe('file archive restore', () => {
 
   it('shows persisted file selections in restore history and detail instead of database mode labels', async () => {
     const fileRestore: RestoreView = { ...sampleRestore, options: { verifyChecksum: true, verifyBackup: true, files: { paths: ['reports', 'notes.txt'], relativeDirectory: 'recovery' } } }
-    vi.mocked(RestoreApi.getRestores).mockResolvedValue({ ...sampleRestorePage, items: [fileRestore] })
+    listRestores({ ...sampleRestorePage, items: [fileRestore] })
     const list = renderWithClient(<RestoresPage />)
     expect(await screen.findByText('Dosya / klasör geri yükleme')).toBeInTheDocument()
     expect(screen.getByText('recovery')).toBeInTheDocument()

@@ -232,14 +232,15 @@ describe('rollback copy removal', () => {
   })
 })
 
-describe('restores list filter', () => {
-  it('switches to restore tests with purpose=Verification', async () => {
-    vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => page(filters?.purpose === 'Verification' ? [{ ...base, sourceDatabaseName: 'SalesDB', cleanup: cleanupOf({}) }] : []))
+describe('restores list', () => {
+  it('shows one list with trial restores badged "Deneme" and no list-type selector', async () => {
+    vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => page(filters?.purpose === 'Verification'
+      ? [{ ...base, id: 'trial-1', purpose: 'Verification', databaseName: 'bp_verify_1', sourceDatabaseName: 'SalesDB', cleanup: cleanupOf({}) }]
+      : [{ ...base, id: 'real-1', purpose: 'Execution', databaseName: 'RestoredDb' }]))
     renderAt(<RestoresPage />)
-    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ purpose: undefined }), expect.anything()))
-    fireEvent.change(screen.getByRole('combobox', { name: "Liste türü" }), { target: { value: 'tests' } })
-    expect(await screen.findByText("Başarılı")).toBeInTheDocument()
-    expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ purpose: 'Verification' }), expect.anything())
-    expect(screen.queryByText("Hedef veritabanı")).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'RestoredDb' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'SalesDB' })).toBeInTheDocument()
+    expect(screen.getAllByText('Deneme')).toHaveLength(1)
+    expect(screen.queryByRole('combobox', { name: 'Liste türü' })).not.toBeInTheDocument()
   })
 })

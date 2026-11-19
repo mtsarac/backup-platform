@@ -55,6 +55,9 @@ function mount() {
   return client
 }
 const request = vi.mocked(apiRequest)
+/** The artifact page also reads the restore targets; they are not what these tests are about. */
+const noRestoreTargets = { agents: [], targets: [] }
+const answering = (path: string, current: unknown) => path.endsWith('/restore-targets') ? noRestoreTargets : current
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 beforeEach(() => { permissions.canAdmin = true; permissions.canOperate = true; permissions.role = 'UserAdmin' })
 const openDetails = () => fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
@@ -88,7 +91,7 @@ describe('Backup dosyaları', () => {
     expect(screen.queryByText("SQL Server sürüm türü")).not.toBeInTheDocument()
   })
   it('clears the opened details and destructive confirmation when navigating to another Artifact', async () => {
-    request.mockResolvedValue(artifact())
+    request.mockImplementation(async (path) => answering(path, artifact()))
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
     const router = createMemoryRouter([{ path: '/tenants/:tenantId/artifacts/:id', element: <Page /> }], { initialEntries: ['/tenants/tenant-a/artifacts/artifact-a'] })
     render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
@@ -105,9 +108,9 @@ describe('Backup dosyaları', () => {
 
   it('silme isteği için dosyanın adını yazdırır ve fiziksel silme yerine bekleme süresini başlatır', async () => {
     let current = artifact()
-    request.mockImplementation(async (_path, options) => {
+    request.mockImplementation(async (path, options) => {
       if (options?.method === 'DELETE') current = pending()
-      return current
+      return answering(path, current)
     })
     const client = mount()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
