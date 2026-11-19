@@ -12,6 +12,7 @@ interface Props {
   tenantId: string
   agentId: string
   idPrefix: string
+  host: string
   /** The reference of the login already stored for this target, if any. */
   reference: string | null | undefined
   onStored: (reference: string) => void
@@ -23,7 +24,7 @@ interface Props {
  * The database login for a restore target. It is encrypted on the server first and the form keeps only the returned reference, so the password never
  * sits in the restore request (which is retried and fingerprinted) and a retried submit stays idempotent.
  */
-export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onStored, onPendingChange }: Props) {
+export function StoredLoginPanel({ tenantId, agentId, idPrefix, host, reference, onStored, onPendingChange }: Props) {
   const [login, setLogin] = useState<DatabaseLogin | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
@@ -31,6 +32,10 @@ export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onSto
   useEffect(() => { onPendingChange?.(pending); return () => onPendingChange?.(false) }, [pending, onPendingChange])
   const save = async () => {
     if (!login || !agentId) return
+    if (!host.trim()) {
+      setError({ what: tx('Sunucu adresini girin.'), technical: [] })
+      return
+    }
     setSaving(true)
     setError(null)
     try {

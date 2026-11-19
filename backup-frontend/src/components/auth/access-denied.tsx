@@ -5,7 +5,7 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { accessDenied } from '@/lib/api/failure-messages'
 import { linkClass } from '@/components/ui/form-styles'
 
-/** The one permission wall: nothing was changed, and the way forward is a person who can grant access. */
+/** The permission wall states what is unavailable and offers a way back. */
 export function AccessDenied({ what, title = tx("Bu alan için yetkiniz yok"), standalone = false, control }: {
   what: string; title?: string; standalone?: boolean
   /** Replaces the default way home when a nearer page is the better next step. */

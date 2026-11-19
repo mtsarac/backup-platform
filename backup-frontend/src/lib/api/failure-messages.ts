@@ -259,7 +259,7 @@ const guidance: Record<string, { dataImpact?: () => string; action?: () => strin
   ServerCertificateUntrusted: certificateGuidance,
   server_certificate_untrusted: certificateGuidance,
   quota_exceeded: { action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
-  quota_size_unknown: { action: () => tx("Yöneticinize danışın.") },
+  quota_size_unknown: { action: () => tx("Bu işlem yapılamadı.") },
   QuotaExceeded: { action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
   integrity_mismatch: { action: () => tx("Yeni bir indirme başlatın.") },
   AgentLost: { action: () => tx("Yedekleme bilgisayarının açık ve bağlı olduğunu kontrol edip yeniden deneyin.") },
@@ -303,9 +303,9 @@ function describeCode(code: string | null | undefined, scope?: ErrorScope): Erro
   return { what, ...(guided(key) ?? { action: nextStep(actionKind) }), actionKind, technical }
 }
 
-/** A permission wall is a failure too: the way forward is a person who can grant access. */
+/** A permission wall states what is unavailable without suggesting a role. */
 export function accessDenied(what: string): ErrorDescription {
-  return { what, action: tx("Yöneticinize danışın."), technical: [] }
+  return { what, technical: [] }
 }
 
 export const platformOnlyMessage = () => tx('Platform Administration yalnızca PlatformAdmin yetkisi olan kullanıcılar içindir. Tenant yöneticiliği platform erişimi vermez.')
@@ -327,7 +327,7 @@ export function describeError(error: unknown, scope?: ErrorScope): ErrorDescript
   if (key && !knownMessage(key, scope) && (error.status !== 401 || isPlainCode(key))) return { what, actionKind: 'retry', technical }
   if (error.status === 401) return { what, technical }
   if (actionKind) return { what, action: nextStep(actionKind), actionKind, technical }
-  if (error.status === 403) return { what, action: tx("Yöneticinize danışın."), technical }
+  if (error.status === 403) return { what, technical }
   if (error.status === 404) return { what, action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
   return { what, actionKind: error.status >= 500 ? 'retry' : undefined, technical }
 }
@@ -351,7 +351,7 @@ export function describePasskeyError(error: unknown): ErrorDescription {
     return { what: tx("Bu cihazdaki geçiş anahtarı hesabınıza zaten kayıtlı."), action: tx("Başka bir cihaz veya güvenlik anahtarı ile deneyin."), technical: [] }
   }
   if (name === 'SecurityError') {
-    return { what: tx("Geçiş anahtarı bu adreste kullanılamıyor. Adres güvenli (HTTPS) olmalı ve sunucu yapılandırmasıyla eşleşmelidir."), action: tx("Yöneticinize danışın."), technical: [] }
+    return { what: tx("Geçiş anahtarı bu adreste kullanılamıyor. Adres güvenli (HTTPS) olmalı ve sunucu yapılandırmasıyla eşleşmelidir."), technical: [] }
   }
   return describeError(error)
 }

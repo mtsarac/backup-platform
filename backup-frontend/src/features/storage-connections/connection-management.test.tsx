@@ -270,7 +270,7 @@ describe('Storage connections list and detail', () => {
     ])
     mount()
     await screen.findByRole('article', { name: 'Yerel disk' })
-    expect(article('Yerel disk').getByText("Yedekleme bilgisayarı tarafında denetlenir")).toBeInTheDocument()
+    expect(article('Yerel disk').getByText("Test edilmedi")).toBeInTheDocument()
     expect(article('Yerel disk').queryByText('Sağlıklı')).not.toBeInTheDocument()
     expect(article('Merkezi depolama').getByText('Sağlıklı')).toBeInTheDocument()
     expect(article('S3 Arşiv').getByText('Bağlantı sorunu')).toBeInTheDocument()

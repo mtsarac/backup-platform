@@ -4,7 +4,7 @@ import { Route, Navigate } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AccountShell } from '@/components/layout/account-shell'
-import { renderPlatform } from '@/features/platform/test-utils'
+import { renderPlatform, tenantOwner } from '@/features/platform/test-utils'
 import { AccountLayout } from './account-layout'
 import { AccountPage } from './account-page'
 
@@ -27,9 +27,17 @@ describe('Account settings', () => {
     expect(auth.logout).toHaveBeenCalled()
   })
 
+  it('does not show a role on the tenant account page', async () => {
+    renderPlatform(null, { path: '/account', routes: tree, user: tenantOwner })
+    expect(await screen.findByRole('heading', { name: 'Hesap', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByText('Rol')).not.toBeInTheDocument()
+    expect(screen.queryByText('Kullanıcı Yöneticisi')).not.toBeInTheDocument()
+  })
+
   it('marks the open sub-page current in the sub-navigation and the settings entry in the sidebar', async () => {
     renderPlatform(null, { path: '/account/security', routes: tree })
     const tabs = within(await screen.findByRole('navigation', { name: 'Hesap ayarları' }))
+    expect(tabs.getByRole('list')).toHaveClass('flex-wrap')
     expect(tabs.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Hesap', '/account'], ['Oturumlarım', '/account/sessions'], ['Güvenlik', '/account/security'], ['Geçiş anahtarları', '/account/passkeys'],
     ])
