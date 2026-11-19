@@ -1,6 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
+import { AccessPill } from '@/features/discovery/access-pill'
 import { StatusPill } from '@/components/data/status-pill'
 import { linkClass } from '@/components/ui/form-styles'
 import { Section } from '@/components/ui/section'
@@ -29,7 +30,7 @@ function InstanceDatabases({ instance }: { instance: DiscoveryInstanceSummary })
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center gap-2">
       <Link className={`font-medium ${linkClass}`} to={discoveryInstancePath(tenantId, instance.id)}>{instance.displayName}</Link>
-      <StatusPill domain="access" status={instance.access} />
+      <AccessPill status={instance.access} reasonCode={instance.accessReasonCode} />
     </div>
     {authenticated && <QueryState isPending={detail.isPending} error={detail.error}>{detail.data && (detail.data.databases.length === 0
       ? <p className="text-sm text-text-muted">{tx("Bu sunucuda listelenmiş veritabanı yok.")}</p>
