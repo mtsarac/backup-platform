@@ -316,6 +316,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.InvalidConfiguration => "The restore configuration is invalid.",
         RestoreFailureCodes.UnsupportedCapability => "The agent or the database does not support a requested restore capability.",
         RestoreFailureCodes.StagingInvalid => "The staging directory is not usable.",
+        RestoreFailureCodes.AgentNotConfigured => "The agent is not set up to run this restore: its staging folder, local backup folder or database client tools are missing.",
         RestoreFailureCodes.Cancelled => "The restore was cancelled.",
         RestoreFailureCodes.AgentLost => "The agent lease expired before the restore completed.",
         RestoreFailureCodes.NotClaimed => "No agent picked up the restore in time, so it was withdrawn without touching the target.",

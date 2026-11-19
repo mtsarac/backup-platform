@@ -178,7 +178,7 @@ public sealed class RestoreTaskRequestFactory(
             throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
         }
 
-        return _staging ?? throw new RestoreTaskRequestException(RestoreAgentFailureCodes.StagingInvalid);
+        return _staging ?? throw new RestoreTaskRequestException(RestoreAgentFailureCodes.AgentNotConfigured);
     }
 
     /// <summary>
@@ -199,7 +199,7 @@ public sealed class RestoreTaskRequestFactory(
     private IStorageProvider? LocalVolumeOverride(RestoreTaskSource source)
     {
         if (source.Access != "AgentLocal" || source.StorageTarget is not { Length: > 0 } target || target == LocalVolumes.DefaultName) return null;
-        return volumes?.Resolve(target) ?? throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        return volumes?.Resolve(target) ?? throw new RestoreTaskRequestException(RestoreAgentFailureCodes.AgentNotConfigured);
     }
 
     private static DatabaseRestoreMode ParseMode(string mode) => mode switch
