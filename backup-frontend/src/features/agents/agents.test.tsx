@@ -143,6 +143,19 @@ describe('Backup computer page', () => {
     expect(discoveryApi.getDiscoveryInstance).not.toHaveBeenCalledWith('tenant-a', 'inst-2', expect.anything())
   })
 
+  it('shows the databases of a server whose login fails as a muted last known list without availability pills', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: supportedAgent.capabilities as AgentDetail['capabilities'] })
+    vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [makeInstance({ access: 'Error', accessReasonCode: 'server_tls_unavailable' })] })
+    vi.mocked(discoveryApi.getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'Error', accessReasonCode: 'server_tls_unavailable', databases: [makeDatabase({ name: 'ERP' })] }))
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const section = within(await screen.findByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' }))
+    expect(await section.findByText('ERP')).toBeVisible()
+    expect(section.getByText('Son bilinen liste')).toBeVisible()
+    expect(section.getByText('Veritabanları listelenemiyor; son başarılı aramadan kalan liste gösteriliyor.')).toBeVisible()
+    expect(section.queryByText('Yedeklenemez')).not.toBeInTheDocument()
+    expect(section.queryByText('Yedeklenebilir')).not.toBeInTheDocument()
+  })
+
   it('keeps platform, versions, identifiers and lifecycle in collapsed, copyable technical details', async () => {
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })

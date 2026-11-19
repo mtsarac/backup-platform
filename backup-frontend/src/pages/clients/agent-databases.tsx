@@ -5,7 +5,7 @@ import { AccessPill } from '@/features/discovery/access-pill'
 import { StatusPill } from '@/components/data/status-pill'
 import { linkClass } from '@/components/ui/form-styles'
 import { Section } from '@/components/ui/section'
-import { databaseAvailability } from '@/features/discovery/status'
+import { databaseAvailability, isStaleList, staleListNote, staleListTitle } from '@/features/discovery/status'
 import { useDiscoveryInstance, useDiscoveryInstances } from '@/features/discovery/hooks'
 import type { DiscoveryDatabase, DiscoveryInstanceDetail, DiscoveryInstanceSummary } from '@/features/discovery/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -25,20 +25,23 @@ export function AgentDatabases({ agentId }: { agentId: string }) {
 
 function InstanceDatabases({ instance }: { instance: DiscoveryInstanceSummary }) {
   const { tenantId } = useTenant()
-  const authenticated = instance.access === 'Authenticated'
-  const detail = useDiscoveryInstance(authenticated ? instance.id : '')
+  const listed = instance.access !== 'CredentialsRequired'
+  const detail = useDiscoveryInstance(listed ? instance.id : '')
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center gap-2">
       <Link className={`font-medium ${linkClass}`} to={discoveryInstancePath(tenantId, instance.id)}>{instance.displayName}</Link>
       <AccessPill status={instance.access} reasonCode={instance.accessReasonCode} />
     </div>
-    {authenticated && <QueryState isPending={detail.isPending} error={detail.error}>{detail.data && (detail.data.databases.length === 0
+    {listed && <QueryState isPending={detail.isPending} error={detail.error}>{detail.data && (detail.data.databases.length === 0
       ? <p className="text-sm text-text-muted">{tx("Bu sunucuda listelenmiş veritabanı yok.")}</p>
-      : <ul className="divide-y divide-border rounded-lg border border-border">{detail.data.databases.map(db => <DatabaseItem key={db.name} db={db} instance={detail.data} />)}</ul>)}</QueryState>}
+      : <>
+        {isStaleList(detail.data) && <div className="space-y-0.5 text-sm text-text-muted"><p className="font-medium">{staleListTitle()}</p><p>{staleListNote()}</p></div>}
+        <ul className={`divide-y divide-border rounded-lg border border-border${isStaleList(detail.data) ? ' opacity-60' : ''}`}>{detail.data.databases.map(db => <DatabaseItem key={db.name} db={db} instance={detail.data} />)}</ul></>)}</QueryState>}
   </div>
 }
 
 function DatabaseItem({ db, instance }: { db: DiscoveryDatabase; instance: DiscoveryInstanceDetail }) {
+  if (isStaleList(instance)) return <li className="px-3 py-2"><span className="font-medium text-text-heading">{db.name}</span></li>
   const { kind, reason } = databaseAvailability(db, instance)
   return <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
     <div className="min-w-0"><span className="font-medium text-text-heading">{db.name}</span>{reason && <p className="text-sm text-text-muted">{reason}</p>}</div>
