@@ -116,7 +116,7 @@ describe('instance detail page', () => {
     mount()
     expect(await screen.findByRole('link', { name: 'SQL Agent' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).queryByText('ERP')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).queryByText('ERP')).not.toBeInTheDocument()
   })
   it('prefills the ticket 10 wizard and creates only the picked databases after confirmation', async () => {
     mount()
@@ -157,10 +157,10 @@ describe('instance detail page', () => {
     const trigger = await screen.findByRole('button', { name: 'Teknik ayrıntılar' })
     expect(screen.queryByText('inst-1')).not.toBeInTheDocument()
     await userEvent.click(trigger)
-    const details = await screen.findByRole('dialog')
-    expect(within(details).getByText('inst-1')).toBeInTheDocument()
-    expect(within(details).getByText('16.0')).toBeInTheDocument()
-    expect(within(details).getByRole('button', { name: 'Kopyala: Sunucu kimliği' })).toBeInTheDocument()
+    const details = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
+    expect(details.getByText('inst-1')).toBeInTheDocument()
+    expect(details.getByText('16.0')).toBeInTheDocument()
+    expect(details.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
   it('asks for credentials without revealing a stored password and verifies the connection', async () => {
     vi.mocked(verifyDiscoveryInstance).mockRejectedValue(new ApiError(409, { error: 'discovery_unsupported' }))

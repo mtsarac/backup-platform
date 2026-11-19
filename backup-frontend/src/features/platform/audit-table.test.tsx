@@ -26,7 +26,7 @@ describe('audit action labels', () => {
     expect(screen.getByText(label)).toBeVisible()
     expect(screen.queryByText(action)).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText(action)).toBeVisible()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText(action)).toBeVisible()
   })
 })
 
@@ -40,11 +40,10 @@ describe('audit log rows', () => {
     expect(screen.getByRole('link', { name: 'Acme A.Ş.' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
     for (const raw of ['membership.role_changed', 'Membership', 'user-1', 'audit-1', 'role', 'Admin', 'PlatformAdmin']) expect(screen.queryByText(raw)).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('membership.role_changed')).toBeVisible()
-    expect(within(dialog).getByText('Admin')).toBeVisible()
-    expect(within(dialog).getByRole('button', { name: 'Kopyala: İşlem kodu' })).toBeVisible()
-    expect(within(dialog).getByRole('button', { name: 'Kopyala: role' })).toBeVisible()
+    const region = screen.getByRole('region', { name: 'Teknik ayrıntılar' })
+    expect(within(region).getByText('membership.role_changed')).toBeVisible()
+    expect(within(region).getByText('Admin')).toBeVisible()
+    expect(within(region).getByRole('button', { name: 'Kopyala' })).toBeVisible()
   })
 
   it('says a code it cannot translate is an unknown action instead of printing the code in the body', async () => {
@@ -52,7 +51,7 @@ describe('audit log rows', () => {
     expect(screen.getByText('Bilinmeyen işlem')).toBeVisible()
     expect(screen.queryByText('made.up_code')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('made.up_code')).toBeVisible()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('made.up_code')).toBeVisible()
   })
 
   it('drops the tenant column where the tenant is the page', () => {

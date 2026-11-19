@@ -22,7 +22,7 @@ export function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
 
-  const fail = (what: string, action: string) => setError({ what, dataImpact: tx('Şifre güncellenmedi.'), action, technical: [] })
+  const fail = (what: string, action: string) => setError({ what, action, technical: [] })
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()

@@ -27,8 +27,8 @@ describe('FormDialog', () => {
     fireEvent.submit(screen.getByLabelText('Ad'))
     expect(pending).not.toHaveBeenCalled()
   })
-  it('shows a failed request as what happened, effect on the data and next step', () => {
+  it('shows a failed request as one plain sentence', () => {
     open({ error: new ApiError(500) })
-    expect(screen.getByRole('alert')).toHaveTextContent('Ne yapmalı')
+    expect(screen.getByRole('alert')).toHaveTextContent('Sunucu isteği tamamlayamadı. Daha sonra tekrar deneyin.')
   })
 })

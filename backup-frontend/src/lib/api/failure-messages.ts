@@ -236,12 +236,12 @@ const codeClasses: Record<Exclude<FailureAction, 'retry'>, readonly string[]> = 
 const classOfCode = new Map(Object.entries(codeClasses).flatMap(([action, codes]) => codes.map(code => [code, action as FailureAction] as const)))
 
 export interface ErrorDescription {
-  /** What happened. */
+  /** What happened (and, where the sentence needs it, what to do). */
   what: string
-  /** What it means for the user's data. */
-  dataImpact: string
-  /** The one thing to do next, as a sentence. */
-  action: string
+  /** A context-specific consequence for the data; only for operations where data is genuinely at risk. Never a generic reassurance. */
+  dataImpact?: string
+  /** A specific next step, as a sentence; omitted when `what` and the button already say it. */
+  action?: string
   /** The kind of action the notice offers as its one button; none when the failure has no single safe action. */
   actionKind?: FailureAction
   /** Raw code, status and field: for the collapsed technical details only. */
@@ -250,32 +250,29 @@ export interface ErrorDescription {
   certificateUntrusted?: boolean
 }
 
-const subscriptionUnchanged = () => tx("Abonelik ve depolama limiti değişmedi; yedekleriniz etkilenmedi.")
-
-// Codes whose consequence for the data is specific; every other failure gets the honest generic line for its kind.
-const certificateGuidance = {
-  dataImpact: () => tx("Sunucuya güvenli bağlantı kurulamadığı için işlem başlamadı; mevcut yedekleriniz etkilenmedi."),
-  action: () => tx("Sunucu sizin sunucunuzsa sertifikasına güvenebilirsiniz; değilse sistem yöneticinize danışın."),
-}
+// Codes with a specific safety line or next step; every other failure is its plain message.
+const certificateGuidance = { action: () => tx("Sunucu sizin sunucunuzsa sertifikasına güvenebilirsiniz; değilse sistem yöneticinize danışın.") }
 const isCertificateCode = (code: string | null | undefined) => code === 'ServerCertificateUntrusted' || code === 'server_certificate_untrusted'
-const guidance: Record<string, { dataImpact: () => string; action: () => string }> = {
+const guidance: Record<string, { dataImpact?: () => string; action?: () => string }> = {
   ServerCertificateUntrusted: certificateGuidance,
   server_certificate_untrusted: certificateGuidance,
-  quota_exceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
-  quota_size_unknown: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Yöneticinize danışın.") },
-  QuotaExceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
-  integrity_mismatch: { dataImpact: () => tx("Dosya doğrulanamadığı için kullanılmadı; yedeğiniz değişmedi."), action: () => tx("Yeni bir indirme başlatın.") },
-  AgentLost: { dataImpact: () => tx("Bu deneme tamamlanmadı; önceki başarılı yedekleriniz korunur."), action: () => tx("Yedekleme bilgisayarının açık ve bağlı olduğunu kontrol edip yeniden deneyin.") },
-  connection_in_use: { dataImpact: () => tx("Bağlantı silinmedi; yedeklemeler kullanmaya devam ediyor."), action: () => tx("Önce bu bağlantıyı kullanan işleri başka bir depolamaya taşıyın.") },
-  private_key_rejected: { dataImpact: () => tx("Özel anahtar gönderilmedi ve kaydedilmedi."), action: () => tx("Yalnızca genel anahtarı girin.") },
-  plan_already_assigned: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Farklı bir plan seçin.") },
-  plan_disabled: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Etkin bir plan seçin.") },
-  subscription_not_active: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
-  subscription_not_suspended: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
-  subscription_not_open: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Yeni bir plan atayın.") },
-  subscription_expired: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Yeni bir plan atayın.") },
-  subscription_not_found: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Önce bir plan atayın.") },
+  quota_exceeded: { action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
+  quota_size_unknown: { action: () => tx("Yöneticinize danışın.") },
+  QuotaExceeded: { action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
+  integrity_mismatch: { action: () => tx("Yeni bir indirme başlatın.") },
+  AgentLost: { action: () => tx("Yedekleme bilgisayarının açık ve bağlı olduğunu kontrol edip yeniden deneyin.") },
+  connection_in_use: { action: () => tx("Önce bu bağlantıyı kullanan işleri başka bir depolamaya taşıyın.") },
+  private_key_rejected: { dataImpact: () => tx("Özel anahtar gönderilmedi ve kaydedilmedi.") },
+  plan_already_assigned: { action: () => tx("Farklı bir plan seçin.") },
+  plan_disabled: { action: () => tx("Etkin bir plan seçin.") },
+  subscription_not_active: { action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
+  subscription_not_suspended: { action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
+  subscription_not_open: { action: () => tx("Yeni bir plan atayın.") },
+  subscription_expired: { action: () => tx("Yeni bir plan atayın.") },
+  subscription_not_found: { action: () => tx("Önce bir plan atayın.") },
 }
+const guided = (key: string) => Object.hasOwn(guidance, key) ? { dataImpact: guidance[key].dataImpact?.(), action: guidance[key].action?.() } : undefined
+const nextStep = (kind: FailureAction | undefined) => kind && kind !== 'retry' ? actionSentence(kind) : undefined
 
 function technicalItems(error: unknown): TechnicalItem[] {
   if (!(error instanceof ApiError)) return []
@@ -299,65 +296,60 @@ function describeCode(code: string | null | undefined, scope?: ErrorScope): Erro
   const what = failureMessage(code, scope)
   const technical = code && isPlainCode(code) ? [{ label: tx("Hata kodu"), value: code }] : []
   const key = code ?? ''
-  if (key && !knownMessage(key, scope)) return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', technical }
+  if (key && !knownMessage(key, scope)) return { what, actionKind: 'retry', technical }
   const actionKind = isCertificateCode(key) ? undefined : classOfCode.get(key) ?? (scope === 'restore' ? 'retry' : undefined)
-  if (Object.hasOwn(guidance, key)) return { what, dataImpact: guidance[key].dataImpact(), action: guidance[key].action(), actionKind, technical }
-  if (scope === 'restore') return { what, dataImpact: tx("Yedeğiniz değişmedi; hedef veritabanının durumunu kontrol edin."), action: actionKind && actionKind !== 'retry' ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip geri yüklemeyi yeniden deneyin."), actionKind, technical }
-  return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: actionKind ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip yeniden deneyin."), actionKind, technical }
+  return { what, ...(guided(key) ?? { action: nextStep(actionKind) }), actionKind, technical }
 }
 
-/** A permission wall is a failure too: nothing was changed, and the way forward is a person who can grant access. */
+/** A permission wall is a failure too: the way forward is a person who can grant access. */
 export function accessDenied(what: string): ErrorDescription {
-  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical: [] }
+  return { what, action: tx("Yöneticinize danışın."), technical: [] }
 }
 
 export const platformOnlyMessage = () => tx('Platform Administration yalnızca PlatformAdmin yetkisi olan kullanıcılar içindir. Tenant Owner / Admin rolü platform erişimi vermez.')
 
-/** A record that is gone or not theirs: nothing changed, and the way forward is to pick again from the list. */
+/** A record that is gone or not theirs: the way forward is to pick again from the list. */
 export function notFound(what: string): ErrorDescription {
-  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical: [] }
+  return { what, action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical: [] }
 }
 
-/** Every failure the user sees says what happened, what it means for the data and what to do next. */
+/** Every failure the user sees says what happened and, when it helps, the one thing to do. */
 export function describeError(error: unknown, scope?: ErrorScope): ErrorDescription {
   const what = errorMessage(error, scope)
   const technical = technicalItems(error)
   const key = error instanceof ApiError ? error.reason ?? error.code ?? '' : ''
   const actionKind = classOfCode.get(key)
-  const known = Object.hasOwn(guidance, key) ? guidance[key] : undefined
-  if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), actionKind, technical }
-  const uncertain = tx("Mevcut yedekleriniz etkilenmedi; işlemin tamamlanıp tamamlanmadığını listeden kontrol edin.")
-  if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), actionKind: 'retry', technical }
-  if (key && !knownMessage(key, scope) && (error.status !== 401 || isPlainCode(key))) return { what, dataImpact: uncertain, action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', technical }
-  if (error.status === 401) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Giriş yaptıktan sonra işlemi tekrarlayın."), technical }
-  if (actionKind) return { what, dataImpact: error.status >= 500 ? uncertain : tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: actionSentence(actionKind), actionKind, technical }
-  if (error.status === 403) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical }
-  if (error.status === 404) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
-  if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), actionKind: 'retry', technical }
-  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: actionKind ? actionSentence(actionKind) : tx("Bilgileri kontrol edip tekrar deneyin."), actionKind, technical }
+  const known = guided(key)
+  if (known) return { what, ...known, actionKind, technical }
+  if (!(error instanceof ApiError)) return { what, actionKind: 'retry', technical }
+  if (key && !knownMessage(key, scope) && (error.status !== 401 || isPlainCode(key))) return { what, actionKind: 'retry', technical }
+  if (error.status === 401) return { what, technical }
+  if (actionKind) return { what, action: nextStep(actionKind), actionKind, technical }
+  if (error.status === 403) return { what, action: tx("Yöneticinize danışın."), technical }
+  if (error.status === 404) return { what, action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
+  return { what, actionKind: error.status >= 500 ? 'retry' : undefined, technical }
 }
 
 /** A passkey step that failed in the browser (cancelled prompt, no support, wrong origin) or on the server; none of these is a server fault worth a raw 500 message. */
 export function describePasskeyError(error: unknown): ErrorDescription {
-  const unchanged = () => tx("Hesabınızda değişiklik yapılmadı.")
   if (error instanceof ApiError) {
     if (error.status === 503 && error.code === 'passkeys_not_configured') {
-      return { what: tx("Geçiş anahtarları bu sunucuda henüz yapılandırılmamış."), dataImpact: unchanged(), action: tx("Şifrenizle giriş yapın veya platform yöneticisine başvurun."), technical: technicalItems(error) }
+      return { what: tx("Geçiş anahtarları bu sunucuda henüz yapılandırılmamış."), action: tx("Şifrenizle giriş yapın veya platform yöneticisine başvurun."), technical: technicalItems(error) }
     }
     return describeError(error)
   }
   const name = error instanceof Error ? error.name : ''
   if (name === 'NotAllowedError' || name === 'AbortError') {
-    return { what: tx("Geçiş anahtarı işlemi iptal edildi veya zaman aşımına uğradı."), dataImpact: unchanged(), action: tx("Tekrar deneyin. Kayıtlı bir geçiş anahtarınız yoksa şifrenizle giriş yapıp ekleyin."), technical: [] }
+    return { what: tx("Geçiş anahtarı işlemi iptal edildi veya zaman aşımına uğradı."), action: tx("Tekrar deneyin. Kayıtlı bir geçiş anahtarınız yoksa şifrenizle giriş yapıp ekleyin."), technical: [] }
   }
   if (name === 'NotSupportedError' || !isWebAuthnSupported()) {
-    return { what: tx("Bu tarayıcı veya cihaz geçiş anahtarlarını desteklemiyor."), dataImpact: unchanged(), action: tx("Şifrenizle giriş yapın veya başka bir tarayıcı ya da cihaz kullanın."), technical: [] }
+    return { what: tx("Bu tarayıcı veya cihaz geçiş anahtarlarını desteklemiyor."), action: tx("Şifrenizle giriş yapın veya başka bir tarayıcı ya da cihaz kullanın."), technical: [] }
   }
   if (name === 'InvalidStateError') {
-    return { what: tx("Bu cihazdaki geçiş anahtarı hesabınıza zaten kayıtlı."), dataImpact: unchanged(), action: tx("Başka bir cihaz veya güvenlik anahtarı ile deneyin."), technical: [] }
+    return { what: tx("Bu cihazdaki geçiş anahtarı hesabınıza zaten kayıtlı."), action: tx("Başka bir cihaz veya güvenlik anahtarı ile deneyin."), technical: [] }
   }
   if (name === 'SecurityError') {
-    return { what: tx("Geçiş anahtarı bu adreste kullanılamıyor. Adres güvenli (HTTPS) olmalı ve sunucu yapılandırmasıyla eşleşmelidir."), dataImpact: unchanged(), action: tx("Yöneticinize danışın."), technical: [] }
+    return { what: tx("Geçiş anahtarı bu adreste kullanılamıyor. Adres güvenli (HTTPS) olmalı ve sunucu yapılandırmasıyla eşleşmelidir."), action: tx("Yöneticinize danışın."), technical: [] }
   }
   return describeError(error)
 }

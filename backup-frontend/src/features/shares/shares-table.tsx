@@ -197,11 +197,7 @@ export function SharesTable({
     <div className="space-y-4">
       {notice && <Notice tone="success">{notice}</Notice>}
       {errorNotice && (
-        <ErrorNotice
-          what={errorNotice}
-          dataImpact={tx('Mevcut yedekleriniz etkilenmedi.')}
-          action={tx('Ayrıntıları kontrol edip yeniden deneyin.')}
-        />
+        <ErrorNotice what={errorNotice} />
       )}
       <DataList
         emptyMessage={tx('Henüz paylaşım yapılmamış.')}

@@ -51,9 +51,9 @@ describe('platform storage targets list', () => {
     expect(row.getByText('123 MB')).toBeVisible()
     for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(row.queryByText(technical)).not.toBeInTheDocument()
     await userEvent.click(row.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const technicalDialog = within(await screen.findByRole('dialog'))
+    const technicalDialog = within(row.getByRole('region', { name: 'Teknik ayrıntılar' }))
     for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(technicalDialog.getByText(technical)).toBeVisible()
-    expect(technicalDialog.getByRole('button', { name: 'Kopyala: Bağlantı kimliği' })).toBeInTheDocument()
+    expect(technicalDialog.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('becomes cards on a phone with the action buttons and no sideways table', async () => {

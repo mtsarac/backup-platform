@@ -37,9 +37,9 @@ describe('discovery page', () => {
     expect(within(computer).getByText('Liste güncel')).toBeInTheDocument()
     expect(screen.queryByText(/Docker yok demek değildir/)).not.toBeInTheDocument()
     await userEvent.click(within(computer).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const details = await screen.findByRole('dialog')
+    const details = within(computer).getByRole('region', { name: 'Teknik ayrıntılar' })
     expect(within(details).getByText(/Docker yok demek değildir/)).toBeInTheDocument()
-    expect(within(details).getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+    expect(within(details).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
   it('links the computer from its scan card and from every server row', async () => {
     mount()
@@ -68,7 +68,7 @@ describe('discovery page', () => {
     Object.assign(access, { canOperate: false, canAdmin: false })
     mount()
     fireEvent.click((await screen.findAllByText('Teknik ayrıntılar'))[0])
-    expect(screen.getByText('Tarama aralığı (dakika)')).toBeInTheDocument()
+    expect(screen.getByText('Tarama aralığı (dakika):')).toBeInTheDocument()
   })
   it('says an offline computer scans when it reconnects', async () => {
     vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'offline' }] as never)
@@ -93,12 +93,10 @@ describe('discovery page', () => {
     mount()
     expect(await screen.findByText('Tarama başarısız')).toBeInTheDocument()
     const alert = screen.getByRole('alert')
-    expect(within(alert).getByText('Verileriniz için:')).toBeInTheDocument()
-    expect(within(alert).getByText('Ne yapmalı:')).toBeInTheDocument()
     expect(within(alert).queryByText('new_scan_code')).not.toBeInTheDocument()
     expect(screen.queryByText('new_scan_code')).not.toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
-    expect(within(await screen.findByRole('dialog')).getByText('new_scan_code')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('new_scan_code')).toBeInTheDocument()
   })
   it('warns that a partial scan may be incomplete', async () => {
     vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ lastOutcome: 'Partial' })] })
@@ -125,8 +123,6 @@ describe('discovery page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'SQL Agent yeniden tara' }))
     expect(await screen.findByText(/Az önce tarama istendi/)).toBeInTheDocument()
     expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
-    expect(screen.getByText('Verileriniz için:')).toBeInTheDocument()
-    expect(screen.getByText('Ne yapmalı:')).toBeInTheDocument()
   })
   it('hides every mutating control from a Viewer', async () => {
     Object.assign(access, { canOperate: false, canAdmin: false })
@@ -140,7 +136,7 @@ describe('discovery page', () => {
     await screen.findByRole('region', { name: 'SQL Agent' })
     expect(screen.queryByLabelText('Tarama ayarları')).not.toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
-    const dialog = await screen.findByRole('dialog')
+    const dialog = screen.getByRole('region', { name: 'Teknik ayrıntılar' })
     expect(within(dialog).getByLabelText('Tarama ayarları')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Tarama aralığı (dakika)'), { target: { value: '30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
@@ -178,12 +174,10 @@ describe('discovery page', () => {
     mount()
     expect(await screen.findByText(/görüntüleme yetkiniz yok/)).toBeInTheDocument()
   })
-  it('renders a three-part load error without backend text', async () => {
+  it('renders a load error without backend text', async () => {
     vi.mocked(getDiscoveryInstances).mockRejectedValue(new ApiError(500, { message: 'secret stack' }))
     mount()
     expect(await screen.findByText(/Sunucu isteği tamamlayamadı/)).toBeInTheDocument()
-    expect(screen.getByText('Verileriniz için:')).toBeInTheDocument()
-    expect(screen.getByText('Ne yapmalı:')).toBeInTheDocument()
     expect(screen.queryByText(/secret stack/)).not.toBeInTheDocument()
   })
   it('passes filters to the API', async () => {

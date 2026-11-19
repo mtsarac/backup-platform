@@ -60,7 +60,8 @@ const noRestoreTargets = { agents: [], targets: [] }
 const answering = (path: string, current: unknown) => path.endsWith('/restore-targets') ? noRestoreTargets : current
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 beforeEach(() => { permissions.canAdmin = true; permissions.canOperate = true; permissions.role = 'UserAdmin' })
-const openDetails = () => fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
+const trigger = () => screen.getByRole("button", { name: "Teknik ayrıntılar" })
+const openDetails = () => fireEvent.click(trigger())
 
 describe('Backup dosyaları', () => {
   it('does not offer artifact content to a platform administrator', async () => {
@@ -82,7 +83,7 @@ describe('Backup dosyaları', () => {
     } }))
     mount()
     await screen.findByText('Kısaca durum')
-    expect(screen.getByText('UTF8')).not.toBeVisible()
+    expect(screen.queryByText('UTF8')).not.toBeInTheDocument()
     openDetails()
     expect(screen.getByRole('heading', { name: /PostgreSQL/ })).toBeVisible()
     expect(screen.getByText('UTF8')).toBeVisible()
@@ -101,7 +102,7 @@ describe('Backup dosyaları', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     await act(async () => { await router.navigate('/tenants/tenant-a/artifacts/artifact-b') })
     await screen.findByText('Kısaca durum')
-    expect(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
+    expect(trigger()).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(request.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
   })
@@ -198,11 +199,11 @@ describe('Backup dosyaları', () => {
     expect(screen.getByText('Sağlam')).toBeVisible()
     expect(screen.getByText('Geri yüklemeye hazır')).toBeVisible()
     // The checksums, replicas and metadata wait behind the collapsed details.
-    for (const checksum of screen.getAllByText('abc123')) expect(checksum).not.toBeVisible()
-    expect(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
+    expect(screen.queryAllByText('abc123')).toHaveLength(0)
+    expect(trigger()).toHaveAttribute('aria-expanded', 'false')
     openDetails()
     expect(screen.getAllByText('abc123')[0]).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Kopyala: Yedek dosyası sağlama toplamı' })).toBeVisible()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByRole('button', { name: 'Kopyala' })).toBeVisible()
   })
 
   it('doğrulanmış kopya yoksa sağlam demez; silinmiş dosya geri yüklenemez', async () => {

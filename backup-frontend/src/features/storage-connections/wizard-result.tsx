@@ -45,9 +45,9 @@ export function WizardResult({ created, google, ops, googleOutcome, googleError,
     {test?.status === 'Succeeded' && <Notice tone="success" title={tx("Bağlantı çalışıyor")}>{testMessage(test)}</Notice>}
     {test?.status === 'NotTestable' && <Notice tone="info" title={tx("Bağlantı kaydedildi")}>{tx("Yedekleme bilgisayarı ilk yedekte denetler; sorun olursa orada görürsünüz.")}</Notice>}
     {failed && !google && <ErrorNotice title={tx("Test başarısız")} what={test ? testMessage(test) : tx("Test tamamlanamadı.")}
-      dataImpact={tx("Bağlantı kaydedildi ama doğrulanmadı. Mevcut yedekleriniz etkilenmedi.")} action={tx("Bilgileri düzeltin ya da yeniden test edin.")} technical={test ? testTechnical(test) : []} />}
+      dataImpact={tx("Bağlantı kaydedildi ama doğrulanmadı.")} action={tx("Bilgileri düzeltin ya da yeniden test edin.")} technical={test ? testTechnical(test) : []} />}
     {failed && google && <ErrorNotice title={tx("Test başarısız")} what={test ? testMessage(test) : tx("Test tamamlanamadı.")}
-      dataImpact={tx("Bağlantı kaydedildi ama doğrulanmadı. Mevcut yedekleriniz etkilenmedi.")} action={tx("Google ile yeniden bağlanın.")} technical={test ? testTechnical(test) : []} />}
+      dataImpact={tx("Bağlantı kaydedildi ama doğrulanmadı.")} action={tx("Google ile yeniden bağlanın.")} technical={test ? testTechnical(test) : []} />}
     <div className="flex flex-wrap gap-2">
       {done && (back
         ? <Button onClick={() => navigate(back.returnTo, { state: { returnState: back.returnState, storageConnectionId: created.id } })}>{tx("Bu depolamayı kullan")}</Button>

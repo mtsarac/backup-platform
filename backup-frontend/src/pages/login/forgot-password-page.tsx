@@ -35,7 +35,7 @@ export function ForgotPasswordPage() {
       setSent(true)
     } catch (err) {
       setError(err instanceof ApiError && err.status === 429
-        ? { what: tx('Çok fazla istek gönderildi.'), dataImpact: tx('Şifreniz değişmedi.'), action: tx('Bir süre sonra tekrar deneyin.'), technical: [] }
+        ? { what: tx('Çok fazla istek gönderildi.'), action: tx('Bir süre sonra tekrar deneyin.'), technical: [] }
         : describeError(err))
     } finally {
       setLoading(false)

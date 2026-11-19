@@ -136,7 +136,7 @@ it.each([
   expect(alert).toHaveTextContent(text)
   expect(within(alert).queryByText(code)).toBeNull()
   await userEvent.click(within(alert).getByRole('button', { name: 'Teknik ayrıntılar' }))
-  expect(within(await screen.findByRole('dialog')).getByText(code)).toBeVisible()
+  expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText(code)).toBeVisible()
 })
 
 it('points to the running attempt when another one already runs', async () => {
@@ -236,6 +236,6 @@ it('a failed load says what happened and keeps the code under technical details'
   vi.mocked(getBackupJobs).mockRejectedValue(new ApiError(503, { error: 'storage_unavailable' }))
   mount('/tenants/tenant-a/backup-jobs')
   const alert = await screen.findByRole('alert')
-  expect(alert).toHaveTextContent('Mevcut yedekleriniz etkilenmedi')
+  expect(alert).toHaveTextContent('Depolama geçici olarak kullanılamıyor.')
   expect(within(alert).queryByText('storage_unavailable')).toBeNull()
 })

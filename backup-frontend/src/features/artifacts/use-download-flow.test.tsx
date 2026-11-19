@@ -89,7 +89,7 @@ describe('download flow', () => {
     fetchStatus.mockResolvedValue({ sessionId: 's1', state: 'Failed', failureCode: 'storage_unavailable', transferredBytes: 0 })
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'başlat' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ne yapmalı')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bilgisayarın açık ve ağa bağlı olduğundan emin olun.')
     expect(click).not.toHaveBeenCalled()
   })
 })

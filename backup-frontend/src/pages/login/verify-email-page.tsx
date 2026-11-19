@@ -26,7 +26,7 @@ export function VerifyEmailPage() {
       setDone(true)
     } catch (err) {
       setError(err instanceof ApiError && err.status === 400
-        ? { what: tx('Doğrulama bağlantısı geçersiz veya süresi dolmuş.'), dataImpact: tx('E-posta adresiniz doğrulanmadı.'), action: tx('Güvenlik ayarlarından yeni bir doğrulama e-postası isteyin.'), technical: [] }
+        ? { what: tx('Doğrulama bağlantısı geçersiz veya süresi dolmuş.'), action: tx('Güvenlik ayarlarından yeni bir doğrulama e-postası isteyin.'), technical: [] }
         : describeError(err))
     } finally {
       setLoading(false)
