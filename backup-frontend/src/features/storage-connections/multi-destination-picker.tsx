@@ -48,6 +48,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
   const defaultTarget = connections.find(item => item.providerType === primary.storageProvider && item.isDefault)
   const defaultReason = connectionUnavailableReason(defaultTarget, provider)
   const selectedMissing = primary.storageConnectionId && !target
+  const selectedConnectionId = target?.isDefault && target.providerType === 'local' ? null : primary.storageConnectionId
 
   const requiredCount = configuration.requiredVerifiedReplicaCount
   function replacePrimaryTarget(next: Pick<BackupDestination, 'storageProvider' | 'storageConnectionId' | 'storageExecutionLocation'>) {
@@ -122,7 +123,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
     <>
       {compact ? <div className="space-y-1 md:col-span-2">
         <label htmlFor="primary-storage-destination" className="block text-sm font-medium text-text-heading">{tx('Depolama hedefi')}</label>
-        <Select id="primary-storage-destination" value={JSON.stringify([primary.storageProvider, primary.storageConnectionId ?? null])} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? 'primary-storage-connection-error' : undefined} onChange={event => {
+        <Select id="primary-storage-destination" value={JSON.stringify([primary.storageProvider, selectedConnectionId ?? null])} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? 'primary-storage-connection-error' : undefined} onChange={event => {
           const [providerType, connectionId] = JSON.parse(event.target.value) as [string, string | null]
           if (connectionId) {
             chooseConnection(connectionId)
@@ -141,7 +142,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             const unavailable = connectionUnavailableReason(defaultConnection, item)
             return <optgroup key={item.providerType} label={tx(item.displayName)}>
               <option value={JSON.stringify([item.providerType, null])} disabled={item.availability !== 'Available' || !item.executionLocation || !item.topology || (item.providerType === primary.storageProvider && Boolean(unavailable))}>{defaultOptionLabel(defaultConnection, tx(item.displayName), unavailable)}</option>
-              {connections.filter(connection => connection.providerType === item.providerType).map(connection => {
+              {connections.filter(connection => connection.providerType === item.providerType && !(connection.isDefault && connection.providerType === 'local')).map(connection => {
                 const reason = connectionUnavailableReason(connection, item)
                 return <option key={connection.id} value={JSON.stringify([item.providerType, connection.id])} disabled={Boolean(reason)}>{[connectionDisplayName(connection), tx(item.displayName), pickerOwnership(connection.ownership), reason ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
               })}
@@ -165,10 +166,10 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
       </div>
       <div className="space-y-1">
         <label htmlFor="primary-storage-connection" className="block text-sm font-medium text-text-heading">{tx("Depolama bağlantısı")}</label>
-        <Select id="primary-storage-connection" value={primary.storageConnectionId ?? ''} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby="storage-connection-help primary-storage-connection-error" onChange={event => chooseConnection(event.target.value)}>
+        <Select id="primary-storage-connection" value={selectedConnectionId ?? ''} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby="storage-connection-help primary-storage-connection-error" onChange={event => chooseConnection(event.target.value)}>
           <option value="" disabled={Boolean(defaultReason)}>{defaultOptionLabel(defaultTarget, tx(provider?.displayName ?? primary.storageProvider), defaultReason)}</option>
           {selectedMissing && <option value={primary.storageConnectionId!} disabled>{tx("Mevcut bağlantı ·")}{' '}{primary.storageConnectionId}{' '}{tx("· Bağlantı bulunamadı")}</option>}
-          {connections.filter(connection => connection.providerType === primary.storageProvider).map(connection => {
+          {connections.filter(connection => connection.providerType === primary.storageProvider && !(connection.isDefault && connection.providerType === 'local')).map(connection => {
             const descriptor = providers.find(item => item.providerType === connection.providerType)
             const unavailable = connectionUnavailableReason(connection, descriptor)
             return <option key={connection.id} value={connection.id} disabled={Boolean(unavailable)}>{[connectionDisplayName(connection), tx(connection.providerDisplayName), pickerOwnership(connection.ownership), unavailable ?? tx('Kullanılabilir')].filter(Boolean).join(' · ')}</option>
@@ -259,20 +260,21 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
               <option value="">{tx("+ Replikasyon hedefi seçin…")}</option>
               <optgroup label={tx("Varsayılan Sağlayıcı Hedefleri")}>
                 {providers.filter(p => p.availability === 'Available' && p.executionLocation).map(p => {
-                  const alreadyAdded = destinations.some(d => d.storageProvider === p.providerType && !d.storageConnectionId)
+                  const defaultConnection = connections.find(c => c.providerType === p.providerType && c.isDefault)
+                  const alreadyAdded = destinations.some(d => d.storageProvider === p.providerType && (!d.storageConnectionId || (p.providerType === 'local' && d.storageConnectionId === defaultConnection?.id)))
                   return (
-                    <option key={`default:${p.providerType}`} value={`default:${p.providerType}`} disabled={alreadyAdded}>{tx("[Replication]")}{' '}{tx(p.displayName)}{' '}{tx("· Varsayılan")}{' '}{alreadyAdded ? tx('(Eklendi)') : ''}
+                    <option key={`default:${p.providerType}`} value={`default:${p.providerType}`} disabled={alreadyAdded}>{defaultConnection ? connectionDisplayName(defaultConnection) : tx(p.displayName)} {alreadyAdded ? tx('(Eklendi)') : ''}
                     </option>
                   )
                 })}
               </optgroup>
               <optgroup label={tx("Özel Depolama Bağlantıları")}>
-                {connections.map(c => {
+                {connections.filter(c => !(c.isDefault && c.providerType === 'local')).map(c => {
                   const descriptor = providers.find(p => p.providerType === c.providerType)
                   const unavail = connectionUnavailableReason(c, descriptor)
                   const alreadyAdded = destinations.some(d => d.storageProvider === c.providerType && d.storageConnectionId === c.id)
                   return (
-                    <option key={c.id} value={c.id} disabled={Boolean(unavail) || alreadyAdded}>{tx("Replication-Hedef:")}{' '}{connectionDisplayName(c)} ({tx(c.providerDisplayName)}) {unavail ? `· ${unavail}` : ''} {alreadyAdded ? tx('(Eklendi)') : ''}
+                    <option key={c.id} value={c.id} disabled={Boolean(unavail) || alreadyAdded}>{connectionDisplayName(c)} ({tx(c.providerDisplayName)}) {unavail ? `· ${unavail}` : ''} {alreadyAdded ? tx('(Eklendi)') : ''}
                     </option>
                   )
                 })}
