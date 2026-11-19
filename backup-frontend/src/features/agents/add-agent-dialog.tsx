@@ -96,8 +96,8 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
               <Field label={tx("İşletim sistemi")}>{(control) => <Select {...control} disabled={pending} value={platform} onChange={event => setPlatform(event.target.value as AgentPlatform)}><option>Windows</option><option>Linux</option></Select>}</Field>
             </div>
           </section>
-          {distribution && !server && <ErrorNotice what={tx("Sunucu HTTPS adresi ayarlanmamış.")} dataImpact={tx("Mevcut yedekleriniz etkilenmedi.")} action={tx("Platform yöneticinizden sunucu HTTPS adresini ayarlamasını isteyin.")} />}
-          {distribution && server && !packageReady && <ErrorNotice what={tx("Bu işletim sistemi için kurulum paketi yayımlanmamış.")} dataImpact={tx("Mevcut yedekleriniz etkilenmedi.")} action={tx("Platform yöneticinizden kurulum paketini yayımlamasını isteyin.")} />}
+          {distribution && !server && <ErrorNotice what={tx("Sunucu HTTPS adresi ayarlanmamış.")} action={tx("Platform yöneticinizden sunucu HTTPS adresini ayarlamasını isteyin.")} />}
+          {distribution && server && !packageReady && <ErrorNotice what={tx("Bu işletim sistemi için kurulum paketi yayımlanmamış.")} action={tx("Platform yöneticinizden kurulum paketini yayımlamasını isteyin.")} />}
           {distributionError && <ErrorNotice {...distributionError} />}
         </form>}
         {view === 'install' && <section className="space-y-3">
@@ -107,7 +107,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
             <p>{platform === 'Windows' ? tx('Hedef bilgisayarda PowerShell’i yönetici olarak açın.') : tx('Hedef bilgisayarda yönetici (sudo) yetkisi olan bir terminal açın. Kurulum bir sistem hizmeti oluşturur.')}</p>
             {!distribution && !distributionError && <p>{tx('Kurulum dosyalarının hazır olup olmadığı denetleniyor…')}</p>}
             {distributionError && <ErrorNotice {...distributionError} />}
-            {distribution && !packageReady && <ErrorNotice what={tx("Bu işletim sistemi için kurulum paketi yayımlanmamış.")} dataImpact={tx("Mevcut yedekleriniz etkilenmedi.")} action={tx("Platform yöneticinizden kurulum paketini yayımlamasını isteyin.")} />}
+            {distribution && !packageReady && <ErrorNotice what={tx("Bu işletim sistemi için kurulum paketi yayımlanmamış.")} action={tx("Platform yöneticinizden kurulum paketini yayımlamasını isteyin.")} />}
           </Card>
           {!ticket && <p className="text-sm text-text-muted">{tx("Anahtarı oluşturduğunuzda komut burada görünür.")}</p>}
           {ticket && secret && <div className="space-y-3">
@@ -121,7 +121,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
                     <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/win-x64-setup`} download>{tx('Kurulum sihirbazını indir (.exe)')}</a></p>
                     <p className="text-text-muted">{tx('Sihirbaz yalnızca yukarıdaki anahtarı ve bilgisayarın adını sorar.')} {tx('Program henüz dijital olarak imzalı olmadığından Windows SmartScreen bir uyarı gösterebilir; “Ek bilgi” ve “Yine de çalıştır” ile devam edin.')}</p>
                   </div>
-                  : <ErrorNotice what={tx('Windows kurulum sihirbazı (.exe) yayımlanmamış.')} dataImpact={tx('Mevcut yedekleriniz etkilenmedi.')} action={tx('Şimdilik yukarıdaki PowerShell komutunu ya da aşağıdaki script ve zip paketini kullanın.')} />)}
+                  : <ErrorNotice what={tx('Windows kurulum sihirbazı (.exe) yayımlanmamış.')} action={tx('Şimdilik yukarıdaki PowerShell komutunu ya da aşağıdaki script ve zip paketini kullanın.')} />)}
                 <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
                 <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/${platform === 'Windows' ? 'win-x64' : 'linux-x64'}`} download>{platform === 'Windows' ? tx('Windows zip paketini indir') : tx('Linux tar.gz paketini indir')}</a></p>
               </div>
@@ -134,7 +134,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
             <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text">{labels[monitor.phase]}</p>
             {monitor.phase === 'Waiting' && <p className="text-sm text-text-muted">{tx("Komutu hedef bilgisayarda çalıştırın. Kayıt ve ilk bağlantı bekleniyor; bu sayfayı açık bırakın.")}</p>}
           </>}
-          <TechnicalDetails accordion items={[]}><p>{tx('Sunucunun TLS sertifikası hedef bilgisayarda güvenilir olmalıdır. Sertifika doğrulamasını asla devre dışı bırakmayın.')}</p></TechnicalDetails>
+          <TechnicalDetails items={[]}><p>{tx('Sunucunun TLS sertifikası hedef bilgisayarda güvenilir olmalıdır. Sertifika doğrulamasını asla devre dışı bırakmayın.')}</p></TechnicalDetails>
         </section>}
         {view === 'connect' && <section className="space-y-3">
           <h2 className="font-medium text-text-heading">{tx("Bağlantı")}</h2>
@@ -142,7 +142,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           {monitor.phase !== 'Online' && <p className="text-sm text-text-muted">{tx("Kimlik kaydedildi. Yedekleme programının çalıştığını ve sunucuya erişebildiğini kontrol edin; bağlantı bekleniyor.")}</p>}
           {monitor.agent && <>
             <Facts columns={1}><Fact label={tx("Ad")}>{monitor.agent.hostName ?? tx('Bildirilmedi')}</Fact></Facts>
-            <TechnicalDetails accordion items={[
+            <TechnicalDetails items={[
               { label: tx('Bilgisayar kimliği'), value: monitor.agent.agentId },
               { label: tx('İşletim sistemi'), value: monitor.agent.osDescription ?? monitor.agent.platform },
               ...(monitor.agent.agentVersion ? [{ label: tx('Yedekleme programı sürümü'), value: monitor.agent.agentVersion }] : []),

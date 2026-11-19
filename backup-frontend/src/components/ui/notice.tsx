@@ -56,9 +56,7 @@ export function ErrorNotice(props: ErrorNoticeProps) {
     <Icon aria-hidden="true" className={cn('mt-0.5 size-5 shrink-0', text)} />
     <div className="min-w-0 flex-1 space-y-2">
       {props.title && <div className={cn('font-medium', text)}>{props.title}</div>}
-      <p className="text-sm font-medium text-text">{what}</p>
-      <p className="text-sm text-text"><span className="font-medium">{tx("Verileriniz için:")}</span>{' '}{dataImpact}</p>
-      <p className="text-sm text-text"><span className="font-medium">{tx("Ne yapmalı:")}</span>{' '}{action}</p>
+      <p className="text-sm text-text">{[what, dataImpact, action].filter(Boolean).join(' ')}</p>
       {props.trust && certificateUntrusted && <>
         <p className="text-sm text-text">{tx("Bu sunucunun kimliği doğrulanamaz; yalnızca kendi sunucunuz olduğundan eminseniz açın.")}</p>
         <Disclosure title={tx("Bu sunucunun sertifikasına yine de güven")}>

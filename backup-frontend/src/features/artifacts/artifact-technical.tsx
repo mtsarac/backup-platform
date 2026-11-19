@@ -10,7 +10,7 @@ import type { BackupArtifact } from './types'
 /** Everything the page keeps out of sight: identifiers, checksums, exact times, retention internals, then the replica cards, encryption keys and engine metadata. */
 export function ArtifactTechnical({ artifact, replication }: { artifact: BackupArtifact; replication?: ReactNode }) {
   useLanguage()
-  return <TechnicalDetails accordion defaultOpen={deletionInProgress(artifact)} items={[
+  return <TechnicalDetails defaultOpen={deletionInProgress(artifact)} items={[
     { label: tx('Yedek dosyası kimliği'), value: artifact.id },
     { label: tx('Yedek dosyası sağlama toplamı'), value: artifact.artifactChecksum },
     { label: tx('Kaynak sağlama toplamı'), value: artifact.sourceChecksum },

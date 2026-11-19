@@ -27,8 +27,8 @@ export function DirectDownloadButton({ session, onFinished }: { session: Downloa
         if (controller.signal.aborted) return
         if (cause instanceof DOMException && cause.name === 'AbortError') { lifetime.current = null; setState('idle'); return }
         setError(cause instanceof Error && cause.message === 'download_integrity_mismatch'
-          ? { what: tx('Dosya bütünlüğü doğrulanamadı; hedef dosya yayımlanmadı.'), dataImpact: tx('Dosya doğrulanamadığı için kullanılmadı; yedeğiniz değişmedi.'), action: tx('Yeni bir indirme başlatın.'), technical: [] }
-          : { what: tx('DirectPathUnavailable: Doğrudan Agent bağlantısı veya güvenli diske yazma desteği kullanılamıyor. Backend aktarımına geçilmez.'), dataImpact: tx('Dosya indirilmedi; yedeğiniz değişmedi.'), action: tx('Agent bağlantısını kontrol edip yeni bir indirme başlatın.'), technical: [] })
+          ? { what: tx('Dosya bütünlüğü doğrulanamadı; hedef dosya yayımlanmadı.'), action: tx('Yeni bir indirme başlatın.'), technical: [] }
+          : { what: tx('DirectPathUnavailable: Doğrudan Agent bağlantısı veya güvenli diske yazma desteği kullanılamıyor. Backend aktarımına geçilmez.'), action: tx('Agent bağlantısını kontrol edip yeni bir indirme başlatın.'), technical: [] })
         setState('failed')
         onFinished?.()
       }
