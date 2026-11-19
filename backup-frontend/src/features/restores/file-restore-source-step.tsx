@@ -1,5 +1,4 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { RadioField } from '@/components/ui/radio-field'
 import { Select } from '@/components/ui/text-input'
 import { CheckCircle2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -8,7 +7,6 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { ErrorNotice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { FilePathList } from '@/features/backup-jobs/file-path-list'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { actionLabel, describeFailure } from '@/lib/api/failure-messages'
 import type { RestoreTargetAgent, RestoreTargetsResponse } from './types'
@@ -21,18 +19,13 @@ interface FileRestoreSourceStepProps {
   /** Only the backup computer that made the backup can restore to the original location. */
   originalAgent: RestoreTargetAgent | undefined
   original: boolean
-  scope: 'all' | 'selected'
-  paths: string[]
-  pathsValid: boolean
   eligible: boolean
   onAgentChange: (agentId: string) => void
-  onScopeChange: (scope: 'all' | 'selected') => void
-  onPathsChange: (paths: string[]) => void
   onContinue: () => void
 }
 
-/** The backup file is fixed by the page; here the user picks the computer that reads it and which of its files to bring back. */
-export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId, originalAgent, original, scope, paths, pathsValid, eligible, onAgentChange, onScopeChange, onPathsChange, onContinue }: FileRestoreSourceStepProps) {
+/** The backup file is fixed by the page; here the user picks the computer that reads it. Skipped when only one computer fits. */
+export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId, originalAgent, original, eligible, onAgentChange, onContinue }: FileRestoreSourceStepProps) {
   useLanguage()
   const { tenantId, canOperate } = useTenant()
   return (
@@ -55,20 +48,8 @@ export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId,
         </div>
       </Section>
 
-      <Section title={tx("Hangi dosyalar geri yüklensin?")} description={tx("Neden soruluyor? Yedeğin tamamını ya da yalnızca ihtiyacınız olan dosya ve klasörleri geri yükleyebilirsiniz.")}>
-        <div className="space-y-4">
-          <fieldset className="flex flex-wrap gap-4">
-            <legend className="sr-only">{tx("Geri yükleme kapsamı")}</legend>
-            <RadioField label={tx("Tüm dosya ve klasörler")} name={`${instancePrefix}-scope`} checked={scope === 'all'} onChange={() => onScopeChange('all')} />
-            <RadioField label={tx("Seçili dosya ve klasörler")} name={`${instancePrefix}-scope`} checked={scope === 'selected'} onChange={() => onScopeChange('selected')} />
-          </fieldset>
-          {scope === 'selected' && <FilePathList id={`${instancePrefix}-paths`} label={tx('Geri yüklenecek göreli yollar')} paths={paths} onChange={onPathsChange} error={!pathsValid ? tx('1–256 geçerli göreli yol girin.') : undefined} />}
-          <p className="text-sm text-text-muted">{tx("Seçilen klasörlerin altındaki dosyalar da geri yüklenir; arşivdeki göreli dizin yapısı korunur. Arşivde bulunmayan seçimler işlemi durdurur.")}</p>
-        </div>
-      </Section>
-
       <div className="flex justify-end gap-3">
-        <Button disabled={!eligible || !pathsValid} onClick={() => onContinue()}>{tx("Devam et →")}</Button>
+        <Button disabled={!eligible} onClick={() => onContinue()}>{tx("Devam et →")}</Button>
       </div>
     </div>
   )

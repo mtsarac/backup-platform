@@ -1,18 +1,24 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { restorePath } from '@/lib/routes'
 import { useNavigate } from 'react-router-dom'
 import { tx, useLanguage } from '@/lib/i18n'
 import { isUncertainError, useIdempotencyKey } from '@/lib/idempotency-key'
 import { Stepper } from '@/components/ui/stepper'
-import { validFilePath, validFilePaths } from '@/features/backup-jobs/file-path-validation'
+import { validFilePaths } from '@/features/backup-jobs/file-path-validation'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { useRestore, useStartRestore, useStartRestorePrecheck } from './hooks'
 import { FileRestoreConfirmStep } from './file-restore-confirm-step'
 import { FileRestoreSourceStep } from './file-restore-source-step'
 import { FileRestoreTargetStep } from './file-restore-target-step'
-import { RestoreCheckStep } from './restore-check-step'
+import { FileRestoreWhatStep } from './file-restore-what-step'
+import { PrecheckResults } from './precheck-results'
+import { Section } from '@/components/ui/section'
 import { RestoreSourceSummary } from './restore-source-summary'
 import type { RestoreTargetsResponse, RestoreView } from './types'
+
+/** Not user input: an alternate restore always goes into this folder under the configured root, so existing files stay untouched. */
+const alternateDirectory = 'restored'
 
 const localTarget = { host: 'localhost', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false }
 
@@ -25,11 +31,13 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
   const navigate = useNavigate()
   const originalTarget = targets.targets.find(target => target.jobId === artifact.jobId && target.database === targets.sourceDatabase)
   const originalAgent = targets.agents.find(agent => agent.agentId === originalTarget?.agentId && agent.canRestore && agent.canPrecheck && agent.sourceEligible)
-  const [step, setStep] = useState(1)
-  const [agentId, setAgentId] = useState(() => targets.agents.find(agent => agent.canRestore && agent.canPrecheck && agent.sourceEligible)?.agentId ?? '')
+  const eligibleAgents = targets.agents.filter(agent => agent.canRestore && agent.canPrecheck && agent.sourceEligible)
+  const skipSource = eligibleAgents.length === 1
+  const [step, setStep] = useState<'source' | 'what' | 'where'>(skipSource ? 'what' : 'source')
+  // The settings the user asked to confirm; a later change makes it stale, which sends them back to Nereye.
+  const [confirmFor, setConfirmFor] = useState<string | null>(null)
+  const [agentId, setAgentId] = useState(() => eligibleAgents[0]?.agentId ?? '')
   const [location, setLocation] = useState<'original' | 'alternate'>('alternate')
-  const [reference, setReference] = useState(targets.sourceDatabase)
-  const [directory, setDirectory] = useState('restored')
   const [scope, setScope] = useState<'all' | 'selected'>('all')
   const [paths, setPaths] = useState<string[]>([])
   const [overwrite, setOverwrite] = useState(false)
@@ -45,8 +53,8 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   const original = location === 'original'
-  const targetReference = original ? targets.sourceDatabase : reference
-  const relativeDirectory = original ? '' : directory
+  const targetReference = targets.sourceDatabase
+  const relativeDirectory = original ? '' : alternateDirectory
   const request = {
     agentId, target: localTarget, databaseName: targetReference,
     mode: overwrite ? 'ReplaceExistingDatabase' as const : 'NewDatabase' as const,
@@ -62,13 +70,10 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
   const failed = result?.status === 'Failed' || result?.result?.preCheck?.some(item => item.status === 'Failed') === true
   const passed = result?.purpose === 'Precheck' && result.status === 'Succeeded' && !failed
   const agent = targets.agents.find(item => item.agentId === agentId)
-  const referenceValid = /^[A-Za-z0-9_.-]{1,128}$/.test(targetReference)
   const eligible = Boolean(artifact.state === 'Available' && agent?.canRestore && agent.canPrecheck && agent.sourceEligible && (!original || agent.agentId === originalAgent?.agentId))
-  const directoryValid = original || directory === '' || validFilePath(directory)
   const pathsValid = scope === 'all' || validFilePaths(paths)
-  const valid = eligible && referenceValid && directoryValid && pathsValid
-  // Only a passed check that matches the current settings opens the confirmation step.
-  const shownStep = step === 4 && !passed ? 3 : step
+  const valid = eligible && pathsValid
+  const confirming = confirmFor === fingerprint
 
   async function check(fresh = false) {
     if (!valid || pending.current) return
@@ -84,7 +89,6 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
       precheckKey.settle()
       if (!mounted.current) return
       setPrecheck({ fingerprint: attempt.fingerprint, data })
-      setStep(3)
     } catch (error) {
       precheckKey.settle(error)
       if (mounted.current) setPrecheckFailure({ fingerprint: attempt.fingerprint, error })
@@ -107,41 +111,52 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
     } finally { pending.current = false }
   }
 
+  // Only a passed check that matches the current settings opens the confirmation step.
+  const shownStep = confirming && passed ? 'confirm' : step
+  const checking = confirming && !passed && precheckError == null
+  const checkPanel = checking && (failed && result
+    ? <Section title={tx("Ön kontrol")}><PrecheckResults data={result} failed passed={false} fileArchive onRecheck={() => void check(true)} recheckDisabled={startPrecheck.isPending || startRestore.isPending} /></Section>
+    : <p role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Ön kontrol çalışıyor…")}</p>)
+  const labels = skipSource ? [tx('Ne'), tx('Nereye'), tx('Onay')] : [tx('Kaynak'), tx('Ne'), tx('Nereye'), tx('Onay')]
+  const currentStep = (shownStep === 'source' ? 0 : shownStep === 'what' ? 1 : shownStep === 'where' ? 2 : 3) - (skipSource ? 1 : 0)
+
+  function continueToConfirm() {
+    setConfirmFor(fingerprint)
+    if (!(current && passed)) void check()
+  }
+
+
   return <div className="space-y-6">
-    <Stepper steps={[tx('Kaynak'), tx('Hedef'), tx('Ön kontrol'), tx('Onay')]} current={shownStep - 1} />
+    <Stepper steps={labels} current={currentStep} />
     <RestoreSourceSummary artifact={artifact} isPg={false} fileArchive />
 
-    {shownStep === 1 && <FileRestoreSourceStep
+    {shownStep === 'source' && <FileRestoreSourceStep
       instancePrefix={id} targets={targets} agent={agent} agentId={agentId} originalAgent={originalAgent} original={original}
-      scope={scope} paths={paths} pathsValid={pathsValid} eligible={eligible}
-      onAgentChange={setAgentId} onScopeChange={setScope} onPathsChange={setPaths} onContinue={() => setStep(2)}
+      eligible={eligible} onAgentChange={setAgentId} onContinue={() => setStep('what')}
     />}
 
-    {shownStep === 2 && <FileRestoreTargetStep
-      instancePrefix={id} targets={targets} originalAgent={originalAgent} original={original}
-      reference={reference} directory={directory} referenceValid={referenceValid} directoryValid={directoryValid} overwrite={overwrite}
+    {shownStep === 'what' && <FileRestoreWhatStep
+      instancePrefix={id} scope={scope} paths={paths} pathsValid={pathsValid}
+      onScopeChange={setScope} onPathsChange={setPaths} onBack={skipSource ? undefined : () => setStep('source')} onContinue={() => setStep('where')}
+    />}
+
+    {shownStep === 'where' && <FileRestoreTargetStep
+      instancePrefix={id} originalAgent={originalAgent} original={original} overwrite={overwrite}
       precheckError={precheckError} precheckRetryable={isUncertainError(precheckError)} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
-      canCheck={valid}
+      canCheck={valid && !checking} checkPanel={checkPanel}
       onLocationChange={(next) => {
         setLocation(next)
         if (next === 'original' && originalAgent) setAgentId(originalAgent.agentId)
       }}
-      onReferenceChange={setReference} onDirectoryChange={setDirectory} onOverwriteChange={setOverwrite}
-      onBack={() => setStep(1)} onRunPrecheck={() => void check()}
+      onOverwriteChange={setOverwrite}
+      onBack={() => setStep('what')} onContinue={continueToConfirm}
     />}
 
-    {shownStep === 3 && <RestoreCheckStep
-      fileArchive precheckData={result} precheckLoading={startPrecheck.isPending || (current && query.isPending)}
-      precheckDisplayError={precheckError || (current && query.error)} precheckError={precheckError} precheckRetryable={isUncertainError(precheckError)}
-      precheckFailed={failed} precheckPassed={passed} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
-      onRunPrecheck={(fresh) => void check(fresh)} onBack={() => setStep(2)} onContinue={() => setStep(4)}
-    />}
-
-    {shownStep === 4 && <FileRestoreConfirmStep
-      agent={agent} agentId={agentId} original={original} targetReference={targetReference} relativeDirectory={relativeDirectory}
-      scope={scope} paths={paths} overwrite={overwrite} precheckPassed={passed} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
+    {shownStep === 'confirm' && <FileRestoreConfirmStep
+      agent={agent} agentId={agentId} original={original} name={targetReference}
+      scope={scope} paths={paths} overwrite={overwrite} precheckData={result} precheckPassed={passed} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
       executionError={executionError} executionRetryable={isUncertainError(executionError)} eligible={eligible}
-      onBack={() => setStep(3)} onStart={() => void restore()}
+      onRecheck={() => void check(true)} onBack={() => setConfirmFor(null)} onStart={() => void restore()}
     />}
   </div>
 }
