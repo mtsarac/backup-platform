@@ -123,12 +123,13 @@ describe('cookie session UI', () => {
   })
   it('uses a fresh CSRF token for the forced first-login password change', async () => {
     passwordChangeRequired = true
+    let auth: ReturnType<typeof useAuth> | undefined
+    const Capture = () => { auth = useAuth(); return null }
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(<QueryClientProvider client={cache}><AuthProvider><AuthProbe /></AuthProvider></QueryClientProvider>)
-    expect(await screen.findByText('Anonymous')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('Login'))
-    await waitFor(() => expect(requests.some(request => request.url.endsWith('/auth/login'))).toBe(true))
-    await apiRequest('auth/change-password', { method: 'POST', json: { currentPassword: 'a', newPassword: 'b' } })
+    render(<QueryClientProvider client={cache}><AuthProvider><Capture /></AuthProvider></QueryClientProvider>)
+    await waitFor(() => expect(auth?.isLoading).toBe(false))
+    await act(async () => { await auth?.login('owner', 'typed-password', false) })
+    await apiRequest('auth/change-password', { method: 'POST', json: { currentPassword: 'typed-password', newPassword: 'another-password' } })
     expect(requests.find(request => request.url.endsWith('/auth/change-password'))?.headers.get('X-CSRF-TOKEN')).toBe('signed-in-token')
     cache.clear()
   })
