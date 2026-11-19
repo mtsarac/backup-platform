@@ -11,7 +11,7 @@ import { catalog, makeConnection, makeManaged } from '@/features/storage-connect
 import { ApiError } from '@/lib/api/client'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online', capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] }]) }))
 vi.mock('@/features/storage-connections/api')
@@ -31,7 +31,6 @@ async function toSummary() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
   vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })

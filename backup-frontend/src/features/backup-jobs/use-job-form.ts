@@ -20,7 +20,7 @@ import { formatDateTime } from '@/lib/format'
 
 /** State, validation inputs and saving shared by the create wizard and the section forms of an existing job. `onSaved` replaces the return to the list. */
 export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }: { job?: BackupJob; prefill?: JobPrefill; draft?: JobDraft; storageConnectionId?: string; onSaved?: () => void }) {
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const navigate = useNavigate()
   const save = useSaveBackupJob(job?.id)
   const agents = useQuery({ queryKey: ['tenant', tenantId, 'agents'], queryFn: ({ signal }) => getAgents(tenantId, signal) })
@@ -112,7 +112,7 @@ export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }
     if (saving.current || cannotSave) return
     saving.current = true
     const { name, agentId, enabled, scheduled, schedule, overlap, retry, retention } = values
-    const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, ...(!job ? { enabled } : {}), schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, ...(canAdmin ? { retention } : {}) }
+    const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, ...(!job ? { enabled } : {}), schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, retention }
     if (multi) { void createMany(input); return }
     save.mutate(input, {
       onSuccess: finish,
@@ -152,7 +152,7 @@ export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }
   }, [clientErrors])
 
   return {
-    job, tenantId, canAdmin, listPath, saved, values, restart, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery, discovered, prefillInstanceId: prefill?.instance.id,
+    job, tenantId, listPath, saved, values, restart, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery, discovered, prefillInstanceId: prefill?.instance.id,
     agents, agent: agents.data?.find(item => item.agentId === values.agentId),
     picker: { connections: connectionItems, providers: providerItems, pending: pickerPending, error: pickerError, existingTarget, onRefresh: refreshConnections },
     cannotSave, results, failedCount: Object.values(results).filter(value => value !== 'ok').length,

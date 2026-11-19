@@ -35,7 +35,7 @@ function ScanSummary({ supported, status }: { supported: boolean; status: Discov
 
 export function ComputerScanCard({ agent, status }: { agent: Agent; status: DiscoveryAgentStatus | undefined }) {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const rescan = useRescanAgent()
   const throttled = isRescanThrottled(rescan.error)
   const { reset } = rescan
@@ -60,7 +60,7 @@ export function ComputerScanCard({ agent, status }: { agent: Agent; status: Disc
     { label: tx("Bulunan veritabanı sunucusu"), value: String(status.instanceCount) },
     ...status.sources.map(source => ({ label: tx("Kaynak: {0}", { "0": sourceLabels[source.source] ?? source.source }), value: [source.status, reasonText(source.reasonCode), source.source === 'Docker' && source.status === 'Unavailable' ? tx("container'lar listelenmedi; Docker yok demek değildir") : null].filter(Boolean).join(' · ') })),
   ] : [{ label: tx("Bilgisayar kimliği"), value: agent.agentId }]
-  return <Section title={<Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(agent.agentId)}`}>{name}</Link>} actions={canOperate && <Button variant="outline" size="sm" aria-label={tx("{0} yeniden tara", { "0": name })} disabled={!supported || busy || rescan.isPending} onClick={() => rescan.mutate(agent.agentId)}>
+  return <Section title={<Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(agent.agentId)}`}>{name}</Link>} actions={<Button variant="outline" size="sm" aria-label={tx("{0} yeniden tara", { "0": name })} disabled={!supported || busy || rescan.isPending} onClick={() => rescan.mutate(agent.agentId)}>
     {busy || rescan.isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <RefreshCw aria-hidden="true" />}{tx("Yeniden tara")}</Button>}>
     <div className="space-y-3">
       <ScanSummary supported={supported} status={status} />

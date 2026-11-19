@@ -34,14 +34,13 @@ export function ScheduleQuestion({ form, headingLevel }: Props) {
 /** Question: how long backups are kept; only an administrator changes it. */
 export function RetentionQuestion({ form, headingLevel }: Props) {
   useLanguage()
-  const { canAdmin, saved, values, set } = form
+  const { saved, values, set } = form
   const { retention } = values
   const customSaved = saved.retention.enabled && !retentionPresets.some(([seconds]) => seconds === saved.retention.keepForSeconds)
   const setRetention = (next: typeof retention) => set({ retention: next })
   return <Question compact={Boolean(form.job)} headingLevel={headingLevel} title={tx("Yedekler ne kadar süre saklansın?")} why={tx("Süresi dolan yedekler silinir; böylece depolama alanı gereksiz yere dolmaz.")}>
     <FormGrid>
-      {!canAdmin && <p className="text-sm text-text-muted md:col-span-2">{form.job ? tx('Mevcut politika korunur.') : tx('Sunucunun varsayılan politikası uygulanır.')}</p>}
-      {form.job ? <Field label={tx("Saklama süresi")}>{control => <Select {...control} disabled={!canAdmin} value={!retention.enabled ? 'off' : customSaved && retention.keepForSeconds === saved.retention.keepForSeconds ? 'custom' : String(retention.keepForSeconds)} onChange={event => {
+      {form.job ? <Field label={tx("Saklama süresi")}>{control => <Select {...control} value={!retention.enabled ? 'off' : customSaved && retention.keepForSeconds === saved.retention.keepForSeconds ? 'custom' : String(retention.keepForSeconds)} onChange={event => {
         const value = event.target.value
         if (value === 'off') setRetention({ ...retention, enabled: false })
         else if (value === 'custom') setRetention(saved.retention)
@@ -50,7 +49,7 @@ export function RetentionQuestion({ form, headingLevel }: Props) {
         {retentionPresets.map(([seconds]) => <option key={seconds} value={seconds}>{keepForLabel(seconds)}</option>)}
         <option value="off">{tx('Hiç silinmesin')}</option>
         {customSaved && <option value="custom">{tx('{0} (mevcut)', { '0': keepForLabel(saved.retention.keepForSeconds) })}</option>}
-      </Select>}</Field> : <PresetChoice label={tx("Saklama süresi")} disabled={!canAdmin} options={[
+      </Select>}</Field> : <PresetChoice label={tx("Saklama süresi")} options={[
         ...retentionPresets.map(([seconds]) => ({ text: keepForLabel(seconds), pressed: retention.enabled && retention.keepForSeconds === seconds, onSelect: () => setRetention({ ...retention, enabled: true, keepForSeconds: seconds }) })),
         { text: tx('Hiç silinmesin'), pressed: !retention.enabled, onSelect: () => setRetention({ ...retention, enabled: false }) },
       ]} />}

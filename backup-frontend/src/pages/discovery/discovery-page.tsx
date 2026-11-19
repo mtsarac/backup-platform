@@ -35,7 +35,7 @@ import { Select } from '@/components/ui/text-input'
 
 export function DiscoveryPage() {
   useLanguage()
-  const { tenantId, canAdmin, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const agents = useAgents(tenantId, false, list => awaitingCapabilities(list) ? CAPABILITY_POLL_MS : false)
   // Route state from the first-backup flow; lives in history only, so a reload or leaving the page drops it.
   const added = (useLocation().state as { addedAgentId?: string } | null)?.addedAgentId ?? ''
@@ -75,8 +75,8 @@ export function DiscoveryPage() {
   if (isForbidden(instances.error) || isForbidden(statuses.error) || isForbidden(agents.error)) body = <AccessDenied title={tx("Yetki yok")} what={tx("Veritabanı bulma sonuçlarını görüntüleme yetkiniz yok.")} />
   else if (agents.error || statuses.error) body = <ErrorNotice error={agents.error || statuses.error} />
   else if (agents.isPending) body = <QueryState isPending error={null} />
-  else if (agents.isSuccess && agentList.length === 0) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Henüz yedekleme bilgisayarı yok; veritabanları bir yedekleme bilgisayarında aranır.")} canAct={canAdmin} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarı ekle")}</Link>} /></Card>
-  else if (agents.isSuccess && !awaiting && !agentList.some(item => supportsDiscovery(item.capabilities))) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Yedekleme bilgisayarlarınızdaki program veritabanı bulmayı desteklemiyor; programı güncelleyin veya veritabanını yedekleme işinde elle girin.")} canAct={canAdmin} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarlarına git")}</Link>} /></Card>
+  else if (agents.isSuccess && agentList.length === 0) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Henüz yedekleme bilgisayarı yok; veritabanları bir yedekleme bilgisayarında aranır.")} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarı ekle")}</Link>} /></Card>
+  else if (agents.isSuccess && !awaiting && !agentList.some(item => supportsDiscovery(item.capabilities))) body = <Card padding="none"><EmptyState icon={Radar} message={tx("Yedekleme bilgisayarlarınızdaki program veritabanı bulmayı desteklemiyor; programı güncelleyin veya veritabanını yedekleme işinde elle girin.")} action={<Link className={buttonVariants()} to={computersPath}>{tx("Yedekleme bilgisayarlarına git")}</Link>} /></Card>
   else body = <>
     <div className="grid gap-4 lg:grid-cols-2">{scans.filter(scan => scan.needsAttention).map(({ agent, status }) => <ComputerScanCard key={agent.agentId} agent={agent} status={status} />)}</div>
     <Disclosure title={tx("Veritabanı bulma filtreleri")} open={filtered}>
@@ -88,7 +88,7 @@ export function DiscoveryPage() {
     <QueryState isPending={instances.isPending} error={instances.error}>
       {servers && (servers.length === 0
         ? !filtered && firstScanPending ? <Card><p role="status" className="flex items-center justify-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" />{tx("Veritabanları aranıyor…")}</p></Card>
-        : <Card padding="none"><EmptyState icon={Radar} message={filtered ? tx("Seçilen filtrelere uyan veritabanı sunucusu bulunamadı.") : tx("Bu bilgisayarlarda henüz veritabanı bulunamadı. Bilgisayar kartındaki \"Yeniden tara\" ile yeniden arayabilirsiniz.")} canAct={filtered || canOperate} action={filtered
+        : <Card padding="none"><EmptyState icon={Radar} message={filtered ? tx("Seçilen filtrelere uyan veritabanı sunucusu bulunamadı.") : tx("Bu bilgisayarlarda henüz veritabanı bulunamadı. Bilgisayar kartındaki \"Yeniden tara\" ile yeniden arayabilirsiniz.")} action={filtered
           ? <Button onClick={() => update({ agentId: '', engine: '', includeMissing: '' })}>{tx("Filtreleri temizle")}</Button>
           : <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx("Yeni yedekleme işi")}</Link>} /></Card>
         : <DataList rows={servers} columns={columns} keyExtractor={item => item.id} caption={tx("Bulunan veritabanı sunucuları")} emptyMessage={tx("Bu bilgisayarlarda henüz veritabanı bulunamadı.")} />)}

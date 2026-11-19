@@ -12,7 +12,7 @@ import { makeConnection, makeManaged } from '@/features/storage-connections/test
 import { StorageLayout } from './storage-layout'
 import { ConnectionList } from '@/features/storage-connections/connection-list'
 
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/storage/api')
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/artifacts/api')

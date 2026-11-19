@@ -20,7 +20,7 @@ function secretFieldsOf(connection: ConnectionView, descriptor?: ProviderDescrip
 
 /**
  * Every button follows `connection.permissions` and nothing else: the API computed them for this caller on this route, so the same component
- * serves a tenant Admin, a PlatformAdmin and a read-only Viewer (who simply gets no buttons).
+ * serves a tenant user and a PlatformAdmin.
  */
 export function ConnectionActions({ connection, descriptor, ops, show = ['edit', 'test', 'credentials', 'toggle', 'delete'] }: { connection: ConnectionView; descriptor?: ProviderDescriptor; ops: ConnectionOps; show?: readonly ActionGroup[] }) {
   useLanguage()

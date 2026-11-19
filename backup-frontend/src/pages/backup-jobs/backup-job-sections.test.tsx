@@ -14,8 +14,7 @@ import { catalog, makeConnection } from '@/features/storage-connections/test-fix
 import { engineLabels } from '@/features/discovery/status'
 import type { BackupJob } from '@/features/backup-jobs/types'
 
-const permissions = vi.hoisted(() => ({ canOperate: true, canAdmin: true }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', ...permissions }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backup-jobs/api')
 vi.mock('@/features/agents/api')
 vi.mock('@/features/backups/api')
@@ -36,7 +35,6 @@ const sentBody = () => vi.mocked(saveBackupJob).mock.calls.at(-1)![1]
 
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(permissions, { canOperate: true, canAdmin: true })
   vi.mocked(getBackupJobHealth).mockResolvedValue(healthyJobHealth)
   vi.mocked(getHealthTimeline).mockResolvedValue({ jobs: [] })
   vi.mocked(getAgents).mockResolvedValue([{ agentId: 'agent-a', hostName: 'Ofis', connectivity: 'online' }] as never)
@@ -151,18 +149,6 @@ describe('retention and encryption', () => {
     expect(sentBody().retention).toMatchObject({ keepForSeconds: 90 * 86400, deleteGracePeriodSeconds: 600 })
   })
 
-  it('keeps retention read-only for someone who is not an administrator, who can still change encryption', async () => {
-    permissions.canAdmin = false
-    mount()
-    await change('Saklama ve şifreleme')
-    expect(screen.getByLabelText('Saklama süresi')).toBeDisabled()
-    fireEvent.click(screen.getByRole('switch', { name: /^Şifreleme:/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
-    await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(sentBody().configuration.encryptionPolicy).toBe('Off')
-    expect(sentBody().retention).toBeUndefined()
-  })
-
   it('shows a stored "Optional" as Açık and keeps Optional on the wire until the switch is flipped', async () => {
     mount()
     expect(await screen.findByText('Şifreleme')).toBeInTheDocument()
@@ -269,12 +255,4 @@ describe('leaving with unsaved changes', () => {
     fireEvent.click(dialog.getByRole('button', { name: 'Değişiklikleri at' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/tenants/tenant-a/backup-jobs/job-b'))
   })
-})
-
-it('offers no way to change a section to someone who cannot operate', async () => {
-  permissions.canOperate = false
-  mount()
-  await screen.findByRole('heading', { name: 'Muhasebe' })
-  expect(screen.getByText('Her gün 02:00')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /^Değiştir/ })).not.toBeInTheDocument()
 })

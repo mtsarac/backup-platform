@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
@@ -80,9 +80,7 @@ function NameRow({ name, editing, invalid, onEdit, onChange }: { name: string; e
 
 export function ConnectionWizard() {
   useLanguage()
-  const { tenantId, canAdmin } = useTenant()
-  const storage = `/tenants/${tenantId}/storage`
-  if (!canAdmin) return <><PageHeader title={tx("Bağlantı ekle")} crumbs={[{ label: tx('Depolama'), to: storage }, { label: tx('Bağlantı ekle') }]} /><Notice tone="warning" title={tx("Yöneticinize danışın")} action={<Link to={storage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{tx("Depolamaya dön")}</Link>}>{tx("Bağlantı eklemek için çalışma alanı yöneticinizden yardım isteyin.")}</Notice></>
+  const { tenantId } = useTenant()
   return <ConnectionWizardForm key={tenantId} />
 }
 

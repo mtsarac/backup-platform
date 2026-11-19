@@ -33,8 +33,7 @@ const withReasons = (state: BackupJobHealth['state'], ...reasons: string[]): Bac
 const runningJob = { ...job, lastRun: { id: 'run-r', status: 'Running', createdAt: '', startedAt: null, completedAt: null, reasonCode: null } } as BackupJob
 const schedule = { ...job.schedule!, enabled: true }
 
-const permissions = vi.hoisted(() => ({ canOperate: true, canAdmin: true }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', ...permissions }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backup-jobs/api')
 vi.mock('@/features/agents/api')
 vi.mock('@/features/backups/api')
@@ -49,7 +48,6 @@ function mount(url = '/tenants/tenant-a/backup-jobs/job-a') {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(permissions, { canOperate: true, canAdmin: true })
   vi.mocked(getBackupJobs).mockResolvedValue([job, other])
   vi.mocked(getBackupJobHealth).mockResolvedValue(healthyJobHealth)
   vi.mocked(getHealthTimeline).mockResolvedValue({ jobs: [] })
@@ -117,14 +115,6 @@ it('starts a backup with "Şimdi yedekle" and links to the new attempt; a double
   expect(startJobRun).toHaveBeenCalledWith('tenant-a', 'job-a', expect.any(String))
 })
 
-it('hides the actions from someone who cannot operate, keeping the status', async () => {
-  permissions.canOperate = false
-  mount()
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Güncel'))
-  expect(screen.queryByRole('button', { name: 'Şimdi yedekle' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /Zamanlamayı/ })).not.toBeInTheDocument()
-})
-
 it.each([
   ['storage_connection_disabled', /yeni yedekleme başlatılamaz/],
   ['quota_size_unknown', /kesin depolama kotası/],
@@ -180,13 +170,6 @@ it('archives only after the name is typed, then the job leaves the list', async 
   expect(screen.getByTestId('location')).toHaveTextContent(/^\/tenants\/tenant-a\/backup-jobs$/)
 })
 
-it('offers removal only to administrators', async () => {
-  permissions.canAdmin = false
-  mount()
-  await screen.findByRole('heading', { name: 'Muhasebe' })
-  expect(screen.queryByRole('button', { name: 'Diğer' })).not.toBeInTheDocument()
-})
-
 it('shows no score breakdown or change summary', async () => {
   mount()
   await screen.findByRole('status')
@@ -205,14 +188,6 @@ it('an empty account offers the one action to create a job', async () => {
   mount('/tenants/tenant-a/backup-jobs')
   expect(await screen.findByText('Henüz yedekleme işi oluşturulmadı.')).toBeInTheDocument()
   expect(screen.getAllByRole('link', { name: 'Yedekleme işi oluştur' })).toHaveLength(1)
-})
-
-it('an empty account sends someone without permission to their administrator', async () => {
-  permissions.canOperate = false
-  vi.mocked(getBackupJobs).mockResolvedValue([])
-  mount('/tenants/tenant-a/backup-jobs')
-  expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-  expect(screen.queryByRole('link', { name: 'Yedekleme işi oluştur' })).not.toBeInTheDocument()
 })
 
 it('an empty filter result offers "Filtreleri temizle", and filters live in the URL', async () => {

@@ -12,7 +12,7 @@ import { ConnectionDetail } from './connection-detail'
 import { ConnectionWizard } from './connection-wizard'
 import type { ConnectionView } from './types'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('./api')
 
@@ -41,7 +41,6 @@ const tab = (label: string) => userEvent.click(screen.getByRole('tab', { name: l
 
 beforeEach(() => {
   vi.resetAllMocks()
-  access.canAdmin = true
   serve([makeConnection({ permissions: { ...tenantAdminPermissions } }), makeManaged()])
 })
 
@@ -104,16 +103,11 @@ describe('Storage connections list and detail', () => {
     expect(local.getAllByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toHaveLength(1)
   })
 
-  it('offers the add connection action when permitted, or asks the administrator', async () => {
+  it('offers the add connection action on an empty list', async () => {
     serve([])
-    const { unmount } = mount()
+    mount()
     expect(await screen.findByText(/Henüz depolama bağlantısı yok/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Depolama bağlantısı ekle' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/new')
-    unmount()
-    access.canAdmin = false
-    mount()
-    expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Depolama bağlantısı ekle' })).not.toBeInTheDocument()
   })
 
   it('opens a destination from its card without exposing credentials or configuration; quota scope and capabilities are technical', async () => {
@@ -299,12 +293,6 @@ describe('Storage connections list and detail', () => {
     expect(screen.queryByRole('button', { name: 'Yerel disk bağlantısı: sil' })).not.toBeInTheDocument()
   })
 
-  it('does not hide permitted connection actions behind the role hint', async () => {
-    access.canAdmin = false
-    mount(detail('conn-local', 'manage'))
-    expect(await screen.findByRole('button', { name: 'Yerel disk bağlantısı: sil' })).toBeInTheDocument()
-  })
-
   it('states a healthy connection once in the header with its last test time, and keeps a single breadcrumb back to Depolama', async () => {
     serve([makeConnection({ lastTest: { status: 'Succeeded', code: 'ok', message: '', testedAt: new Date(Date.now() - 3 * 3_600_000).toISOString() }, permissions: { ...tenantAdminPermissions } })])
     mount(detail('conn-local'))
@@ -329,16 +317,6 @@ describe('Storage connections list and detail', () => {
     const dialog = screen.getByRole('region', { name: 'Teknik ayrıntılar' })
     expect(within(dialog).getByText('Access denied.')).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
-  })
-})
-
-describe('Connection wizard access', () => {
-  it('does not allow the non-admin role to create, including a direct wizard URL', async () => {
-    access.canAdmin = false
-    mount(`${base}/connections/new`)
-    expect(screen.getByText("Yöneticinize danışın")).toBeInTheDocument()
-    expect(api.getTenantConnections).not.toHaveBeenCalled()
-    expect(api.createTenantConnection).not.toHaveBeenCalled()
   })
 })
 

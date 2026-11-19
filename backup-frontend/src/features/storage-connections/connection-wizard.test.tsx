@@ -9,7 +9,7 @@ import { makeConnection, makeProvider, tenantAdminPermissions } from './test-fix
 import { ConnectionWizard } from './connection-wizard'
 import type { ConnectionTestResponse, ConnectionView, ProviderDescriptor } from './types'
 
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('./api')
 
 const site = { name: 'site', label: 'Physical site / failure domain', kind: 'Text' as const, required: false, maxLength: 64 }
