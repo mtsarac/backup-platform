@@ -8,6 +8,7 @@ import { BackupCenterLayout } from './pages/backup-center/backup-center-layout'
 import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
+import { FirstBackupPage } from './pages/first-backup/first-backup-page'
 import { DiscoveryPage } from './pages/discovery/discovery-page'
 import { InstanceDetailPage } from './pages/discovery/instance-detail-page'
 import { UploadBandwidthPage } from './pages/upload-bandwidth/upload-bandwidth-page'
@@ -45,6 +46,7 @@ export const tenantRoutes = <>
   <Route path="agents/databases" element={<DiscoveryPage />} />
   <Route path="agents/:id" element={<ClientDetailPage />} />
   <Route path="enrollment" element={<AgentRegisterPage />} />
+  <Route path="first-backup" element={<FirstBackupPage />} />
   <Route element={<BackupCenterLayout />}>
     <Route path="backup-jobs" element={<BackupJobsPage />} />
     <Route path="backup-jobs/:id" element={<BackupJobsPage />} />

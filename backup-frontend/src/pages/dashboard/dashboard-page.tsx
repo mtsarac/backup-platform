@@ -106,14 +106,14 @@ function ProtectedData({ rows, agents, base }: { rows: ProtectionRow[]; agents: 
 
 function Steps({ p, base, canOperate }: { p: Protection; base: string; canOperate: boolean }) {
   const steps = [
-    { done: p.agents.length > 0, label: tx('Yedekleme bilgisayarı ekleyin'), to: `${base}/enrollment` },
-    { done: p.rows.length > 0, label: tx('Yedeklenecek veriyi seçin'), to: `${base}/backup-jobs/new` },
+    { done: p.agents.length > 0, label: tx('Yedekleme bilgisayarı ekleyin'), to: `${base}/first-backup` },
+    { done: p.rows.length > 0, label: tx('Yedeklenecek veriyi seçin'), to: `${base}/first-backup` },
     { done: p.hasSucceededEver, label: tx('İlk yedeğinizi alın'), to: `${base}/backup-jobs` },
     { done: p.hasRestoreTrial, label: tx('Yedeği geri yükleyerek deneyin'), to: `${base}/backup-runs?status=Succeeded` },
   ]
   const current = steps.findIndex(step => !step.done)
   return <Section title={tx('Başlangıç adımları')}>
-    <ol className="divide-y divide-border rounded-lg border border-border bg-surface">{steps.map((step, index) => <li key={step.to} aria-current={index === current ? 'step' : undefined} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <ol className="divide-y divide-border rounded-lg border border-border bg-surface">{steps.map((step, index) => <li key={step.label} aria-current={index === current ? 'step' : undefined} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <span className="flex items-center gap-2">{step.done ? <Check aria-hidden="true" className="size-4 text-success" /> : <Circle aria-hidden="true" className="size-4 text-text-muted" />}
         <span className={step.done ? 'text-text-muted' : 'font-medium text-text-heading'}>{step.label}</span>{step.done && <span className="sr-only">{tx('Tamamlandı')}</span>}</span>
       {index === current && canOperate && <Link className={buttonVariants()} to={step.to}>{tx('Başla')}</Link>}

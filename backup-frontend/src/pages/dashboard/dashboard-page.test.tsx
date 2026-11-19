@@ -338,6 +338,7 @@ describe('no jobs', () => {
     expect(steps).toHaveLength(4)
     expect(steps.find(step => step.getAttribute('aria-current') === 'step')).toHaveTextContent(current)
     expect(steps.filter(step => within(step).queryByText('Tamamlandı'))).toHaveLength(done)
+    if (current !== 'İlk yedeğinizi alın') expect(within(steps.find(step => step.getAttribute('aria-current') === 'step')!).getByRole('link', { name: 'Başla' })).toHaveAttribute('href', '/tenants/tenant-a/first-backup')
   })
 
   it('shows the empty ghost and the storage card, and hides band, counts, activity and the next backup', async () => {
