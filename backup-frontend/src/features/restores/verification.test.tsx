@@ -71,17 +71,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 describe('artifact restore verification', () => {
-  it('shows "not tested" and starts a verification without database name or mode', async () => {
+  const withJob = { ...artifact, jobId: 'job-1' } as BackupArtifact
+  const renderSection = (art: BackupArtifact = withJob) => renderAt(<Routes><Route path="/" element={<ArtifactVerificationSection tenantId="tenant-a" artifact={art} />} /><Route path="/tenants/tenant-a/restores/:id" element={<p>detail page</p>} /></Routes>)
+
+  it('shows "not tested" and starts a verification with one click on the backup\'s own server and computer', async () => {
     vi.mocked(RestoreApi.startRestoreVerification).mockResolvedValue(base)
-    renderAt(<Routes><Route path="/" element={<ArtifactVerificationSection tenantId="tenant-a" artifact={artifact} />} /><Route path="/tenants/tenant-a/restores/:id" element={<p>detail page</p>} /></Routes>)
+    renderSection()
     expect(await screen.findByText('Henüz test edilmedi.')).toBeInTheDocument()
     expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', { purpose: 'Verification', artifactId: 'artifact-1', pageSize: 10 }, expect.anything())
-    fireEvent.click(screen.getByRole('button', { name: "Geri yükleme testi başlat" }))
-    expect(await screen.findByText(/(?:Production Veritabanı değiştirilmez|Canlı veritabanı değiştirilmez)/)).toBeInTheDocument()
-    const agentOptions = within(screen.getByLabelText("Yedekleme bilgisayarı")).getAllByRole('option')
-    expect(agentOptions).toHaveLength(1)
-    expect(agentOptions[0]).toHaveTextContent('Verifier')
-    fireEvent.click(screen.getByRole('button', { name: 'Testi başlat' }))
+    for (const gone of [/Hedef/, /Özel Bağlantı/, /Bağlantı Noktası/, /Sertifika/, /Windows kimlik/, /Yedekleme bilgisayarı/]) expect(screen.queryByLabelText(gone)).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: "Geri yükleme testi başlat" }))
     await waitFor(() => expect(RestoreApi.startRestoreVerification).toHaveBeenCalled())
     const [tenant, artifactId, request, key] = vi.mocked(RestoreApi.startRestoreVerification).mock.calls[0]
     expect([tenant, artifactId]).toEqual(['tenant-a', 'artifact-1'])
@@ -90,6 +89,24 @@ describe('artifact restore verification', () => {
     expect(request).not.toHaveProperty('mode')
     expect(key).toMatch(/[0-9a-f-]{36}/)
     expect(await screen.findByText('detail page')).toBeInTheDocument()
+  })
+
+  it('asks only for the computer when more than one can run the test', async () => {
+    vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...targets, agents: [...targets.agents, { ...targets.agents[0], agentId: 'agent-3', hostName: 'Second' }] })
+    vi.mocked(RestoreApi.startRestoreVerification).mockResolvedValue(base)
+    renderSection()
+    const select = await screen.findByLabelText('Yedekleme bilgisayarı')
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([expect.stringContaining('Verifier'), expect.stringContaining('Second')])
+    fireEvent.change(select, { target: { value: 'agent-3' } })
+    fireEvent.click(screen.getByRole('button', { name: "Geri yükleme testi başlat" }))
+    await waitFor(() => expect(RestoreApi.startRestoreVerification).toHaveBeenCalled())
+    expect(vi.mocked(RestoreApi.startRestoreVerification).mock.calls[0][2]).toEqual({ agentId: 'agent-3', target: targets.targets[0].target, options: { verifyChecksum: true, verifyBackup: true } })
+  })
+
+  it('cannot start when the backup\'s server is not known', async () => {
+    renderSection({ ...withJob, jobId: 'gone' } as BackupArtifact)
+    expect(await screen.findByText(/Yedeğin alındığı sunucu bulunamadığı/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Geri yükleme testi başlat" })).not.toBeInTheDocument()
   })
 
   it('hides the action from viewers and renders history with pending cleanup', async () => {
