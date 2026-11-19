@@ -4,9 +4,9 @@ import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { linkClass } from '@/components/ui/form-styles'
 import { Section } from '@/components/ui/section'
-import { DatabaseTable } from '@/features/discovery/database-table'
+import { databaseAvailability } from '@/features/discovery/status'
 import { useDiscoveryInstance, useDiscoveryInstances } from '@/features/discovery/hooks'
-import type { DiscoveryInstanceSummary } from '@/features/discovery/types'
+import type { DiscoveryDatabase, DiscoveryInstanceDetail, DiscoveryInstanceSummary } from '@/features/discovery/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { discoveryInstancePath } from '@/lib/routes'
 
@@ -31,6 +31,18 @@ function InstanceDatabases({ instance }: { instance: DiscoveryInstanceSummary })
       <Link className={`font-medium ${linkClass}`} to={discoveryInstancePath(tenantId, instance.id)}>{instance.displayName}</Link>
       <StatusPill domain="access" status={instance.access} />
     </div>
-    {authenticated && <QueryState isPending={detail.isPending} error={detail.error}>{detail.data && <DatabaseTable instance={detail.data} />}</QueryState>}
+    {authenticated && <QueryState isPending={detail.isPending} error={detail.error}>{detail.data && (detail.data.databases.length === 0
+      ? <p className="text-sm text-text-muted">{tx("Bu sunucuda listelenmiş veritabanı yok.")}</p>
+      : <ul className="divide-y divide-border rounded-lg border border-border">{detail.data.databases.map(db => <DatabaseItem key={db.name} db={db} instance={detail.data} />)}</ul>)}</QueryState>}
   </div>
+}
+
+function DatabaseItem({ db, instance }: { db: DiscoveryDatabase; instance: DiscoveryInstanceDetail }) {
+  const { kind, reason } = databaseAvailability(db, instance)
+  return <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
+    <div className="min-w-0"><span className="font-medium text-text-heading">{db.name}</span>{reason && <p className="text-sm text-text-muted">{reason}</p>}</div>
+    {kind === 'available' ? <StatusPill level="safe">{tx("Yedeklenebilir")}</StatusPill>
+      : kind === 'covered' ? <StatusPill level="info">{tx("Zaten yedekleniyor")}</StatusPill>
+      : <StatusPill level={db.isSystem ? 'neutral' : 'attention'}>{tx("Yedeklenemez")}</StatusPill>}
+  </li>
 }
