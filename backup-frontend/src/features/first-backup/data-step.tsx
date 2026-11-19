@@ -19,18 +19,15 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { autoJobName, awaitingCapabilities, itemKey, type FirstBackupItem } from './first-backup-model'
 
 /** "Ne yedeklensin": scans the chosen computer on arrival and lists what it found, all ticked; jobs are named automatically and only renamed on request. */
-export function DataStep({ agents, computerId, names, onNames, picked, onPicked, onNext }: {
-  agents: readonly Agent[]
-  /** The computer the user just added (`''` when none was); it is scanned first. */
-  computerId: string
-  names: Record<string, string>; onNames: (names: Record<string, string>) => void
+export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
+  agents: readonly Agent[]; names: Record<string, string>; onNames: (names: Record<string, string>) => void
   /** `null` means untouched: every database found is ticked. */
   picked: ReadonlySet<string> | null; onPicked: (picked: ReadonlySet<string>) => void; onNext: (items: FirstBackupItem[]) => void
 }) {
   useLanguage()
   const { tenantId } = useTenant()
   const capable = agents.filter(agent => supportsDiscovery(agent.capabilities))
-  const [chosen, setChosen] = useState(computerId)
+  const [chosen, setChosen] = useState('')
   // Derived on every render: a computer whose capabilities arrive later must be adopted, not skipped.
   const computer = capable.find(agent => agent.agentId === chosen) ?? capable.find(agent => agent.connectivity === 'online') ?? capable[0]
   const agentId = computer?.agentId ?? ''

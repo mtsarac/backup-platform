@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Agent } from './types'
-import { getAgent, getAgents, getEnrollmentPolicy, getEnrollmentTokens } from './api'
+import { getAgent, getAgentDistribution, getAgents, getEnrollmentPolicy, getEnrollmentTokens } from './api'
 
 export const agentQueryKeys = {
   all: (tenantId: string) => ['tenant', tenantId, 'agents'] as const,
@@ -28,4 +28,8 @@ export function useEnrollmentPolicy(tenantId: string, enabled: boolean) {
 
 export function useEnrollmentTokens(tenantId: string, enabled: boolean) {
   return useQuery({ queryKey: agentQueryKeys.tokens(tenantId), queryFn: ({ signal }) => getEnrollmentTokens(tenantId, signal), enabled })
+}
+
+export function useAgentDistribution() {
+  return useQuery({ queryKey: ['agent-distribution'], queryFn: ({ signal }) => getAgentDistribution(signal) })
 }
