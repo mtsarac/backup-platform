@@ -2606,6 +2606,8 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Sonraki yedek": {"tr":"Sonraki yedek","en":"Next backup"},
   "Bu bilgisayarın yedekleme işleri": {"tr":"Bu bilgisayarın yedekleme işleri","en":"This computer's backup jobs"},
   "Bu bilgisayar için tanımlı yedekleme işi yok.": {"tr":"Bu bilgisayar için tanımlı yedekleme işi yok.","en":"No backup job is defined for this computer."},
+  "Bu bilgisayarda bulunan veritabanları": {"tr":"Bu bilgisayarda bulunan veritabanları","en":"Databases found on this computer"},
+  "Bu bilgisayarda henüz veritabanı bulunamadı.": {"tr":"Bu bilgisayarda henüz veritabanı bulunamadı.","en":"No databases have been found on this computer yet."},
   "Veritabanı yedeklerini alan bilgisayarlar ve açık olup olmadıkları.": {"tr":"Veritabanı yedeklerini alan bilgisayarlar ve açık olup olmadıkları.","en":"The computers that take your database backups, and whether they are on."},
   "Bilgisayar filtreleri": {"tr":"Bilgisayar filtreleri","en":"Computer filters"},
   "Bilgisayar ara": {"tr":"Bilgisayar ara","en":"Search computers"},

@@ -13,10 +13,13 @@ import { AddAgentDialog } from './add-agent-dialog'
 import type { AgentDetail, CreatedEnrollmentToken } from './types'
 import * as api from './api'
 import * as jobsApi from '@/features/backup-jobs/api'
+import * as discoveryApi from '@/features/discovery/api'
+import { makeDatabase, makeDetail, makeInstance, supportedAgent } from '@/features/discovery/test-fixtures'
 import { setViewport } from '@/test/viewport'
 
 const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test' } }))
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn() }))
+vi.mock('@/features/discovery/api', () => ({ getDiscoveryAgents: vi.fn(), getDiscoveryInstances: vi.fn(), getDiscoveryInstance: vi.fn() }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 vi.mock('./api', () => ({ getAgentDistribution: vi.fn(), getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), getEnrollmentTokenStatus: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
 
@@ -39,6 +42,8 @@ beforeEach(() => {
   vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
   Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
   vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([])
+  vi.mocked(discoveryApi.getDiscoveryAgents).mockResolvedValue({ items: [] })
+  vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [] })
   vi.mocked(api.getAgents).mockResolvedValue([agent])
   vi.mocked(api.getAgent).mockResolvedValue(agent)
   vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: true })
@@ -145,6 +150,20 @@ describe('Backup computer page', () => {
     expect(screen.getByRole('navigation', { name: 'Sayfa yolu' })).toHaveTextContent('Yedekleme bilgisayarları')
     expect(screen.queryByRole('button', { name: 'Bilgisayar kaydını iptal et' })).not.toBeInTheDocument()
     expect(api.getAgent).toHaveBeenCalledWith('tenant-a', 'agent-a', expect.any(AbortSignal))
+  })
+
+  it('shows the databases found on this computer, with whether each can be backed up', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: supportedAgent.capabilities as AgentDetail['capabilities'] })
+    vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [makeInstance(), makeInstance({ id: 'inst-2', displayName: 'Kilitli sunucu', access: 'CredentialsRequired' })] })
+    vi.mocked(discoveryApi.getDiscoveryInstance).mockResolvedValue(makeDetail({ databases: [makeDatabase({ name: 'ERP' }), makeDatabase({ name: 'master', isSystem: true, fullBackup: 'Unsupported' })] }))
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const section = within(await screen.findByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' }))
+    expect(await section.findByText('ERP')).toBeVisible()
+    expect(section.getByText('master')).toBeVisible()
+    expect(section.getByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
+    expect(section.getByRole('link', { name: 'Kilitli sunucu' })).toBeVisible()
+    expect(discoveryApi.getDiscoveryInstances).toHaveBeenCalledWith('tenant-a', { agentId: 'agent-a' }, expect.any(AbortSignal))
+    expect(discoveryApi.getDiscoveryInstance).not.toHaveBeenCalledWith('tenant-a', 'inst-2', expect.anything())
   })
 
   it('keeps platform, versions, identifiers and lifecycle in collapsed, copyable technical details', async () => {

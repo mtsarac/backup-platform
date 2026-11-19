@@ -22,6 +22,7 @@ import { notFound } from '@/lib/api/failure-messages'
 import { supportsDiscovery } from '@/features/discovery/status'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { linkClass } from '@/components/ui/form-styles'
+import { AgentDatabases } from './agent-databases'
 
 export function ClientDetailPage() {
   useLanguage()
@@ -55,6 +56,7 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
             {canAdmin && agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
           </>} />
         {agent.status === 'Active' && agent.connectivity === 'offline' && <Notice tone="warning">{tx("Bu bilgisayar çevrimdışı; yedeklemeler bilgisayar yeniden bağlanana kadar çalışmaz. Bilgisayarın açık olduğunu ve yedekleme programının çalıştığını kontrol edin.")}</Notice>}
+        {supportsDiscovery(agent.capabilities) && <AgentDatabases agentId={id} />}
         <AgentJobs agentId={id} />
         <AgentTechnicalDetails agent={agent} />
       </>}
