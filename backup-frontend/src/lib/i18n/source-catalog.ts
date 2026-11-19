@@ -3368,4 +3368,8 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Geri yüklemeyi dene": { tr: "Geri yüklemeyi dene", en: "Try a restore" },
   "Atla": { tr: "Atla", en: "Skip" },
   "Başlatıldı": { tr: "Başlatıldı", en: "Started" },
+  // computer-flow: add-computer step and the computer shown on "Ne yedeklensin"
+  "Bilgisayar hazırlanıyor…": { tr: "Bilgisayar hazırlanıyor…", en: "Preparing the computer…" },
+  "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.": { tr: "Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.", en: "The computer is reporting what can be backed up; this takes a few seconds." },
+  "Yedekleme bilgisayarı:": { tr: "Yedekleme bilgisayarı:", en: "Backup computer:" },
 }

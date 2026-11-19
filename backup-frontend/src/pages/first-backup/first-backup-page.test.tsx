@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -68,6 +68,20 @@ describe('first backup flow', () => {
     expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
     expect(screen.getByText(/Muhasebe veritabanı yedeği/)).toBeVisible()
     expect(screen.queryByLabelText('İş adı')).not.toBeInTheDocument()
+  })
+
+  it('waits for a just-added computer to report what it can do, then scans it and names it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const computer = { ...supportedAgent, hostName: 'win11-virtual', connectivity: 'online' }
+    vi.mocked(getAgents).mockResolvedValueOnce([{ ...computer, capabilities: [], capabilitiesReportedAt: null }] as never).mockResolvedValue([computer] as never)
+    mount()
+    expect(await screen.findByText('Bilgisayar hazırlanıyor…')).toBeVisible()
+    expect(screen.queryByText('Otomatik taramayı destekleyen bilgisayar yok.')).not.toBeInTheDocument()
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
+    expect(screen.getByText('win11-virtual')).toBeVisible()
+    expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
+    vi.useRealTimers()
   })
 
   it('renames a job only through "Adı değiştir"', async () => {

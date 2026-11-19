@@ -10,7 +10,7 @@ import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
 import { useAgents } from '@/features/agents/hooks'
 import { useRunBackupJob, useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import { DataStep } from '@/features/first-backup/data-step'
-import { autoJobName, defaultSettings, firstBackupJobInput, type FirstBackupItem, type FirstBackupSettings } from '@/features/first-backup/first-backup-model'
+import { autoJobName, awaitingCapabilities, CAPABILITY_POLL_MS, defaultSettings, firstBackupJobInput, type FirstBackupItem, type FirstBackupSettings } from '@/features/first-backup/first-backup-model'
 import { ProgressStep, ReadyStep } from '@/features/first-backup/progress-step'
 import { SummaryStep, type ItemResult } from '@/features/first-backup/summary-step'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -25,7 +25,7 @@ export function FirstBackupPage() {
   const { tenantId, canOperate, canAdmin } = useTenant()
   const base = `/tenants/${tenantId}`
   const navigate = useNavigate()
-  const agents = useAgents(tenantId)
+  const agents = useAgents(tenantId, false, list => awaitingCapabilities(list) ? CAPABILITY_POLL_MS : false)
   const save = useSaveBackupJob()
   const { run } = useRunBackupJob()
   const [step, setStep] = useState<Step | null>(null)
@@ -69,7 +69,7 @@ export function FirstBackupPage() {
       : <AccessDenied what={tx('Yeni yedekleme bilgisayarı eklemek için çalışma alanı yöneticisi olmalısınız.')} control={<Link className={linkClass} to={base}>{tx('Ana sayfaya dön')}</Link>} />)}
     {phase === 'ready' && <ReadyStep settings={settings} pending={pending} failures={items.flatMap(item => results[item.key]?.error ? [results[item.key].error] : [])} onStart={() => void create(true)} base={base} />}
     {phase === 'running' && <ProgressStep items={items} names={itemName} runIds={Object.fromEntries(items.map(item => [item.key, results[item.key]?.runId ?? '']))} settings={settings} base={base} />}
-    {!phase && current === 'data' && <DataStep agents={agents.data ?? []} names={names} onNames={setNames} picked={picked} onPicked={setPicked} onNext={chosen => { setItems(chosen); setStep('summary') }} />}
+    {!phase && current === 'data' && <DataStep agents={agents.data ?? []} computerId="" names={names} onNames={setNames} picked={picked} onPicked={setPicked} onNext={chosen => { setItems(chosen); setStep('summary') }} />}
     {!phase && current === 'summary' && <SummaryStep items={items} names={names} settings={settings} onSettings={setSettings} results={results} pending={pending} onCreate={startFirstBackup => void create(startFirstBackup)} onBack={() => setStep('data')} />}
   </QueryState>
   return <div className="space-y-6">

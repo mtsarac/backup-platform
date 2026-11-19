@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import type { Agent } from './types'
 import { getAgent, getAgents, getEnrollmentPolicy, getEnrollmentTokens } from './api'
 
 export const agentQueryKeys = {
@@ -9,8 +10,12 @@ export const agentQueryKeys = {
 }
 
 /** Revoked agents are hidden unless asked for; screens that resolve the agent of a past run or restore need `includeRevoked`. */
-export function useAgents(tenantId: string, includeRevoked = false) {
-  return useQuery({ queryKey: includeRevoked ? [...agentQueryKeys.all(tenantId), { includeRevoked }] : agentQueryKeys.all(tenantId), queryFn: ({ signal }) => getAgents(tenantId, signal, includeRevoked) })
+export function useAgents(tenantId: string, includeRevoked = false, pollEveryMs?: (agents: Agent[] | undefined) => number | false) {
+  return useQuery({
+    queryKey: includeRevoked ? [...agentQueryKeys.all(tenantId), { includeRevoked }] : agentQueryKeys.all(tenantId),
+    queryFn: ({ signal }) => getAgents(tenantId, signal, includeRevoked),
+    refetchInterval: query => pollEveryMs?.(query.state.data) ?? false,
+  })
 }
 
 export function useAgent(tenantId: string, id: string) {

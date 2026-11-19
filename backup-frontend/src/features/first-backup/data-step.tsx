@@ -16,19 +16,24 @@ import { discoveryKeys, useDiscoveryInstances, useRescanAgent } from '@/features
 import { canCreateJob, databaseSelectable, engineLabels, supportsDiscovery } from '@/features/discovery/status'
 import { useDiscoveryAgents } from '@/features/discovery/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { autoJobName, itemKey, type FirstBackupItem } from './first-backup-model'
+import { autoJobName, awaitingCapabilities, itemKey, type FirstBackupItem } from './first-backup-model'
 
 /** "Ne yedeklensin": scans the chosen computer on arrival and lists what it found, all ticked; jobs are named automatically and only renamed on request. */
-export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
-  agents: readonly Agent[]; names: Record<string, string>; onNames: (names: Record<string, string>) => void
+export function DataStep({ agents, computerId, names, onNames, picked, onPicked, onNext }: {
+  agents: readonly Agent[]
+  /** The computer the user just added (`''` when none was); it is scanned first. */
+  computerId: string
+  names: Record<string, string>; onNames: (names: Record<string, string>) => void
   /** `null` means untouched: every database found is ticked. */
   picked: ReadonlySet<string> | null; onPicked: (picked: ReadonlySet<string>) => void; onNext: (items: FirstBackupItem[]) => void
 }) {
   useLanguage()
   const { tenantId } = useTenant()
   const capable = agents.filter(agent => supportsDiscovery(agent.capabilities))
-  const [chosen, setChosen] = useState(capable.find(agent => agent.connectivity === 'online')?.agentId ?? capable[0]?.agentId ?? '')
-  const agentId = capable.some(agent => agent.agentId === chosen) ? chosen : ''
+  const [chosen, setChosen] = useState(computerId)
+  // Derived on every render: a computer whose capabilities arrive later must be adopted, not skipped.
+  const computer = capable.find(agent => agent.agentId === chosen) ?? capable.find(agent => agent.connectivity === 'online') ?? capable[0]
+  const agentId = computer?.agentId ?? ''
   const rescan = useRescanAgent()
   const scanned = useRef('')
   useEffect(() => {
@@ -51,16 +56,21 @@ export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
     if (checked) next.add(key); else next.delete(key)
     onPicked(next)
   }
-  if (capable.length === 0) return <Notice tone="info" action={<Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx('Elle yapılandır')}</Link>}>{tx('Otomatik taramayı destekleyen bilgisayar yok.')}</Notice>
+  const manual = <Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx('Elle yapılandır')}</Link>
+  if (capable.length === 0) return awaitingCapabilities(agents)
+    ? <Notice tone="info" title={tx('Bilgisayar hazırlanıyor…')} action={manual}>{tx('Bilgisayar nelerin yedeklenebileceğini bildiriyor; birkaç saniye sürer.')}</Notice>
+    : <Notice tone="info" action={manual}>{tx('Otomatik taramayı destekleyen bilgisayar yok.')}</Notice>
   return <section aria-labelledby="first-backup-data" className="space-y-4">
     <h2 id="first-backup-data" className="text-lg font-semibold text-text-heading">{tx('Ne yedeklensin?')}</h2>
-    {capable.length > 1 && <Field label={tx('Yedekleme bilgisayarı')}>{control => <Select {...control} value={agentId} onChange={event => { setChosen(event.target.value); onPicked(new Set()) }}>
-      {capable.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız bilgisayar')}</option>)}</Select>}</Field>}
+    {capable.length > 1
+      ? <Field label={tx('Yedekleme bilgisayarı')}>{control => <Select {...control} value={agentId} onChange={event => { setChosen(event.target.value); onPicked(new Set()) }}>
+        {capable.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız bilgisayar')}</option>)}</Select>}</Field>
+      : <p className="text-sm text-text-muted">{tx('Yedekleme bilgisayarı:')} <span className="font-medium text-text-heading">{computer?.hostName ?? tx('Adsız bilgisayar')}</span></p>}
     {rescan.error && <ErrorNotice error={rescan.error} onRetry={() => rescan.mutate(agentId)} />}
     {scanning && <p role="status" className="text-sm text-text-muted">{tx('Bilgisayar taranıyor…')}</p>}
     <QueryState isPending={instances.isPending} error={instances.error}>
       {!loaded || scanning ? null : items.length === 0
-        ? <Notice tone="info" title={tx('Veri bulunamadı')} action={<Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/backup-jobs/new`}>{tx('Elle yapılandır')}</Link>}>{tx('Bu bilgisayarda yedeklenebilir veritabanı bulunamadı.')}</Notice>
+        ? <Notice tone="info" title={tx('Veri bulunamadı')} action={manual}>{tx('Bu bilgisayarda yedeklenebilir veritabanı bulunamadı.')}</Notice>
         : <ul className="divide-y divide-border rounded-lg border border-border bg-surface">{items.map(item => {
           const name = names[item.key] ?? autoJobName(item.database)
           return <li key={item.key} className="space-y-1 px-4 py-3">
