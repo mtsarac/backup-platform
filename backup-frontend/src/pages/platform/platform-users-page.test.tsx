@@ -37,6 +37,19 @@ describe('platform users', () => {
     expect(screen.getByText(/tüm açık oturumları sonlandırılır/)).toBeInTheDocument()
   })
 
+  it('closes the actions menu after a temporary password is assigned', async () => {
+    vi.mocked(api.assignTemporaryPassword).mockResolvedValue(undefined as never)
+    renderPlatform(<PlatformUsersPage />)
+    await screen.findByText('Ayşe Yılmaz')
+    const summary = screen.getAllByText('İşlemler', { selector: 'summary' }).find((item) => item.textContent?.includes('Ayşe Yılmaz (ayse)'))!
+    await userEvent.click(summary)
+    await userEvent.click(screen.getByRole('button', { name: 'Ayşe Yılmaz kullanıcısına geçici şifre ata' }))
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText(/^Geçici şifre/), 'temporary-password')
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Geçici şifre ata' }))
+    await screen.findByText(/geçici şifre atandı/)
+    expect(screen.getAllByText('İşlemler', { selector: 'summary' }).find((item) => item.textContent?.includes('Ayşe Yılmaz (ayse)'))!.closest('details')).not.toHaveAttribute('open')
+  })
+
   it('lists account details and opens the create action with an empty list', async () => {
     vi.mocked(api.getUsers).mockResolvedValueOnce(paged([]))
     renderPlatform(<PlatformUsersPage />)

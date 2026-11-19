@@ -28,6 +28,8 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "IP adresi": { tr: "IP adresi", en: "IP address" },
   "Son etkinlik": { tr: "Son etkinlik", en: "Last activity" },
   "Oturumu sonlandır": { tr: "Oturumu sonlandır", en: "End session" },
+  "Bilinmeyen cihaz": { tr: "Bilinmeyen cihaz", en: "Unknown device" },
+  "Mobil": { tr: "Mobil", en: "Mobile" },
   "{0} oturumunu sonlandır": { tr: "{0} oturumunu sonlandır", en: "End session on {0}" },
   "Oturum sonlandırılsın mı?": { tr: "Oturum sonlandırılsın mı?", en: "End session?" },
   "Tüm oturumlar sonlandırılsın mı?": { tr: "Tüm oturumlar sonlandırılsın mı?", en: "End all sessions?" },

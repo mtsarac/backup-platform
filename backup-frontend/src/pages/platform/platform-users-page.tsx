@@ -87,6 +87,7 @@ export function PlatformUsersPage() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<PlatformUser | null>(null)
   const [disablingUser, setDisablingUser] = useState<PlatformUser | null>(null)
+  const [menuEpoch, setMenuEpoch] = useState(0)
   const [assigningTemp, setAssigningTemp] = useState<PlatformUser | null>(null)
   const [disableReason, setDisableReason] = useState('')
   const [actionError, setActionError] = useState<unknown>(null)
@@ -101,7 +102,7 @@ export function PlatformUsersPage() {
     { key: 'email', header: tx('E-posta'), wrap: true, render: (user) => user.email },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="space-y-1">
       <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını düzenle', { '0': user.displayName })} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
-      <Disclosure title={<>{tx('İşlemler')} <span className="sr-only">{user.displayName} ({user.username})</span></>}>
+      <Disclosure key={menuEpoch} title={<>{tx('İşlemler')} <span className="sr-only">{user.displayName} ({user.username})</span></>}>
       <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısına geçici şifre ata', { '0': user.displayName })} onClick={() => { setSaved(null); setAssigningTemp(user) }}>{tx('Geçici şifre ata')}</Button>
       {user.isManuallyDisabled ? (
@@ -143,6 +144,6 @@ export function PlatformUsersPage() {
         <Field label={tx('Devre dışı bırakma nedeni')}>{(control) => <TextInput {...control} value={disableReason} placeholder={tx('İsteğe bağlı açıklama')} onChange={(e) => setDisableReason(e.target.value)} />}</Field>
       </FormDialog>
     )}
-    {assigningTemp && <TemporaryPasswordDialog user={assigningTemp} onClose={() => setAssigningTemp(null)} onAssigned={(name) => setSaved({ name, created: false, action: 'temp' })} />}
+    {assigningTemp && <TemporaryPasswordDialog user={assigningTemp} onClose={() => setAssigningTemp(null)} onAssigned={(name) => { setMenuEpoch((epoch) => epoch + 1); setSaved({ name, created: false, action: 'temp' }) }} />}
   </div>
 }
