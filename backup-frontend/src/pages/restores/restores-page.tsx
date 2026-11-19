@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/text-input'
 import { History } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -19,11 +20,10 @@ import { useAgents } from '@/features/agents/hooks'
 import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 import { useRestores } from '@/features/restores/hooks'
-import { restoreModeLabel, restoreStatuses, targetStateLabel, verificationCleanupText } from '@/features/restores/presentation'
+import { restoreModeLabel, restoreStatuses, targetStateLabel } from '@/features/restores/presentation'
 import type { RestoreFilters, RestoreView } from '@/features/restores/types'
 import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { formatDuration } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 
 export function RestoresPage() {
@@ -31,9 +31,16 @@ export function RestoresPage() {
   const { tenantId, canOperate } = useTenant()
   const { page, get, update } = useListParams()
   const status = oneOf(get('status'), restoreStatuses) ?? ''
-  const verification = get('view') === 'tests'
-  const filters: RestoreFilters = { page, pageSize: LIST_PAGE_SIZE, purpose: verification ? 'Verification' : undefined, status, artifactId: get('artifactId'), agentId: get('agentId') }
-  const query = useRestores(filters)
+  const filters: RestoreFilters = { page: 1, pageSize: 100, status, artifactId: get('artifactId'), agentId: get('agentId') }
+  const executions = useRestores(filters)
+  const trials = useRestores({ ...filters, purpose: 'Verification' })
+  // shortcut: the API lists one purpose at a time, so the newest 100 of each are merged here; upgrade to a server-side "all purposes" list when history outgrows that.
+  const merged = [...(executions.data?.items ?? []), ...(trials.data?.items ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const query = {
+    isPending: executions.isPending || trials.isPending, isFetching: executions.isFetching || trials.isFetching, error: executions.error ?? trials.error,
+    refetch: () => Promise.all([executions.refetch(), trials.refetch()]),
+    data: executions.data && trials.data ? { items: merged.slice((page - 1) * LIST_PAGE_SIZE, page * LIST_PAGE_SIZE), totalCount: merged.length, page, pageSize: LIST_PAGE_SIZE } : undefined,
+  }
   const agents = useAgents(tenantId, true)
   const base = `/tenants/${tenantId}`
   const filtering = Boolean(status || filters.artifactId || filters.agentId)
@@ -44,15 +51,8 @@ export function RestoresPage() {
     {restore.sourceJobName && <p className="text-xs text-text-muted">{restore.sourceJobName}</p>}
   </div>
   const when = { key: 'when', header: tx('Ne zaman'), wrap: true, render: (restore: RestoreView) => <RelativeTime value={restore.createdAt} /> } satisfies Column<RestoreView>
-  const testColumns: Column<RestoreView>[] = [
-    { key: 'source', header: tx('Test edilen yedek'), wrap: true, render: (restore) => <div className="space-y-1"><Link className={linkClass} to={`${base}/restores/${restore.id}`}>{restore.sourceDatabaseName ?? tx('Geri yükleme testi')}</Link>{restore.sourceJobName && <p className="text-xs text-text-muted">{restore.sourceJobName}</p>}</div> },
-    { key: 'outcome', card: 'status', header: tx('Sonuç'), wrap: true, render: (restore) => <div className="space-y-1">{restore.verificationOutcome ? <StatusPill domain="verification" status={restore.verificationOutcome} /> : <StatusPill status={restore.status} />}{restore.cleanup && restore.cleanup.state !== 'Completed' && <p className="text-xs text-text-muted">{verificationCleanupText(restore.cleanup)}</p>}</div> },
-    { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: computer },
-    when,
-    { key: 'duration', header: tx('Süre'), wrap: true, render: (restore) => restore.completedAt ? formatDuration(restore.startedAt, restore.completedAt) : '—' },
-  ]
   const columns: Column<RestoreView>[] = [
-    { key: 'database', card: 'title', header: tx('Hedef veritabanı'), wrap: true, render: (restore) => <div className="space-y-1"><Link className={linkClass} to={`${base}/restores/${restore.id}`}>{restore.databaseName}</Link><p className="text-sm font-normal">{restore.options.files ? tx('Dosya / klasör geri yükleme') : restoreModeLabel(restore.mode)}</p>{restore.options.files && <p className="break-all text-xs font-normal">{restore.options.files.relativeDirectory || '.'}</p>}</div> },
+    { key: 'database', card: 'title', header: tx('Hedef veritabanı'), wrap: true, render: (restore) => <div className="space-y-1"><Link className={linkClass} to={`${base}/restores/${restore.id}`}>{restore.purpose === 'Verification' ? restore.sourceDatabaseName ?? restore.databaseName : restore.databaseName}</Link>{restore.purpose === 'Verification' && <Badge tone="accent">{tx('Deneme')}</Badge>}<p className="text-sm font-normal">{restore.options.files ? tx('Dosya / klasör geri yükleme') : restoreModeLabel(restore.mode)}</p>{restore.options.files && <p className="break-all text-xs font-normal">{restore.options.files.relativeDirectory || '.'}</p>}</div> },
     { key: 'status', card: 'status', header: tx('Durum'), wrap: true, render: (restore) => <div className="space-y-1"><StatusPill status={restore.status} /><p className="text-xs text-text-muted">{targetStateLabel(restore.targetState)}</p></div> },
     { key: 'source', header: tx('Kaynak yedek'), wrap: true, render: sourceBackup },
     { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: computer },
@@ -60,7 +60,6 @@ export function RestoresPage() {
   ]
   return <div className="space-y-6">
     <Filters label={tx("Geri yükleme filtreleri")} onClear={filtering && query.data?.items.length !== 0 ? clearFilters : undefined}>
-      <FilterField label={tx("Liste türü")}><Select aria-label={tx("Liste türü")} value={verification ? 'tests' : 'restores'} onChange={(event) => update({ view: event.target.value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })}><option value="restores">{tx("Geri yüklemeler")}</option><option value="tests">{tx("Geri yükleme testleri")}</option></Select></FilterField>
       <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</Select></FilterField>
     </Filters>
     <Disclosure title={tx('Diğer filtreler')} open={Boolean(filters.artifactId || filters.agentId)}>
@@ -75,9 +74,9 @@ export function RestoresPage() {
     <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
       {query.data?.items.length === 0
         ? <Card data-testid="restores-empty" padding="none"><EmptyState icon={History} canAct={filtering || canOperate}
-          message={filtering ? tx("Bu filtrelere uyan geri yükleme yok.") : verification ? tx("Henüz geri yükleme testi yapılmadı.") : tx("Henüz geri yükleme yapılmadı.")}
+          message={filtering ? tx("Bu filtrelere uyan geri yükleme yok.") : tx("Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.")}
           onClearFilters={filtering ? clearFilters : undefined} action={!filtering && <Link className={buttonVariants()} to={`${base}/backup-runs`}>{tx("Yedek dosyalarını aç")}</Link>} /></Card>
-        : <DataList rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} emptyMessage={tx("Henüz geri yükleme yapılmadı.")} />}
+        : <DataList rows={query.data?.items ?? []} columns={columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} emptyMessage={tx("Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.")} />}
       {query.data && query.data.totalCount > 0 && <Pagination label={tx("Geri yükleme sayfaları")} page={query.data.page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
     </QueryState>
   </div>

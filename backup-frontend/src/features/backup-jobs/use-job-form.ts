@@ -9,7 +9,7 @@ import { discoveredConfiguration } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import type { FieldErrors } from '@/features/backup-jobs/job-field-kit'
-import { initialValues, resetSource, switchEngine, type Engine, type EngineMemory, type JobPrefill, type JobValues } from '@/features/backup-jobs/job-form-values'
+import { initialValues, resetSource, switchEngine, type Engine, type EngineMemory, type JobDraft, type JobPrefill, type JobValues } from '@/features/backup-jobs/job-form-values'
 import { stepOfField } from '@/features/backup-jobs/job-wizard-model'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
@@ -19,16 +19,16 @@ import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 
 /** State, validation inputs and saving shared by the create wizard and the single-page edit form. */
-export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPrefill }) {
+export function useJobForm({ job, prefill, draft, storageConnectionId }: { job?: BackupJob; prefill?: JobPrefill; draft?: JobDraft; storageConnectionId?: string }) {
   const { tenantId, canAdmin } = useTenant()
   const navigate = useNavigate()
   const save = useSaveBackupJob(job?.id)
   const agents = useQuery({ queryKey: ['tenant', tenantId, 'agents'], queryFn: ({ signal }) => getAgents(tenantId, signal) })
   const [saved, setSaved] = useState(() => initialValues(job, prefill))
-  const [values, setValues] = useState(saved)
+  const [values, setValues] = useState(draft?.values ?? saved)
   const [results, setResults] = useState<Record<string, string>>({})
   /** The inventory instance the selected databases belong to; the source summary shows it and a failed create is checked against it. */
-  const [discovered, setDiscovered] = useState<DiscoveryInstanceDetail | null>(prefill?.databases.length ? prefill.instance : null)
+  const [discovered, setDiscovered] = useState<DiscoveryInstanceDetail | null>(draft ? draft.discovered : prefill?.databases.length ? prefill.instance : null)
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const engines = useRef<EngineMemory>({})
   const saving = useRef(false)
@@ -79,6 +79,15 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     set({ selected: [], configuration: resetSource(configuration) })
     setResults({})
   }
+  // A connection just created in the storage wizard becomes the primary target once the refreshed lists know it.
+  const adopted = useRef(false)
+  const adoptable = storageConnectionId ? connectionItems.find(item => item.id === storageConnectionId) : undefined
+  const adoptableLocation = providerItems.find(item => item.providerType === adoptable?.providerType)?.executionLocation
+  useEffect(() => {
+    if (adopted.current || !adoptable || !adoptableLocation) return
+    adopted.current = true
+    setValues(current => ({ ...current, configuration: { ...current.configuration, destinations: current.configuration.destinations.map(item => item.isPrimary ? { ...item, storageProvider: adoptable.providerType, storageConnectionId: adoptable.id, storageExecutionLocation: adoptableLocation } : item) } }))
+  }, [adoptable, adoptableLocation])
   const listPath = `/tenants/${tenantId}/backup-jobs`
   useEffect(() => {
     if (!finished) return

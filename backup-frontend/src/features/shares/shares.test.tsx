@@ -309,7 +309,7 @@ describe('BackupShare frontend', () => {
     })
   })
 
-  it('validates duration between 1 and 72 hours', async () => {
+  it('offers only 1 saat / 24 saat / 3 gün when creating, with no free number field', async () => {
     request.mockImplementation(async (path: string) => {
       if (path.includes('backup-shares') || path.includes('/shares')) return []
       if (path.includes('repairs')) return []
@@ -318,26 +318,15 @@ describe('BackupShare frontend', () => {
     })
 
     await renderDetailPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Paylaşım oluştur' }))
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Paylaşım oluştur' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('Yeni paylaşım oluştur')).toBeInTheDocument()
-    })
-
-    const durationInput = screen.getByDisplayValue('24')
-    fireEvent.change(durationInput, { target: { value: '80' } })
-
-    const form = durationInput.closest('form')!
-    fireEvent.submit(form)
-
-    await waitFor(() => {
-      expect(screen.getByText('Süre 1 ile 72 saat arasında olmalıdır.')).toBeInTheDocument()
-    })
+    const select = await screen.findByRole('combobox', { name: 'Süre' })
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual(['1 saat', '24 saat', '3 gün'])
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+    fireEvent.change(select, { target: { value: '72' } })
+    const submitButtons = screen.getAllByRole('button', { name: 'Paylaşım oluştur' })
+    fireEvent.click(submitButtons[submitButtons.length - 1])
+    await waitFor(() => expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-1/shares', expect.objectContaining({ method: 'POST', json: { durationHours: 72, reason: undefined } })))
   })
 
   it('disables share creation when artifact has no verified available replica', async () => {
@@ -384,7 +373,7 @@ describe('BackupShare frontend', () => {
     renderSharesPage()
 
     await waitFor(() => {
-      expect(screen.getByText('Henüz paylaşım yapılmamış.')).toBeInTheDocument()
+      expect(screen.getByText("Henüz paylaşım yok. Bir yedeğin ayrıntısından Platform Yöneticisi'ne süreli indirme izni verebilirsiniz.")).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
   })
@@ -539,21 +528,55 @@ describe('BackupShare frontend', () => {
       expect(screen.getByText('Paylaşım süresini uzat')).toBeInTheDocument()
     })
 
-    const input = screen.getByDisplayValue('24')
-    fireEvent.change(input, { target: { value: '12' } })
-
-    const form = input.closest('form')!
-    fireEvent.submit(form)
+    const select = screen.getByRole('combobox', { name: 'Ek süre' })
+    // testShare used 24 of its 72 hours: 1 and 24 fit, 3 gün does not
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual(['1 saat', '24 saat'])
+    fireEvent.change(select, { target: { value: '24' } })
+    fireEvent.submit(select.closest('form')!)
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith(
         'tenants/tenant-a/backup-shares/share-1/extend',
         expect.objectContaining({
           method: 'POST',
-          json: { additionalHours: 12 },
+          json: { additionalHours: 24 },
         })
       )
     })
+  })
+
+  it.each([
+    ['72 hours used', '2026-11-14T12:00:00Z', 0],
+    ['71 hours used', '2026-11-14T11:00:00Z', 1],
+    ['48 hours used', '2026-11-13T12:00:00Z', 2],
+    ['24 hours used', '2026-11-12T12:00:00Z', 2],
+    ['1 hour used', '2026-11-11T13:00:00Z', 2],
+  ])('offers only extensions that stay within 72 hours (%s)', async (_name, expiresAtUtc, optionCount) => {
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [{ ...testShare, expiresAtUtc }]))
+    renderSharesPage()
+    await screen.findByText('Audit inspection')
+    if (optionCount === 0) {
+      expect(screen.queryByRole('button', { name: 'Süreyi uzat' })).not.toBeInTheDocument()
+      return
+    }
+    fireEvent.click(await screen.findByRole('button', { name: 'Süreyi uzat' }))
+    expect(within(await screen.findByRole('combobox', { name: 'Ek süre' })).getAllByRole('option')).toHaveLength(optionCount)
+  })
+
+  it('explains the tab in plain Turkish and keeps download attempts in a closed section', async () => {
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]))
+    renderSharesPage()
+    expect(await screen.findByText("Platform Yöneticisi'nin bir yedeği süreli indirmesine verdiğiniz izinler. Genellikle destek isterken gerekir.")).toBeInTheDocument()
+    expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
+  })
+
+  it('hides extend and revoke from a viewer', async () => {
+    permissions.canAdmin = false
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]))
+    renderSharesPage()
+    await screen.findByText('Audit inspection')
+    expect(screen.queryByRole('button', { name: 'Süreyi uzat' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'İptal et' })).not.toBeInTheDocument()
   })
 
   it('revokes active share from Paylaşımlarım', async () => {
