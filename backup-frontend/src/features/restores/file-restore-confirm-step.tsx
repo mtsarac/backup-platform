@@ -7,28 +7,30 @@ import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { ApiError } from '@/lib/api/client'
 import { describeStartFailure } from './presentation'
-import type { RestoreTargetAgent } from './types'
+import { PrecheckResults } from './precheck-results'
+import type { RestoreTargetAgent, RestoreView } from './types'
 
 interface FileRestoreConfirmStepProps {
   agent: RestoreTargetAgent | undefined
   agentId: string
   original: boolean
-  targetReference: string
-  relativeDirectory: string
+  name: string
   scope: 'all' | 'selected'
   paths: string[]
   overwrite: boolean
+  precheckData: RestoreView | undefined
   precheckPassed: boolean
   precheckStarting: boolean
   restoreStarting: boolean
   executionError: unknown
   executionRetryable: boolean
   eligible: boolean
+  onRecheck: () => void
   onBack: () => void
   onStart: () => void
 }
 
-export function FileRestoreConfirmStep({ agent, agentId, original, targetReference, relativeDirectory, scope, paths, overwrite, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligible, onBack, onStart }: FileRestoreConfirmStepProps) {
+export function FileRestoreConfirmStep({ agent, agentId, original, name, scope, paths, overwrite, precheckData, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligible, onRecheck, onBack, onStart }: FileRestoreConfirmStepProps) {
   useLanguage()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const retryLabel = executionRetryable ? tx('Tekrar dene') : undefined
@@ -41,15 +43,13 @@ export function FileRestoreConfirmStep({ agent, agentId, original, targetReferen
           <Facts>
             <Fact label={tx("Yedekleme bilgisayarı")}>{agent?.hostName ?? agentId}</Fact>
             <Fact label={tx("Geri yükleme konumu")}>{original ? tx('Özgün konum') : tx('Alternatif konum')}</Fact>
-            <Fact label={tx("Hedef dosya kaynağı referansı")}>{targetReference}</Fact>
-            <Fact label={tx("Hedef göreli klasör")}>{relativeDirectory || '.'}</Fact>
             <Fact label={tx("Geri yükleme kapsamı")}>{scope === 'all' ? tx('Tüm dosya ve klasörler') : paths.join(', ')}</Fact>
             <Fact label={tx("Mevcut dosyalar")}>{overwrite ? tx('Üzerine yazılır') : tx('Üzerine yazılmaz')}</Fact>
             <Fact label={tx("Ön kontrol")}>{precheckPassed ? tx('Geçti') : tx('Başarılı ön kontrol bekleniyor')}</Fact>
           </Facts>
           {overwrite && <Notice tone="warning" title={tx("Mevcut dosyaların üzerine yazılacak")}>
-            <p>{tx("Seçili hedefteki çakışan dosyalar değiştirilecektir. Başlatmadan önce kaynak referansını, göreli klasörü ve kapsamı kontrol edin.")}</p>
-            <p className="mt-1">{tx("Başlatmadan önce hedef dosya kaynağı referansını yazarak onaylamanız istenecek.")}</p>
+            <p>{tx("Hedefteki çakışan dosyalar değiştirilecektir. Başlatmadan önce konumu ve kapsamı kontrol edin.")}</p>
+            <p className="mt-1">{tx("Başlatmadan önce adı yazarak onaylamanız istenecek.")}</p>
           </Notice>}
           <TechnicalDetails items={[
             { label: tx('Yedekleme bilgisayarı kimliği'), value: agentId },
@@ -57,6 +57,9 @@ export function FileRestoreConfirmStep({ agent, agentId, original, targetReferen
           ]} />
         </div>
       </Section>
+      {precheckData && <Section title={tx("Ön kontrol")}>
+        <PrecheckResults data={precheckData} failed={false} passed={precheckPassed} fileArchive onRecheck={onRecheck} recheckDisabled={precheckStarting || restoreStarting} />
+      </Section>}
       {failure && !confirmOpen && (failure instanceof ApiError ? <ErrorNotice error={failure} scope="restore" /> : <ErrorNotice {...failure} />)}
 
       <div className="flex flex-wrap justify-between gap-3">
@@ -72,11 +75,11 @@ export function FileRestoreConfirmStep({ agent, agentId, original, targetReferen
         onClose={() => setConfirmOpen(false)}
         title={tx("Mevcut dosyaların üzerine yazılsın mı?")}
         consequence={{
-          what: tx('{0} hedefindeki çakışan dosyalar yedekteki sürümleriyle değiştirilir.', { "0": targetReference }),
+          what: tx('Hedefteki çakışan dosyalar yedekteki sürümleriyle değiştirilir.'),
           who: tx('Bu dosyaları kullanan herkes ve uygulama etkilenir.'),
           reversible: tx('Hayır. Üzerine yazılan dosyaların eski sürümleri geri getirilemez.'),
         }}
-        name={targetReference}
+        name={name}
         pending={restoreStarting}
         error={failure}
         errorScope="restore"
