@@ -187,7 +187,7 @@ export function DashboardPage() {
   return <>
     <PageHeader title={tx('Ana sayfa')}
       meta={!p.isPending && !p.error && <StatusPill level={badge.level}>{badge.text}</StatusPill>}
-      description={!p.isPending && !empty && tx('{0} veri korunuyor · {1} güncel · {2} dikkat gerekiyor', { '0': counts.total, '1': counts.current, '2': counts.attention })}
+      description={!p.isPending && !empty && [counts.total > 0 || counts.first === 0 ? tx('{0} veri korunuyor · {1} güncel · {2} dikkat gerekiyor', { '0': counts.total, '1': counts.current, '2': counts.attention }) : null, counts.first > 0 ? tx('{0} ilk yedek bekliyor', { '0': counts.first }) : null].filter(Boolean).join(' · ')}
       actions={<>
         <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-runs?status=Succeeded`}>{tx('Geri yükle')}</Link>
         <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" className="size-4" />{tx('Yedekleme işi oluştur')}</Link>

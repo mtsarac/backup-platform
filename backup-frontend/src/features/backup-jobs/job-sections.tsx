@@ -53,6 +53,7 @@ export function JobSections({ job }: { job: BackupJob }) {
   const form = useJobForm({ job, onSaved: () => setEditing(null) })
   const input = summaryInput(form)
   const rows = summaryRows({ ...input, agentLabel: job.agentRevoked ? `${job.agentName ?? tx('Adsız bilgisayar')} · ${tx('Bilgisayar iptal edildi')}` : input.agentLabel, values: initialValues(job) })
+    .map(row => job.agentRevoked && row.step === 'schedule' ? { ...row, value: tx('Zamanlanmadı') } : row)
   const dirty = editing !== null && form.dirty
   function begin(section: EditSection) {
     form.restart(job)

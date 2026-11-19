@@ -245,7 +245,13 @@ describe('iş formu', () => {
   it('yeni iş tek bir birincil local hedefle ve varsayılan bağlantı (null) ile gönderilir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(3)
+    await reach(1)
+    const select = screen.getByLabelText('Depolama bağlantısı')
+    await waitFor(() => expect(select).toBeEnabled())
+    expect(select).toHaveValue('')
+    expect(within(select).getByRole('option', { name: 'Yerel disk · Kullanılabilir', selected: true })).toBeEnabled()
+    expect(within(select).queryByRole('option', { name: 'Yerel disk · Yerel yedekleme bilgisayarı diski · Kullanılabilir' })).not.toBeInTheDocument()
+    next(2)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     const configuration = vi.mocked(saveBackupJob).mock.calls[0][1].configuration
@@ -288,7 +294,7 @@ describe('iş formu', () => {
     const select = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
     expect(within(select).getByRole('option', { name: 'Yerel disk · Kullanılabilir' })).toBeEnabled()
-    expect(within(select).getByRole('option', { name: 'Yerel disk · Yerel yedekleme bilgisayarı diski · Kullanılabilir' })).toBeEnabled()
+    expect(within(select).queryByRole('option', { name: 'Yerel disk · Yerel yedekleme bilgisayarı diski · Kullanılabilir' })).not.toBeInTheDocument()
     for (const name of [/Kilitli.*Platform kilidi/, /Kapalı.*Devre dışı/]) {
       expect(within(select).getByRole('option', { name })).toBeDisabled()
     }
@@ -559,6 +565,7 @@ describe('adım adım sihirbaz', () => {
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
     const configuration = vi.mocked(saveBackupJob).mock.calls[0][1].configuration
     expect(configuration.destinations).toHaveLength(2)
+    expect(configuration.destinations).toEqual(expect.arrayContaining([expect.objectContaining({ storageProvider: 'central', storageConnectionId: 'conn-central', isPrimary: false })]))
     expect(configuration.requiredVerifiedReplicaCount).toBe(2)
   })
   it('the last step summarises the job in plain words before anything is created and holds no technical values', async () => {

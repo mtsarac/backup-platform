@@ -95,6 +95,7 @@ describe('rows', () => {
     ['no success yet, backend Critical', { health: health('job-a', 'backup_missing'), succeeded: false }, 'İlk yedek bekleniyor'],
     ['the first attempt failed', { health: health('job-a', 'backup_missing'), succeeded: false, days: strip([13, 'Failed', 1]) }, 'Dikkat gerekiyor'],
     ['manual', { job: { schedule: null }, health: health('job-a', 'schedule_unavailable') }, 'Elle çalışır'],
+    ['manual whose last run succeeded', { job: { schedule: null, lastRun: { id: 'run-s', status: 'Succeeded', createdAt: '', startedAt: null, completedAt: null, reasonCode: null } }, health: health('job-a', 'schedule_unavailable') }, 'Güncel'],
     ['paused', { job: { enabled: false }, health: health('job-a', 'backup_stale') }, 'Durduruldu'],
     ['running', { job: { lastRun: { id: 'run-r', status: 'Running', createdAt: '', startedAt: null, completedAt: null, reasonCode: null } } }, 'Çalışıyor %35'],
   ])('says one word for the row: %s', async (_name, setup: { health?: BackupJobHealth; connectivity?: Agent['connectivity']; job?: Partial<BackupJob>; succeeded?: boolean; days?: ReturnType<typeof strip> }, word) => {
@@ -122,13 +123,33 @@ describe('rows', () => {
     expect(screen.queryByText(/sağlıklı/i)).not.toBeInTheDocument()
   })
 
-  it('counts every row as protected but neutral rows neither as current nor as attention', async () => {
+  it('counts neutral rows as protected but neither as current nor as attention, and a job without a backup separately', async () => {
     jobs = [makeJob('job-a', 'Muhasebe'), makeJob('job-b', 'Satış'), makeJob('job-c', 'Arşiv', { schedule: null }), makeJob('job-d', 'Yeni'), makeJob('job-e', 'Eski', { enabled: false })]
     healths = [health('job-a', null), health('job-b', 'backup_stale'), health('job-c', 'schedule_unavailable'), health('job-d', 'backup_missing'), health('job-e', 'backup_stale')]
     days = { 'job-a': succeeded, 'job-b': succeeded, 'job-c': succeeded, 'job-d': strip(), 'job-e': succeeded }
     noSuccess.add('job-d')
     mount()
-    expect(await screen.findByText('5 veri korunuyor · 1 güncel · 1 dikkat gerekiyor')).toBeVisible()
+    expect(await screen.findByText('4 veri korunuyor · 1 güncel · 1 dikkat gerekiyor · 1 ilk yedek bekliyor')).toBeVisible()
+  })
+
+  it('does not call a job without a backup protected or up to date', async () => {
+    jobs = [makeJob('job-a', 'Muhasebe'), makeJob('job-d', 'Yeni')]
+    healths = [health('job-a', null), health('job-d', 'backup_missing')]
+    days = { 'job-a': succeeded, 'job-d': strip() }
+    noSuccess.add('job-d')
+    mount()
+    expect(await screen.findByText('1 veri korunuyor · 1 güncel · 0 dikkat gerekiyor · 1 ilk yedek bekliyor')).toBeVisible()
+    const header = screen.getByRole('heading', { level: 1, name: 'Ana sayfa' }).closest('header')!
+    expect(within(header).getByText('İlk yedek bekleniyor')).toBeVisible()
+    expect(screen.queryByText('Hepsi güncel')).not.toBeInTheDocument()
+  })
+
+  it('names only the waiting jobs when none has a backup yet', async () => {
+    healths = [health('job-a', 'backup_missing')]
+    noSuccess.add('job-a')
+    mount()
+    expect(await screen.findByText('1 ilk yedek bekliyor')).toBeVisible()
+    expect(screen.queryByText(/veri korunuyor/)).not.toBeInTheDocument()
   })
 
   it('counts a running row by its status before the run', async () => {
@@ -317,7 +338,7 @@ describe('no jobs', () => {
   it.each([
     ['no computer', [], 0, 0, 'Yedekleme bilgisayarı ekleyin', 0],
     ['a computer', [agent('online')], 0, 0, 'Yedeklenecek veriyi seçin', 1],
-    ['a computer and a past successful backup', [agent('online')], 1, 0, 'Yedeklenecek veriyi seçin', 2],
+    ['a computer and a past successful backup without a live job', [agent('online')], 1, 0, 'Yedeklenecek veriyi seçin', 1],
   ])('continues the real progress with %s', async (_name, agents, backups, restores, current, done) => {
     vi.mocked(getAgents).mockResolvedValue(agents)
     vi.mocked(getBackups).mockResolvedValue(page(backups ? [makeRun({ id: 'old', status: 'Succeeded' })] : [], backups))
@@ -387,6 +408,16 @@ describe('jobs of a revoked computer', () => {
     const card = (await screen.findByRole('heading', { name: 'Sıradaki ve son yedek' })).closest('section')!
     expect(within(card).queryByRole('link', { name: 'Eski iş' })).not.toBeInTheDocument()
     expect(within(card).getByText('Etkin zamanlama yok.')).toBeVisible()
+  })
+
+  it('derives the first steps from computers and jobs that are not revoked', async () => {
+    jobs = [revoked('job-r', 'Eski iş')]
+    healths = [health('job-r', null)]
+    vi.mocked(getAgents).mockResolvedValue([{ ...agent('offline', 'agent-r'), status: 'Revoked' } as Agent])
+    mount()
+    const steps = within((await screen.findByRole('heading', { name: 'Başlangıç adımları' })).closest('section')!).getAllByRole('listitem')
+    expect(steps.find(step => step.getAttribute('aria-current') === 'step')).toHaveTextContent('Yedekleme bilgisayarı ekleyin')
+    expect(steps.filter(step => within(step).queryByText('Tamamlandı'))).toHaveLength(0)
   })
 
   it('says there is nothing protected when only revoked computers remain', async () => {

@@ -66,6 +66,12 @@ it('opens the job with the list beside it and marks it current', async () => {
   expect(screen.getByRole('link', { name: 'Tüm denemeler' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?jobId=job-a')
 })
 
+it('labels the search field visibly and for assistive technology', async () => {
+  mount('/tenants/tenant-a/backup-jobs')
+  const search = await screen.findByRole('searchbox', { name: 'İş, yedekleme bilgisayarı veya veritabanı ara' })
+  expect(search).toHaveAttribute('placeholder', 'İş, yedekleme bilgisayarı veya veritabanı ara')
+})
+
 it('shows no job detail until one is chosen, and the way back on a narrow screen', async () => {
   mount('/tenants/tenant-a/backup-jobs')
   expect(await screen.findByText('Ayrıntıları görmek için bir iş seçin.')).toBeInTheDocument()
@@ -234,12 +240,44 @@ it('marks a job of a revoked computer in the list and the detail, and offers no 
   expect(otherRow).not.toHaveTextContent('Bilgisayar iptal edildi')
 })
 
+it('never counts a job of a revoked computer as active, even while its stored state is still enabled', async () => {
+  const stale = { ...job, id: 'job-r', name: 'Eski iş', agentName: 'Eski bilgisayar', agentRevoked: true, enabled: true } as BackupJob
+  vi.mocked(getBackupJobs).mockResolvedValue([job, stale])
+  mount('/tenants/tenant-a/backup-jobs/job-r?state=enabled')
+  expect(await screen.findByRole('link', { name: /Muhasebe/ })).toBeVisible()
+  expect(screen.queryByRole('link', { name: /Eski iş/ })).not.toBeInTheDocument()
+  fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'disabled' } })
+  expect(await screen.findByRole('link', { name: /Eski iş/ })).toBeVisible()
+  expect(screen.queryByRole('link', { name: /Muhasebe/ })).not.toBeInTheDocument()
+  const detail = screen.getByRole('region', { name: 'İş ayrıntıları' })
+  expect(within(detail).queryByText('Her gün 02:00')).not.toBeInTheDocument()
+  expect(within(detail).getByText('Zamanlanmadı')).toBeVisible()
+})
+
 it('shows no "Zamanlamayı durdur" for a job without a schedule', async () => {
   vi.mocked(getBackupJobs).mockResolvedValue([{ ...job, schedule: null }, other])
   mount()
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Elle çalışır'))
   expect(screen.getByRole('button', { name: 'Şimdi yedekle' })).toBeEnabled()
   expect(screen.queryByRole('button', { name: /Zamanlamayı/ })).not.toBeInTheDocument()
+})
+
+it('shows the success of a manual job whose last run succeeded', async () => {
+  const done = { id: 'run-s', status: 'Succeeded', createdAt: '', startedAt: null, completedAt: null, reasonCode: null }
+  vi.mocked(getBackupJobs).mockResolvedValue([{ ...job, schedule: null, lastRun: done } as BackupJob, other])
+  mount()
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Güncel'))
+})
+
+it('removes the "started" notice once the started run has finished', async () => {
+  const succeededRun = { id: 'run-a', status: 'Succeeded', createdAt: '', startedAt: null, completedAt: null, reasonCode: null }
+  mount()
+  const button = await screen.findByRole('button', { name: 'Şimdi yedekle' })
+  vi.mocked(getBackupJobs).mockResolvedValue([{ ...job, lastRun: succeededRun } as BackupJob, other])
+  fireEvent.click(button, { detail: 1 })
+  await waitFor(() => expect(startJobRun).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(screen.queryByText('Yedekleme denemesi başlatıldı')).not.toBeInTheDocument())
+  expect(vi.mocked(getBackupJobs).mock.calls.length).toBeGreaterThan(1)
 })
 
 it('answers a second start while one runs with a calm notice, not a failure', async () => {

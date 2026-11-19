@@ -66,14 +66,15 @@ export function buildRow({ job, health = noHealth, days, hasSucceeded, lastSucce
 }
 
 export function countRows(rows: readonly ProtectionRow[]) {
-  return { total: rows.length, current: rows.filter(row => row.baseStatus === 'current').length, attention: rows.filter(row => row.baseStatus === 'attention').length }
+  const first = rows.filter(row => !row.hasSucceeded).length
+  return { total: rows.length - first, first, current: rows.filter(row => row.baseStatus === 'current' && row.hasSucceeded).length, attention: rows.filter(row => row.baseStatus === 'attention').length }
 }
 
 export type Badge = 'attention' | 'none' | 'first' | 'current'
 export function headerBadge(rows: readonly ProtectionRow[]): Badge {
   if (rows.some(row => row.baseStatus === 'attention')) return 'attention'
   if (rows.length === 0) return 'none'
-  return rows.every(row => row.baseStatus === 'first') ? 'first' : 'current'
+  return rows.some(row => !row.hasSucceeded) ? 'first' : 'current'
 }
 
 // A failed first attempt ranks with a missed backup: both are "the backup was not taken".

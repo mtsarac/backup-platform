@@ -3298,6 +3298,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Sıradaki": {"tr":"Sıradaki","en":"Next"},
   "Son başarılı yedek": {"tr":"Son başarılı yedek","en":"Latest successful backup"},
   "{0} veri korunuyor · {1} güncel · {2} dikkat gerekiyor": {"tr":"{0} veri korunuyor · {1} güncel · {2} dikkat gerekiyor","en":"{0} protected · {1} up to date · {2} need attention"},
+  "{0} ilk yedek bekliyor": {"tr":"{0} ilk yedek bekliyor","en":"{0} waiting for the first backup"},
   "Son 14 gün · {0}": {"tr":"Son 14 gün · {0}","en":"Last 14 days · {0}"},
   "Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.": {"tr":"Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.","en":"No restore has been started yet. You can restore from a backup's details."},
   "Henüz paylaşım yok. Bir yedeğin ayrıntısından Platform Yöneticisi'ne süreli indirme izni verebilirsiniz.": {"tr":"Henüz paylaşım yok. Bir yedeğin ayrıntısından Platform Yöneticisi'ne süreli indirme izni verebilirsiniz.","en":"No shares yet. From a backup's details you can give the Platform Administrator a time-limited download permission."},
