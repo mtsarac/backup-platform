@@ -186,6 +186,27 @@ describe('restore verification detail', () => {
     expect(screen.queryByRole('link', { name: /Yeniden dene|Bilgileri düzelt/ })).not.toBeInTheDocument()
   })
 
+  it('offers to run the restore test again with the certificate trusted, for that test only, and only for the certificate failure', async () => {
+    const untrusted = { ...base, status: 'Failed' as const, verificationOutcome: 'Failed' as const, failureCode: 'ServerCertificateUntrusted', cleanup: cleanupOf({}) }
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(untrusted)
+    vi.mocked(RestoreApi.startRestoreVerification).mockResolvedValue({ ...base, id: 'ver-2' })
+    renderDetail()
+    const summary = await screen.findByText('Bu sunucunun sertifikasına yine de güven')
+    expect(summary.closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(summary)
+    expect(screen.getByText(/yalnızca bu geri yükleme testi için geçerlidir/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Güven ve yeniden dene' }))
+    await waitFor(() => expect(RestoreApi.startRestoreVerification).toHaveBeenCalledWith('tenant-a', 'artifact-1',
+      { agentId: 'agent-1', target: { ...base.target, trustServerCertificate: true }, options: { verifyChecksum: true, verifyBackup: true } }, expect.any(String)))
+  })
+
+  it.each(['DatabaseUnavailable', 'AuthenticationFailed', 'VerificationFailed'])('does not offer the certificate step for the general %s failure', async (failureCode) => {
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Failed', verificationOutcome: 'Failed', failureCode, cleanup: cleanupOf({}) })
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: /Geri yükleme testi/ })
+    expect(screen.queryByText('Bu sunucunun sertifikasına yine de güven')).not.toBeInTheDocument()
+  })
+
   it('renders NotRun for a cancelled verification', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Cancelled', verificationOutcome: 'NotRun', cleanup: cleanupOf({}) })
     renderDetail()

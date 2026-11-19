@@ -246,12 +246,21 @@ export interface ErrorDescription {
   actionKind?: FailureAction
   /** Raw code, status and field: for the collapsed technical details only. */
   technical: TechnicalItem[]
+  /** The server's certificate could not be verified: the one failure that may offer the explicit "trust anyway" step. */
+  certificateUntrusted?: boolean
 }
 
 const subscriptionUnchanged = () => tx("Abonelik ve depolama limiti değişmedi; yedekleriniz etkilenmedi.")
 
 // Codes whose consequence for the data is specific; every other failure gets the honest generic line for its kind.
+const certificateGuidance = {
+  dataImpact: () => tx("Sunucuya güvenli bağlantı kurulamadığı için işlem başlamadı; mevcut yedekleriniz etkilenmedi."),
+  action: () => tx("Sunucu sizin sunucunuzsa sertifikasına güvenebilirsiniz; değilse sistem yöneticinize danışın."),
+}
+const isCertificateCode = (code: string | null | undefined) => code === 'ServerCertificateUntrusted' || code === 'server_certificate_untrusted'
 const guidance: Record<string, { dataImpact: () => string; action: () => string }> = {
+  ServerCertificateUntrusted: certificateGuidance,
+  server_certificate_untrusted: certificateGuidance,
   quota_exceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
   quota_size_unknown: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Yöneticinize danışın.") },
   QuotaExceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
@@ -282,11 +291,16 @@ function technicalItems(error: unknown): TechnicalItem[] {
 
 /** A failure reported as a bare code (a run, a replica, a restore), not as a failed request. */
 export function describeFailure(code: string | null | undefined, scope?: ErrorScope): ErrorDescription {
+  const description = describeCode(code, scope)
+  return isCertificateCode(code) ? { ...description, certificateUntrusted: true } : description
+}
+
+function describeCode(code: string | null | undefined, scope?: ErrorScope): ErrorDescription {
   const what = failureMessage(code, scope)
   const technical = code && isPlainCode(code) ? [{ label: tx("Hata kodu"), value: code }] : []
   const key = code ?? ''
   if (key && !knownMessage(key, scope)) return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Biraz sonra yeniden deneyin."), actionKind: 'retry', technical }
-  const actionKind = key === 'ServerCertificateUntrusted' || key === 'server_certificate_untrusted' ? undefined : classOfCode.get(key) ?? (scope === 'restore' ? 'retry' : undefined)
+  const actionKind = isCertificateCode(key) ? undefined : classOfCode.get(key) ?? (scope === 'restore' ? 'retry' : undefined)
   if (Object.hasOwn(guidance, key)) return { what, dataImpact: guidance[key].dataImpact(), action: guidance[key].action(), actionKind, technical }
   if (scope === 'restore') return { what, dataImpact: tx("Yedeğiniz değişmedi; hedef veritabanının durumunu kontrol edin."), action: actionKind && actionKind !== 'retry' ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip geri yüklemeyi yeniden deneyin."), actionKind, technical }
   return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: actionKind ? actionSentence(actionKind) : tx("Ayrıntıları kontrol edip yeniden deneyin."), actionKind, technical }

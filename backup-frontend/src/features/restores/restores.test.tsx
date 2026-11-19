@@ -680,6 +680,47 @@ describe('RestoreWizardPage', () => {
     expect(RestoreApi.startRestore).not.toHaveBeenCalled()
   })
 
+  it('offers the closed "trust anyway" step only for an untrusted certificate, and trusts it for this restore only', async () => {
+    const untrusted: RestoreView = { ...sampleRestore, id: 'untrusted-precheck', purpose: 'Precheck', status: 'Failed', failureCode: 'ServerCertificateUntrusted' }
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValueOnce(untrusted).mockResolvedValue(passedPrecheck('precheck-1'))
+    vi.mocked(RestoreApi.getRestore).mockImplementation((_tenantId, id) => Promise.resolve(id === 'precheck-1' ? passedPrecheck(id) : untrusted))
+    const view = renderWithClient(wizardRoutes, wizardUrl)
+    await next()
+    fireEvent.click(screen.getByRole('radio', { name: 'Başka sunucu' }))
+    fireEvent.change(screen.getByLabelText('Ana Makine / Veritabanı Sunucusu'), { target: { value: 'other-sql' } })
+    fireEvent.click(screen.getByRole('button', { name: /Devam et/i }))
+    const summary = await screen.findByText('Bu sunucunun sertifikasına yine de güven')
+    expect(screen.getByText('Bu sunucunun kimliği doğrulanamaz; yalnızca kendi sunucunuz olduğundan eminseniz açın.')).toBeInTheDocument()
+    expect(summary.closest('details')).not.toHaveAttribute('open')
+    expect(vi.mocked(RestoreApi.startRestorePrecheck).mock.calls[0][2].target.trustServerCertificate).toBe(false)
+    fireEvent.click(summary)
+    fireEvent.click(screen.getByRole('button', { name: 'Güven ve yeniden dene' }))
+    await startButton()
+    const trusted = { host: 'other-sql', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: true }
+    expect(vi.mocked(RestoreApi.startRestorePrecheck).mock.calls[1][2].target).toEqual(trusted)
+    fireEvent.click(screen.getByRole('button', { name: /Geri yüklemeyi başlat/i }))
+    await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalledWith('tenant-a', 'artifact-1', expect.objectContaining({ target: trusted, precheckId: 'precheck-1' }), expect.any(String)))
+    view.unmount()
+    renderWithClient(wizardRoutes, wizardUrl)
+    await next()
+    fireEvent.click(screen.getByRole('radio', { name: 'Başka sunucu' }))
+    fireEvent.change(screen.getByLabelText('Ana Makine / Veritabanı Sunucusu'), { target: { value: 'other-sql' } })
+    fireEvent.click(screen.getByRole('button', { name: /Devam et/i }))
+    await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(3))
+    expect(vi.mocked(RestoreApi.startRestorePrecheck).mock.calls[2][2].target.trustServerCertificate).toBe(false)
+  })
+
+  it.each(['StorageUnavailable', 'AuthenticationFailed', 'DatabaseUnavailable', 'PreCheckFailed'])('does not offer to trust a certificate for the general %s failure', async (failureCode) => {
+    const failed: RestoreView = { ...sampleRestore, id: 'failed-precheck', purpose: 'Precheck', status: 'Failed', failureCode }
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(failed)
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
+    renderWithClient(wizardRoutes, wizardUrl)
+    fireEvent.click(await next())
+    expect(await screen.findByText(/Ön kontrol başarısız oldu/)).toBeInTheDocument()
+    expect(screen.queryByText('Bu sunucunun sertifikasına yine de güven')).not.toBeInTheDocument()
+    expect(screen.queryByText(/yalnızca kendi sunucunuz olduğundan eminseniz/)).not.toBeInTheDocument()
+  })
+
   it('shows the check running on the first screen until it ends', async () => {
     const running = { ...sampleRestore, id: 'running-precheck', purpose: 'Precheck' as const, status: 'Running' as const }
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(running)

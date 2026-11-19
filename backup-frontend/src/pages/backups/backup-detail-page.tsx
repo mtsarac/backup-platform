@@ -17,6 +17,7 @@ import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-
 import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
+import { TrustJobCertificate } from '@/features/backups/trust-job-certificate'
 import { canCancelRun, canRetryRun, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
 import { SizeAnomalyComparison } from '@/features/backups/size-anomaly'
@@ -121,6 +122,17 @@ function BackupDetail({ id }: { id: string }) {
 
   const failureCode = run && (run.reasonCode ?? run.retry.lastFailureCode ?? (run.status === 'AgentLost' ? 'AgentLost' : null))
   const failure = describeFailure(failureCode)
+  const failureNotice = (run: BackupRun) => ({
+    title: tx("Yedekleme denemesi başarısız oldu"), ...failure,
+    action: canOperate ? failure.action : tx("Yöneticinize danışın."),
+    onAction: canOperate && failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
+      if (failure.actionKind === 'checkComputer') navigate(`/tenants/${tenantId}/agents/${run.agentId}`)
+      else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}`)
+      else if (failure.actionKind === 'manageStorage') navigate(`/tenants/${tenantId}/storage`)
+      else if (failure.actionKind === 'backupNow' && canRetryRun(run.status)) void perform('retry')
+    } : undefined,
+    onRetry: canOperate && canRetryRun(run.status) ? () => void perform('retry') : undefined,
+  })
 
   return (
     <div className="space-y-6">
@@ -158,15 +170,9 @@ function BackupDetail({ id }: { id: string }) {
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
               <SizeAnomalyComparison run={run} />
-              {(run.status === 'Failed' || run.status === 'AgentLost') && <ErrorNotice title={tx("Yedekleme denemesi başarısız oldu")} {...failure}
-                action={canOperate ? failure.action : tx("Yöneticinize danışın.")}
-                onAction={canOperate && failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
-                  if (failure.actionKind === 'checkComputer') navigate(`/tenants/${tenantId}/agents/${run.agentId}`)
-                  else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}`)
-                  else if (failure.actionKind === 'manageStorage') navigate(`/tenants/${tenantId}/storage`)
-                  else if (failure.actionKind === 'backupNow' && canRetryRun(run.status)) void perform('retry')
-                } : undefined}
-                onRetry={canOperate && canRetryRun(run.status) ? () => void perform('retry') : undefined} />}
+              {(run.status === 'Failed' || run.status === 'AgentLost') && (canOperate && failure.certificateUntrusted
+                ? <TrustJobCertificate jobId={run.jobId}>{trust => <ErrorNotice {...failureNotice(run)} trust={trust} />}</TrustJobCertificate>
+                : <ErrorNotice {...failureNotice(run)} />)}
               {run.status === 'RetryPending' && <Notice tone="warning">{tx("Otomatik yeniden deneme bekleniyor. Sonraki deneme:")}{' '}{formatDateTime(run.retry.nextAttemptAt)}. {describeFailure(run.retry.lastFailureCode).what}</Notice>}
               {run.status === 'CancellationRequested' && <Notice tone="warning">{tx("İptal istendi; yedekleme denemesi henüz iptal edilmiş değildir. Yedekleme bilgisayarı sonucu bildirdiğinde durum güncellenir.")}</Notice>}
               {run.status === 'Paused' && <Notice tone="warning">{run.pauseReason === 'PausedByNetworkError' ? tx('Ağ kesintisi nedeniyle aktarım duraklatıldı. Bağlantıyı kontrol edip Devam Et ile sürdürün.') : tx('Aktarım duraklatıldı. Hazırlanmış yedek korunur; Devam Et ile aynı baytlardan sürdürülür.')}</Notice>}
