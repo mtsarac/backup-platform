@@ -8,7 +8,7 @@ import { getBandwidthProfiles, getUploadBandwidth, saveBandwidthProfile, setUplo
 import { ApiError } from '@/lib/api/client'
 import { UploadBandwidthPage } from './upload-bandwidth-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme A.Ş.' }, canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme A.Ş.' } }))
 const jobs = vi.hoisted(() => vi.fn())
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/upload-bandwidth/api')
@@ -32,7 +32,6 @@ const rawRate = /\d B\/sn/
 
 beforeEach(() => {
   vi.clearAllMocks()
-  access.canAdmin = true
   jobs.mockResolvedValue([{ id: 'job-a', name: 'Günlük ERP', agentName: 'SQL-01' }])
   vi.mocked(getUploadBandwidth).mockResolvedValue(limits)
   vi.mocked(getBandwidthProfiles).mockResolvedValue([])
@@ -216,21 +215,9 @@ describe('upload bandwidth page', () => {
     expect(technical.getAllByText('1.250.000 B/sn')).toHaveLength(5)
   })
 
-  it('guides to the one primary action when no profile exists, or to the administrator without permission', async () => {
+  it('guides to the one primary action when no profile exists', async () => {
     mount()
     await openTab(/^Profiller$/)
     expect(await screen.findByRole('button', { name: 'Yeni Profil' })).toBeInTheDocument()
-    expect(screen.queryByText('Yöneticinize danışın')).not.toBeInTheDocument()
-  })
-
-  it('is read-only without administrator rights and says whom to ask', async () => {
-    access.canAdmin = false
-    mount()
-    expect(await screen.findByTestId('tenant-limit')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /düzenle/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/Yöneticinize danışın/)).toBeInTheDocument()
-    await openTab(/^Profiller$/)
-    expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Yeni Profil' })).not.toBeInTheDocument()
   })
 })

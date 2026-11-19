@@ -12,7 +12,7 @@ import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { ApiError } from '@/lib/api/client'
 import { NotificationsPage } from './notifications-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Acme' }, canAdmin: true, canOperate: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Acme' } }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { userId: 'owner-a' } }) }))
 vi.mock('@/features/notifications/api')
@@ -49,23 +49,12 @@ const openChannelDetails = async (user: UserEvent, name: string) => {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  access.canAdmin = true
   vi.mocked(api.getPolicy).mockResolvedValue(policy())
   vi.mocked(api.getChannels).mockResolvedValue({ items: [channel(), channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', recipientVerified: null, targetDisplay: 'https://hooks.example.com/…', authentication: 'bearer', hasSecret: true })] })
   vi.mocked(api.getDeliveries).mockResolvedValue({ items: [delivery()], totalCount: 1, page: 1, pageSize: 25 })
 })
 
 describe('role gating', () => {
-  it('shows a notice and makes no request for non-admins', () => {
-    access.canAdmin = false
-    mount()
-    expect(screen.getByText('Bildirimleri yönetme yetkiniz yok')).toBeInTheDocument()
-    expect(screen.queryByText('Bildirim politikası')).not.toBeInTheDocument()
-    expect(api.getPolicy).not.toHaveBeenCalled()
-    expect(api.getChannels).not.toHaveBeenCalled()
-    expect(api.getDeliveries).not.toHaveBeenCalled()
-  })
-
   it('shows all three sections to admins, one tab at a time', async () => {
     const user = userEvent.setup()
     mount()

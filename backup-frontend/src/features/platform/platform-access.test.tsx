@@ -13,7 +13,7 @@ import { paged, platformAdmin, renderPlatform, tenantOwner } from './test-utils'
 
 vi.mock('./api')
 vi.mock('./storage/api')
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Acme' } }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Acme' } }) }))
 
 const tree = <Route path="/platform" element={<PlatformAdminRoute />}>
   <Route element={<ThemeProvider><PlatformShell /></ThemeProvider>}><Route index element={<PlatformDashboardPage />} /></Route>
@@ -32,7 +32,7 @@ describe('Platform Administration entry points', () => {
     for (const link of screen.getAllByText(/Platform Administration|Platform Yönetimi/)) expect(link.closest('a')).toHaveAttribute('href', '/platform')
   })
 
-  it('tenant sidebar hides it from a user who is only a tenant Owner', () => {
+  it('tenant sidebar hides it from a user who is only a tenant user', () => {
     renderPlatform(<Sidebar />, { user: tenantOwner })
     expect(screen.queryByText(/Platform Administration|Platform Yönetimi/)).not.toBeInTheDocument()
     expect(screen.getAllByText(/Yedeklemeler/).length).toBeGreaterThan(0)

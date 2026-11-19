@@ -7,7 +7,7 @@ import { SidebarFrame, type NavGroup } from './nav'
 import { tx, useLanguage } from '@/lib/i18n'
 
 export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const { user } = useAuth()
   useLanguage()
   const base = `/tenants/${tenantId}`
@@ -17,8 +17,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
     { label: tx("Yedeklemeler"), to: `${base}/backup-jobs`, icon: Database, activeFor: under('backup-jobs', 'backup-runs', 'artifacts', 'restores', 'backup-shares') },
     { label: tx("Bilgisayarlar"), to: `${base}/agents`, icon: Monitor, activeFor: under('enrollment', 'discovery') },
     { label: tx("Depolama"), to: `${base}/storage`, icon: Gauge },
-    // Settings sections other than bandwidth are administrator-only, so a non-administrator lands on bandwidth.
-    { label: tx("Ayarlar"), to: `${base}/settings${canAdmin ? '' : '/bandwidth'}`, icon: SlidersHorizontal, activeFor: under('settings') },
+    { label: tx("Ayarlar"), to: `${base}/settings`, icon: SlidersHorizontal, activeFor: under('settings') },
   ] }]
   const footer = <div className="space-y-1">
     {user?.role === 'PlatformAdmin' && <Link to="/platform" className="flex min-h-control items-center gap-3 rounded-lg px-3 text-body text-text transition-colors hover:bg-border"><ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-text-muted" />{tx("Platform Yönetimi")}</Link>}

@@ -9,9 +9,9 @@ import { TenantContext } from '@/features/tenancy/tenant-context'
 import { EncryptionPage } from './encryption-page'
 
 vi.mock('@/features/artifact-encryption/api')
-function mount(canAdmin = true) {
+function mount() {
   const tenantId = 'tenant-a'
-  return renderPlatform(<TenantContext.Provider value={{ tenantId, tenant: { tenantId, name: 'Acme' }, canAdmin, canOperate: canAdmin, switchTenant: vi.fn() }}><EncryptionPage /></TenantContext.Provider>, { path: '/tenants/tenant-a/encryption' })
+  return renderPlatform(<TenantContext.Provider value={{ tenantId, tenant: { tenantId, name: 'Acme' }, switchTenant: vi.fn() }}><EncryptionPage /></TenantContext.Provider>, { path: '/tenants/tenant-a/encryption' })
 }
 beforeEach(() => {
   vi.resetAllMocks()
@@ -19,12 +19,6 @@ beforeEach(() => {
 })
 
 describe('tenant encryption page', () => {
-  it('makes no request when access is denied', () => {
-    mount(false)
-    expect(screen.getByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
-    expect(api.getTenantEncryption).not.toHaveBeenCalled()
-  })
-
   it('shows protection with copyable collapsed key details', async () => {
     mount()
     expect(screen.getByText('Şifreli yedeklerinizin korumasını inceleyin.')).toBeInTheDocument()

@@ -122,7 +122,7 @@ describe('platform tenant detail', () => {
     await waitFor(() => expect(encryptionApi.getTenantEncryption).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal)))
     expect(encryptionApi.getWrapKeys).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
     expect(await screen.findByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
-    expect(screen.getByText(/yalnızca bu çalışma alanının Owner veya Admin üyeleri/)).toBeInTheDocument()
+    expect(screen.getByText(/yalnızca bu çalışma alanının üyeleri/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Anahtarı kaydet' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Özet' }))

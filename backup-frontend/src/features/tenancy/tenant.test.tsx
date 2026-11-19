@@ -16,10 +16,10 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({ ...await importOriginal
 
 const tenants = [{ tenantId: 'tenant-a', name: 'Tenant A' }, { tenantId: 'tenant-b', name: 'Tenant B' }]
 function TenantProbe() {
-  const { tenantId, switchTenant, canOperate } = useTenant()
+  const { tenantId, switchTenant } = useTenant()
   const navigate = useNavigate()
   const query = useQuery({ queryKey: ['tenant', tenantId, 'backup-runs'], queryFn: () => Promise.resolve(tenantId === 'tenant-a' ? ['Private A'] : ['Public B']) })
-  return <><p>{tenantId}</p><p>{query.data?.join(',') ?? 'Loading tenant data'}</p>{canOperate && <button>Run now</button>}<button onClick={() => { void switchTenant('tenant-b') }}>Switch tenant</button><button onClick={() => navigate('/tenants/tenant-b')}>Direct navigation</button></>
+  return <><p>{tenantId}</p><p>{query.data?.join(',') ?? 'Loading tenant data'}</p><button onClick={() => { void switchTenant('tenant-b') }}>Switch tenant</button><button onClick={() => navigate('/tenants/tenant-b')}>Direct navigation</button></>
 }
 function setup(cache: QueryClient, role: 'PlatformAdmin' | 'UserAdmin' = 'PlatformAdmin', initialPath = '/tenants/tenant-a') {
   return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', role, isPlatformAdmin: role === 'PlatformAdmin' }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}><MemoryRouter initialEntries={[initialPath]}><Routes><Route path="/tenants/:tenantId" element={<TenantProvider><TenantProbe /></TenantProvider>} /></Routes></MemoryRouter></AuthContext.Provider></QueryClientProvider>)

@@ -1,6 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
@@ -10,23 +9,18 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { AgentsTabs } from '@/features/agents/agents-tabs'
-import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { agentQueryKeys, useEnrollmentPolicy, useEnrollmentTokens } from '@/features/agents/hooks'
 import { revokeEnrollmentToken, setEnrollmentPolicy } from '@/features/agents/api'
 import type { EnrollmentToken } from '@/features/agents/types'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
-import { AccessDenied } from '@/components/auth/access-denied'
 import { formatDateTime } from '@/lib/format'
 
 export function AgentRegisterPage() {
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   useLanguage()
-  return canAdmin ? <EnrollmentContent key={tenantId} tenantId={tenantId} /> : <div className="space-y-6">
-    <PageHeader title={tx("Yeni bilgisayar kaydı")} />
-    <AccessDenied title={tx("Yetkiniz yok")} what={tx("Yeni yedekleme bilgisayarı eklemek için çalışma alanı yöneticisi olmalısınız.")} control={<Link className={linkClass} to={`/tenants/${tenantId}/agents`}>{tx("Yedekleme bilgisayarlarına dön")}</Link>} />
-  </div>
+  return <EnrollmentContent key={tenantId} tenantId={tenantId} />
 }
 
 function EnrollmentContent({ tenantId }: { tenantId: string }) {
