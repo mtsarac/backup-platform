@@ -41,7 +41,7 @@ beforeEach(() => {
       authenticated = true
       return new Response(null, { status: 204 })
     }
-    if (path === '/api/auth/logout') { authenticated = false; return new Response(null, { status: 204 }) }
+    if (path === '/api/auth/logout') { authenticated = false; halfSession = false; return new Response(null, { status: 204 }) }
     if (halfSession) return json({}, 403)
     if (!authenticated) return json({}, 401)
     if (path === '/api/me/tenants') return json([{ tenantId: 'tenant-a', name: 'Tenant A' }])
@@ -145,6 +145,7 @@ describe('cookie session UI', () => {
     await waitFor(() => expect(auth?.isLoading).toBe(false))
     expect(auth?.error).toBeNull()
     expect(auth?.isAuthenticated).toBe(false)
+    expect(requests.some(request => request.url.endsWith('/auth/logout'))).toBe(true)
     cache.clear()
   })
   it('restores existing cookie session and expires it on resource401, not403', async () => {
