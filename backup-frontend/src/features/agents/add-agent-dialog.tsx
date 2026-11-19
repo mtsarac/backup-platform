@@ -105,6 +105,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           <Card tone="subtle" className="space-y-2 text-sm text-text-muted">
             <p>{tx('Komut programı kurar, bilgisayarı kaydeder ve bağlar; soru sormaz. Kayıt anahtarını içerir.')}</p>
             <p>{platform === 'Windows' ? tx('Hedef bilgisayarda PowerShell’i yönetici olarak açın.') : tx('Hedef bilgisayarda yönetici (sudo) yetkisi olan bir terminal açın. Kurulum bir sistem hizmeti oluşturur.')}</p>
+            <p>{tx("Bu bilgisayarda zaten bir ajan kuruluysa komut çalışmaz; önce mevcut ajanı kaldırın.")}</p>
             {!distribution && !distributionError && <p>{tx('Kurulum dosyalarının hazır olup olmadığı denetleniyor…')}</p>}
             {distributionError && <ErrorNotice {...distributionError} />}
             {distribution && !packageReady && <ErrorNotice what={tx("Bu işletim sistemi için kurulum paketi yayımlanmamış.")} action={tx("Platform yöneticinizden kurulum paketini yayımlamasını isteyin.")} />}

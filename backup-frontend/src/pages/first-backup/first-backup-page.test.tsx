@@ -285,6 +285,7 @@ describe('first backup flow', () => {
       expect(createEnrollmentToken).toHaveBeenCalledTimes(1)
       expect(commandText()).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File')
       expect(commandText()).toContain("-Token 'secret-key' -AgentName 'Ofis'")
+      expect(screen.getByText('Bu bilgisayarda zaten bir ajan kuruluysa komut çalışmaz; önce mevcut ajanı kaldırın.')).toBeVisible()
       expect(screen.getByRole('button', { name: 'Kurulum komutunu kopyala' })).toBeEnabled()
       expect(screen.getByText('Komutun çalıştırılması bekleniyor')).toBeVisible()
       expect(screen.getByText('Başka yollarla kur').closest('details')).not.toHaveAttribute('open')

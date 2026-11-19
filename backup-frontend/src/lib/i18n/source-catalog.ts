@@ -3208,6 +3208,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Şimdilik yukarıdaki PowerShell komutunu ya da aşağıdaki script ve zip paketini kullanın.": {"tr":"Şimdilik yukarıdaki PowerShell komutunu ya da aşağıdaki script ve zip paketini kullanın.","en":"For now, use the PowerShell command above or the script and zip package below."},
   "Windows zip paketini indir": {"tr":"Windows zip paketini indir","en":"Download Windows zip package"},
   "Linux tar.gz paketini indir": {"tr":"Linux tar.gz paketini indir","en":"Download Linux tar.gz package"},
+  "Bu bilgisayarda zaten bir ajan kuruluysa komut çalışmaz; önce mevcut ajanı kaldırın.": {"tr":"Bu bilgisayarda zaten bir ajan kuruluysa komut çalışmaz; önce mevcut ajanı kaldırın.","en":"If an agent is already installed on this computer the command does not run; remove the existing agent first."},
   "Bu anahtar tek kullanımlıktır ve süresi dolar.": {"tr":"Bu anahtar tek kullanımlıktır ve süresi dolar.","en":"This key can be used once and expires."},
   "Google ile bağlan": {"tr":"Google ile bağlan","en":"Connect with Google"},
   "Bilgiler": {"tr":"Bilgiler","en":"Details"},

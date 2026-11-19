@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { CheckField } from '@/components/ui/check-field'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { linkClass } from '@/components/ui/form-styles'
@@ -147,9 +147,9 @@ export function InstanceDetailPage() {
   // The request is accepted at once; the result is there when the computer's scan is over (the page polls while it runs).
   // It also ends as soon as the access result differs from the one the request started from.
   const result = instance && `${instance.access}|${instance.accessReasonCode}|${instance.databasesCheckedAt}`
-  const requestedFrom = useRef(result)
-  useEffect(() => { if (!verify.isSuccess) requestedFrom.current = result }, [verify.isSuccess, result])
-  const verifying = verify.isPending || (verify.isSuccess && scanning && result === requestedFrom.current)
+  const [requestedFrom, setRequestedFrom] = useState(result)
+  if (!verify.isSuccess && requestedFrom !== result) setRequestedFrom(result)
+  const verifying = verify.isPending || (verify.isSuccess && scanning && result === requestedFrom)
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Bulunan veritabanları'), to: discoveredDatabasesPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
       description={instance && <>{tx("Bilgisayar")}: <Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(instance.agentId)}`}>{computer}</Link></>}

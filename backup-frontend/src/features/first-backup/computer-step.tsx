@@ -80,6 +80,7 @@ export function ComputerStep({ tenantId, onOnline }: { tenantId: string; onOnlin
     {failure && <ErrorNotice {...failure} onRetry={() => void create()} />}
     {ticket && secret && command && <div className="space-y-2">
       <p className="text-sm text-text-muted">{platform === 'Windows' ? tx('Hedef bilgisayarda PowerShell’i yönetici olarak açın.') : tx('Hedef bilgisayarda yönetici (sudo) yetkisi olan bir terminal açın. Kurulum bir sistem hizmeti oluşturur.')}</p>
+      <p className="text-sm text-text-muted">{tx("Bu bilgisayarda zaten bir ajan kuruluysa komut çalışmaz; önce mevcut ajanı kaldırın.")}</p>
       <Field label={tx('Tek kullanımlık kurulum komutu')}>{control => <TextArea {...control} readOnly rows={4} value={command} className="resize-none break-all font-mono text-sm" />}</Field>
       <CopyButton value={command} label={tx('Kurulum komutunu kopyala')} />
       <p className="text-sm text-text-muted">{tx('Bu anahtar tek kullanımlıktır ve süresi dolar.')} {tx('Anahtarı paylaşmayın; günlüklere, ayar dosyalarına veya komut geçmişine kaydetmeyin. Kapatıldıktan sonra tekrar gösterilmez.')} {tx('Son kullanma:')} {formatDateTime(ticket.expiresAt, tx('Henüz bildirilmedi'))}</p>
