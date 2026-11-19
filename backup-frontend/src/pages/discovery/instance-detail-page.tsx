@@ -6,14 +6,16 @@ import { Loader2 } from 'lucide-react'
 import { linkClass } from '@/components/ui/form-styles'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/disclosure'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
 import { useAgents } from '@/features/agents/hooks'
+import { AccessPill } from '@/features/discovery/access-pill'
 import { DatabaseTable } from '@/features/discovery/database-table'
 import { useDiscoveryAgents, useDiscoveryInstance, useSaveCredential, useVerifyInstance } from '@/features/discovery/hooks'
-import { canCreateJob, databaseSelectable, engineLabels, plainReasonText, reasonText, sourceLabels } from '@/features/discovery/status'
+import { canCreateJob, databaseSelectable, engineLabels, plainReasonText, reasonText, sourceLabels, TLS_UNAVAILABLE } from '@/features/discovery/status'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { DatabaseLoginFields } from '@/features/backup-jobs/database-login-fields'
 import { loginErrors } from '@/features/backup-jobs/database-login-validation'
@@ -23,11 +25,11 @@ import { ApiError } from '@/lib/api/client'
 import { describeError, describeFailure, failureMessage } from '@/lib/api/failure-messages'
 import { discoveredDatabasesPath } from '@/lib/routes'
 import { formatDateTime } from '@/lib/format'
-import { StatusPill } from '@/components/data/status-pill'
 
 type CredentialActions = { save: ReturnType<typeof useSaveCredential>; verify: ReturnType<typeof useVerifyInstance> }
 
-function CredentialForm({ instance, save, verify }: { instance: DiscoveryInstanceDetail } & CredentialActions) {
+/** The login form. It owns the typed values, so they survive the section changing from the open card (login needed) to the closed disclosure (login works). */
+function CredentialSection({ instance, save, verify, needsLogin }: { instance: DiscoveryInstanceDetail; needsLogin: boolean } & CredentialActions) {
   useLanguage()
   const { canOperate } = useTenant()
   const isMssql = instance.engine === 'mssql'
@@ -38,23 +40,25 @@ function CredentialForm({ instance, save, verify }: { instance: DiscoveryInstanc
   const usesPassword = !(isMssql && integrated)
   const loginProblem = usesPassword && submitted ? loginErrors(login, hasStored) : undefined
   const [encrypt, setEncrypt] = useState(instance.credential.encrypt)
-  return <Section title={tx("Veritabanı sunucusuna giriş")} description={tx("Veritabanlarını listelemek için bu sunucuda kullanılacak kullanıcı. Parola şifrelenerek saklanır ve bir daha gösterilmez.")}>
-    <form className="space-y-3" noValidate onSubmit={event => {
-      event.preventDefault()
-      setSubmitted(true)
-      if (usesPassword && loginErrors(login, hasStored)) return
-      // The typed login stays in the form until the screen is left, so one wrong character can be corrected and sent again.
-      save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: instance.credential.trustServerCertificate },
-        { onSuccess: () => verify.mutate(instance.id) })
-    }}>
-      {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} disabled={!canOperate} errors={loginProblem} onChange={setLogin} />}
-      {isMssql && <CheckField label={tx("Windows hesabıyla giriş yap")} checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />}
-      <CheckField label={tx("Bağlantıyı şifrele")} checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />
-      {canOperate && <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={save.isPending || verify.isPending}>{(save.isPending || verify.isPending) && <Loader2 aria-hidden="true" className="animate-spin" />}{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet ve doğrula')}</Button>
-      </div>}
-    </form>
-  </Section>
+  const description = tx("Veritabanlarını listelemek için bu sunucuda kullanılacak kullanıcı. Parola şifrelenerek saklanır ve bir daha gösterilmez.")
+  const form = <form className="space-y-3" noValidate onSubmit={event => {
+    event.preventDefault()
+    setSubmitted(true)
+    if (usesPassword && loginErrors(login, hasStored)) return
+    // The typed login stays in the form until the screen is left, so one wrong character can be corrected and sent again.
+    save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: instance.credential.trustServerCertificate },
+      { onSuccess: () => verify.mutate(instance.id) })
+  }}>
+    {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} disabled={!canOperate} errors={loginProblem} onChange={setLogin} />}
+    {isMssql && <CheckField label={tx("Windows hesabıyla giriş yap")} checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />}
+    <CheckField label={tx("Bağlantıyı şifrele")} checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />
+    {canOperate && <div className="flex flex-wrap gap-2">
+      <Button type="submit" disabled={save.isPending || verify.isPending}>{(save.isPending || verify.isPending) && <Loader2 aria-hidden="true" className="animate-spin" />}{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet ve doğrula')}</Button>
+    </div>}
+  </form>
+  return needsLogin
+    ? <Section title={tx("Veritabanı sunucusuna giriş")} description={description}>{form}</Section>
+    : <Disclosure title={tx("Giriş bilgilerini değiştir")}><div className="space-y-3"><p className="text-text-muted">{description}</p>{form}</div></Disclosure>
 }
 
 /** The bound login stays as it is; the trust is saved on the server's binding, so it holds for every later scan, then the scan runs again. */
@@ -75,6 +79,8 @@ function AccessNotice({ instance, save, verify }: { instance: DiscoveryInstanceD
   useLanguage()
   const { canOperate } = useTenant()
   if (instance.accessReasonCode && describeFailure(instance.accessReasonCode).certificateUntrusted) return <CertificateNotice instance={instance} save={save} verify={verify} />
+  // Not a login problem: the hint to re-check the login would send the user the wrong way, and no button turns the encryption off for them.
+  if (instance.accessReasonCode === TLS_UNAVAILABLE) return <ErrorNotice {...describeFailure(instance.accessReasonCode)} title={tx("Şifreli bağlantı kurulamadı")} />
   if (instance.access === 'CredentialsRequired') return <Notice tone="warning">{tx("Veritabanlarını listelemek için giriş bilgilerini girin.")}</Notice>
   const reason = plainReasonText(instance.accessReasonCode)
   return <Notice tone="warning">
@@ -84,14 +90,15 @@ function AccessNotice({ instance, save, verify }: { instance: DiscoveryInstanceD
 }
 
 /** What saving or verifying the login produced; it is shown with the access notice so every warning and error of this page sits in one place. */
-function CredentialFeedback({ save, verify }: CredentialActions) {
+function CredentialFeedback({ error }: { error: unknown }) {
   useLanguage()
-  const error = save.error ?? verify.error
   const detail = error instanceof ApiError && Object.values(error.fields).length > 0 ? { what: failureMessage(Object.values(error.fields)[0]) } : {}
-  return <>
-    {error && <ErrorNotice {...describeError(error)} {...detail} />}
-    {verify.isSuccess && !error && <Notice tone="info">{tx("Doğrulama istendi; sonuç bilgisayarın bir sonraki bağlantısında gelir.")}</Notice>}
-  </>
+  return <ErrorNotice {...describeError(error)} {...detail} />
+}
+
+function Verifying() {
+  useLanguage()
+  return <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-text"><Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" />{tx("Doğrulanıyor…")}<span className="text-text-muted">{tx("En fazla 30 saniye sürebilir.")}</span></p>
 }
 
 function Databases({ instance }: { instance: DiscoveryInstanceDetail }) {
@@ -137,25 +144,32 @@ export function InstanceDetailPage() {
   const { scanning } = useDiscoveryAgents()
   const instance = query.data
   const computer = instance && (agents.data?.find(item => item.agentId === instance.agentId)?.hostName || tx('Adsız bilgisayar'))
-  const needsLogin = instance && instance.access !== 'Authenticated'
+  const needsLogin = instance !== undefined && instance.access !== 'Authenticated'
+  const feedbackError = save.error ?? verify.error
+  const noAddress = instance !== undefined && instance.access === 'Authenticated' && !canCreateJob(instance) && instance.presence === 'Present'
+  const warned = instance !== undefined && (instance.presence === 'Missing' || needsLogin || noAddress || Boolean(feedbackError))
+  // The request is accepted at once; the result is there when the computer's scan is over (the page polls while it runs).
+  const verifying = verify.isPending || (verify.isSuccess && scanning)
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Bulunan veritabanları'), to: discoveredDatabasesPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
       description={instance && <>{tx("Bilgisayar")}: <Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(instance.agentId)}`}>{computer}</Link></>}
       meta={<>
-        {instance && <StatusPill domain="access" status={instance.access} />}
-        {scanning && <span role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Tarama sürüyor")}</span>}
+        {instance && <AccessPill status={instance.access} reasonCode={instance.accessReasonCode} />}
+        {scanning && !verifying && <span role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Tarama sürüyor")}</span>}
       </>} />
     <QueryState isPending={query.isPending} error={query.error}>
       {instance && <>
-        <section aria-label={tx("Uyarılar")} className="space-y-3 empty:hidden">
+        {warned && <section aria-labelledby="instance-warnings" className="space-y-3">
+          <h2 id="instance-warnings" className="text-base font-semibold text-text-heading">{tx("Uyarılar")}</h2>
           {instance.presence === 'Missing' && <Notice tone="warning" title={tx("Sunucu bulunamadı")}>{tx("Son aramalarda bu veritabanı sunucusu bulunamadı; kaydı silinmedi.")}</Notice>}
           {needsLogin && <AccessNotice instance={instance} save={save} verify={verify} />}
-          {instance.access === 'Authenticated' && !canCreateJob(instance) && instance.presence === 'Present' && <Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice>}
-          <CredentialFeedback save={save} verify={verify} />
-        </section>
-        {needsLogin && <CredentialForm key={instance.id} instance={instance} save={save} verify={verify} />}
+          {noAddress && <Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice>}
+          {feedbackError && <CredentialFeedback error={feedbackError} />}
+        </section>}
+        {verifying && <Verifying />}
+        <CredentialSection key={instance.id} instance={instance} save={save} verify={verify} needsLogin={needsLogin} />
         <Databases key={`${instance.id}:db`} instance={instance} />
-        <TechnicalDetails items={technicalItems(instance)}>{!needsLogin && <CredentialForm key={instance.id} instance={instance} save={save} verify={verify} />}</TechnicalDetails>
+        <TechnicalDetails items={technicalItems(instance)} />
       </>}
     </QueryState>
   </div>

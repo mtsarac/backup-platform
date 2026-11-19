@@ -1,10 +1,15 @@
 import { tx } from '@/lib/i18n'
 import type { AgentCapability } from '@/features/agents/types'
+import { ApiError } from '@/lib/api/client'
 import type { DiscoveryAgentStatus, DiscoveryDatabase, DiscoveryInstanceSummary } from './types'
 
 export const DISCOVERY_CAPABILITY = 'discovery.database-inventory'
 export const SCAN_POLL_MS = 3000
 export const sourceLabels: Record<string, string> = { get Service() { return tx("Servis") }, get Listener() { return tx("Dinleyici (port)") }, Docker: 'Docker' }
+/** Reason code: "encrypt" is on but the PostgreSQL server offers no (verifiable) TLS. */
+export const TLS_UNAVAILABLE = 'server_tls_unavailable'
+/** The 429 of a second rescan right after the first: nothing is wrong, the scan is already queued. */
+export const isRescanThrottled = (error: unknown) => error instanceof ApiError && (error.reason ?? error.code) === 'rescan_too_soon'
 export const engineLabels: Record<string, string> = { mssql: 'MSSQL', postgres: 'PostgreSQL' }
 
 // Reason codes are agent-produced fixed codes; unknown ones are shown as the bare code, never as free text.
