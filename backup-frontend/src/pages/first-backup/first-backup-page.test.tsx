@@ -6,6 +6,9 @@ import { createMemoryRouter, createRoutesFromElements, Route, RouterProvider } f
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getAgentDistribution, getAgents } from '@/features/agents/api'
 import { saveBackupJob, startJobRun } from '@/features/backup-jobs/api'
+import { getBackup } from '@/features/backups/api'
+import { makeRun } from '@/features/backups/test-data'
+import { getRestore, getRestores, getRestoreTargets, startRestoreVerification } from '@/features/restores/api'
 import { getDiscoveryAgents, getDiscoveryInstance, getDiscoveryInstances, rescanDiscoveryAgent } from '@/features/discovery/api'
 import { makeDatabase, makeDetail, makeInstance, makeStatus, supportedAgent } from '@/features/discovery/test-fixtures'
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
@@ -17,6 +20,8 @@ const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAd
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api')
 vi.mock('@/features/backup-jobs/api')
+vi.mock('@/features/backups/api')
+vi.mock('@/features/restores/api')
 vi.mock('@/features/discovery/api')
 vi.mock('@/features/storage-connections/api')
 
@@ -47,8 +52,12 @@ beforeEach(() => {
   vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance()] })
   vi.mocked(getDiscoveryInstance).mockResolvedValue(detail)
   vi.mocked(saveBackupJob).mockImplementation(async (_tenant, input) => ({ id: `job-${input.configuration.database}` }) as never)
-  vi.mocked(startJobRun).mockImplementation(async id => ({ id: `run-${id}` }))
+  vi.mocked(startJobRun).mockImplementation(async (_tenant, id) => ({ id: `run-${id}` }))
+  vi.mocked(getBackup).mockImplementation(async (_tenant, id) => makeRun({ id }))
+  vi.mocked(getRestores).mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 })
 })
+const artifact = { id: 'artifact-1', jobId: 'job-Muhasebe', runId: 'run-job-Muhasebe', backupType: 'Full', state: 'Available', sizeBytes: 2_000_000, replicas: [{ id: 'r1', verificationState: 'Verified', usable: true }] }
+const succeeded = (id: string) => makeRun({ id, status: 'Succeeded', completedAt: '2026-10-06T10:05:00Z', attempts: [{ ...makeRun().attempts[0], status: 'Succeeded', progressStage: 'Completed', progressPercent: 100, artifacts: [artifact as never] }] })
 
 describe('first backup flow', () => {
   it('starts at "Ne yedeklensin" when a computer exists, scans on its own and lists the found data ticked with generated names', async () => {
@@ -98,7 +107,7 @@ describe('first backup flow', () => {
     mount()
     await toSummary(user)
     await user.click(screen.getByRole('button', { name: 'Yedeklemeyi oluştur ve ilk yedeği başlat' }))
-    expect(await screen.findByText('Ana sayfa içeriği')).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'İlk yedek' })).toBeVisible()
     const inputs = vi.mocked(saveBackupJob).mock.calls.map(call => call[1])
     expect(inputs.map(input => input.name)).toEqual(['Muhasebe veritabanı yedeği', 'CRM veritabanı yedeği'])
     expect(inputs[0]).toMatchObject({
@@ -121,7 +130,7 @@ describe('first backup flow', () => {
     await user.click(screen.getByRole('button', { name: /Saklama: Değiştir/ }))
     await user.selectOptions(screen.getByLabelText('Saklama süresi'), '7 gün')
     await user.click(screen.getByRole('button', { name: 'Sadece oluştur' }))
-    expect(await screen.findByText('Ana sayfa içeriği')).toBeVisible()
+    expect(await screen.findByText(/Yedekleme elle çalıştırılır/)).toBeVisible()
     expect(saveBackupJob).toHaveBeenCalledTimes(2)
     expect(vi.mocked(saveBackupJob).mock.calls[0][1]).toMatchObject({ schedule: null, retention: { keepForSeconds: 7 * 86400 } })
     expect(startJobRun).not.toHaveBeenCalled()
@@ -136,7 +145,7 @@ describe('first backup flow', () => {
     expect(await screen.findByRole('alert')).toBeVisible()
     expect(screen.queryByText('Ana sayfa içeriği')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Başarısızları yeniden dene' }))
-    expect(await screen.findByText('Ana sayfa içeriği')).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'İlk yedek' })).toBeVisible()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(3))
     expect(startJobRun).toHaveBeenCalledTimes(2)
   })
@@ -147,5 +156,80 @@ describe('first backup flow', () => {
     mount()
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Yedekleme bilgisayarı ekle')).toBeVisible()
+  })
+
+  describe('first backup screen', () => {
+    async function start(user: ReturnType<typeof userEvent.setup>) {
+      await toSummary(user)
+      await user.click(screen.getByRole('button', { name: 'Yedeklemeyi oluştur ve ilk yedeği başlat' }))
+    }
+
+    it('shows each item\'s stage and progress to assistive tech, and cannot go back to earlier steps', async () => {
+      vi.mocked(getBackup).mockImplementation(async (_tenant, id) => id === 'run-job-CRM'
+        ? makeRun({ id, attempts: [{ ...makeRun().attempts[0], progressStage: 'Verifying', progressPercent: 90 }] })
+        : makeRun({ id }))
+      const user = userEvent.setup()
+      mount()
+      await start(user)
+      const bar = await screen.findByRole('progressbar', { name: 'Muhasebe veritabanı yedeği: ilerleme' })
+      expect(bar).toHaveAttribute('aria-valuenow', '35')
+      expect(bar).toHaveAttribute('aria-valuetext', 'Yedek alınıyor, %35')
+      expect(screen.getByRole('progressbar', { name: 'CRM veritabanı yedeği: ilerleme' })).toHaveAttribute('aria-valuetext', 'Doğrulanıyor, %90')
+      expect(screen.getByText('Muhasebe veritabanı yedeği: Yedek alınıyor', { selector: '[role=status]' })).toBeInTheDocument()
+      expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('İlk yedek')
+      expect(screen.queryByRole('button', { name: 'Geri' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Yedeklemeyi oluştur ve ilk yedeği başlat' })).not.toBeInTheDocument()
+    })
+
+    it('"Arka planda devam etsin" returns to the home page', async () => {
+      const user = userEvent.setup()
+      mount()
+      await start(user)
+      await user.click(await screen.findByRole('link', { name: 'Arka planda devam etsin' }))
+      expect(await screen.findByText('Ana sayfa içeriği')).toBeVisible()
+    })
+
+    it('"Sadece oluştur" says the first backup waits for its time and offers "Şimdi başlat"', async () => {
+      const user = userEvent.setup()
+      mount()
+      await toSummary(user)
+      await user.click(screen.getByRole('button', { name: 'Sadece oluştur' }))
+      expect(await screen.findByText('İlk yedek zamanlanan saatte alınacak (Her gün 02:00).')).toBeVisible()
+      expect(startJobRun).not.toHaveBeenCalled()
+      await user.click(screen.getByRole('button', { name: 'Şimdi başlat' }))
+      expect(await screen.findByRole('progressbar', { name: /Muhasebe/ })).toBeVisible()
+      expect(vi.mocked(startJobRun).mock.calls.map(call => call[1])).toEqual(['job-Muhasebe', 'job-CRM'])
+      expect(saveBackupJob).toHaveBeenCalledTimes(2)
+    })
+
+    it('shows the finished result with size, time and storage, then a trial restore that can be started as a new database', async () => {
+      vi.mocked(getBackup).mockImplementation(async (_tenant, id) => succeeded(id))
+      vi.mocked(getRestoreTargets).mockResolvedValue({ artifactId: 'artifact-1', sourceDatabase: 'Muhasebe', backupType: 'Full', sizeBytes: 1,
+        agents: [{ agentId: 'agent-a', hostName: 'PC', status: 'Active', connectivity: 'online', canRestore: true, canPrecheck: true, canDiscover: true, canVerify: true, sourceEligible: true, sourceAccess: 'CentralStorage', rejectionCode: null, rejectionMessage: null }],
+        targets: [{ jobId: 'job-Muhasebe', jobName: 'x', agentId: 'agent-a', database: 'Muhasebe', target: { host: 'h', port: 1433 } as never }] } as never)
+      vi.mocked(startRestoreVerification).mockResolvedValue({ id: 'ver-1' } as never)
+      vi.mocked(getRestore).mockResolvedValue({ id: 'ver-1', status: 'Running' } as never)
+      const user = userEvent.setup()
+      mount()
+      await start(user)
+      expect((await screen.findAllByText('İlk yedeğiniz alındı ve doğrulandı'))[0]).toBeVisible()
+      expect(screen.getAllByText('2 MB')[0]).toBeVisible()
+      expect(screen.getAllByText('Yerel disk')[0]).toBeVisible()
+      expect(screen.queryByText(/Yerine geç/)).not.toBeInTheDocument()
+      await user.click((await screen.findAllByRole('button', { name: 'Geri yüklemeyi dene' }))[0])
+      expect(startRestoreVerification).toHaveBeenCalledTimes(1)
+      expect(await screen.findByRole('link', { name: 'Ayrıntı' })).toHaveAttribute('href', '/tenants/tenant-a/restores/ver-1')
+    })
+
+    it('skipping the trial restore says the home page keeps a reminder', async () => {
+      vi.mocked(getBackup).mockImplementation(async (_tenant, id) => succeeded(id))
+      vi.mocked(getRestoreTargets).mockResolvedValue({ artifactId: 'artifact-1', sourceDatabase: 'Muhasebe', backupType: 'Full', sizeBytes: 1, agents: [], targets: [] })
+      const user = userEvent.setup()
+      mount()
+      await start(user)
+      await user.click((await screen.findAllByRole('button', { name: 'Atla' }))[0])
+      expect(screen.getByText(/Atlandı\. Ana sayfada .* hatırlatma kalır/)).toBeVisible()
+      expect(startRestoreVerification).not.toHaveBeenCalled()
+    })
   })
 })

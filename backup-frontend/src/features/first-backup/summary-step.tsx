@@ -7,8 +7,9 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { Select } from '@/components/ui/text-input'
 import { keepForLabel, retentionPresets, schedulePresetLabel, schedulePresets } from '@/features/backup-jobs/job-wizard-model'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
-import { connectionOptions, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
+import { connectionOptions } from '@/features/storage-connections/job-connection-picker-utils'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { useDestinationLabel } from './use-destination-label'
 import { autoJobName, type FirstBackupItem, type FirstBackupSettings } from './first-backup-model'
 
 export type ItemResult = { jobId?: string; runId?: string; error?: unknown }
@@ -27,8 +28,7 @@ export function SummaryStep({ items, names, settings, onSettings, results, pendi
   const connectionList = connections.data?.items ?? []
   const providerList = providers.data?.items ?? []
   const destination = settings.destinations[0]
-  const connection = resolveDestinationConnection(destination, connectionList)
-  const where = destination.storageConnectionId ? connection?.name ?? tx('Bağlantı bulunamadı') : tx('Yerel disk')
+  const where = useDestinationLabel(settings)
   const when = settings.scheduled ? schedulePresetLabel(settings.cronExpression) ?? tx('Özel zamanlama') : tx('Elle çalıştırılır (zamanlama yok)')
   const keep = settings.retention.enabled ? keepForLabel(settings.retention.keepForSeconds) : tx('Hiç silinmesin')
   const row = (id: Row, label: string, value: string, editor: React.ReactNode, locked = false) => <div key={id} className="space-y-2 px-4 py-3">
