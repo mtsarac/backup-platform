@@ -196,7 +196,7 @@ describe('discovery page', () => {
   describe('after a computer was added in the first-backup flow', () => {
     const added = { pathname: '/', state: { addedAgentId: 'agent-a' } }
     beforeEach(() => {
-      vi.mocked(getAgents).mockResolvedValue([supportedAgent] as never)
+      vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'online' }] as never)
       vi.mocked(rescanDiscoveryAgent).mockReset().mockResolvedValue(makeStatus())
     })
 
@@ -218,6 +218,14 @@ describe('discovery page', () => {
       mount(added)
       const notice = (await screen.findByText(/giriş bilgilerini girin/)).closest('[role=status]') as HTMLElement
       expect(within(notice).getByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
+    })
+    it('shows the login guide despite an unrelated offline or revoked pending scan', async () => {
+      vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'online' }, { ...supportedAgent, agentId: 'old', connectivity: 'offline' }] as never)
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus(), makeStatus({ agentId: 'old', scanState: 'Requested' }), makeStatus({ agentId: 'revoked', scanState: 'Requested' })] })
+      vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance({ access: 'CredentialsRequired' })] })
+      mount(added)
+      expect(await screen.findByText(/giriş bilgilerini girin/)).toBeVisible()
+      expect(screen.queryByText('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')).not.toBeInTheDocument()
     })
     it('offers a backup job from the usable server', async () => {
       mount(added)

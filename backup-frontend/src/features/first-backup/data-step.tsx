@@ -12,6 +12,7 @@ import { Select, TextInput } from '@/components/ui/text-input'
 import { QueryState } from '@/components/data/query-state'
 import type { Agent } from '@/features/agents/types'
 import { getDiscoveryInstance } from '@/features/discovery/api'
+import { discoveryInstancePath } from '@/lib/routes'
 import { discoveryKeys, useDiscoveryAgents, useDiscoveryInstances, useRescanAgent } from '@/features/discovery/hooks'
 import { canCreateJob, databaseSelectable, engineLabels, isScanActive, supportsDiscovery } from '@/features/discovery/status'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -37,11 +38,15 @@ export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
     rescan.mutate(agentId)
   }, [agentId]) // oxlint-disable-line react-hooks/exhaustive-deps -- one automatic scan per computer, not per render
   // Only this computer's own scan counts: another computer (or a revoked one) with a pending scan must not keep this list waiting.
-  const statuses = useDiscoveryAgents(Boolean(agentId))
-  const polling = isScanActive(statuses.data?.items.filter(status => status.agentId === agentId))
-  const scanning = Boolean(agentId) && (rescan.isIdle || rescan.isPending || polling)
+  const statuses = useDiscoveryAgents(Boolean(agentId), agentId)
+  const online = computer?.connectivity === 'online'
+  const queued = isScanActive(statuses.data?.items.filter(status => status.agentId === agentId))
+  // An offline computer only queues the scan: say so instead of waiting for it.
+  const scanning = Boolean(agentId) && online && (rescan.isIdle || rescan.isPending || queued)
+  const waitingOffline = Boolean(agentId) && !online && (rescan.isIdle || rescan.isPending || queued)
   const instances = useDiscoveryInstances({ agentId }, Boolean(agentId))
   const usable = (instances.data?.items ?? []).filter(canCreateJob)
+  const needLogin = (instances.data?.items ?? []).filter(item => item.presence === 'Present' && item.access !== 'Authenticated')
   const details = useQueries({ queries: usable.map(item => ({ queryKey: discoveryKeys.instance(tenantId, item.id), queryFn: ({ signal }: { signal: AbortSignal }) => getDiscoveryInstance(tenantId, item.id, signal) })) })
   const loaded = details.every(detail => !detail.isPending)
   const items = details.flatMap(detail => detail.data ? detail.data.databases.filter(database => databaseSelectable(database, detail.data)).map(database => ({ key: itemKey(detail.data.id, database.name), instance: detail.data, database: database.name })) : [])
@@ -67,10 +72,13 @@ export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
         {capable.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız bilgisayar')}</option>)}</Select>}</Field>
       : <p className="text-sm text-text-muted">{tx('Yedekleme bilgisayarı:')} <span className="font-medium text-text-heading">{computer?.hostName ?? tx('Adsız bilgisayar')}</span></p>}
     {rescan.error && <ErrorNotice error={rescan.error} onRetry={() => rescan.mutate(agentId)} />}
-    {scanning && <p role="status" className="text-sm text-text-muted">{tx('Bilgisayar taranıyor…')}{computer?.connectivity !== 'online' && <> {tx('Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.')}</>}</p>}
+    {scanning && <p role="status" className="text-sm text-text-muted">{tx('Bilgisayar taranıyor…')}</p>}
+    {waitingOffline && <p role="status" className="text-sm text-text-muted">{tx('Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.')}</p>}
     <QueryState isPending={instances.isPending} error={instances.error}>
       {!loaded || scanning ? null : items.length === 0
-        ? <Notice tone="info" title={tx('Veri bulunamadı')} action={manual}>{tx('Bu bilgisayarda yedeklenebilir veritabanı bulunamadı.')}</Notice>
+        ? needLogin.length > 0
+          ? <Notice tone="info" action={manual}>{tx('Veritabanı sunucusu bulundu ama listelemek için giriş bilgisi gerekiyor.')} {needLogin.map((item, index) => <span key={item.id}>{index > 0 && ', '}<Link className={linkClass} to={discoveryInstancePath(tenantId, item.id)}>{item.displayName}</Link></span>)}</Notice>
+          : <Notice tone="info" title={tx('Veri bulunamadı')} action={manual}>{tx('Bu bilgisayarda yedeklenebilir veritabanı bulunamadı.')}</Notice>
         : <>
           {items.length > 1 && <TextInput type="search" aria-label={tx('Veritabanı ara')} placeholder={tx('Veritabanı veya sunucu adı')} value={search} onChange={event => setSearch(event.target.value)} />}
           {shown.length === 0 ? <p className="text-sm text-text-muted">{tx('Aramaya uyan veritabanı yok.')}</p> : <ul className="divide-y divide-border rounded-lg border border-border bg-surface">{shown.map(item => {

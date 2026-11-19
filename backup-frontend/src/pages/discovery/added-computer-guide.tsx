@@ -23,7 +23,7 @@ export function AddedComputerGuide({ agent, agentId, onDismiss }: { agent: Agent
     scanned.current = true
     rescan.mutate(agentId)
   }, [capable]) // oxlint-disable-line react-hooks/exhaustive-deps -- one automatic scan, not per render
-  const { scanning: polling } = useDiscoveryAgents(capable)
+  const { scanning: polling } = useDiscoveryAgents(capable, agentId)
   const instances = useDiscoveryInstances({ agentId }, capable)
   const dismiss = <Button variant="outline" onClick={onDismiss}>{tx('Kapat')}</Button>
   // A throttled rescan means one is already queued: the scan state below tells it.
@@ -36,6 +36,7 @@ export function AddedComputerGuide({ agent, agentId, onDismiss }: { agent: Agent
   const jobsNew = `/tenants/${tenantId}/backup-jobs/new`
   const next = <Link className={buttonVariants()} to={`/tenants/${tenantId}/first-backup`}>{tx('İlk yedeği almaya devam et')}</Link>
   const actions = <span className="flex flex-wrap justify-end gap-2">{dismiss}{next}</span>
+  if (agent?.connectivity === 'offline') return <Notice tone="info" action={actions}>{tx('Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.')}</Notice>
   if (scanning) return <Notice tone="info" action={actions}>{tx('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')}</Notice>
   if (usable) return <Notice tone="success" action={<span className="flex flex-wrap justify-end gap-2">{dismiss}<Link className={buttonVariants({ variant: 'outline' })} to={`${jobsNew}?${new URLSearchParams({ discoveryInstance: usable.id })}`}>{tx('Yedekleme işi oluştur')}</Link>{next}</span>}>{tx('Yedeklemek istediğiniz veritabanını seçin.')}</Notice>
   if (needsLogin) return <Notice tone="warning" action={actions}>{tx('Bilgisayarda veritabanı sunucusu bulundu. Yedek alabilmek için sunucuyu açıp giriş bilgilerini girin:')} <Link className={linkClass} to={discoveryInstancePath(tenantId, needsLogin.id)}>{needsLogin.displayName}</Link></Notice>

@@ -3314,6 +3314,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Bilgisayar taranıyor…": {"tr":"Bilgisayar taranıyor…","en":"Scanning the computer…"},
   "Veri bulunamadı": {"tr":"Veri bulunamadı","en":"No data found"},
   "Bu bilgisayarda yedeklenebilir veritabanı bulunamadı.": {"tr":"Bu bilgisayarda yedeklenebilir veritabanı bulunamadı.","en":"No database that can be backed up was found on this computer."},
+  "Veritabanı sunucusu bulundu ama listelemek için giriş bilgisi gerekiyor.": {"tr":"Veritabanı sunucusu bulundu ama listelemek için giriş bilgisi gerekiyor.","en":"A database server was found, but a login is needed to list its databases."},
   "{0}: Adı değiştir": {"tr":"{0}: Adı değiştir","en":"{0}: Change name"},
   "{0} veritabanı yedeği": {"tr":"{0} veritabanı yedeği","en":"{0} database backup"},
   "{0}: Değiştir": {"tr":"{0}: Değiştir","en":"{0}: Change"},
