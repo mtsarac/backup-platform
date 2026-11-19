@@ -219,6 +219,23 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Linux_installer_configures_staging_and_the_backup_folder_outside_the_state_folder_that_replacing_deletes()
+    {
+        var text = await _client.GetStringAsync("/api/agent-dist/install.sh");
+
+        Assert.Contains("DATA_DIR=/var/lib/backup-agent-data", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("STATE_DIR=/var/lib/backup-agent-data", text, StringComparison.Ordinal);
+        foreach (var line in new[]
+        {
+            "Environment=\"Agent__Backup__Staging__Mapping=SameHost\"",
+            "Environment=\"Agent__Backup__Staging__AgentDirectory=$DATA_DIR/staging\"",
+            "Environment=\"Agent__Backup__LocalStorage__RootDirectory=$DATA_DIR/backups\""
+        })
+            Assert.Contains(line, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("rm -rf -- \"$INSTALL_DIR\" \"$STATE_DIR\" \"$DATA_DIR\"", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Windows_replace_removes_the_update_staging_directory_next_to_the_store_after_checking_it_like_the_store()
     {
         var install = await _client.GetStringAsync("/api/agent-dist/install.ps1");

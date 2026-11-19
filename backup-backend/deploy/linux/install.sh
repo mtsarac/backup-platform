@@ -9,6 +9,7 @@ SERVER='' TOKEN='' AGENT_NAME='' LANGUAGE=en MODE=auto REPLACE=0 EXISTING=0
 INSTALL_DIR=/opt/backup-agent
 STATE_DIR=/var/lib/backup-agent
 STORE_DIR=$STATE_DIR/identity
+DATA_DIR=/var/lib/backup-agent-data
 UNIT=/etc/systemd/system/backup-agent.service
 WORK=''
 declare -A SEEN=()
@@ -191,6 +192,10 @@ chown -R root:root "$INSTALL_DIR"
 chmod 755 "$INSTALL_DIR/bin/BackupPlatform.Agent.Host"
 useradd --system --user-group --no-create-home --home-dir "$STATE_DIR" --shell /usr/sbin/nologin backup-agent
 install -d -m 700 -o backup-agent -g backup-agent "$STATE_DIR" "$STORE_DIR"
+# Backup working folders live outside STATE_DIR so that replacing an installation never deletes the backups stored on this machine; the new account may get another uid, so they are re-owned.
+[[ ! -L "$DATA_DIR" && ! -L "$DATA_DIR/staging" && ! -L "$DATA_DIR/backups" ]] || fail 'A backup working folder is a symbolic link; nothing was changed.' 'Bir yedek calisma klasoru sembolik baglanti; hicbir sey degistirilmedi.'
+install -d -m 700 -o backup-agent -g backup-agent "$DATA_DIR" "$DATA_DIR/staging" "$DATA_DIR/backups"
+chown -R backup-agent:backup-agent "$DATA_DIR"
 export BACKUP_AGENT_ENROLLMENT_TOKEN="$TOKEN"
 unset TOKEN
 if ! runuser --user backup-agent --preserve-environment -- "$INSTALL_DIR/bin/BackupPlatform.Agent.Host" enroll --server "$SERVER" --store-directory "$STORE_DIR" --name "$AGENT_NAME" --non-interactive >"$WORK/enroll.log" 2>&1; then
@@ -213,6 +218,9 @@ WorkingDirectory=$INSTALL_DIR/bin
 ExecStart=$INSTALL_DIR/bin/BackupPlatform.Agent.Host
 Environment="Agent__Backend__BaseUri=$escaped_server"
 Environment="Agent__CredentialStoreDirectory=$STORE_DIR"
+Environment="Agent__Backup__Staging__Mapping=SameHost"
+Environment="Agent__Backup__Staging__AgentDirectory=$DATA_DIR/staging"
+Environment="Agent__Backup__LocalStorage__RootDirectory=$DATA_DIR/backups"
 Restart=on-failure
 RestartSec=10
 UMask=0077
