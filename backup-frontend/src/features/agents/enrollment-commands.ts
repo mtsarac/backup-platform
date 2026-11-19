@@ -2,6 +2,9 @@ import type { SupportedLanguage } from '@/lib/i18n/types'
 
 export type AgentPlatform = 'Windows' | 'Linux'
 
+/** What a visitor most likely installs on: Linux only from a Linux desktop browser, otherwise Windows. */
+export const likelyPlatform = (userAgent = navigator.userAgent): AgentPlatform => /linux|x11/i.test(userAgent) && !/android|cros/i.test(userAgent) ? 'Linux' : 'Windows'
+
 /** Commands accept an origin, never credentials, paths, queries or an insecure URL. */
 export function httpsServerOrigin(value: string): string {
   try {

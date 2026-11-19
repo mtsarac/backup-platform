@@ -1,10 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getAgentDistribution, getAgents } from '@/features/agents/api'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createEnrollmentToken, getAgent, getAgentDistribution, getAgents, getEnrollmentTokenStatus } from '@/features/agents/api'
 import { saveBackupJob, startJobRun } from '@/features/backup-jobs/api'
 import { getBackup } from '@/features/backups/api'
 import { makeRun } from '@/features/backups/test-data'
@@ -25,13 +25,15 @@ vi.mock('@/features/restores/api')
 vi.mock('@/features/discovery/api')
 vi.mock('@/features/storage-connections/api')
 
-function mount() {
+function mount(seed?: (client: QueryClient) => void) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  seed?.(client)
   const router = createMemoryRouter(createRoutesFromElements(<>
     <Route path="/tenants/:tenantId/first-backup" element={<FirstBackupPage />} />
     <Route path="/tenants/:tenantId" element={<p>Ana sayfa içeriği</p>} />
     <Route path="/tenants/:tenantId/backup-jobs/new" element={<p>İş sihirbazı</p>} />
   </>), { initialEntries: ['/tenants/tenant-a/first-backup'] })
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
+  render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return router
 }
 const detail = makeDetail({ databases: [makeDatabase({ name: 'Muhasebe' }), makeDatabase({ name: 'CRM' }), makeDatabase({ name: 'master', isSystem: true })] })
@@ -68,6 +70,26 @@ describe('first backup flow', () => {
     expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
     expect(screen.getByText(/Muhasebe veritabanı yedeği/)).toBeVisible()
     expect(screen.queryByLabelText('İş adı')).not.toBeInTheDocument()
+  })
+
+  it('decides where to start from the fresh list, not from a stale cached one', async () => {
+    mount(client => client.setQueryData(['tenant', 'tenant-a', 'agents'], []))
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
+    expect(screen.queryByRole('heading', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
+  })
+
+  it('waits for a just-added computer to report what it can do, then scans it and names it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const computer = { ...supportedAgent, hostName: 'win11-virtual', connectivity: 'online' }
+    vi.mocked(getAgents).mockResolvedValueOnce([{ ...computer, capabilities: [], capabilitiesReportedAt: null }] as never).mockResolvedValue([computer] as never)
+    mount()
+    expect(await screen.findByText('Bilgisayar hazırlanıyor…')).toBeVisible()
+    expect(screen.queryByText('Otomatik taramayı destekleyen bilgisayar yok.')).not.toBeInTheDocument()
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+    expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
+    expect(screen.getByText('win11-virtual')).toBeVisible()
+    expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
+    vi.useRealTimers()
   })
 
   it('renames a job only through "Adı değiştir"', async () => {
@@ -150,12 +172,136 @@ describe('first backup flow', () => {
     expect(startJobRun).toHaveBeenCalledTimes(2)
   })
 
-  it('starts with adding a computer when there is none', async () => {
-    vi.mocked(getAgents).mockResolvedValue([])
-    vi.mocked(getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backup.example', packages: {} } as never)
-    mount()
-    const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Yedekleme bilgisayarı ekle')).toBeVisible()
+  describe('adding a computer', () => {
+    const windowsBrowser = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/150.0 Safari/537.36'
+    const linuxBrowser = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/150.0 Safari/537.36'
+    const computer = { ...supportedAgent, hostName: 'win11-virtual', connectivity: 'online' }
+    const detailOf = (connectivity: string) => ({ ...computer, connectivity, osDescription: 'Windows 11', agentVersion: '1.0.0', platform: 'Windows' }) as never
+    // A key lives for a day; a far-future date would overflow the monitor's expiry timer.
+    const expiresAt = new Date(Date.now() + 86_400_000).toISOString()
+    const distribution = { serverUrl: 'https://backup.example', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': false } }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(windowsBrowser)
+      vi.mocked(getAgents).mockResolvedValue([])
+      vi.mocked(getAgentDistribution).mockResolvedValue(distribution as never)
+      vi.mocked(createEnrollmentToken).mockResolvedValue({ tokenId: 'token-a', token: 'secret-key', expiresAt })
+      vi.mocked(getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-a', expiresAt, state: 'Active', agentId: null })
+      vi.mocked(getAgent).mockResolvedValue(detailOf('unknown'))
+    })
+    afterEach(() => { vi.useRealTimers() })
+
+    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+    async function issueCommand(name = 'win11-virtual') {
+      fireEvent.change(await screen.findByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: name } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Kurulum komutunu oluştur' })) })
+    }
+    const commandText = () => (screen.getByRole('textbox', { name: 'Tek kullanımlık kurulum komutu' }) as HTMLTextAreaElement).value
+
+    it('is one screen: name, system defaulting to Windows, no command until asked, other ways closed', async () => {
+      mount()
+      expect(await screen.findByRole('heading', { name: 'Yedekleme bilgisayarı ekle' })).toBeVisible()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByRole('combobox', { name: 'İşletim sistemi' })).toHaveValue('Windows')
+      expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Bilgisayar')
+      expect(screen.getByRole('button', { name: 'Kurulum komutunu oluştur' })).toBeDisabled()
+      expect(createEnrollmentToken).not.toHaveBeenCalled()
+      await issueCommand('Ofis')
+      expect(createEnrollmentToken).toHaveBeenCalledTimes(1)
+      expect(commandText()).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File')
+      expect(commandText()).toContain("-Token 'secret-key' -AgentName 'Ofis'")
+      expect(screen.getByRole('button', { name: 'Kurulum komutunu kopyala' })).toBeEnabled()
+      expect(screen.getByText('Komutun çalıştırılması bekleniyor')).toBeVisible()
+      expect(screen.getByText('Başka yollarla kur').closest('details')).not.toHaveAttribute('open')
+    })
+
+    it('offers Linux first when the visitor browses from Linux', async () => {
+      vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(linuxBrowser)
+      mount()
+      expect(await screen.findByRole('combobox', { name: 'İşletim sistemi' })).toHaveValue('Linux')
+      await issueCommand()
+      expect(commandText()).toContain("sudo bash")
+    })
+
+    it('shows the live status, keeps the screen while the computer is only enrolled, and moves on by itself once it is online', async () => {
+      vi.mocked(getAgents).mockResolvedValueOnce([])
+      mount()
+      await issueCommand()
+      vi.mocked(getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-a', expiresAt, state: 'Consumed', agentId: 'agent-a' })
+      await advance(5_000)
+      expect(screen.getByText('Kayıt tamamlandı')).toBeVisible()
+      expect(screen.queryByRole('textbox', { name: 'Tek kullanımlık kurulum komutu' })).not.toBeInTheDocument()
+      await advance(5_000)
+      expect(screen.getByText('Bilgisayar bağlanıyor')).toBeVisible()
+      // The list learns about the new computer before it is online (window focus, another tab): that must not end this screen.
+      vi.mocked(getAgents).mockResolvedValue([{ ...computer, connectivity: 'offline', capabilities: [], capabilitiesReportedAt: null }] as never)
+      await act(async () => { window.dispatchEvent(new Event('visibilitychange')) })
+      await advance(1_000)
+      expect(screen.getByText('Bilgisayar bağlanıyor')).toBeVisible()
+      expect(screen.queryByRole('heading', { name: 'Ne yedeklensin?' })).not.toBeInTheDocument()
+      vi.mocked(getAgent).mockResolvedValue(detailOf('online'))
+      vi.mocked(getAgents).mockResolvedValue([computer] as never)
+      await advance(5_000)
+      expect(await screen.findByRole('heading', { name: 'Ne yedeklensin?' })).toBeVisible()
+      expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Ne yedeklensin')
+      expect(screen.getByText('win11-virtual')).toBeVisible()
+      expect(await screen.findByRole('checkbox', { name: /Muhasebe/ })).toBeChecked()
+      expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
+    })
+
+    it('says in a plain sentence, not an error, that a long wait is still going on', async () => {
+      mount()
+      await issueCommand()
+      expect(screen.queryByText(/Beklenenden uzun sürüyor/)).not.toBeInTheDocument()
+      await advance(130_000)
+      expect(screen.getByText(/Beklenenden uzun sürüyor/)).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('says the key ran out in a sentence and offers a new command', async () => {
+      mount()
+      await issueCommand()
+      vi.mocked(getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-a', expiresAt, state: 'Expired', agentId: null })
+      await advance(5_000)
+      expect(screen.getByText('Kayıt anahtarının süresi doldu')).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      vi.mocked(createEnrollmentToken).mockResolvedValue({ tokenId: 'token-b', token: 'second-key', expiresAt })
+      vi.mocked(getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-b', expiresAt, state: 'Active', agentId: null })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Yeni komut oluştur' })) })
+      expect(commandText()).toContain("-Token 'second-key'")
+    })
+
+    it('offers the Windows setup wizard under "Başka yollarla kur" only when it is published', async () => {
+      mount()
+      await issueCommand()
+      expect(screen.queryByRole('link', { name: 'Kurulum sihirbazını indir (.exe)' })).not.toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Kurulum scriptini indir' })).toHaveAttribute('href', 'https://backup.example/api/agent-dist/install.ps1')
+      expect(screen.getByRole('link', { name: 'Windows zip paketini indir' })).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Tek kullanımlık kayıt anahtarı' })).toHaveValue('secret-key')
+    })
+
+    it('shows the wizard link when it is published', async () => {
+      vi.mocked(getAgentDistribution).mockResolvedValue({ ...distribution, packages: { ...distribution.packages, 'win-x64-setup': true } } as never)
+      mount()
+      await issueCommand()
+      expect(screen.getByRole('link', { name: 'Kurulum sihirbazını indir (.exe)' })).toHaveAttribute('href', 'https://backup.example/api/agent-dist/packages/win-x64-setup')
+    })
+
+    it('explains instead of offering a command when no package is published for the system', async () => {
+      vi.mocked(getAgentDistribution).mockResolvedValue({ ...distribution, packages: { ...distribution.packages, 'win-x64': false } } as never)
+      mount()
+      fireEvent.change(await screen.findByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Ofis' } })
+      expect(await screen.findByRole('alert')).toHaveTextContent('Bu işletim sistemi için kurulum paketi yayımlanmamış.')
+      expect(screen.getByRole('button', { name: 'Kurulum komutunu oluştur' })).toBeDisabled()
+    })
+
+    it('only a workspace administrator can add a computer', async () => {
+      Object.assign(access, { canAdmin: false })
+      mount()
+      expect(await screen.findByText(/çalışma alanı yöneticisi olmalısınız/)).toBeVisible()
+      expect(screen.queryByRole('textbox', { name: 'Bilgisayarın adı' })).not.toBeInTheDocument()
+    })
   })
 
   describe('first backup screen', () => {
