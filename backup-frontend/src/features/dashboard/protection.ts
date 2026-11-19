@@ -17,6 +17,8 @@ export interface RowInput {
   hasSucceeded: boolean
   /** The job's newest successful attempt, for the row's "Geri yükle". */
   lastSuccessId?: string
+  /** When the newest successful attempt finished. */
+  lastSuccessAt?: string | null
   offline: boolean
   percent?: number | null
 }
@@ -32,6 +34,7 @@ export interface ProtectionRow {
   score: number
   hasSucceeded: boolean
   lastSuccessId?: string
+  lastSuccessAt?: string | null
   offline: boolean
   topic: Topic | null
   note: string | null
@@ -45,7 +48,7 @@ const notes: Record<string, () => string> = {
   capacity_unavailable: () => tx('Depolama alanı ölçülemiyor.'),
 }
 
-export function buildRow({ job, health = noHealth, days, hasSucceeded, lastSuccessId, offline, percent }: RowInput): ProtectionRow {
+export function buildRow({ job, health = noHealth, days, hasSucceeded, lastSuccessId, lastSuccessAt, offline, percent }: RowInput): ProtectionRow {
   const failedRecently = days.some(day => day.status === 'Failed')
   const running = Boolean(job.lastRun && isActiveRun(job.lastRun.status))
   const input = { job, health, failedRecently, hasSucceeded, offline }
@@ -62,7 +65,7 @@ export function buildRow({ job, health = noHealth, days, hasSucceeded, lastSucce
     : reasons.includes('no_verified_replica') || reasons.includes('replicas_missing') ? 'replica'
     : reasons.includes('restore_failed') ? 'restoreFailed' : null
   const noteReason = ['attention', 'current', 'running'].includes(status) ? reasons.find(reason => reason in notes) : undefined
-  return { job, days, status, baseStatus, percent: running ? percent ?? null : null, score: health.score, hasSucceeded, lastSuccessId, offline, topic, note: noteReason ? notes[noteReason]() : null }
+  return { job, days, status, baseStatus, percent: running ? percent ?? null : null, score: health.score, hasSucceeded, lastSuccessId, lastSuccessAt, offline, topic, note: noteReason ? notes[noteReason]() : null }
 }
 
 export function countRows(rows: readonly ProtectionRow[]) {

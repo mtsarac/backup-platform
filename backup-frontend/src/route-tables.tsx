@@ -6,6 +6,7 @@ import { ClientDetailPage } from './pages/clients/client-detail-page'
 import { AgentRegisterPage } from './pages/clients/agent-register-page'
 import { BackupCenterLayout } from './pages/backup-center/backup-center-layout'
 import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
+import { BackupJobDetailPage } from './pages/backup-jobs/backup-job-detail-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { FirstBackupPage } from './pages/first-backup/first-backup-page'
@@ -49,13 +50,13 @@ export const tenantRoutes = <>
   <Route path="first-backup" element={<FirstBackupPage />} />
   <Route element={<BackupCenterLayout />}>
     <Route path="backup-jobs" element={<BackupJobsPage />} />
-    <Route path="backup-jobs/:id" element={<BackupJobsPage />} />
     <Route path="backup-runs" element={<BackupsPage />} />
     <Route path="backup-runs/:id" element={<BackupsPage />} />
     <Route path="restores" element={<RestoresPage />} />
     <Route path="backup-shares" element={<SharesPage />} />
   </Route>
   <Route path="backup-jobs/new" element={<BackupJobWizardPage />} />
+  <Route path="backup-jobs/:id" element={<BackupJobDetailPage />} />
   <Route path="backup-runs/:id/restore" element={<RestoreWizardPage />} />
   <Route path="storage" element={<StorageLayout />}>
     <Route index element={<ConnectionList />} />

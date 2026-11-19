@@ -15,7 +15,9 @@ const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
-vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJobs: vi.fn(), startJobRun: vi.fn() }))
+vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJobs: vi.fn(), startJobRun: vi.fn(), getHealthTimeline: vi.fn().mockResolvedValue({ jobs: [] }) }))
+vi.mock('@/features/backups/api', () => ({ getBackups: vi.fn().mockResolvedValue({ items: [], totalCount: 1, page: 1, pageSize: 1 }), getBackup: vi.fn() }))
+vi.mock('@/features/dashboard/api', () => ({ getHealthSummary: vi.fn().mockResolvedValue({ totalJobs: 0, state: null, jobs: [] }) }))
 
 const job: BackupJob = {
   id: 'job-a', backupType: 'Full', createdAt: '2026-10-01T08:00:00Z', name: 'ERP backup', agentId: 'agent-a', agentName: 'SQL Agent', enabled: true, overlapPolicy: 'Skip', schedule: null, nextOccurrenceAt: null, lastRun: null, agentRevoked: false,

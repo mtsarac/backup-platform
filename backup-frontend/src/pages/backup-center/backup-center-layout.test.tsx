@@ -1,14 +1,19 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getBackupJobs } from '@/features/backup-jobs/api'
+import { savedJob } from '@/features/backup-jobs/test-fixtures'
 import { BackupCenterLayout } from './backup-center-layout'
 
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
+vi.mock('@/features/backup-jobs/api')
 
 function mount(path: string) {
-  render(<MemoryRouter initialEntries={[path]}><Routes>
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={[path]}><Routes>
     <Route path="/tenants/:tenantId">
       <Route element={<BackupCenterLayout />}>
         <Route path="backup-jobs" element={<p>jobs list</p>} />
@@ -19,10 +24,12 @@ function mount(path: string) {
       <Route path="backup-jobs/new" element={<p>job wizard</p>} />
       <Route path="backup-runs/:id/restore" element={<p>run restore</p>} />
     </Route>
-  </Routes></MemoryRouter>)
+  </Routes></MemoryRouter></QueryClientProvider>)
 }
 
 describe('Backup Center layout', () => {
+  beforeEach(() => { vi.mocked(getBackupJobs).mockResolvedValue([savedJob]) })
+
   it('shows one page heading and the four lists as navigation links, the open one marked current', () => {
     mount('/tenants/tenant-a/backup-runs')
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
@@ -47,5 +54,25 @@ describe('Backup Center layout', () => {
   it.each(['/tenants/tenant-a/backup-jobs/new', '/tenants/tenant-a/backup-runs/run-1/restore'])('%s is not wrapped in the tabs', (path) => {
     mount(path)
     expect(screen.queryByRole('navigation', { name: 'Yedekleme bölümleri' })).not.toBeInTheDocument()
+  })
+
+  it('puts the create-job button at the top right of the heading on the jobs list, once there are jobs', async () => {
+    mount('/tenants/tenant-a/backup-jobs')
+    expect(await screen.findByRole('link', { name: 'Yedekleme işi oluştur' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/new')
+    expect(screen.getByRole('banner').contains(screen.getByRole('link', { name: 'Yedekleme işi oluştur' }))).toBe(true)
+  })
+
+  it('leaves the create-job button to the empty list when there are no jobs, and off the other tabs', async () => {
+    vi.mocked(getBackupJobs).mockResolvedValue([])
+    mount('/tenants/tenant-a/backup-jobs')
+    await waitFor(() => expect(getBackupJobs).toHaveBeenCalled())
+    expect(screen.queryByRole('link', { name: 'Yedekleme işi oluştur' })).not.toBeInTheDocument()
+  })
+
+  it('shows no create-job button on the other tabs', async () => {
+    mount('/tenants/tenant-a/backup-runs')
+    expect(await screen.findByText('runs list')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Yedekleme işi oluştur' })).not.toBeInTheDocument()
+    expect(getBackupJobs).not.toHaveBeenCalled()
   })
 })
