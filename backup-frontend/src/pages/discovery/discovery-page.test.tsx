@@ -2,7 +2,7 @@ import userEvent from '@testing-library/user-event'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getAgents } from '@/features/agents/api'
 import { getDiscoveryAgents, getDiscoveryInstances, rescanDiscoveryAgent } from '@/features/discovery/api'
@@ -226,6 +226,22 @@ describe('discovery page', () => {
       mount(added)
       expect(await screen.findByText(/giriş bilgilerini girin/)).toBeVisible()
       expect(screen.queryByText('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')).not.toBeInTheDocument()
+    })
+    it('lists every server that needs a login, one link each', async () => {
+      vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [
+        makeInstance({ access: 'CredentialsRequired', displayName: 'PostgreSQL 18', databaseCounts: { total: 0, user: 0, backupEligible: 0 } }),
+        makeInstance({ id: 'inst-2', access: 'CredentialsRequired', displayName: 'SQL Server (MSSQLSERVER25)', databaseCounts: { total: 0, user: 0, backupEligible: 0 } }),
+      ] })
+      mount(added)
+      const notice = (await screen.findByText(/giriş bilgilerini girin/)).closest('[role=status]') as HTMLElement
+      expect(within(notice).getByRole('link', { name: 'PostgreSQL 18' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
+      expect(within(notice).getByRole('link', { name: 'SQL Server (MSSQLSERVER25)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-2')
+    })
+    it('keeps the guide on screen but drops the route state, so a reload does not bring it back', async () => {
+      const Probe = () => <output data-testid="route-state">{JSON.stringify(useLocation().state)}</output>
+      render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[added]}><DiscoveryPage /><Probe /></MemoryRouter></QueryClientProvider>)
+      expect(await screen.findByText('Yedeklemek istediğiniz veritabanını seçin.')).toBeVisible()
+      expect(screen.getByTestId('route-state')).toHaveTextContent('null')
     })
     it('offers a backup job from the usable server', async () => {
       mount(added)

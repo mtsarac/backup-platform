@@ -69,19 +69,20 @@ export function connectionDisplayName(connection: Pick<ConnectionView, 'name' | 
 /** The backend marks one default per provider type; the one users care about is the local disk, used when no connection is chosen. */
 export const showsDefaultBadge = (connection: Pick<ConnectionView, 'providerType' | 'isDefault'>) => connection.isDefault && connection.providerType === 'local'
 
-export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'agent-side' | 'healthy'; label: string; level: StatusLevel }
+export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'platform-tested' | 'agent-side' | 'healthy'; label: string; level: StatusLevel }
 
 /**
  * One at-a-glance state for a destination, strongest problem first. It only restates what the API reported (enablement, the last test,
  * the Google re-authorization flag): a destination is never called healthy without a successful test.
  */
-export function connectionHealth(connection: Pick<ConnectionView, 'effectiveEnabled' | 'lastTest' | 'providerType' | 'hasSecret' | 'configuration'>): Health {
+export function connectionHealth(connection: Pick<ConnectionView, 'effectiveEnabled' | 'lastTest' | 'providerType' | 'hasSecret' | 'configuration' | 'ownership' | 'permissions'>): Health {
   if (!connection.effectiveEnabled) return { key: 'disabled', label: tx('Devre dışı'), level: 'attention' }
   if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: connection.configuration?.reauthorizationRequired === 'true' ? tx('Yeniden yetkilendirme gerekli') : tx('Yetkilendirme gerekiyor'), level: 'attention' }
   const test = connection.lastTest
-  if (!test) return { key: 'untested', label: tx('Test edilmedi'), level: 'neutral' }
+  // A platform-managed destination the tenant cannot test is tested by the platform: "Test edilmedi" would read as a gap the tenant has to close.
+  if (!test) return connection.ownership === 'PlatformManaged' && !connection.permissions.canTest ? { key: 'platform-tested', label: tx('Test platform tarafından yapılır'), level: 'neutral' } : { key: 'untested', label: tx('Test edilmedi'), level: 'neutral' }
   if (test.status === 'Failed') return { key: 'failed', label: tx('Bağlantı sorunu'), level: 'urgent' }
-  if (test.status === 'NotTestable') return { key: 'agent-side', label: tx('Agent tarafında denetlenir'), level: 'neutral' }
+  if (test.status === 'NotTestable') return { key: 'agent-side', label: tx('Test yedekleme bilgisayarında yapılır'), level: 'neutral' }
   return { key: 'healthy', label: tx('Sağlıklı'), level: 'safe' }
 }
 

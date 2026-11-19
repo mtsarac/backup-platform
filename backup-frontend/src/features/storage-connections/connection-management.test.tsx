@@ -62,7 +62,8 @@ describe('Storage connections list and detail', () => {
     expect(local.getByText('3 saat önce')).toBeInTheDocument()
     expect(local.getByText("Çalışma alanı yönetimli")).toBeInTheDocument()
     expect(article('Merkezi depolama').getByText('Platform yönetimli')).toBeInTheDocument()
-    expect(article('Merkezi depolama').getByText('Test edilmedi')).toBeInTheDocument()
+    expect(article('Merkezi depolama').getByText('Test platform tarafından yapılır')).toBeInTheDocument()
+    expect(article('Merkezi depolama').queryByText('Test edilmedi')).not.toBeInTheDocument()
     expect(article('Merkezi depolama').queryByText('Henüz test edilmedi')).not.toBeInTheDocument()
     // The footprint is a statistic: collapsed until the card's technical details are opened.
     expect(local.queryByText('6,2 GB')).not.toBeInTheDocument()
@@ -270,7 +271,8 @@ describe('Storage connections list and detail', () => {
     ])
     mount()
     await screen.findByRole('article', { name: 'Yerel disk' })
-    expect(article('Yerel disk').getByText("Test edilmedi")).toBeInTheDocument()
+    expect(article('Yerel disk').getByText('Test yedekleme bilgisayarında yapılır')).toBeInTheDocument()
+    expect(article('Yerel disk').queryByText('Test edilmedi')).not.toBeInTheDocument()
     expect(article('Yerel disk').queryByText('Sağlıklı')).not.toBeInTheDocument()
     expect(article('Merkezi depolama').getByText('Sağlıklı')).toBeInTheDocument()
     expect(article('S3 Arşiv').getByText('Bağlantı sorunu')).toBeInTheDocument()
@@ -433,6 +435,18 @@ describe('Enablement, test, deletion and editing', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Yerel disk bağlantısı: test et' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Depolama dosya işlemi tamamlanamadı.')
     expect(api.testTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local')
+  })
+
+  it('shows the agent-side wording on the card after "Test et" on the local disk', async () => {
+    const tested = makeConnection({ permissions: { ...tenantAdminPermissions }, lastTest: { status: 'NotTestable', code: 'agent_side_storage', message: '', testedAt: new Date().toISOString() } })
+    vi.mocked(api.getTenantConnections).mockResolvedValueOnce({ items: [makeConnection({ permissions: { ...tenantAdminPermissions } })] }).mockResolvedValue({ items: [tested] })
+    vi.mocked(api.testTenantConnection).mockResolvedValue({ connection: tested, test: { ...tested.lastTest!, durationMs: 12 } })
+    mount()
+    const local = await screen.findByRole('article', { name: 'Yerel disk' })
+    expect(within(local).getByText('Test edilmedi')).toBeInTheDocument()
+    await userEvent.click(within(local).getByRole('button', { name: 'Yerel disk bağlantısı: test et' }))
+    expect(await within(screen.getByRole('article', { name: 'Yerel disk' })).findByText('Test yedekleme bilgisayarında yapılır')).toBeInTheDocument()
+    expect(within(screen.getByRole('article', { name: 'Yerel disk' })).queryByText('Test edilmedi')).not.toBeInTheDocument()
   })
 
   it('blocks deletion until the exact name is typed, then deletes', async () => {

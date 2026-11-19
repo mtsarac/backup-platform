@@ -32,13 +32,13 @@ export function AddedComputerGuide({ agent, agentId, onDismiss }: { agent: Agent
   const scanning = !capable || rescan.isIdle || rescan.isPending || polling || !instances.data
   const found = instances.data?.items.filter(item => item.presence === 'Present') ?? []
   const usable = found.find(item => canCreateJob(item) && item.databaseCounts.backupEligible > 0)
-  const needsLogin = found.find(item => item.access === 'CredentialsRequired')
+  const needsLogin = found.filter(item => item.access === 'CredentialsRequired')
   const jobsNew = `/tenants/${tenantId}/backup-jobs/new`
   const next = <Link className={buttonVariants()} to={`/tenants/${tenantId}/first-backup`}>{tx('İlk yedeği almaya devam et')}</Link>
   const actions = <span className="flex flex-wrap justify-end gap-2">{dismiss}{next}</span>
   if (agent?.connectivity === 'offline') return <Notice tone="info" action={actions}>{tx('Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.')}</Notice>
   if (scanning) return <Notice tone="info" action={actions}>{tx('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')}</Notice>
   if (usable) return <Notice tone="success" action={<span className="flex flex-wrap justify-end gap-2">{dismiss}<Link className={buttonVariants({ variant: 'outline' })} to={`${jobsNew}?${new URLSearchParams({ discoveryInstance: usable.id })}`}>{tx('Yedekleme işi oluştur')}</Link>{next}</span>}>{tx('Yedeklemek istediğiniz veritabanını seçin.')}</Notice>
-  if (needsLogin) return <Notice tone="warning" action={actions}>{tx('Bilgisayarda veritabanı sunucusu bulundu. Yedek alabilmek için sunucuyu açıp giriş bilgilerini girin:')} <Link className={linkClass} to={discoveryInstancePath(tenantId, needsLogin.id)}>{needsLogin.displayName}</Link></Notice>
+  if (needsLogin.length > 0) return <Notice tone="warning" action={actions}>{tx('Bilgisayarda veritabanı sunucusu bulundu. Yedek alabilmek için sunucuyu açıp giriş bilgilerini girin:')} {needsLogin.map((item, index) => <span key={item.id}>{index > 0 && ', '}<Link className={linkClass} to={discoveryInstancePath(tenantId, item.id)}>{item.displayName}</Link></span>)}</Notice>
   return <Notice tone="info" action={actions}>{tx('Bu bilgisayarda veritabanı bulunamadı; dosya yedeklemek veya elle eklemek için')} <Link className={linkClass} to={jobsNew}>{tx('Elle yapılandır')}</Link></Notice>
 }
