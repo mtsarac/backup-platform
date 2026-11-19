@@ -247,6 +247,11 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
         {
             return new RescanOutcome(RescanStatus.Disabled);
         }
+        else if (instanceKey is null && state.RequestedInstanceKey is null && state.StateAt(now) != DiscoveryScanState.Idle)
+        {
+            // An agent-wide scan is already queued or running: asking again is not an error, the answer is the same.
+            return new RescanOutcome(RescanStatus.Requested, ToStatus(state, await InstanceCountAsync(context, tenantId, agentId, cancellationToken), now));
+        }
         else if (!state.CanRequestManual(now))
         {
             return new RescanOutcome(RescanStatus.TooSoon, RetryAfter: state.ManualRetryAfter(now));

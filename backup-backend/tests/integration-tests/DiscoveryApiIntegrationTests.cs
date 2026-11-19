@@ -199,6 +199,25 @@ public sealed class DiscoveryApiIntegrationTests(PostgreSqlFixture fixture) : IC
     }
 
     [Fact]
+    public async Task Asking_again_for_a_scan_that_is_already_pending_is_acknowledged_not_refused()
+    {
+        var clock = new MutableClock();
+        await using var world = await AgentWorld.CreateAsync(fixture, clock: clock);
+        var setup = await world.CreateTenantAsync();
+        var agent = await world.EnrollAsync(setup);
+        await DeclareDiscoveryAsync(world, agent);
+        await ScanReasonAsync(world, agent);
+        var plan = (await ClaimAsync(world, agent))!.Value;
+        (await ReportAsync(world, agent, plan.GetProperty("scanId").GetGuid(), SqlServerReport())).Dispose();
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        using (var first = await setup.Admin.SendAsync(HttpMethod.Post, $"{Root(setup)}/agents/{agent.AgentId}/rescan"))
+            Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+        using (var again = await setup.Admin.SendAsync(HttpMethod.Post, $"{Root(setup)}/agents/{agent.AgentId}/rescan"))
+            Assert.Equal(HttpStatusCode.Accepted, again.StatusCode);
+    }
+
+    [Fact]
     public async Task A_due_scan_waits_while_the_agent_runs_a_backup_and_is_requested_once_it_has_finished()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
