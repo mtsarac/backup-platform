@@ -44,7 +44,7 @@ const openTab = async (user: UserEvent, name: string) => user.click(await screen
 const openChannelDetails = async (user: UserEvent, name: string) => {
   const card = within(await screen.findByRole('article', { name }))
   await user.click(card.getByRole('button', { name: 'Teknik ayrıntılar' }))
-  return within(await screen.findByRole('dialog', { name: 'Teknik ayrıntılar' }))
+  return within(card.getByRole('region', { name: 'Teknik ayrıntılar' }))
 }
 
 beforeEach(() => {
@@ -151,8 +151,6 @@ describe('channels', () => {
     const details = await openChannelDetails(user, 'Pager')
     expect(details.getByText(/Gizli anahtar kayıtlı/)).toBeInTheDocument()
     expect(details.getByRole('button', { name: /Pager kanalı: (?:secret|gizli anahtarı) temizle/ })).toBeInTheDocument()
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     const mailbox = await openChannelDetails(user, 'Ops mailbox')
     expect(mailbox.queryByRole('button', { name: /secret/i })).not.toBeInTheDocument()
   })
@@ -324,11 +322,11 @@ describe('delivery history', () => {
     expect(card.getByText('Ops mailbox')).toBeInTheDocument()
     expect(card.queryByText('smtp_unavailable')).not.toBeInTheDocument()
     await user.click(card.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const details = within(await screen.findByRole('dialog'))
+    const details = card
     expect(details.getByText('smtp_unavailable')).toBeVisible()
     expect(details.getByText('4')).toBeVisible()
     expect(details.getByText(formatDateTime('2026-10-14T12:00:00Z'))).toBeVisible()
-    expect(details.getByRole('button', { name: /Kopyala:.*Hata/ })).toBeInTheDocument()
+    expect(details.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('sends status, kind and eventType filters and resets to page 1', async () => {

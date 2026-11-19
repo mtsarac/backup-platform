@@ -2194,7 +2194,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "HTTP durumu": {"tr":"HTTP durumu","en":"HTTP status"},
   "Alan": {"tr":"Alan","en":"Field"},
   "Sayfayı yenileyip kaydı listeden yeniden seçin.": {"tr":"Sayfayı yenileyip kaydı listeden yeniden seçin.","en":"Refresh the page and pick the item from the list again."},
-  "Mevcut yedekleriniz etkilenmedi.": {"tr":"Mevcut yedekleriniz etkilenmedi.","en":"Your existing backups were not affected."},
   "Ayrıntıları kontrol edip yeniden deneyin.": {"tr":"Ayrıntıları kontrol edip yeniden deneyin.","en":"Check the details and try again."},
   "Kayıt token'ınız etkilenmedi; süresi dolana kadar kullanılabilir.": {"tr":"Kayıt anahtarınız etkilenmedi; süresi dolana kadar kullanılabilir.","en":"Your enrolment token was not affected; it stays usable until it expires."},
   "Takibi tekrar deneyin.": {"tr":"Takibi tekrar deneyin.","en":"Try following the enrolment again."},
@@ -3340,4 +3339,5 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Atla": { tr: "Atla", en: "Skip" },
   "Başlatıldı": { tr: "Başlatıldı", en: "Started" },
   "Bağlantı kaydedildi ama doğrulanmadı.": {"tr":"Bağlantı kaydedildi ama doğrulanmadı.","en":"The connection was saved but not verified."},
+  "Kopyala: {0}": {"tr":"Kopyala: {0}","en":"Copy: {0}"},
 }

@@ -779,11 +779,9 @@ describe('BackupShare frontend', () => {
     expect(screen.queryByText('share_revoked')).not.toBeInTheDocument()
     const refusal = screen.getByText('Paylaşım iptal edilmiş.').closest<HTMLElement>('[role="alert"]')!
     fireEvent.click(within(refusal).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const details = await screen.findByRole('dialog')
-    expect(within(details).getByText('share_revoked')).toBeVisible()
-    expect(within(details).getByRole('button', { name: 'Kopyala: Hata kodu' })).toBeInTheDocument()
-    fireEvent.click(within(details).getByRole('button', { name: 'Kapat' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const details = within(within(refusal).getByRole('region', { name: 'Teknik ayrıntılar' }))
+    expect(details.getByText('share_revoked')).toBeVisible()
+    expect(details.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
 
     // Older attempts are fetched with the cursor of the previous page and appended; the control disappears on the last page.
     expect(screen.queryByText(/Dosya sağlama toplamı doğrulaması başarısız/)).not.toBeInTheDocument()

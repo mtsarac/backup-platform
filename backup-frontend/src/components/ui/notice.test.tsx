@@ -104,7 +104,7 @@ describe('ErrorNotice', () => {
   it('shows an optional title above the message', () => {
     render(<ErrorNotice title="Veriler alınamadı" error={new ApiError(403)} />)
     expect(screen.getByText('Veriler alınamadı')).toBeInTheDocument()
-    expect(screen.getByText('Bu işlem için yetkiniz yok.')).toBeInTheDocument()
+    expect(screen.getByText(/Bu işlem için yetkiniz yok\./)).toBeInTheDocument()
   })
 })
 

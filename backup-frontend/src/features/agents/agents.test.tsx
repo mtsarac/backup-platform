@@ -152,9 +152,9 @@ describe('Backup computer page', () => {
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     for (const value of ['agent-a', 'Windows', 'Windows Server', '1.2.0', '.NET 10']) expect(screen.queryByText(value)).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const dialog = within(await screen.findByRole('dialog'))
+    const dialog = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
     for (const value of ['agent-a', 'Windows Server', '1.2.0', '.NET 10']) expect(dialog.getByText(value)).toBeVisible()
-    expect(dialog.getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('lists reported capabilities under technical details with separate supported, unsupported and unknown states', async () => {
@@ -169,7 +169,7 @@ describe('Backup computer page', () => {
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     expect(screen.queryByRole('heading', { name: 'Bildirilen yetenekler' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const dialog = within(await screen.findByRole('dialog'))
+    const dialog = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
     const section = dialog.getByRole('heading', { name: 'Bildirilen yetenekler' }).parentElement!
     expect(within(section).getAllByText('Destekleniyor')).toHaveLength(2)
     expect(within(section).getByText('Desteklenmiyor')).toBeInTheDocument()
@@ -184,7 +184,7 @@ describe('Backup computer page', () => {
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
   })
 
   it('shows only this computer\'s backup jobs', async () => {

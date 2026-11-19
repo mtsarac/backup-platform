@@ -254,17 +254,18 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+const technicalRegions = () => screen.queryAllByRole('region', { name: 'Teknik ayrıntılar' })
 async function closeTechnical() {
-  await userEvent.keyboard('{Escape}')
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  for (const trigger of screen.queryAllByRole('button', { name: 'Teknik ayrıntılar', expanded: true })) await userEvent.click(trigger)
+  expect(technicalRegions()).toHaveLength(0)
 }
-/** Opens the technical-details dialogs in turn until one holds `text`; leaves it open. */
+/** Opens the technical-details sections in turn until one holds `text`; leaves it open. */
 async function technicalWith(text: string | RegExp) {
   const count = screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length
   for (let i = 0; i < count; i++) {
     await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[i])
-    const dialog = within(await screen.findByRole('dialog'))
-    if (dialog.queryAllByText(text).length) return dialog
+    const region = technicalRegions().find(node => typeof text === 'string' ? node.textContent?.includes(text) : text.test(node.textContent ?? ''))
+    if (region) return within(region)
     await closeTechnical()
   }
   throw new Error(`No technical details contain ${String(text)}`)
@@ -438,7 +439,7 @@ describe('RestoreDetailPage', () => {
   const detailRoutes = <Routes><Route path="/tenants/:tenantId/restores/:id" element={<RestoreDetailPage />} /></Routes>
   const detailUrl = '/tenants/tenant-a/restores/restore-1'
   /** Visible text is whatever lies outside the collapsed technical section. */
-  const visibleLeaves = (text: string) => [...document.body.querySelectorAll('*')].filter(node => node.children.length === 0 && node.textContent?.includes(text) && !node.closest('details'))
+  const visibleLeaves = (text: string) => [...document.body.querySelectorAll('*')].filter(node => node.children.length === 0 && node.textContent?.includes(text) && !node.closest('[role="region"][aria-label="Teknik ayrıntılar"]'))
   const failed: RestoreView = { ...sampleRestore, status: 'Failed', targetState: 'PartiallyRestored', failureCode: 'SqlRestoreFailed', sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup', completedAt: '2026-10-08T12:20:00Z' }
 
   it('names the source backup and the backup computer, and never shows ids or codes outside the technical details', async () => {
@@ -450,26 +451,24 @@ describe('RestoreDetailPage', () => {
     for (const raw of ['restore-1', 'artifact-1', 'agent-1', 'replica-1', 'PartiallyRestored', 'SqlRestoreFailed', 'localhost']) expect(visibleLeaves(raw), raw).toEqual([])
   })
 
-  it('keeps the technical details collapsed and every value in them copyable', async () => {
+  it('keeps the technical details collapsed and copyable as one block', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
     await screen.findByRole('link', { name: 'SalesDB' })
     expect(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(technicalRegions()).toHaveLength(0)
     for (const label of ['Geri yükleme kimliği', 'Yedek dosyası kimliği', 'Yedekleme bilgisayarı kimliği', 'Yedek kopyası kimliği', 'Hedef durumu kodu', 'Hedef sunucu']) {
-      expect(screen.queryByRole('button', { name: `Kopyala: ${label}` }), label).not.toBeInTheDocument()
-      const dialog = await technicalWith(label)
-      expect(dialog.getByRole('button', { name: `Kopyala: ${label}` }), label).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Kopyala' }), label).not.toBeInTheDocument()
+      const details = await technicalWith(`${label}:`)
+      expect(details.getByRole('button', { name: 'Kopyala' }), label).toBeInTheDocument()
       await closeTechnical()
     }
   })
 
-  it('tells a failed restore as what happened, what it means for the database and what to do', async () => {
+  it('tells a failed restore in one plain sentence without the raw code', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
     const notice = await screen.findByRole('alert')
-    expect(within(notice).getByText('Verileriniz için:')).toBeInTheDocument()
-    expect(within(notice).getByText('Ne yapmalı:')).toBeInTheDocument()
     expect(within(notice).queryByText('SqlRestoreFailed')).not.toBeInTheDocument()
     expect(screen.queryByText('SqlRestoreFailed')).not.toBeInTheDocument()
     expect((await technicalWith('SqlRestoreFailed')).getByText('SqlRestoreFailed')).toBeInTheDocument()
@@ -502,7 +501,7 @@ describe('RestoreDetailPage', () => {
     for (const raw of ['restore.disk-space', 'SomeWarning']) expect(visibleLeaves(raw), raw).toEqual([])
     for (const raw of ['restore.disk-space', 'SomeWarning']) {
       expect(screen.queryByText(raw), raw).not.toBeInTheDocument()
-      expect((await technicalWith(raw)).getByRole('button', { name: `Kopyala: ${raw}` })).toBeInTheDocument()
+      expect((await technicalWith(raw)).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
       await closeTechnical()
     }
   })
@@ -789,7 +788,7 @@ describe('RestoreWizardPage', () => {
     expect(screen.queryByText('artifact-1')).not.toBeInTheDocument()
     const dialog = await technicalWith('artifact-1')
     expect(dialog.getByText('artifact-1')).toBeInTheDocument()
-    expect(dialog.getByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('does not let a check that no longer matches the settings start the restore', async () => {
@@ -1137,13 +1136,13 @@ describe('file archive restore', () => {
     renderWithClient(fileWizard, wizardUrl)
     await screen.findByRole('radio', { name: 'Tüm dosya ve klasörler' })
     expect(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).not.toBeInTheDocument()
-    expect((await technicalWith('Yedek dosyası kimliği')).getByRole('button', { name: /Kopyala: Yedek dosyası kimliği/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kopyala' })).not.toBeInTheDocument()
+    expect((await technicalWith('Yedek dosyası kimliği:')).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
     await closeTechnical()
     await reachFileConfirmStep()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Kopyala: Yedekleme bilgisayarı kimliği/ })).not.toBeInTheDocument()
-    expect((await technicalWith('Yedekleme bilgisayarı kimliği')).getByRole('button', { name: /Kopyala: Yedekleme bilgisayarı kimliği/ })).toBeInTheDocument()
+    expect(technicalRegions()).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: 'Kopyala' })).not.toBeInTheDocument()
+    expect((await technicalWith('Yedekleme bilgisayarı kimliği:')).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('disables original location when its source-agent mapping is unavailable', async () => {
@@ -1163,7 +1162,7 @@ describe('precheck verdict', () => {
   })
   const rawId = /\b(server|restore|staging|permission|database)\.[a-z-]+/
   /** Visible text is whatever lies outside the collapsed technical section. */
-  const visibleRawIds = () => [...document.body.querySelectorAll('*')].filter(node => node.children.length === 0 && rawId.test(node.textContent ?? '') && !node.closest('details'))
+  const visibleRawIds = () => [...document.body.querySelectorAll('*')].filter(node => node.children.length === 0 && rawId.test(node.textContent ?? '') && !node.closest('[role="region"][aria-label="Teknik ayrıntılar"]'))
 
   beforeEach(() => vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'file-system' }))
 
@@ -1183,7 +1182,8 @@ describe('precheck verdict', () => {
     expect(screen.queryByText('restore.target-sessions')).not.toBeInTheDocument()
     expect(screen.getAllByRole('row').length).toBeGreaterThanOrEqual(4)
     const dialog = await technicalWith('restore.target-sessions')
-    for (const id of ['server.reachable', 'restore.target-sessions', 'some.future-check']) expect(dialog.getByRole('button', { name: `Kopyala: ${id}` })).toBeInTheDocument()
+    for (const id of ['server.reachable', 'restore.target-sessions', 'some.future-check']) expect(dialog.getByText(`${id}:`)).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('explains a failed check in plain words without exposing its reason code', async () => {
@@ -1200,14 +1200,14 @@ describe('precheck verdict', () => {
   it('shows a repeated check once, however many times the agent reported it', async () => {
     await showVerdict(withChecks('Succeeded', [check('restore.target-sessions', 'Passed', 'ok'), check('server.reachable', 'Passed', 'ok'), check('restore.target-sessions', 'Passed', 'ok')]))
     await screen.findAllByRole('button', { name: 'Teknik ayrıntılar' })
-    expect((await technicalWith('restore.target-sessions')).getAllByRole('button', { name: 'Kopyala: restore.target-sessions' })).toHaveLength(1)
+    expect((await technicalWith('restore.target-sessions')).getAllByText('restore.target-sessions:')).toHaveLength(1)
     await closeTechnical()
   })
 
   it('keeps the worse status when one check is reported twice with different results', async () => {
     await showVerdict(withChecks('Failed', [check('restore.disk-space', 'Passed', 'ok'), check('restore.disk-space', 'Failed', 'InsufficientDiskSpace')]))
     await screen.findAllByRole('button', { name: 'Teknik ayrıntılar' })
-    expect((await technicalWith('restore.disk-space')).getAllByRole('button', { name: 'Kopyala: restore.disk-space' })).toHaveLength(1)
+    expect((await technicalWith('restore.disk-space')).getAllByText('restore.disk-space:')).toHaveLength(1)
     await closeTechnical()
     expect(screen.getAllByText('Hedefte yeterli disk alanı yok.').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Devam et/ })).toBeDisabled()

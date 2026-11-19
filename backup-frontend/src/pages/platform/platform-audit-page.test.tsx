@@ -20,7 +20,7 @@ describe('platform audit page', () => {
     expect(screen.queryByText('tenant_wrap_key.rotated')).not.toBeInTheDocument()
     expect(screen.queryByText('request-1')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const dialog = within(await screen.findByRole('dialog'))
+    const dialog = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
     expect(dialog.getByText('tenant_wrap_key.rotated')).toBeVisible()
     expect(dialog.getByText('request-1')).toBeVisible()
   })
