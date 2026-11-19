@@ -1427,6 +1427,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.": {"tr":"Bu sayfada değişiklik yapma yetkiniz yok. Görüntüleyici rolü salt okunurdur.","en":"You do not have permission to make changes on this page. The Reader role is read-only."},
   "Keşfedilen veritabanları yüklenemedi": {"tr":"Keşfedilen veritabanları yüklenemedi","en":"Databases found by discovery could not be loaded"},
   "Yeni yedekleme işi": {"tr":"Yeni yedekleme işi","en":"New backup job"},
+  "Yeni depolama ekle": {"tr":"Yeni depolama ekle","en":"Add new storage"},
   "Planlanmamış": {"tr":"Planlanmamış","en":"Unscheduled"},
   "Adım": {"tr":"Adım","en":"Step"},
   "İş etkin": {"tr":"İş etkin","en":"Job enabled"},
