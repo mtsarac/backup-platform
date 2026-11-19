@@ -4,7 +4,10 @@ Installs the agent using its real Windows Service enrollment (DPAPI CurrentUser)
 .DESCRIPTION
 Run in elevated Windows PowerShell. Use -Interactive for guided installation, or
 -NonInteractive -Server HTTPS_URL -Token TOKEN for unattended installation.
-Existing services, identities and binary directories are never replaced.
+An existing installation (BackupAgent service, %ProgramFiles%\BackupAgent, %ProgramData%\BackupAgent) is only replaced
+after the new package was downloaded and validated, and only with consent: with a terminal the script asks (default
+no); without one it refuses unless -ReplaceExisting (yes without asking) is given. Replacing removes the service,
+binaries and the agent identity (a new token is enrolled); backups already stored in backup storage locations are not deleted.
 #>
 [CmdletBinding()]
 param(
@@ -13,6 +16,7 @@ param(
     [string] $AgentName,
     [switch] $Interactive,
     [switch] $NonInteractive,
+    [switch] $ReplaceExisting,
     [ValidateSet('tr', 'en')] [string] $Language = 'en'
 )
 $ErrorActionPreference = 'Stop'
@@ -41,6 +45,60 @@ function New-ProtectedDirectory([string] $Path) {
     }
     $null = [IO.Directory]::CreateDirectory($Path)
     Set-Acl -Path $Path -AclObject $security
+}
+function Refuse-Existing { Fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again. Alternatively run it in a terminal to be asked, or add -ReplaceExisting to remove the existing agent and reinstall without asking.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin -ReplaceExisting ekleyin.' }
+# Same protections as Uninstall-BackupAgentService.ps1 -RemoveIdentity: only the agent credential store files may be present.
+function Assert-PurgeStore([string] $Path) {
+    $full = (Assert-SafePath $Path).TrimEnd('\')
+    $forbidden = @([IO.Path]::GetPathRoot($full).TrimEnd('\'), $env:WINDIR, $env:ProgramFiles, ${env:ProgramFiles(x86)}, [Environment]::GetFolderPath('CommonApplicationData'), $env:USERPROFILE)
+    if ($forbidden -contains $full) { Fail 'Refusing to remove a system, root or profile directory.' 'Sistem, kok veya profil dizini kaldirilmaz.' }
+    if (Test-Path -LiteralPath $full) {
+        if (-not (Test-Path -LiteralPath $full -PathType Container)) { Fail 'The identity store must be a directory.' 'Kimlik deposu bir dizin olmalidir.' }
+        foreach ($item in Get-ChildItem -LiteralPath $full -Force) {
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail 'Refusing removal through a reparse point.' 'Yeniden ayristirma noktasi uzerinden silme reddedildi.' }
+            if ($item.PSIsContainer -or ($item.Name -ne 'agent-identity.bin' -and $item.Name -ne '.enrollment.lock' -and $item.Name -notmatch '^\.agent-identity\.bin\.[a-fA-F0-9]{32}\.tmp$')) {
+                Fail 'Refusing removal: a directory contains data not owned by the agent credential store; nothing was removed.' 'Silme reddedildi: bir dizin ajan kimlik deposuna ait olmayan veri iceriyor; hicbir sey silinmedi.'
+            }
+        }
+    }
+    return $full
+}
+function Get-ServiceSetting([string] $Name) {
+    $environment = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\BackupAgent' -Name Environment -ErrorAction SilentlyContinue).Environment
+    $setting = @($environment | Where-Object { $_ -like "$Name=*" }) | Select-Object -First 1
+    if ($setting) { return $setting.Substring($Name.Length + 1) }
+}
+function Remove-ExistingAgent([string] $InstallPath, [string] $StorePath) {
+    # Validate every target before touching the service so a failed check removes nothing.
+    $stores = @($StorePath)
+    $registered = Get-ServiceSetting 'Agent__CredentialStoreDirectory'
+    if ($registered -and -not $registered.Equals($StorePath, [StringComparison]::OrdinalIgnoreCase)) { $stores += $registered }
+    $stores = @($stores | ForEach-Object { Assert-PurgeStore $_ })
+    if (Test-Path -LiteralPath $InstallPath) {
+        if (-not (Test-Path -LiteralPath $InstallPath -PathType Container)) { Fail 'The installation path is not a directory; nothing was removed.' 'Kurulum yolu bir dizin degil; hicbir sey silinmedi.' }
+        if (@(Get-ChildItem -LiteralPath $InstallPath -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
+            Fail 'The installation contains reparse points; nothing was removed.' 'Kurulum yeniden ayristirma noktasi iceriyor; hicbir sey silinmedi.'
+        }
+    }
+    if (Get-ScheduledTask -TaskName 'BackupAgentUpdate' -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName 'BackupAgentUpdate' -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName 'BackupAgentUpdate' -Confirm:$false
+    }
+    $service = Get-Service -Name BackupAgent -ErrorAction SilentlyContinue
+    if ($service) {
+        $marker = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\BackupAgent' -Name BackupOperatorsAddedByInstaller -ErrorAction SilentlyContinue).BackupOperatorsAddedByInstaller
+        if ($marker -eq 1) {
+            $backupOperators = (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-551').Translate([Security.Principal.NTAccount]).Value.Split('\')[1]
+            & net.exe localgroup $backupOperators 'NT SERVICE\BackupAgent' /delete | Out-Null
+        }
+        if ($service.Status -ne 'Stopped') { Stop-Service -Name BackupAgent -Force; $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(60)) }
+        $service.Dispose()
+        & sc.exe delete BackupAgent | Out-Null
+        if ($LASTEXITCODE -ne 0) { Fail 'Windows Service removal failed.' 'Windows hizmeti kaldirilamadi.' }
+    }
+    if ([Diagnostics.EventLog]::SourceExists('BackupAgent')) { Remove-EventLog -Source 'BackupAgent' }
+    foreach ($store in $stores) { if (Test-Path -LiteralPath $store) { Remove-Item -LiteralPath $store -Recurse -Force } }
+    if (Test-Path -LiteralPath $InstallPath) { Remove-Item -LiteralPath $InstallPath -Recurse -Force }
 }
 if ($Interactive -and $NonInteractive) { Fail 'Choose only one interaction mode.' 'Yalnizca bir etkilesim kipi secin.' }
 # SSH/ConPTY has a real console even when Windows reports no interactive desktop session.
@@ -82,9 +140,9 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $Server = $uri.AbsoluteUri.TrimEnd('/')
 $installPath = Assert-SafePath (Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'BackupAgent')
 $storePath = Assert-SafePath (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent')
-if ((Get-Service -Name BackupAgent -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath $installPath) -or (Test-Path -LiteralPath $storePath)) {
-    Fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin.'
-}
+$existing = [bool]((Get-Service -Name BackupAgent -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath $installPath) -or (Test-Path -LiteralPath $storePath))
+# No terminal and no explicit consent: refuse before downloading anything.
+if ($existing -and -not $ReplaceExisting -and -not $canPrompt) { Refuse-Existing }
 if ($guided) {
     Write-Host (Text '3. Installation summary (token hidden)' '3. Kurulum ozeti (kayit anahtari gizli)')
     Write-Host "  $Server`n  $AgentName`n  $installPath`n  BackupAgent / NT SERVICE\BackupAgent"
@@ -139,6 +197,23 @@ try {
         }
     } catch { Fail 'The package is invalid or unsafe; nothing was installed.' 'Paket gecersiz veya guvensiz; kurulum yapilmadi.' }
     finally { $archive.Dispose() }
+    # The new package is valid; only now may the old installation be removed.
+    if ($existing) {
+        if (-not $ReplaceExisting) {
+            Write-Host (Text 'An existing agent installation was found:' 'Mevcut bir ajan kurulumu bulundu:')
+            Write-Host ("  " + (Text 'Service: ' 'Hizmet: ') + $(if (Get-Service -Name BackupAgent -ErrorAction SilentlyContinue) { 'BackupAgent' } else { '-' }))
+            Write-Host ("  " + (Text 'Install path: ' 'Kurulum yolu: ') + $installPath)
+            Write-Host ("  " + (Text 'Identity store: ' 'Kimlik deposu: ') + $storePath)
+            $enrolled = Get-ServiceSetting 'Agent__Backend__BaseUri'
+            if ($enrolled) { Write-Host ("  " + (Text 'Server: ' 'Sunucu: ') + $enrolled) }
+            Write-Host (Text 'Removing deletes the service, binaries and agent identity (re-enrollment with the new token). Backups already stored in backup storage locations are not deleted.' 'Kaldirma hizmeti, ikili dosyalari ve ajan kimligini siler (yeni anahtarla yeniden kayit yapilir). Yedekleme depolama konumlarindaki mevcut yedekler silinmez.')
+            $answer = Read-Host (Text 'Remove it and reinstall? (y/n)' 'Mevcut ajan kurulumu bulundu. Kaldirilip yeniden kurulsun mu? (e/h)')
+            $accepted = if ($Language -eq 'tr') { '^[eE]$' } else { '^[yY]$' }
+            if ($answer -notmatch $accepted) { Refuse-Existing }
+        }
+        Write-Host (Text 'Removing the existing agent installation...' 'Mevcut ajan kurulumu kaldiriliyor...')
+        Remove-ExistingAgent $installPath $storePath
+    }
     # Directory.Move refuses an existing destination; keep the protected ACL on the binary tree.
     [IO.Directory]::Move($package, $installPath)
     try {

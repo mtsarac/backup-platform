@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Run elevated. HTTPS certificates must be trusted by both curl and the agent.
+# An existing installation (backup-agent.service, backup-agent user/group, /opt/backup-agent, /var/lib/backup-agent) is only replaced after the
+# new package was downloaded and validated, and only with consent: with a terminal the script asks (default no); without one it refuses
+# unless --replace-existing (yes without asking) is given. Replacing removes the service, binaries and the agent identity (a new token is
+# enrolled); backups already stored in backup storage locations are not deleted.
 set -euo pipefail
-SERVER='' TOKEN='' AGENT_NAME='' LANGUAGE=en MODE=auto
+SERVER='' TOKEN='' AGENT_NAME='' LANGUAGE=en MODE=auto REPLACE=0 EXISTING=0
 INSTALL_DIR=/opt/backup-agent
 STATE_DIR=/var/lib/backup-agent
 STORE_DIR=$STATE_DIR/identity
@@ -10,8 +14,24 @@ WORK=''
 declare -A SEEN=()
 text() { if [[ "$LANGUAGE" == tr ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 fail() { text "$1" "$2" >&2; printf '\n' >&2; exit 1; }
-# The same sentence as install.ps1 (a unit test compares them); every existing-install check ends here.
-refuse_existing() { fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin.'; }
+# The same sentence as install.ps1 (a unit test compares them); declining or refusing an existing install ends here.
+refuse_existing() { fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again. Alternatively run it in a terminal to be asked, or add --replace-existing to remove the existing agent and reinstall without asking.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin --replace-existing ekleyin.'; }
+# Only the agent's own fixed paths, service and account are touched; checked before anything is deleted.
+remove_existing() {
+    local path
+    for path in "$INSTALL_DIR" "$STATE_DIR"; do
+        [[ ! -L "$path" ]] || fail 'An installation path is a symbolic link; nothing was removed.' 'Bir kurulum yolu sembolik baglanti; hicbir sey silinmedi.'
+    done
+    if systemctl cat backup-agent.service >/dev/null 2>&1; then
+        systemctl disable --now backup-agent.service || fail 'The existing service could not be stopped; nothing else was removed.' 'Mevcut hizmet durdurulamadi; baska hicbir sey silinmedi.'
+    fi
+    rm -f -- "$UNIT"
+    systemctl daemon-reload
+    systemctl reset-failed backup-agent.service 2>/dev/null || true
+    rm -rf -- "$INSTALL_DIR" "$STATE_DIR"
+    if getent passwd backup-agent >/dev/null; then userdel backup-agent || fail 'The backup-agent account could not be removed.' 'backup-agent hesabi kaldirilamadi.'; fi
+    if getent group backup-agent >/dev/null; then groupdel backup-agent || fail 'The backup-agent group could not be removed.' 'backup-agent grubu kaldirilamadi.'; fi
+}
 cleanup() { unset TOKEN BACKUP_AGENT_ENROLLMENT_TOKEN; [[ -z "$WORK" ]] || rm -rf -- "$WORK"; }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -26,11 +46,12 @@ while (( $# )); do
                 --server) SERVER=$2 ;; --token) TOKEN=$2 ;; --name) AGENT_NAME=$2 ;; --language) LANGUAGE=$2 ;;
             esac
             shift 2 ;;
+        --replace-existing) REPLACE=1; shift ;;
         --interactive|--non-interactive)
             [[ "$MODE" == auto ]] || fail 'Choose only one interaction mode.' 'Yalnizca bir etkilesim kipi secin.'
             MODE=${1#--}; shift ;;
         --help|-h)
-            printf '%s\n' 'install.sh [--server HTTPS_URL] [--token TOKEN] [--name NAME] [--interactive|--non-interactive] [--language tr|en]'; exit 0 ;;
+            printf '%s\n' 'install.sh [--server HTTPS_URL] [--token TOKEN] [--name NAME] [--interactive|--non-interactive] [--replace-existing] [--language tr|en]'; exit 0 ;;
         *) fail 'Unknown installer option.' 'Bilinmeyen kurulum parametresi.' ;;
     esac
 done
@@ -94,10 +115,12 @@ for path in /opt /var /var/lib /etc /etc/systemd /etc/systemd/system; do
     (( (8#$permissions & 0022) == 0 )) || fail 'Installation parents must not be writable by other users.' 'Diger kullanicilar ust kurulum dizinlerine yazamamalidir.'
 done
 for path in "$INSTALL_DIR" "$STATE_DIR" "$UNIT" /run/systemd/system/backup-agent.service /usr/lib/systemd/system/backup-agent.service /lib/systemd/system/backup-agent.service; do
-    [[ ! -e "$path" && ! -L "$path" ]] || refuse_existing
+    [[ ! -e "$path" && ! -L "$path" ]] || EXISTING=1
 done
-[[ $(systemctl show backup-agent.service --property=LoadState --value) == not-found ]] || refuse_existing
-if getent passwd backup-agent >/dev/null || getent group backup-agent >/dev/null; then refuse_existing; fi
+[[ $(systemctl show backup-agent.service --property=LoadState --value) == not-found ]] || EXISTING=1
+if getent passwd backup-agent >/dev/null || getent group backup-agent >/dev/null; then EXISTING=1; fi
+# No terminal and no explicit consent: refuse before downloading anything.
+if (( EXISTING && ! REPLACE )) && [[ "$MODE" != interactive ]] && ! ( : </dev/tty ) 2>/dev/null; then refuse_existing; fi
 if [[ "$MODE" == interactive ]]; then
     printf '\n%s\n  %s\n  %s\n  %s\n  %s\n' "$(text '3. Installation summary (token hidden)' '3. Kurulum ozeti (kayit anahtari gizli)')" "$SERVER" "$AGENT_NAME" "$INSTALL_DIR" 'backup-agent.service / backup-agent' >&3
     printf '%s\n' "$(text 'The service uses a dedicated unprivileged account; grant source access separately.' 'Hizmet ayri, yetkisiz bir hesap kullanir; kaynak erisimini ayrica verin.')" >&3
@@ -142,6 +165,25 @@ with tarfile.open(work / 'agent.tar.gz', 'r:gz') as archive:
 PY
 then fail 'The package is invalid or unsafe; nothing was installed.' 'Paket gecersiz veya guvensiz; kurulum yapilmadi.'; fi
 root=$(<"$WORK/root")
+# The new package is valid; only now may the old installation be removed.
+if (( EXISTING )); then
+    if (( ! REPLACE )); then
+        [[ "$MODE" == interactive ]] || exec 3<>/dev/tty
+        {
+            printf '\n%s\n' "$(text 'An existing agent installation was found:' 'Mevcut bir ajan kurulumu bulundu:')"
+            printf '  %s%s\n  %s%s\n  %s%s\n' "$(text 'Service: ' 'Hizmet: ')" backup-agent.service "$(text 'Install path: ' 'Kurulum yolu: ')" "$INSTALL_DIR" "$(text 'Identity store: ' 'Kimlik deposu: ')" "$STORE_DIR"
+            enrolled=$(sed -n 's/^Environment="Agent__Backend__BaseUri=\(.*\)"$/\1/p' "$UNIT" 2>/dev/null | head -n 1 | sed 's/%%/%/g' || true)
+            [[ -z "$enrolled" ]] || printf '  %s%s\n' "$(text 'Server: ' 'Sunucu: ')" "$enrolled"
+            printf '%s\n' "$(text 'Removing deletes the service, binaries, the backup-agent account and the agent identity (re-enrollment with the new token). Backups already stored in backup storage locations are not deleted.' 'Kaldirma hizmeti, ikili dosyalari, backup-agent hesabini ve ajan kimligini siler (yeni anahtarla yeniden kayit yapilir). Yedekleme depolama konumlarindaki mevcut yedekler silinmez.')"
+            printf '%s ' "$(text 'Remove it and reinstall? (y/n)' 'Mevcut ajan kurulumu bulundu. Kaldirilip yeniden kurulsun mu? (e/h)')"
+        } >&3
+        IFS= read -r confirm <&3
+        if [[ "$LANGUAGE" == tr ]]; then accepted='^[eE]$'; else accepted='^[yY]$'; fi
+        [[ "$confirm" =~ $accepted ]] || refuse_existing
+    fi
+    text 'Removing the existing agent installation...' 'Mevcut ajan kurulumu kaldiriliyor...'; printf '\n'
+    remove_existing
+fi
 # Fail closed after this point: preserve any newly saved identity and partial installation for diagnosis.
 mkdir -m 755 "$INSTALL_DIR"
 cp -R -- "$WORK/package/$root/." "$INSTALL_DIR/"
