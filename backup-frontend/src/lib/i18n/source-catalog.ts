@@ -3335,7 +3335,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "{0} veritabanı yedeği": {"tr":"{0} veritabanı yedeği","en":"{0} database backup"},
   "{0}: Değiştir": {"tr":"{0}: Değiştir","en":"{0}: Change"},
   "Özet ve başla": {"tr":"Özet ve başla","en":"Summary and start"},
-  "Nereye": {"tr":"Nereye","en":"Where to"},
   "Yedekler otomatik şifrelenir.": {"tr":"Yedekler otomatik şifrelenir.","en":"Backups are encrypted automatically."},
   "Sadece oluştur": {"tr":"Sadece oluştur","en":"Only create"},
   "Yedeklemeyi oluştur ve ilk yedeği başlat": {"tr":"Yedeklemeyi oluştur ve ilk yedeği başlat","en":"Create the backup and start the first one"},
