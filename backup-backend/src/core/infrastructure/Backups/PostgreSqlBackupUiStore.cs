@@ -1,5 +1,6 @@
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -42,7 +43,8 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
     public async Task<BackupDashboardView> GetDashboardAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var jobs = await ReadJobsAsync(context, tenantId, null, false, now, cancellationToken);
+        // A revoked computer's jobs no longer protect anything: they stay in the job list, not in the dashboard numbers.
+        var jobs = (await ReadJobsAsync(context, tenantId, null, false, now, cancellationToken)).Where(job => !job.AgentRevoked).ToList();
         var runs = context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId);
         var since = now.AddHours(-24);
         var active = await runs.CountAsync(run => run.Status == BackupStatus.Pending || run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running || run.Status == BackupStatus.RetryPending || run.Status == BackupStatus.Paused, cancellationToken);
@@ -78,7 +80,8 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
     public async Task<BackupHealthTimelineView> GetHealthTimelineAsync(TenantId tenantId, TimeZoneInfo zone, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null)
+        var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null
+                && !context.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked))
             .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new HealthTimelineJobRow(job.Id, job.Name, job.CreatedAt)).ToListAsync(cancellationToken);
         var since = BackupHealthTimeline.RunsSince(now);
         var runs = await context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId && run.CreatedAt >= since)
@@ -115,6 +118,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
             {
                 Job = job,
                 AgentName = context.Agents.Where(agent => agent.TenantId == tenantId && agent.Id == job.AgentId).Select(agent => agent.HostName).FirstOrDefault(),
+                AgentRevoked = context.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked),
                 LastRun = context.BackupRuns.Where(run => run.TenantId == tenantId && run.JobId == job.Id).OrderByDescending(run => run.CreatedAt).ThenBy(run => run.Id)
                     .Select(run => new { run.Id, run.Status, run.CreatedAt, run.StartedAt, run.CompletedAt, run.TerminalReason, run.CancellationRequestedAt }).FirstOrDefault()
             }).ToListAsync(cancellationToken);
@@ -122,7 +126,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         {
             var view = BackupOrchestrator.ToView(row.Job, now);
             var last = row.LastRun;
-            return view with { AgentName = row.AgentName, LastRun = last is null ? null : new(last.Id, BackupOrchestrator.RunStatus(last.Status, last.CancellationRequestedAt), last.CreatedAt, last.StartedAt, last.CompletedAt, last.TerminalReason), NextOccurrenceAt = view.Schedule?.NextOccurrenceAt };
+            return view with { AgentName = row.AgentName, AgentRevoked = row.AgentRevoked, LastRun = last is null ? null : new(last.Id, BackupOrchestrator.RunStatus(last.Status, last.CancellationRequestedAt), last.CreatedAt, last.StartedAt, last.CompletedAt, last.TerminalReason), NextOccurrenceAt = view.Schedule?.NextOccurrenceAt };
         }).ToArray();
     }
 

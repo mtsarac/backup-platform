@@ -42,7 +42,11 @@ internal sealed partial class PostgreSqlSession : IAsyncDisposable
         {
             await connection.DisposeAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            throw Translate(logger, "connect", exception, timedOut: exception is OperationCanceledException);
+            var translated = Translate(logger, "connect", exception, timedOut: exception is OperationCanceledException);
+            throw translated.Kind == DatabaseFailureKind.Unreachable && target.SslMode != SslMode.Prefer && IsBareProtocolFailure(exception)
+                && await ServerRefusesTlsAsync(target, guard.Token).ConfigureAwait(false)
+                ? new DatabaseProviderException(DatabaseFailureKind.ServerTlsUnavailable, "Encryption is on, but the server does not offer an encrypted (TLS) connection.", exception)
+                : translated;
         }
 
         return new PostgreSqlSession(connection, logger);
@@ -133,11 +137,26 @@ internal sealed partial class PostgreSqlSession : IAsyncDisposable
         return false;
     }
 
-    private static bool IsTlsFailure(Exception exception)
+    // Npgsql raises a bare NpgsqlException (no SQLSTATE, no inner exception) when the server answers the SSL request with "no"; the text is not matched, ServerRefusesTlsAsync confirms it on the wire.
+    private static bool IsBareProtocolFailure(Exception exception) =>
+        exception is NpgsqlException { InnerException: null, SqlState: null } and not PostgresException;
+
+    /// <summary>Asks the server the protocol's own SSLRequest question; 'N' means it speaks no TLS. Any other outcome (including errors) is "not confirmed".</summary>
+    private static async Task<bool> ServerRefusesTlsAsync(PostgreSqlConnectionTarget target, CancellationToken cancellationToken)
     {
-        for (var e = exception; e is not null; e = e.InnerException)
-            if (e is NpgsqlException && e.Message.Contains("SSL/TLS", StringComparison.Ordinal)) return true;
-        return false;
+        try
+        {
+            using var client = new TcpClient();
+            await client.ConnectAsync(target.Host, target.Port, cancellationToken).ConfigureAwait(false);
+            var stream = client.GetStream();
+            await stream.WriteAsync(new byte[] { 0, 0, 0, 8, 0x04, 0xD2, 0x16, 0x2F }, cancellationToken).ConfigureAwait(false);
+            var answer = new byte[1];
+            return await stream.ReadAsync(answer, cancellationToken).ConfigureAwait(false) == 1 && answer[0] == (byte)'N';
+        }
+        catch (Exception exception) when (exception is SocketException or IOException or OperationCanceledException)
+        {
+            return false;
+        }
     }
 
     internal static DatabaseProviderException Translate(ILogger logger, string phase, Exception exception, bool timedOut)
@@ -162,8 +181,6 @@ internal sealed partial class PostgreSqlSession : IAsyncDisposable
                 new DatabaseProviderException(DatabaseFailureKind.Unexpected, "The server returned an unexpected error. Details are in the agent log.", exception),
             _ when IsCertificateFailure(exception) =>
                 new DatabaseProviderException(DatabaseFailureKind.ServerCertificateUntrusted, "The server's TLS certificate could not be verified.", exception),
-            _ when IsTlsFailure(exception) =>
-                new DatabaseProviderException(DatabaseFailureKind.InvalidConfiguration, "A TLS connection could not be established. Change the encryption settings or check that the server offers TLS.", exception),
             _ when exception is NpgsqlException or SocketException or IOException or System.Security.Authentication.AuthenticationException
                     || exception.InnerException is SocketException or IOException =>
                 new DatabaseProviderException(DatabaseFailureKind.Unreachable, "The server could not be reached or the connection was lost.", exception),

@@ -12,7 +12,9 @@ public enum DatabaseFailureKind
     /// <summary>The supplied settings cannot form a connection.</summary>
     InvalidConfiguration,
     /// <summary>The TLS handshake reached the server but its certificate was not trusted (self-signed, unknown issuer or name mismatch).</summary>
-    ServerCertificateUntrusted
+    ServerCertificateUntrusted,
+    /// <summary>Encryption is required but the server does not speak TLS at all (no handshake took place).</summary>
+    ServerTlsUnavailable
 }
 
 /// <summary>

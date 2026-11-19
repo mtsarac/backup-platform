@@ -17,6 +17,7 @@ internal static class PostgreSqlFailures
             DatabaseFailureKind.Timeout => new(PostgreSqlReasons.ConnectionTimeout, error.Message, BackupFailureCause.Timeout),
             DatabaseFailureKind.InvalidConfiguration => new(PostgreSqlReasons.ConnectionSettingsInvalid, error.Message, BackupFailureCause.InvalidConfiguration),
             DatabaseFailureKind.ServerCertificateUntrusted => new(PostgreSqlReasons.ServerCertificateUntrusted, error.Message, BackupFailureCause.ServerCertificateUntrusted),
+            DatabaseFailureKind.ServerTlsUnavailable => new(PostgreSqlReasons.ServerTlsUnavailable, error.Message, BackupFailureCause.InvalidConfiguration),
             DatabaseFailureKind.Unreachable => new(PostgreSqlReasons.ServerUnreachable, error.Message, BackupFailureCause.DatabaseUnavailable),
             _ => new(PostgreSqlReasons.MetadataUnavailable, error.Message, BackupFailureCause.Unclassified)
         };

@@ -7,6 +7,7 @@ public static class PostgreSqlReasons
     public const string ConnectionTimeout = "connection-timeout";
     public const string ConnectionSettingsInvalid = "connection-settings-invalid";
     public const string ServerCertificateUntrusted = "server-certificate-untrusted";
+    public const string ServerTlsUnavailable = "server_tls_unavailable";
     public const string AuthenticationFailed = "authentication-failed";
     public const string PermissionDenied = "permission-denied";
     public const string MetadataUnavailable = "metadata-unavailable";
