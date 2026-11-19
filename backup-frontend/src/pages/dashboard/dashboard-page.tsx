@@ -1,106 +1,187 @@
-import { tx, useLanguage } from '@/lib/i18n'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
-import { apiRequest, tenantPath } from '@/lib/api/client'
-import { failureMessage } from '@/lib/api/failure-messages'
-import { useTenant } from '@/features/tenancy/use-tenant'
+import { Check, Circle, Plus } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
-import { StatusPill } from '@/components/data/status-pill'
-import { statusLabel } from '@/lib/status'
-import { KpiCard } from '@/components/data/kpi-card'
-import { DataList, type Column } from '@/components/data/data-list'
 import { RelativeTime } from '@/components/data/relative-time'
+import { ProgressBar } from '@/components/data/progress-bar'
+import { StatusPill } from '@/components/data/status-pill'
+import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Disclosure } from '@/components/ui/disclosure'
+import { linkClass } from '@/components/ui/form-styles'
 import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
-import { TechnicalDetails } from '@/components/ui/technical-details'
-import { ReplicationSummary } from '@/features/backups/replication'
+import { useRunBackupJob } from '@/features/backup-jobs/hooks'
+import { jobStatusLabel, jobStatusLevel } from '@/features/backup-jobs/job-status'
+import { type Badge, type Band, countRows, formatDay, headerBadge, lastSucceededDay, pickBand, type ProtectionRow } from '@/features/dashboard/protection'
 import type { BackupRun } from '@/features/backups/types'
-import type { BackupJob } from '@/features/backup-jobs/types'
-import { HealthStatusCard } from './health-status-card'
-import { useHealthSummary } from './health-summary'
-import { ObservabilityPanel } from './observability-panel'
-import { formatDateTime } from '@/lib/format'
+import { useTenant } from '@/features/tenancy/use-tenant'
+import { failureMessage } from '@/lib/api/failure-messages'
+import { formatBytes, formatDateTime } from '@/lib/format'
+import { tx, useLanguage } from '@/lib/i18n'
+import { ProtectionStrip } from './protection-strip'
+import { useProtection } from './use-protection'
 
-interface Dashboard {
-  jobs: { total: number; enabled: number; scheduled: number }
-  agents: { total: number; online: number; offline: number; unknown: number; disabled: number; revoked: number }
-  runs: { active: number; running: number; retryPending: number; cancellationRequested: number; storageFailedLast24Hours: number; failedLast24Hours: number; succeededLast24Hours: number; replicationInsufficientLast24Hours?: number }
-  artifacts: { total: number; sizeBytes: number; deletePending: number; deleteFailed: number }
-  recentRuns: BackupRun[]
-  upcomingJobs: BackupJob[]
-}
+type Protection = ReturnType<typeof useProtection>
 
-function Row({ label, value, tone }: { label: string; value: number; tone?: 'error' }) {
-  return <div className="flex items-center justify-between gap-3 py-1.5"><dt className="text-body text-text-muted">{label}</dt><dd className={`font-semibold tabular-nums ${tone === 'error' && value > 0 ? 'text-error' : 'text-text-heading'}`}>{value}</dd></div>
+const badgeView: Record<Badge, () => { level: 'urgent' | 'neutral' | 'safe'; text: string }> = {
+  attention: () => ({ level: 'urgent', text: tx('Dikkat gerekiyor') }),
+  none: () => ({ level: 'neutral', text: tx('Henüz yedekleme yok') }),
+  first: () => ({ level: 'neutral', text: tx('İlk yedek bekleniyor') }),
+  current: () => ({ level: 'safe', text: tx('Hepsi güncel') }),
 }
 
 /** One plain sentence about a run: why it failed, or what it is waiting for. */
 function runNote(run: BackupRun): string {
   if (run.reasonCode) return failureMessage(run.reasonCode)
-  if (run.status === 'RetryPending') return tx("Yeniden deneme bekleniyor.")
-  if (run.status === 'CancellationRequested') return tx("Yedekleme bilgisayarı iptali henüz tamamlamadı.")
+  if (run.status === 'RetryPending') return tx('Yeniden deneme bekleniyor.')
+  if (run.status === 'CancellationRequested') return tx('Yedekleme bilgisayarı iptali henüz tamamlamadı.')
   return '—'
+}
+
+function AttentionBand({ band, base }: { band: Band; base: string }) {
+  const { canOperate } = useTenant()
+  const run = useRunBackupJob()
+  const [started, setStarted] = useState<string>()
+  const [error, setError] = useState<unknown>(null)
+  const { row } = band
+  const action = band.kind === 'attention' && canOperate ? band.action : null
+  return <section aria-label={band.kind === 'attention' ? tx('Dikkat gerekiyor') : tx('Çalışan yedekleme')} className={`space-y-2 rounded-lg border p-4 ${band.kind === 'attention' ? 'border-error-border bg-error-subtle' : 'border-border bg-surface'}`}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="min-w-0 font-medium text-text-heading">{band.text}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {action === 'runNow' && <Button disabled={run.isPending} onClick={() => { setError(null); void run.run(row.job.id).then(result => { if (result) setStarted(result.id) }).catch(setError) }}>{tx('Şimdi yedekle')}</Button>}
+        {action === 'checkComputer' && <Link className={buttonVariants()} to={`${base}/agents/${row.job.agentId}`}>{tx('Bilgisayarı kontrol et')}</Link>}
+        {action === 'manageStorage' && <Link className={buttonVariants()} to={`${base}/storage`}>{tx('Depolamayı yönet')}</Link>}
+        {action === 'retryRestore' && row.lastSuccessId && <Link className={buttonVariants()} to={`${base}/backup-runs/${row.lastSuccessId}/restore`}>{tx('Yeniden dene')}</Link>}
+        <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-jobs/${row.job.id}`}>{tx('Ayrıntıyı gör')}</Link>
+      </div>
+    </div>
+    {started && <p className="text-sm">{tx('Yedekleme denemesi başlatıldı')} · <Link className={linkClass} to={`${base}/backup-runs/${started}`}>{tx('Denemeyi aç')}</Link></p>}
+    {error !== null && <ErrorNotice title={tx('İşlem tamamlanamadı')} error={error} />}
+  </section>
+}
+
+function Row({ row, base }: { row: ProtectionRow; base: string }) {
+  const { job } = row
+  const day = lastSucceededDay(row.days)
+  return <li className="grid items-center gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto_auto]">
+    <div className="min-w-0">
+      <Link className={`font-medium ${linkClass}`} to={`${base}/backup-jobs/${job.id}`}>{job.name}</Link>
+      <p className="truncate text-sm text-text-muted">{job.configuration.database}</p>
+    </div>
+    <div className="min-w-0 space-y-0.5">
+      <StatusPill level={jobStatusLevel[row.status]}>{jobStatusLabel(row.status, row.percent)}</StatusPill>
+      {row.note && <p className="text-sm text-text-muted">{row.note}</p>}
+    </div>
+    <ProtectionStrip days={row.days} jobName={job.name} />
+    <p className="text-sm text-text-muted">{tx('Son başarılı')}: {day ? formatDay(day) : row.hasSucceeded ? tx('14 günden önce') : '—'}</p>
+    <div className="flex flex-wrap items-center gap-2">
+      {row.lastSuccessId
+        ? <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-runs/${row.lastSuccessId}/restore`} aria-label={tx('{0} için geri yükle', { '0': job.name })}>{tx('Geri yükle')}</Link>
+        : <><Button variant="outline" disabled aria-label={tx('{0} için geri yükle', { '0': job.name })}>{tx('Geri yükle')}</Button><span className="text-sm text-text-muted">{tx('henüz yedek yok')}</span></>}
+    </div>
+  </li>
+}
+
+function ProtectedData({ rows, agents, base }: { rows: ProtectionRow[]; agents: Protection['agents']; base: string }) {
+  const groups = new Map<string, ProtectionRow[]>()
+  for (const row of rows) groups.set(row.job.agentId, [...groups.get(row.job.agentId) ?? [], row])
+  return <Section title={tx('Korunan veriler')}>
+    {rows.length === 0
+      ? <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">{tx('Korunan verileriniz burada görünecek.')}</p>
+      : <div className="space-y-4">{[...groups].map(([agentId, items]) => {
+        const connectivity = agents.find(agent => agent.agentId === agentId)?.connectivity ?? 'unknown'
+        const sorted = items.toSorted((a, b) => Number(b.baseStatus === 'attention') - Number(a.baseStatus === 'attention') || a.score - b.score || a.job.name.localeCompare(b.job.name))
+        return <section key={agentId} aria-label={items[0].job.agentName ?? agentId} className="overflow-hidden rounded-lg border border-border bg-surface">
+          <header className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">
+            <h3 className="font-medium text-text-heading">{items[0].job.agentName ?? agentId}</h3>
+            <StatusPill status={connectivity} />
+          </header>
+          <ul className="divide-y divide-border">{sorted.map(row => <Row key={row.job.id} row={row} base={base} />)}</ul>
+        </section>
+      })}</div>}
+  </Section>
+}
+
+function Steps({ p, base, canOperate }: { p: Protection; base: string; canOperate: boolean }) {
+  const steps = [
+    { done: p.agents.length > 0, label: tx('Yedekleme bilgisayarı ekleyin'), to: `${base}/enrollment` },
+    { done: p.rows.length > 0, label: tx('Yedeklenecek veriyi seçin'), to: `${base}/backup-jobs/new` },
+    { done: p.hasSucceededEver, label: tx('İlk yedeğinizi alın'), to: `${base}/backup-jobs` },
+    { done: p.hasRestoreTrial, label: tx('Yedeği geri yükleyerek deneyin'), to: `${base}/backup-runs?status=Succeeded` },
+  ]
+  const current = steps.findIndex(step => !step.done)
+  return <Section title={tx('Başlangıç adımları')}>
+    <ol className="divide-y divide-border rounded-lg border border-border bg-surface">{steps.map((step, index) => <li key={step.to} aria-current={index === current ? 'step' : undefined} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <span className="flex items-center gap-2">{step.done ? <Check aria-hidden="true" className="size-4 text-success" /> : <Circle aria-hidden="true" className="size-4 text-text-muted" />}
+        <span className={step.done ? 'text-text-muted' : 'font-medium text-text-heading'}>{step.label}</span>{step.done && <span className="sr-only">{tx('Tamamlandı')}</span>}</span>
+      {index === current && canOperate && <Link className={buttonVariants()} to={step.to}>{tx('Başla')}</Link>}
+    </li>)}</ol>
+  </Section>
+}
+
+function StorageCard({ p, base }: { p: Protection; base: string }) {
+  const quota = p.quota
+  const limited = quota && !quota.unlimited && quota.limitBytes != null && quota.limitBytes > 0
+  const percent = limited ? (quota.usedBytes / quota.limitBytes!) * 100 : null
+  return <Section title={tx('Depolama')} actions={<Link className={linkClass} to={`${base}/storage`}>{tx('Yönet')}</Link>}>
+    <p className="text-lg font-semibold tabular-nums text-text-heading">{formatBytes(p.dashboard?.artifacts.sizeBytes ?? 0)}</p>
+    {limited && <div className="mt-2 space-y-1">
+      <ProgressBar label={tx('Kota kullanımı')} value={percent} valueText={`${Math.round(percent!)}%`} tone={quota.state === 'Normal' ? 'primary' : 'warning'} />
+      <p className="text-sm text-text-muted">{tx('Kota: {0}', { '0': formatBytes(quota.limitBytes!) })}</p>
+    </div>}
+  </Section>
+}
+
+function NextCard({ p, base }: { p: Protection; base: string }) {
+  const upcoming = (p.dashboard?.upcomingJobs ?? []).filter(job => job.schedule?.nextOccurrenceAt)
+    .toSorted((a, b) => a.schedule!.nextOccurrenceAt!.localeCompare(b.schedule!.nextOccurrenceAt!))[0]
+  const last = p.lastSuccess
+  return <Section title={tx('Sıradaki ve son yedek')}><dl className="space-y-2 text-sm">
+    <div><dt className="text-text-muted">{tx('Sıradaki')}</dt><dd>{upcoming ? <><Link className={linkClass} to={`${base}/backup-jobs/${upcoming.id}`}>{upcoming.name}</Link> · {formatDateTime(upcoming.schedule!.nextOccurrenceAt)}</> : tx('Etkin zamanlama yok.')}</dd></div>
+    <div><dt className="text-text-muted">{tx('Son başarılı yedek')}</dt><dd>{last ? <><Link className={linkClass} to={`${base}/backup-runs/${last.id}`}>{last.jobName}</Link> · <RelativeTime value={last.completedAt ?? last.createdAt} /></> : '—'}</dd></div>
+  </dl></Section>
+}
+
+function ActivityCard({ runs, base }: { runs: BackupRun[]; base: string }) {
+  return <Section title={tx('Son etkinlik')} actions={<Link className={linkClass} to={`${base}/backup-runs`}>{tx('Tüm geçmiş')}</Link>}>
+    {runs.length === 0 ? <p className="text-sm text-text-muted">{tx('Henüz yedekleme kaydı yok.')}</p>
+      : <ul className="space-y-2">{runs.slice(0, 4).map(run => <li key={run.id} className="space-y-0.5 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2"><Link className={`font-medium ${linkClass}`} to={`${base}/backup-runs/${run.id}`}>{run.jobName}</Link><StatusPill status={run.status} /></div>
+        <p className="text-text-muted"><RelativeTime value={run.startedAt ?? run.createdAt} />{run.reasonCode || run.status === 'RetryPending' || run.status === 'CancellationRequested' ? <> · {runNote(run)}</> : null}</p>
+      </li>)}</ul>}
+  </Section>
 }
 
 export function DashboardPage() {
   useLanguage()
-  const { tenantId, tenant, canOperate } = useTenant()
-  const query = useQuery({ queryKey: ['tenant', tenantId, 'dashboard'], queryFn: ({ signal }) => apiRequest<Dashboard>(tenantPath(tenantId, 'dashboard'), { signal }), refetchInterval: 15_000, refetchIntervalInBackground: false })
-  const data = query.data
+  const { tenantId, canOperate } = useTenant()
   const base = `/tenants/${tenantId}`
-  const columns: Column<BackupRun>[] = [
-    { key: 'job', card: 'title', header: tx('Yedekleme işi'), wrap: true, render: run => <Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName}</Link> },
-    { key: 'agent', header: tx('Yedekleme bilgisayarı'), render: run => run.agentName ?? '—' },
-    { key: 'date', header: tx('Başlangıç'), render: run => <RelativeTime value={run.startedAt ?? run.createdAt} /> },
-    { key: 'status', header: tx('Durum'), card: 'status', render: run => <StatusPill status={run.status} /> },
-    { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => <div className="space-y-1"><p>{runNote(run)}</p>{(run.reasonCode || run.status === 'Failed' || run.status === 'AgentLost' || (run.replication && run.replication.status !== 'Healthy')) && <TechnicalDetails items={[{ label: tx('Veritabanı'), value: run.configuration.database }]}>{run.replication && <ReplicationSummary replication={run.replication} />}</TechnicalDetails>}</div> },
-  ]
-  const replicationShort = data?.runs.replicationInsufficientLast24Hours ?? 0
-  const noJobs = useHealthSummary(tenantId).data?.totalJobs === 0
+  const p = useProtection(tenantId)
+  const counts = countRows(p.rows)
+  const badge = badgeView[headerBadge(p.rows)]()
+  const band = pickBand(p.rows)
+  const empty = p.rows.length === 0
   return <>
-    <PageHeader title={tx("Genel Bakış")} description={tx("{0} · Yedeklerinizin durumu", { "0": tenant.name })}
-      actions={canOperate && !noJobs ? <Link to={`${base}/backup-jobs/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx("Yeni yedekleme işi")}</Link> : undefined} />
-    <HealthStatusCard tenantId={tenantId} canOperate={canOperate} replicationInsufficientLast24Hours={replicationShort} />
-    <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
-      {data && <>
-        {data.artifacts.deleteFailed > 0 && <ErrorNotice what={tx("{0} yedek dosyası silinemedi.", { "0": data.artifacts.deleteFailed })} dataImpact={tx("Silinemeyen dosyalar depoda duruyor; diğer yedekleriniz etkilenmedi.")} action={tx("Nedenini inceleyip silmeyi yeniden deneyin.")} control={<Link className="font-medium underline" to={`${base}/storage`}>{tx("Silme hatalarını inceleyin.")}</Link>} />}
-        {!noJobs && <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-          <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" />
-          <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined}
-            hint={data.runs.failedLast24Hours > 0 || data.runs.storageFailedLast24Hours > 0 ? <>
-              {data.runs.storageFailedLast24Hours > 0 && <>{tx("{0} tanesi depolamaya yazma veya kopya doğrulama hatası.", { "0": data.runs.storageFailedLast24Hours })}{' '}</>}
-              {tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")}
-              <Link className="flex min-h-control w-fit items-center font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
-            </> : undefined} />
-        </div>}
-        {!noJobs && <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="recent-runs-heading" className="text-base font-semibold text-text-heading">{tx("Son yedeklemeler")}</h2>
-            <Link className="text-sm font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs`}>{tx("Tüm geçmiş")}</Link>
-          </div>
-          <DataList rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage={tx("Henüz yedekleme kaydı yok.")} />
-        </section>}
-            {!noJobs && <ObservabilityPanel tenantId={tenantId} />}
-            <Disclosure title={tx('İş ve bilgisayar ayrıntıları')}>
-            <div className="grid gap-x-8 gap-y-6 lg:grid-cols-3">
-              <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")}><dl className="divide-y divide-border">
-                <Row label={tx("Toplam")} value={data.agents.total} /><Row label={tx("Çevrimiçi")} value={data.agents.online} /><Row label={tx("Çevrimdışı")} value={data.agents.offline} tone="error" /><Row label={tx("Bağlantı bilinmiyor")} value={data.agents.unknown} />
-                <Row label={tx("Devre dışı (lifecycle)")} value={data.agents.disabled} /><Row label={tx("İptal edilmiş (lifecycle)")} value={data.agents.revoked} />
-              </dl></Section>
-              <Section title={tx("Çalışan işler")}><dl className="divide-y divide-border">
-                <Row label={statusLabel('general', 'Running')} value={data.runs.running} /><Row label={statusLabel('general', 'RetryPending')} value={data.runs.retryPending} /><Row label={statusLabel('general', 'CancellationRequested')} value={data.runs.cancellationRequested} />
-                <Row label={tx("Etkin yedekleme denemeleri")} value={data.runs.active} /><Row label={tx("Etkin yedekleme işleri")} value={data.jobs.enabled} /><Row label={tx("Planlı yedekleme işleri")} value={data.jobs.scheduled} /><Row label={tx("Silinmeyi bekleyen yedek dosyaları")} value={data.artifacts.deletePending} />
-              </dl></Section>
-              <Section title={tx("Sonraki planlı yedeklemeler")}>{data.upcomingJobs.length
-                ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? formatDateTime(job.schedule.nextOccurrenceAt) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
-                : <p className="text-sm text-text-muted">{tx("Etkin zamanlama yok.")}</p>}</Section>
-            </div>
-            </Disclosure>
-      </>}
+    <PageHeader title={tx('Ana sayfa')}
+      meta={!p.isPending && !p.error && <StatusPill level={badge.level}>{badge.text}</StatusPill>}
+      description={!p.isPending && !empty && tx('{0} veri korunuyor · {1} güncel · {2} dikkat gerekiyor', { '0': counts.total, '1': counts.current, '2': counts.attention })}
+      actions={<>
+        <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-runs?status=Succeeded`}>{tx('Geri yükle')}</Link>
+        {canOperate && <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" className="size-4" />{tx('Yedekleme işi oluştur')}</Link>}
+      </>} />
+    <QueryState isPending={p.isPending} error={p.error} onRetry={p.refetch}>
+      <div className="space-y-6">
+        {band && <AttentionBand band={band} base={base} />}
+        {empty && <Steps p={p} base={base} canOperate={canOperate} />}
+        <ProtectedData rows={p.rows} agents={p.agents} base={base} />
+        <div className="grid gap-6 md:grid-cols-3">
+          {!empty && <NextCard p={p} base={base} />}
+          <StorageCard p={p} base={base} />
+          {!empty && <ActivityCard runs={p.dashboard?.recentRuns ?? []} base={base} />}
+        </div>
+      </div>
     </QueryState>
   </>
 }
