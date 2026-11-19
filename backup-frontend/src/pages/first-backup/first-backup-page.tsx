@@ -1,9 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { AccessDenied } from '@/components/auth/access-denied'
+import { useNavigate } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
-import { linkClass } from '@/components/ui/form-styles'
 import { PageHeader } from '@/components/ui/page-header'
 import { Stepper } from '@/components/ui/stepper'
 import { useAgents } from '@/features/agents/hooks'
@@ -23,7 +21,7 @@ type Phase = '' | 'ready' | 'running'
 /** `…/first-backup`: add a computer when there is none, then choose what to back up, review, and create one job per pick (optionally starting its first backup). */
 export function FirstBackupPage() {
   useLanguage()
-  const { tenantId, canOperate, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const base = `/tenants/${tenantId}`
   const agents = useAgents(tenantId, false, list => awaitingCapabilities(list) ? CAPABILITY_POLL_MS : false)
   const navigate = useNavigate()
@@ -54,7 +52,7 @@ export function FirstBackupPage() {
       const previous = outcome[item.key] ?? {}
       let next: ItemResult = { jobId: previous.jobId, runId: previous.runId }
       try {
-        if (!next.jobId) next.jobId = (await save.mutateAsync(firstBackupJobInput(item, itemName(item), settings, canAdmin))).id
+        if (!next.jobId) next.jobId = (await save.mutateAsync(firstBackupJobInput(item, itemName(item), settings))).id
         if (startFirstBackup && !next.runId) next.runId = (await run(next.jobId))?.id
       } catch (error) { next = { ...next, error } }
       outcome[item.key] = next
@@ -64,12 +62,8 @@ export function FirstBackupPage() {
     if (items.every(item => outcome[item.key].jobId && !outcome[item.key].error)) setPhase(startFirstBackup ? 'running' : 'ready')
   }
 
-  let body
-  if (!canOperate) body = <AccessDenied what={tx('Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.')} />
-  else body = <QueryState isPending={agents.isPending || step === null} error={agents.error}>
-    {!phase && step === 'computer' && (canAdmin
-      ? <ComputerStep tenantId={tenantId} onOnline={computerOnline} />
-      : <AccessDenied what={tx('Yeni yedekleme bilgisayarı eklemek için çalışma alanı yöneticisi olmalısınız.')} control={<Link className={linkClass} to={base}>{tx('Ana sayfaya dön')}</Link>} />)}
+  const body = <QueryState isPending={agents.isPending || step === null} error={agents.error}>
+    {!phase && step === 'computer' && <ComputerStep tenantId={tenantId} onOnline={computerOnline} />}
     {phase === 'ready' && <ReadyStep settings={settings} pending={pending} failures={items.flatMap(item => results[item.key]?.error ? [results[item.key].error] : [])} onStart={() => void create(true)} base={base} />}
     {phase === 'running' && <ProgressStep items={items} names={itemName} runIds={Object.fromEntries(items.map(item => [item.key, results[item.key]?.runId ?? '']))} settings={settings} base={base} />}
     {!phase && step === 'data' && <DataStep agents={agents.data ?? []} names={names} onNames={setNames} picked={picked} onPicked={setPicked} onNext={chosen => { setItems(chosen); setStep('summary') }} />}
@@ -77,7 +71,7 @@ export function FirstBackupPage() {
   </QueryState>
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Ana sayfa'), to: base }, { label: tx('İlk yedek') }]} title={tx('İlk yedeğinizi alın')} description={tx('Bilgisayarınızı seçin, yedeklenecek veriyi işaretleyin ve başlayın.')} />
-    {canOperate && <Stepper steps={[tx('Bilgisayar'), tx('Ne yedeklensin'), tx('Özet ve başla'), tx('İlk yedek')]} current={phase ? 3 : step === 'computer' ? 0 : step === 'data' ? 1 : 2} />}
+    <Stepper steps={[tx('Bilgisayar'), tx('Ne yedeklensin'), tx('Özet ve başla'), tx('İlk yedek')]} current={phase ? 3 : step === 'computer' ? 0 : step === 'data' ? 1 : 2} />
     {body}
   </div>
 }

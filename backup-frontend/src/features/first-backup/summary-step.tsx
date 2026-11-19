@@ -10,7 +10,6 @@ import { connectionOptions } from '@/features/storage-connections/job-connection
 import { connectionDisplayName } from '@/features/storage-connections/labels'
 import { EncryptionSwitch } from '@/features/artifact-encryption/encryption-switch'
 import { encryptionStateLabel } from '@/features/artifact-encryption/labels'
-import { useTenant } from '@/features/tenancy/use-tenant'
 import { useDestinationLabel } from './use-destination-label'
 import { autoJobName, type FirstBackupItem, type FirstBackupSettings } from './first-backup-model'
 
@@ -23,7 +22,6 @@ export function SummaryStep({ items, names, settings, onSettings, results, pendi
   results: Record<string, ItemResult>; pending: boolean; onCreate: (startFirstBackup: boolean) => void; onBack: () => void
 }) {
   useLanguage()
-  const { canAdmin } = useTenant()
   const connections = useTenantConnections()
   const providers = useTenantProviders()
   const [editing, setEditing] = useState<Row | null>(null)
@@ -33,10 +31,10 @@ export function SummaryStep({ items, names, settings, onSettings, results, pendi
   const where = useDestinationLabel(settings)
   const when = settings.scheduled ? schedulePresetLabel(settings.cronExpression) ?? tx('Özel zamanlama') : tx('Elle çalıştırılır (zamanlama yok)')
   const keep = settings.retention.enabled ? keepForLabel(settings.retention.keepForSeconds) : tx('Hiç silinmesin')
-  const row = (id: Row, label: string, value: string, editor: React.ReactNode, locked = false) => <div key={id} className="space-y-2 px-4 py-3">
+  const row = (id: Row, label: string, value: string, editor: React.ReactNode) => <div key={id} className="space-y-2 px-4 py-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><dt className="text-sm text-text-muted">{label}</dt><dd className="font-medium text-text-heading">{value}</dd></div>
-      {!locked && <Button type="button" variant="outline" size="sm" aria-label={tx('{0}: Değiştir', { '0': label })} aria-expanded={editing === id} onClick={() => setEditing(editing === id ? null : id)}>{tx('Değiştir')}</Button>}
+      <Button type="button" variant="outline" size="sm" aria-label={tx('{0}: Değiştir', { '0': label })} aria-expanded={editing === id} onClick={() => setEditing(editing === id ? null : id)}>{tx('Değiştir')}</Button>
     </div>
     {editing === id && editor}
   </div>
@@ -69,7 +67,7 @@ export function SummaryStep({ items, names, settings, onSettings, results, pendi
       {row('keep', tx('Saklama'), keep, <Field label={tx('Saklama süresi')}>{control => <Select {...control} value={settings.retention.enabled ? String(settings.retention.keepForSeconds) : 'off'} onChange={event => onSettings({ ...settings, retention: event.target.value === 'off' ? { ...settings.retention, enabled: false } : { ...settings.retention, enabled: true, keepForSeconds: Number(event.target.value) } })}>
         {retentionPresets.map(([seconds]) => <option key={seconds} value={seconds}>{keepForLabel(seconds)}</option>)}
         <option value="off">{tx('Hiç silinmesin')}</option>
-      </Select>}</Field>, !canAdmin)}
+      </Select>}</Field>)}
       {row('encryption', tx('Şifreleme'), encryptionStateLabel(settings.encryptionPolicy), <EncryptionSwitch policy={settings.encryptionPolicy} onChange={encryptionPolicy => onSettings({ ...settings, encryptionPolicy })} />)}
     </dl>
     <ul className="space-y-1 text-sm">{items.map(item => <li key={item.key}>

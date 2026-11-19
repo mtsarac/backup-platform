@@ -24,9 +24,9 @@ vi.mock('@/lib/api/client', async (importOriginal) => {
   }
 })
 
-const permissions = vi.hoisted(() => ({ canAdmin: true, canOperate: true, role: 'UserAdmin' }))
+const permissions = vi.hoisted(() => ({ role: 'UserAdmin' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({
-  useTenant: () => ({ tenantId: 'tenant-a', canAdmin: permissions.canAdmin, canOperate: permissions.canOperate }),
+  useTenant: () => ({ tenantId: 'tenant-a' }),
 }))
 vi.mock('@/features/auth/use-auth', () => ({
   useAuth: () => ({ user: { role: permissions.role } }),
@@ -195,8 +195,6 @@ afterEach(() => {
 })
 
 beforeEach(() => {
-  permissions.canAdmin = true
-  permissions.canOperate = true
   permissions.role = 'UserAdmin'
 })
 
@@ -570,15 +568,6 @@ describe('BackupShare frontend', () => {
     expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
   })
 
-  it('hides extend and revoke from a viewer', async () => {
-    permissions.canAdmin = false
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]))
-    renderSharesPage()
-    await screen.findByText('Audit inspection')
-    expect(screen.queryByRole('button', { name: 'Süreyi uzat' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'İptal et' })).not.toBeInTheDocument()
-  })
-
   it('revokes active share from Paylaşımlarım', async () => {
     request.mockImplementation(async (path: string, options?: { method?: string }) => {
       if (options?.method === 'POST' && path.includes('/revoke')) {
@@ -617,7 +606,6 @@ describe('BackupShare frontend', () => {
 
   it('UserAdmin cannot see extend/revoke actions on PlatformAdmin-created share, expired share, or revoked share', async () => {
     permissions.role = 'UserAdmin'
-    permissions.canAdmin = true
     request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
@@ -631,7 +619,6 @@ describe('BackupShare frontend', () => {
 
   it('PlatformAdmin can see extend/revoke actions on both PlatformAdmin-created and UserAdmin-created shares', async () => {
     permissions.role = 'PlatformAdmin'
-    permissions.canAdmin = false
     request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
@@ -755,7 +742,6 @@ describe('BackupShare frontend', () => {
 
   it('renders tenant download attempt history in Paylaşımlarım for UserAdmin without platform retention controls', async () => {
     permissions.role = 'UserAdmin'
-    permissions.canAdmin = true
     request.mockImplementation(async (path: string) => {
       if (path.includes('download-attempts')) return path.includes('cursor=next-page')
         ? { items: [failedAttempt], nextCursor: null }

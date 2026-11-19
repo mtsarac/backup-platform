@@ -31,7 +31,6 @@ type CredentialActions = { save: ReturnType<typeof useSaveCredential>; verify: R
 /** The login form. It owns the typed values, so they survive the section changing from the open card (login needed) to the closed disclosure (login works). */
 function CredentialSection({ instance, save, verify, needsLogin }: { instance: DiscoveryInstanceDetail; needsLogin: boolean } & CredentialActions) {
   useLanguage()
-  const { canOperate } = useTenant()
   const isMssql = instance.engine === 'mssql'
   const [login, setLogin] = useState<DatabaseLogin | null>(null)
   const [submitted, setSubmitted] = useState(false)
@@ -49,12 +48,12 @@ function CredentialSection({ instance, save, verify, needsLogin }: { instance: D
     save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: instance.credential.trustServerCertificate },
       { onSuccess: () => verify.mutate(instance.id) })
   }}>
-    {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} disabled={!canOperate} errors={loginProblem} onChange={setLogin} />}
-    {isMssql && <CheckField label={tx("Windows hesabıyla giriş yap")} checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />}
-    <CheckField label={tx("Bağlantıyı şifrele")} checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />
-    {canOperate && <div className="flex flex-wrap gap-2">
+    {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} errors={loginProblem} onChange={setLogin} />}
+    {isMssql && <CheckField label={tx("Windows hesabıyla giriş yap")} checked={integrated} onChange={event => setIntegrated(event.target.checked)} />}
+    <CheckField label={tx("Bağlantıyı şifrele")} checked={encrypt} onChange={event => setEncrypt(event.target.checked)} />
+    <div className="flex flex-wrap gap-2">
       <Button type="submit" disabled={save.isPending || verify.isPending}>{(save.isPending || verify.isPending) && <Loader2 aria-hidden="true" className="animate-spin" />}{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet ve doğrula')}</Button>
-    </div>}
+    </div>
   </form>
   return needsLogin
     ? <Section title={tx("Veritabanı sunucusuna giriş")} description={description}>{form}</Section>
@@ -64,20 +63,18 @@ function CredentialSection({ instance, save, verify, needsLogin }: { instance: D
 /** The bound login stays as it is; the trust is saved on the server's binding, so it holds for every later scan, then the scan runs again. */
 function CertificateNotice({ instance, save, verify }: { instance: DiscoveryInstanceDetail } & CredentialActions) {
   useLanguage()
-  const { canOperate } = useTenant()
   const { credentialReference, integratedSecurity, encrypt } = instance.credential
   const failure = describeFailure(instance.accessReasonCode)
-  const trust = canOperate ? { note: tx("Bu sunucunun sertifikası kalıcı olarak güvenilir sayılacak."), pending: save.isPending || verify.isPending, onConfirm: () => save.mutate(
-    { credentialReference, databaseLogin: null, integratedSecurity, encrypt, trustServerCertificate: true }, { onSuccess: () => verify.mutate(instance.id) }) } : undefined
+  const trust = { note: tx("Bu sunucunun sertifikası kalıcı olarak güvenilir sayılacak."), pending: save.isPending || verify.isPending, onConfirm: () => save.mutate(
+    { credentialReference, databaseLogin: null, integratedSecurity, encrypt, trustServerCertificate: true }, { onSuccess: () => verify.mutate(instance.id) }) }
   return <div className="space-y-3">
-    <ErrorNotice {...failure} action={canOperate ? failure.action : tx("Yöneticinize danışın.")} trust={trust} />
+    <ErrorNotice {...failure} trust={trust} />
   </div>
 }
 
 /** The one explanation of why the databases cannot be listed: the reason, what it means for the list below, and the next step (the login form). */
 function AccessNotice({ instance, save, verify }: { instance: DiscoveryInstanceDetail } & CredentialActions) {
   useLanguage()
-  const { canOperate } = useTenant()
   if (instance.accessReasonCode && describeFailure(instance.accessReasonCode).certificateUntrusted) return <CertificateNotice instance={instance} save={save} verify={verify} />
   // Not a login problem: the hint to re-check the login would send the user the wrong way, and no button turns the encryption off for them.
   if (instance.accessReasonCode === TLS_UNAVAILABLE) return <ErrorNotice {...describeFailure(instance.accessReasonCode)} title={tx("Şifreli bağlantı kurulamadı")} />
@@ -85,7 +82,7 @@ function AccessNotice({ instance, save, verify }: { instance: DiscoveryInstanceD
   const reason = plainReasonText(instance.accessReasonCode)
   return <Notice tone="warning">
     {reason && <p>{reason}</p>}
-    {canOperate && <p>{tx("Giriş bilgilerini kontrol edip yeniden kaydedin.")}</p>}
+    <p>{tx("Giriş bilgilerini kontrol edip yeniden kaydedin.")}</p>
   </Notice>
 }
 
@@ -103,16 +100,15 @@ function Verifying() {
 
 function Databases({ instance }: { instance: DiscoveryInstanceDetail }) {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const navigate = useNavigate()
   const [selected, setSelected] = useState<string[]>([])
   if (instance.access === 'CredentialsRequired') return null
   const creatable = canCreateJob(instance)
   const picks = selected.filter(name => instance.databases.some(db => db.name === name && databaseSelectable(db, instance)))
   return <Section title={tx("Veritabanları")} description={tx("Yedeklenebilir olanları seçip yedekleme işi oluşturabilirsiniz. Sistem veritabanları ve zaten yedeklenenler seçilemez.")} flush
-    actions={canOperate && creatable ? <Button disabled={picks.length === 0} onClick={() => navigate(`/tenants/${tenantId}/backup-jobs/new?${new URLSearchParams([['discoveryInstance', instance.id], ...picks.map(name => ['database', name])])}`)}>{tx("Yedekleme işi oluştur")}{picks.length > 0 ? ` (${picks.length})` : ''}</Button> : undefined}>
-    {!canOperate && <p className="p-4 text-sm text-text-muted">{tx("Yöneticinize danışın")}</p>}
-    <DatabaseTable instance={instance} selected={picks} onChange={canOperate && creatable ? setSelected : undefined} />
+    actions={creatable ? <Button disabled={picks.length === 0} onClick={() => navigate(`/tenants/${tenantId}/backup-jobs/new?${new URLSearchParams([['discoveryInstance', instance.id], ...picks.map(name => ['database', name])])}`)}>{tx("Yedekleme işi oluştur")}{picks.length > 0 ? ` (${picks.length})` : ''}</Button> : undefined}>
+    <DatabaseTable instance={instance} selected={picks} onChange={creatable ? setSelected : undefined} />
   </Section>
 }
 

@@ -45,7 +45,7 @@ const tabs = [
 ] as const
 /** `tab=storage-computers` was one section before it was split; old links land on the storage section. */
 const legacyStorageTab = 'storage-computers'
-const tenantMembershipMessage = () => tx('Tenant kurtarma anahtarını yalnızca bu çalışma alanının Owner veya Admin üyeleri görüntüleyebilir ve yönetebilir; platform yöneticisi yetkisi bunu kapsamaz.')
+const tenantMembershipMessage = () => tx('Tenant kurtarma anahtarını yalnızca bu çalışma alanının üyeleri görüntüleyebilir ve yönetebilir; platform yöneticisi yetkisi bunu kapsamaz.')
 type TabValue = (typeof tabs)[number]['value']
 
 function RenameForm({ tenantId, name }: { tenantId: string; name: string }) {
@@ -112,7 +112,7 @@ function Header({ tenant }: { tenant: PlatformTenantDetail }) {
     </div>} />
 }
 
-/** Tenant-scoped endpoint: it needs a tenant Owner/Admin membership, which platform administration alone does not grant (the 403 is expected for a non-member). */
+/** Tenant-scoped endpoint: it needs a tenant membership, which platform administration alone does not grant (the 403 is expected for a non-member). */
 function RecoveryKeys({ tenant }: { tenant: PlatformTenantDetail }) {
   const encryption = useTenantEncryption(tenant.tenantId)
   return <QueryState forbiddenMessage={tenantMembershipMessage} isPending={encryption.isPending} error={encryption.error}>

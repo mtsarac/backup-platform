@@ -17,7 +17,7 @@ import * as discoveryApi from '@/features/discovery/api'
 import { makeDatabase, makeDetail, makeInstance, supportedAgent } from '@/features/discovery/test-fixtures'
 import { setViewport } from '@/test/viewport'
 
-const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test' } }))
+const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Test' } }))
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn() }))
 vi.mock('@/features/discovery/api', () => ({ getDiscoveryAgents: vi.fn(), getDiscoveryInstances: vi.fn(), getDiscoveryInstance: vi.fn() }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
@@ -40,7 +40,7 @@ function mount(content: ReactNode, path = '/tenants/tenant-a/agents') {
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
-  Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
+  Object.assign(tenancy, { tenantId: 'tenant-a' })
   vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([])
   vi.mocked(discoveryApi.getDiscoveryAgents).mockResolvedValue({ items: [] })
   vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [] })
@@ -120,38 +120,15 @@ describe('Backup computers list', () => {
     expect(screen.getByRole('link', { name: 'Depo-PC' })).toBeInTheDocument()
   })
 
-  it('an administrator with no computers gets one primary action; others are told to ask their administrator', async () => {
+  it('with no computers offers one primary action', async () => {
     vi.mocked(api.getAgents).mockResolvedValue([])
-    const admin = mount(<ClientsPage />)
+    mount(<ClientsPage />)
     await screen.findByText(/Henüz yedekleme bilgisayarı eklenmedi/)
     expect(screen.getAllByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).toHaveLength(1)
-    admin.unmount()
-    tenancy.canAdmin = false
-    mount(<ClientsPage />)
-    await screen.findByText(/Henüz yedekleme bilgisayarı eklenmedi/)
-    expect(screen.getByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
-  })
-
-  it('does not offer the enrolment tab to a non-administrator', async () => {
-    tenancy.canAdmin = false
-    mount(<ClientsPage />)
-    await screen.findByRole('link', { name: 'SQL-01' })
-    expect(screen.getByRole('navigation', { name: 'Bilgisayar bölümleri' })).not.toHaveTextContent('Yeni bilgisayar kaydı')
   })
 })
 
 describe('Backup computer page', () => {
-  it('can read the computer but cannot remove it without admin', async () => {
-    tenancy.canAdmin = false
-    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
-    expect(await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).toBeInTheDocument()
-    expect(screen.getByText('Çevrimiçi')).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: 'Sayfa yolu' })).toHaveTextContent('Yedekleme bilgisayarları')
-    expect(screen.queryByRole('button', { name: 'Bilgisayar kaydını iptal et' })).not.toBeInTheDocument()
-    expect(api.getAgent).toHaveBeenCalledWith('tenant-a', 'agent-a', expect.any(AbortSignal))
-  })
-
   it('shows the databases found on this computer, with whether each can be backed up', async () => {
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: supportedAgent.capabilities as AgentDetail['capabilities'] })
     vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [makeInstance(), makeInstance({ id: 'inst-2', displayName: 'Kilitli sunucu', access: 'CredentialsRequired' })] })
@@ -254,16 +231,6 @@ describe('Backup computer page', () => {
   })
 })
 describe('Adding a computer from the new-computer page', () => {
-  it('cannot query or mutate enrollment administration without admin', () => {
-    tenancy.canAdmin = false
-    mount(<AgentRegisterPage />)
-    expect(screen.getByRole('heading', { level: 1, name: 'Yeni bilgisayar kaydı' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('yöneticisi')
-    expect(api.getEnrollmentPolicy).not.toHaveBeenCalled()
-    expect(api.getEnrollmentTokens).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
-  })
-
   it('shows policy off and disables token creation, while admin may enable enrollment', async () => {
     vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: false })
     mount(<AgentRegisterPage />)

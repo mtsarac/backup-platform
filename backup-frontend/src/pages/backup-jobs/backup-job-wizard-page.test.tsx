@@ -13,7 +13,7 @@ import { getAgents } from '@/features/agents/api'
 import { changeLanguage } from '@/lib/i18n/runtime'
 import { setViewport } from '@/test/viewport'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
@@ -66,7 +66,7 @@ async function fill(target: number) {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  access.tenantId = 'tenant-a'; access.canOperate = true; access.canAdmin = true
+  access.tenantId = 'tenant-a'
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
 })
@@ -195,12 +195,6 @@ describe('iş formu', () => {
       database: '数'.repeat(21), copyOnly: false, checksumPolicy: 'Preferred',
     })
   })
-  it('Viewer rolüne düzenleme formunu sunmaz', () => {
-    access.canOperate = false
-    renderPage()
-    expect(screen.getByRole('alert')).toHaveTextContent('yetkiniz yok')
-    expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument()
-  })
   it('PostgreSQL kimlik doğrulamasında kullanıcı adı ve parola girilmeden Kaynak adımından ilerlemez', async () => {
     renderPage()
     await reach(0)
@@ -247,17 +241,6 @@ describe('iş formu', () => {
     expect(screen.getByLabelText('Depolama bağlantısı')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument()
     expect(saveBackupJob).not.toHaveBeenCalled()
-  })
-  it('Operator saklama politikasını değiştiremez veya gönderemez', async () => {
-    access.canAdmin = false
-    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
-    renderPage()
-    await reach(2)
-    expect(screen.getByRole('button', { name: '30 gün' })).toBeDisabled()
-    next(1)
-    await submit()
-    await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].retention).toBeUndefined()
   })
   it('yeni iş tek bir birincil local hedefle ve varsayılan bağlantı (null) ile gönderilir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
@@ -546,12 +529,6 @@ describe('adım adım sihirbaz', () => {
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(2))
     expect(vi.mocked(saveBackupJob).mock.calls[1][1].retention?.enabled).toBe(false)
-  })
-  it('Operator sees the retention presets but cannot change them', async () => {
-    access.canAdmin = false
-    renderPage()
-    await reach(2)
-    expect(screen.getByRole('button', { name: '30 gün' })).toBeDisabled()
   })
   it('encryption defaults to Kapalı; turning it on links to the recovery key without blocking and sends Required', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))

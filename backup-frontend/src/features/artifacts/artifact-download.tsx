@@ -12,20 +12,20 @@ import { useArtifactDownload } from './use-artifact-download'
 import { formatBytes } from '@/lib/format'
 import { storageProviderLabel } from '@/features/storage-connections/labels'
 
-export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
+export function ArtifactDownload({ tenantId, artifactId, eligible }: { tenantId: string; artifactId: string; eligible: boolean }) {
   useLanguage()
   // Remount the controller on scope/permission changes: pending requests cannot initiate a download in a new scope.
-  return <DownloadController key={`${tenantId}:${artifactId}:${canAdmin}:${eligible}`} tenantId={tenantId} artifactId={artifactId} canAdmin={canAdmin} eligible={eligible} />
+  return <DownloadController key={`${tenantId}:${artifactId}:${eligible}`} tenantId={tenantId} artifactId={artifactId} eligible={eligible} />
 }
-function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
+function DownloadController({ tenantId, artifactId, eligible }: { tenantId: string; artifactId: string; eligible: boolean }) {
   useLanguage()
   const [decrypt, setDecrypt] = useState(false)
   const [copyNotice, setCopyNotice] = useState('')
   // The decrypt flag is only sent when chosen: the default request stays exactly the stored-file download.
   // Remounting on scope/permission changes (the key above) plus `enabled` keeps a pending request from starting a download in a new scope.
   const { availability, flow, replicaId, setReplicaId, selected } = useArtifactDownload({
-    enabled: canAdmin && eligible,
-    availabilityKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId, canAdmin],
+    enabled: eligible,
+    availabilityKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId],
     fetchAvailability: signal => getDownloadAvailability(tenantId, artifactId, signal),
     refetchInterval: 10_000,
     prepare: replica => decrypt ? prepareDownload(tenantId, artifactId, replica, true) : prepareDownload(tenantId, artifactId, replica),
@@ -33,7 +33,6 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
     statusKey: sessionId => ['tenant', tenantId, 'backup-artifacts', 'download-status', artifactId, sessionId],
   })
   const { session } = flow
-  if (!canAdmin) return <Notice tone="info">{tx("Download Backup yalnızca Owner / Admin için açıktır.")}</Notice>
   if (!eligible) return <Notice tone="info">{tx("Bu Backup silme sürecinde veya silinmiş; indirme kullanılamıyor.")}</Notice>
   const busy = flow.busy
   async function copyChecksum() {

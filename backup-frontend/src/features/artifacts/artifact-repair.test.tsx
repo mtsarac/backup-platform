@@ -9,7 +9,6 @@ import type { BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest 
 import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 
 const state = vi.hoisted(() => ({
-  canOperate: true,
   artifact: undefined as BackupArtifact | undefined,
   repairOp: undefined as ReplicaRepairOperation | undefined,
   startRepairFn: vi.fn(),
@@ -17,7 +16,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/tenancy/use-tenant', () => ({
-  useTenant: () => ({ tenantId: 'tenant-1', canAdmin: true, canOperate: state.canOperate }),
+  useTenant: () => ({ tenantId: 'tenant-1' }),
 }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: 'UserAdmin' } }) }))
 
@@ -155,7 +154,6 @@ function renderPage() {
 describe('Manual replica repair frontend flow', () => {
   beforeEach(() => {
     setFeatureFlags({ replicaRepair: true })
-    state.canOperate = true
     state.artifact = undefined
     state.repairOp = undefined
     state.startRepairFn.mockClear()
@@ -185,17 +183,6 @@ describe('Manual replica repair frontend flow', () => {
     renderPage()
     openDetails()
     expect(screen.queryByRole('button', { name: 'Onar' })).not.toBeInTheDocument()
-  })
-
-  it('does not expose replica repair or repair cancellation to Viewer', () => {
-    state.canOperate = false
-    state.artifact = sampleArtifact('Failed', true)
-    renderPage()
-    openDetails()
-    expect(screen.queryByRole('button', { name: 'Onar' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Onarımı iptal et' })).not.toBeInTheDocument()
-    expect(state.startRepairFn).not.toHaveBeenCalled()
-    expect(state.cancelRepairFn).not.toHaveBeenCalled()
   })
 
   it('renders Repair button for failed destination when verified source exists', async () => {

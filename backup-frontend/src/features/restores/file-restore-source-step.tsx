@@ -27,7 +27,7 @@ interface FileRestoreSourceStepProps {
 /** The backup file is fixed by the page; here the user picks the computer that reads it. Skipped when only one computer fits. */
 export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId, originalAgent, original, eligible, onAgentChange, onContinue }: FileRestoreSourceStepProps) {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   return (
     <div className="space-y-5">
       <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Dosyaları yedekten alıp yerlerine koyacak yedekleme bilgisayarını seçmeniz gerekir.")}>
@@ -40,7 +40,7 @@ export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId,
             ))}
           </Select>
           {eligible && <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />{tx("Bu bilgisayar bu yedek dosyasına ulaşabilir.")}</p>}
-          {agent && !eligible && <ErrorNotice failureCode={agent.rejectionCode} scope="restore" control={canOperate && describeFailure(agent.rejectionCode, 'restore').actionKind === 'checkComputer' ? <Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{actionLabel('checkComputer')}</Link> : undefined} />}
+          {agent && !eligible && <ErrorNotice failureCode={agent.rejectionCode} scope="restore" control={describeFailure(agent.rejectionCode, 'restore').actionKind === 'checkComputer' ? <Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{actionLabel('checkComputer')}</Link> : undefined} />}
           {agent && <TechnicalDetails items={[
             { label: tx('Yedekleme bilgisayarı kimliği'), value: agent.agentId },
             ...(agent.sourceAccess ? [{ label: tx('Yedek erişim yolu'), value: agent.sourceAccess }] : []),

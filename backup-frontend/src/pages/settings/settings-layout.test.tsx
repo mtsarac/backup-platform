@@ -1,13 +1,11 @@
 import { screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SettingsLayout } from './settings-layout'
 
-const access = vi.hoisted(() => ({ canAdmin: true }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: access.canAdmin }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 
-beforeEach(() => { access.canAdmin = true })
 
 function mount(path: string) {
   render(<MemoryRouter initialEntries={[path]}><Routes>
@@ -31,11 +29,5 @@ describe('Settings layout', () => {
     ])
     expect(tabs.getByRole('link', { current: 'page' })).toHaveTextContent('Kurtarma anahtarı')
     expect(screen.getByText('recovery key section')).toBeInTheDocument()
-  })
-
-  it('leaves only upload bandwidth to non-administrators', () => {
-    access.canAdmin = false
-    const tabs = mount('/tenants/tenant-a/settings/bandwidth')
-    expect(tabs.getAllByRole('link').map((link) => link.textContent)).toEqual(['Yükleme bant genişliği'])
   })
 })

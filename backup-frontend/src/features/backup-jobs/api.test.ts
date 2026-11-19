@@ -29,11 +29,6 @@ describe('saveBackupJob', () => {
     expect(options).toMatchObject({ method: 'PUT', json: { ...input, schedule } })
     expect(sentJson()).not.toHaveProperty('removeSchedule')
   })
-  it('Operator için retention göndermez', async () => {
-    await saveBackupJob('tenant-a', { ...input, retention: undefined }, 'job-a')
-    expect(apiRequest).toHaveBeenCalledTimes(1)
-    expect(sentJson().retention).toBeUndefined()
-  })
   it('zamanlama kapalıyken removeSchedule: true gönderir', async () => {
     await saveBackupJob('tenant-a', { ...input, schedule: null }, 'job-a')
     expect(apiRequest).toHaveBeenCalledTimes(1)

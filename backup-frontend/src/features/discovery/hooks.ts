@@ -1,4 +1,3 @@
-import { tx } from '@/lib/i18n'
 import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -12,7 +11,6 @@ export const discoveryKeys = {
   instances: (tenantId: string, filters: DiscoveryInstanceFilters) => ['tenant', tenantId, 'discovery', 'instances', filters] as const,
   instance: (tenantId: string, id: string) => ['tenant', tenantId, 'discovery', 'instance', id] as const,
 }
-const denied = () => { throw new Error(tx('Bu işlem için yetkiniz yok.')) }
 
 /** Polls while any agent scan is queued or running, and refreshes the inventory once when it finishes. */
 export function useDiscoveryAgents(enabled = true) {
@@ -48,17 +46,17 @@ function useInvalidateDiscovery() {
   return () => client.invalidateQueries({ queryKey: discoveryKeys.all(tenantId) })
 }
 export function useRescanAgent() {
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const invalidate = useInvalidateDiscovery()
-  return useMutation({ mutationFn: (agentId: string) => canOperate ? rescanDiscoveryAgent(tenantId, agentId) : denied(), onSuccess: invalidate, onError: invalidate })
+  return useMutation({ mutationFn: (agentId: string) => rescanDiscoveryAgent(tenantId, agentId), onSuccess: invalidate, onError: invalidate })
 }
 export function useVerifyInstance() {
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const invalidate = useInvalidateDiscovery()
-  return useMutation({ mutationFn: (id: string) => canOperate ? verifyDiscoveryInstance(tenantId, id) : denied(), onSuccess: invalidate, onError: invalidate })
+  return useMutation({ mutationFn: (id: string) => verifyDiscoveryInstance(tenantId, id), onSuccess: invalidate, onError: invalidate })
 }
 export function useSaveCredential(id: string) {
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const invalidate = useInvalidateDiscovery()
-  return useMutation({ mutationFn: (input: DiscoveryCredentialInput) => canOperate ? saveDiscoveryCredential(tenantId, id, input) : denied(), onSuccess: invalidate })
+  return useMutation({ mutationFn: (input: DiscoveryCredentialInput) => saveDiscoveryCredential(tenantId, id, input), onSuccess: invalidate })
 }

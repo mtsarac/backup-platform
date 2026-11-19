@@ -14,7 +14,6 @@ import type { BackupArtifact } from '@/features/artifacts/types'
 import { formatBytes, formatDateTime } from '@/lib/format'
 
 const state = vi.hoisted(() => ({
-  canOperate: true,
   query: { data: undefined as BackupRun | undefined, isPending: false, error: null as unknown },
   retry: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
   cancel: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
@@ -22,7 +21,7 @@ const state = vi.hoisted(() => ({
   resume: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
 }))
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: state.canOperate }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backups/hooks', () => ({ useBackup: () => state.query, useBackupActions: () => ({ retry: state.retry, cancel: state.cancel, pause: state.pause, resume: state.resume }) }))
 vi.mock('@/pages/artifacts/artifact-detail-page', () => ({ ArtifactDetail: ({ id }: { id: string }) => <div data-testid="artifact-detail">{id}</div> }))
 
@@ -33,7 +32,6 @@ function renderDetail() {
 beforeEach(() => {
   setFeatureFlags({ sizeAnomaly: true })
   vi.clearAllMocks()
-  state.canOperate = true
   state.query.data = makeRun()
   state.query.error = null
   state.retry.error = null
@@ -180,13 +178,9 @@ describe('run detail controls and attention', () => {
     expect(screen.queryByText('unsafe internal exception')).not.toBeInTheDocument()
   })
 
-  it('hides retry/cancel for Viewer and disables duplicate mutations', () => {
-    state.canOperate = false
-    const view = renderDetail()
-    expect(screen.queryByRole('button', { name: 'İptal et' })).not.toBeInTheDocument()
-    state.canOperate = true
+  it('disables duplicate mutations', () => {
     state.cancel.isPending = true
-    view.rerender(<MemoryRouter><BackupDetailPage /></MemoryRouter>)
+    renderDetail()
     expect(screen.getByRole('button', { name: 'İletiliyor…' })).toBeDisabled()
   })
 
@@ -234,14 +228,6 @@ describe('run detail controls and attention', () => {
     await userEvent.click(alert.getByRole('button', { name: 'Teknik ayrıntılar' }))
     expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('PermissionDenied')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Yeniden dene' })).toBeEnabled()
-  })
-
-  it('sends a viewer to their administrator instead of offering retry', () => {
-    state.canOperate = false
-    state.query.data = makeRun({ status: 'AgentLost' })
-    renderDetail()
-    expect(screen.getByRole('alert')).toHaveTextContent('Yöneticinize danışın')
-    expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
   })
 
   it('keeps trigger, planned time, attempt counts, engine and the run id under collapsed copyable technical details', async () => {

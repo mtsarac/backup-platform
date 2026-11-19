@@ -10,8 +10,8 @@ import type { BackupRun } from '@/features/backups/types'
 import { ApiError } from '@/lib/api/client'
 import { BackupDetailPage } from './backup-detail-page'
 
-const state = vi.hoisted(() => ({ canOperate: true, run: undefined as BackupRun | undefined }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: state.canOperate, canAdmin: true }) }))
+const state = vi.hoisted(() => ({ run: undefined as BackupRun | undefined }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backups/hooks', () => {
   const action = { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() }
   return { useBackup: () => ({ data: state.run, isPending: false, error: null }), useBackupActions: () => ({ retry: action, cancel: action, pause: action, resume: action }) }
@@ -31,7 +31,6 @@ function renderDetail() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  state.canOperate = true
   state.run = makeRun({ status: 'Failed', reasonCode: 'ServerCertificateUntrusted' })
   vi.mocked(getBackupJob).mockResolvedValue({ ...savedJob, id: 'job-id' })
   vi.mocked(saveBackupJob).mockResolvedValue({} as never)
@@ -50,12 +49,6 @@ describe('trusting the server certificate from a failed backup', () => {
     renderDetail()
     expect(screen.queryByText(trustTitle)).not.toBeInTheDocument()
     expect(screen.queryByText(/yalnızca kendi sunucunuz olduğundan eminseniz/)).not.toBeInTheDocument()
-  })
-
-  it('offers it to nobody who cannot operate', () => {
-    state.canOperate = false
-    renderDetail()
-    expect(screen.queryByText(trustTitle)).not.toBeInTheDocument()
   })
 
   it('says the trust stays on the job, saves the job as it is with the trust on, then runs it again', async () => {

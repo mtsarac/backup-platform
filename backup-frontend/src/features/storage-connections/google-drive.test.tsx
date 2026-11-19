@@ -9,7 +9,7 @@ import { makeConnection, tenantAdminPermissions } from './test-fixtures'
 import { ConnectionDetail } from './connection-detail'
 import type { ConnectionView, ProviderDescriptor } from './types'
 
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('./api')
 
 const googleDriveProvider: ProviderDescriptor = {

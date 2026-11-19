@@ -11,14 +11,14 @@ import type { AgentDetail, CreatedEnrollmentToken, EnrollmentTokenStatus } from 
 import { ApiError } from '@/lib/api/client'
 import * as api from './api'
 
-const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
+const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 vi.mock('./api', () => ({ getAgentDistribution: vi.fn(), getAgents: vi.fn(), getAgent: vi.fn(), createEnrollmentToken: vi.fn(), getEnrollmentTokenStatus: vi.fn(), revokeEnrollmentToken: vi.fn() }))
 const detail: AgentDetail = { agentId: 'agent-a', hostName: 'Backup host', platform: 'Windows', osDescription: 'Windows Server', agentVersion: '1.2', protocolVersion: '1', runtimeVersion: '.NET', status: 'Active', connectivity: 'offline', operationalStatus: 'Offline', lastSeenAt: null, lastHeartbeatAt: null, lastConnectedAt: null, capabilityRevision: null, capabilities: [], enrolledAt: null }
 let expiresAt: string
 beforeEach(() => {
   vi.resetAllMocks(); vi.useFakeTimers()
-  Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
+  Object.assign(tenancy, { tenantId: 'tenant-a' })
   expiresAt = new Date(Date.now() + 60_000).toISOString()
   vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
   vi.mocked(api.getAgents).mockResolvedValue([])
@@ -289,13 +289,6 @@ describe('Adding a backup computer', () => {
     expect(signal.aborted).toBe(true)
     await act(async () => { resolve({ tokenId: 'late', token: 'late-secret', expiresAt }) })
     expect(screen.queryByDisplayValue(/late-secret/)).not.toBeInTheDocument()
-  })
-  it('cannot add a backup computer without admin', async () => {
-    tenancy.canAdmin = false
-    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><ClientsPage /></MemoryRouter></QueryClientProvider>)
-    await act(async () => {})
-    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
-    expect(api.createEnrollmentToken).not.toHaveBeenCalled()
   })
   it('tenant Admin sees the add button, and tenant changes unmount plaintext', async () => {
     const client = new QueryClient()

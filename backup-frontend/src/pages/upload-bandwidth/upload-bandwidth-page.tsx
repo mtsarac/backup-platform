@@ -7,7 +7,6 @@ import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Disclosure } from '@/components/ui/disclosure'
-import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -38,7 +37,7 @@ const exactLimit = (label: string, value: number | null | undefined) => value ==
 
 export function UploadBandwidthPage() {
   useLanguage()
-  const { tenant, tenantId, canAdmin } = useTenant()
+  const { tenant, tenantId } = useTenant()
   const limits = useUploadBandwidth()
   const agents = useAgents(tenantId)
   const jobs = useBackupJobs()
@@ -55,36 +54,33 @@ export function UploadBandwidthPage() {
   const jobProfiles = new Map(data?.jobs.map(item => [item.jobId, item.profileId]))
   const agentLimits = new Map(data?.agents.map(item => [item.agentId, item.bytesPerSecond]))
   const jobLimits = new Map(data?.jobs.map(item => [item.jobId, item.bytesPerSecond]))
-  const edit = (target: BandwidthTarget, name: string, current: number | null | undefined) => canAdmin
-    ? <Button variant="outline" size="sm" aria-label={tx("{0} yükleme hız sınırını düzenle", { "0": name })} onClick={() => setEditing({ target, name, current: current ?? null })}>{tx("Düzenle")}</Button>
-    : null
+  const edit = (target: BandwidthTarget, name: string, current: number | null | undefined) => <Button variant="outline" size="sm" aria-label={tx("{0} yükleme hız sınırını düzenle", { "0": name })} onClick={() => setEditing({ target, name, current: current ?? null })}>{tx("Düzenle")}</Button>
   const agentColumns: Column<Agent>[] = [
     { key: 'name', header: tx('Yedekleme bilgisayarı'), wrap: true, render: agent => agent.hostName || agent.agentId },
     { key: 'limit', header: tx('Hız sınırı'), wrap: true, render: agent => <Limit value={agentLimits.get(agent.agentId)} /> },
     { key: 'profile', header: tx('Bant Genişliği Profili'), wrap: true, render: agent => agentProfiles.get(agent.agentId) ? profileMap.get(agentProfiles.get(agent.agentId)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
-    ...(canAdmin ? [{ key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (agent: Agent) => (
+    { key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (agent: Agent) => (
       <div className="flex gap-2">
         {edit({ scope: 'agent', id: agent.agentId }, agent.hostName || agent.agentId, agentLimits.get(agent.agentId))}
         <Button variant="outline" size="sm" onClick={() => setAssigning({ target: { scope: 'agent', id: agent.agentId }, name: agent.hostName || agent.agentId, currentProfileId: agentProfiles.get(agent.agentId) })}>{tx("Profil Ata")}</Button>
       </div>
-    ) }] : []),
+    ) },
   ]
   const jobColumns: Column<BackupJob>[] = [
     { key: 'name', header: tx('Yedekleme işi'), wrap: true, render: job => job.name },
     { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: job => job.agentName || '—' },
     { key: 'limit', header: tx('Hız sınırı'), wrap: true, render: job => <Limit value={jobLimits.get(job.id)} /> },
     { key: 'profile', header: tx('Bant Genişliği Profili'), wrap: true, render: job => jobProfiles.get(job.id) ? profileMap.get(jobProfiles.get(job.id)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
-    ...(canAdmin ? [{ key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (job: BackupJob) => (
+    { key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (job: BackupJob) => (
       <div className="flex gap-2">
         {edit({ scope: 'job', id: job.id }, job.name, jobLimits.get(job.id))}
         <Button variant="outline" size="sm" onClick={() => setAssigning({ target: { scope: 'job', id: job.id }, name: job.name, currentProfileId: jobProfiles.get(job.id) })}>{tx("Profil Ata")}</Button>
       </div>
-    ) }] : []),
+    ) },
   ]
-  const newProfile = canAdmin ? <Button size="sm" onClick={() => setEditingProfile('new')}>{tx("Yeni Profil")}</Button> : null
+  const newProfile = <Button size="sm" onClick={() => setEditingProfile('new')}>{tx("Yeni Profil")}</Button>
   return <div className="space-y-6">
     <p className="text-body text-text-muted">{tx("{0} · Yedeklerin ne kadar hızlı yükleneceğini sınırlayın.", { "0": tenant.name })}</p>
-    {!canAdmin && <Notice tone="warning">{tx("Hız sınırlarını yalnızca yöneticiler değiştirebilir. Yöneticinize danışın.")}</Notice>}
     <Tabs label={tx("Hız sınırı kapsamı")} idPrefix="bandwidth" value={tab} onChange={setTab} items={[{ value: 'tenant', label: tx('Çalışma alanı') }, { value: 'agents', label: tx('Yedekleme bilgisayarları') }, { value: 'jobs', label: tx('Yedekleme işleri') }, { value: 'profiles', label: tx('Profiller') }]} />
     <div role="tabpanel" id={`bandwidth-panel-${tab}`} aria-labelledby={`bandwidth-tab-${tab}`}>
       <QueryState isPending={limits.isPending} error={limits.error}>
@@ -92,7 +88,7 @@ export function UploadBandwidthPage() {
           <Section title={tx("Çalışma alanı sınırı")} description={tx("Çalışma alanındaki tüm yüklemelerin toplamı için üst sınır.")} actions={
             <div className="flex gap-2">
               {edit({ scope: 'tenant' }, tenant.name, data?.tenant.bytesPerSecond)}
-              {canAdmin && <Button variant="outline" size="sm" onClick={() => setAssigning({ target: { scope: 'tenant' }, name: tenant.name, currentProfileId: data?.tenant.profileId })}>{tx("Profil Ata")}</Button>}
+              <Button variant="outline" size="sm" onClick={() => setAssigning({ target: { scope: 'tenant' }, name: tenant.name, currentProfileId: data?.tenant.profileId })}>{tx("Profil Ata")}</Button>
             </div>
           }>
             <div className="space-y-2">
@@ -122,18 +118,16 @@ export function UploadBandwidthPage() {
               <h2 className="text-base font-semibold text-text-heading">{tx("Bant Genişliği Profilleri")}</h2>
               {profileList.length > 0 && newProfile}
             </div>
-            {profileList.length === 0 ? <Card padding="none"><EmptyState message={tx("Henüz profil yok. Saate göre değişen bir hız sınırı için profil oluşturun.")} action={newProfile} canAct={canAdmin} /></Card> : (
+            {profileList.length === 0 ? <Card padding="none"><EmptyState message={tx("Henüz profil yok. Saate göre değişen bir hız sınırı için profil oluşturun.")} action={newProfile} /></Card> : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {profileList.map(p => (
                   <Card key={p.id} className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="min-w-0 break-words font-semibold text-text-heading">{p.name}</h3>
-                      {canAdmin && (
-                        <div className="flex gap-1">
-                          <Button variant="outline" size="sm" onClick={() => setEditingProfile(p)}>{tx("Düzenle")}</Button>
-                          <Button variant="outline" size="sm" onClick={() => deleteProfile.mutate(p.id)}>{tx("Sil")}</Button>
-                        </div>
-                      )}
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="sm" onClick={() => setEditingProfile(p)}>{tx("Düzenle")}</Button>
+                        <Button variant="outline" size="sm" onClick={() => deleteProfile.mutate(p.id)}>{tx("Sil")}</Button>
+                      </div>
                     </div>
                     {p.windows.length === 0 ? <p className="text-sm text-text-muted">{tx("Zaman penceresi tanımlı değil.")}</p> : <>
                       <ul className="space-y-1 text-sm text-text">{describeSchedule(p.windows).map(line => <li key={line}>{line}</li>)}</ul>

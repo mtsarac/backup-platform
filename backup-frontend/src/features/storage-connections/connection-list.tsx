@@ -56,7 +56,7 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
 /** The tenant's destinations as cards: name (the link to its page), health, capacity, last test and provider. Statistics are collapsed; changes live on the connection's own page. */
 export function ConnectionList() {
   useLanguage()
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const connections = useTenantConnections()
   const ops = useTenantConnectionOps()
   const list = connections.data?.items ?? []
@@ -64,7 +64,7 @@ export function ConnectionList() {
   return <QueryState isPending={connections.isPending} error={connections.error} onRetry={() => void connections.refetch()}>
     <Section title={tx("Depolama bağlantıları")} description={tx("Yedeklerinizin yazıldığı yerler.")} flush>
       {list.length === 0
-        ? <EmptyState icon={Cable} message={tx("Henüz depolama bağlantısı yok.")} canAct={canAdmin} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/storage/connections/new`}>{tx("Depolama bağlantısı ekle")}</Link>} />
+        ? <EmptyState icon={Cable} message={tx("Henüz depolama bağlantısı yok.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/storage/connections/new`}>{tx("Depolama bağlantısı ekle")}</Link>} />
         : <>
           <ul className="divide-y divide-border">{list.map((connection) => <ConnectionCard key={connection.id} connection={connection} tenantId={tenantId} total={total}
             testing={ops.test.isPending && ops.test.variables?.id === connection.id} testError={ops.test.error && ops.test.variables?.id === connection.id ? errorMessage(ops.test.error, 'storageConnection') : undefined} onTest={() => ops.test.mutate(connection)} />)}</ul>

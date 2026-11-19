@@ -19,8 +19,7 @@ import type { Agent } from '@/features/agents/types'
 import type { TenantQuota } from '@/features/storage/types'
 import { DashboardPage } from './dashboard-page'
 
-const permissions = vi.hoisted(() => ({ canOperate: true, canAdmin: true }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { name: 'Tenant A' }, ...permissions }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { name: 'Tenant A' } }) }))
 vi.mock('@/features/agents/api')
 vi.mock('@/features/backup-jobs/api')
 vi.mock('@/features/backups/api')
@@ -55,7 +54,6 @@ const row = async (name: string) => within(await screen.findByRole('region', { n
 
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(permissions, { canOperate: true, canAdmin: true })
   jobs = [makeJob('job-a', 'Muhasebe')]
   healths = [health('job-a', null)]
   days = { 'job-a': succeeded }
@@ -240,15 +238,6 @@ describe('band', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Şimdi yedekle' }))
     await waitFor(() => expect(startJobRun).toHaveBeenCalledWith('tenant-a', 'job-a', expect.any(String)))
     expect(await screen.findByRole('link', { name: 'Denemeyi aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-new')
-  })
-
-  it('hides the primary button without operate rights but keeps the band and "Ayrıntıyı gör"', async () => {
-    permissions.canOperate = false
-    healths = [health('job-a', 'backup_stale')]
-    mount()
-    const band = await screen.findByRole('region', { name: 'Dikkat gerekiyor' })
-    expect(within(band).queryByRole('button', { name: 'Şimdi yedekle' })).not.toBeInTheDocument()
-    expect(within(band).getByRole('link', { name: 'Ayrıntıyı gör' })).toBeVisible()
   })
 
   it('shows a neutral running band while nothing needs attention', async () => {

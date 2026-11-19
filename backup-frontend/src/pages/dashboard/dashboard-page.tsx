@@ -40,12 +40,11 @@ function runNote(run: BackupRun): string {
 }
 
 function AttentionBand({ band, base }: { band: Band; base: string }) {
-  const { canOperate } = useTenant()
   const run = useRunBackupJob()
   const [started, setStarted] = useState<string>()
   const [error, setError] = useState<unknown>(null)
   const { row } = band
-  const action = band.kind === 'attention' && canOperate ? band.action : null
+  const action = band.kind === 'attention' ? band.action : null
   return <section aria-label={band.kind === 'attention' ? tx('Dikkat gerekiyor') : tx('Çalışan yedekleme')} className={`space-y-2 rounded-lg border p-4 ${band.kind === 'attention' ? 'border-error-border bg-error-subtle' : 'border-border bg-surface'}`}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="min-w-0 font-medium text-text-heading">{band.text}</p>
@@ -125,7 +124,7 @@ function ProtectedData({ rows, revokedRows, agents, base }: { rows: ProtectionRo
   </Section>
 }
 
-function Steps({ p, base, canOperate }: { p: Protection; base: string; canOperate: boolean }) {
+function Steps({ p, base }: { p: Protection; base: string }) {
   const steps = [
     { done: p.agents.length > 0, label: tx('Yedekleme bilgisayarı ekleyin'), to: `${base}/first-backup` },
     { done: p.rows.length > 0, label: tx('Yedeklenecek veriyi seçin'), to: `${base}/first-backup` },
@@ -137,7 +136,7 @@ function Steps({ p, base, canOperate }: { p: Protection; base: string; canOperat
     <ol className="divide-y divide-border rounded-lg border border-border bg-surface">{steps.map((step, index) => <li key={step.label} aria-current={index === current ? 'step' : undefined} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <span className="flex items-center gap-2">{step.done ? <Check aria-hidden="true" className="size-4 text-success" /> : <Circle aria-hidden="true" className="size-4 text-text-muted" />}
         <span className={step.done ? 'text-text-muted' : 'font-medium text-text-heading'}>{step.label}</span>{step.done && <span className="sr-only">{tx('Tamamlandı')}</span>}</span>
-      {index === current && canOperate && <Link className={buttonVariants()} to={step.to}>{tx('Başla')}</Link>}
+      {index === current && <Link className={buttonVariants()} to={step.to}>{tx('Başla')}</Link>}
     </li>)}</ol>
   </Section>
 }
@@ -178,7 +177,7 @@ function ActivityCard({ runs, base }: { runs: BackupRun[]; base: string }) {
 
 export function DashboardPage() {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const base = `/tenants/${tenantId}`
   const p = useProtection(tenantId)
   const counts = countRows(p.rows)
@@ -191,12 +190,12 @@ export function DashboardPage() {
       description={!p.isPending && !empty && tx('{0} veri korunuyor · {1} güncel · {2} dikkat gerekiyor', { '0': counts.total, '1': counts.current, '2': counts.attention })}
       actions={<>
         <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-runs?status=Succeeded`}>{tx('Geri yükle')}</Link>
-        {canOperate && <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" className="size-4" />{tx('Yedekleme işi oluştur')}</Link>}
+        <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" className="size-4" />{tx('Yedekleme işi oluştur')}</Link>
       </>} />
     <QueryState isPending={p.isPending} error={p.error} onRetry={p.refetch}>
       <div className="space-y-6">
         {band && <AttentionBand band={band} base={base} />}
-        {empty && <Steps p={p} base={base} canOperate={canOperate} />}
+        {empty && <Steps p={p} base={base} />}
         <ProtectedData rows={p.rows} revokedRows={p.revokedRows} agents={p.agents} base={base} />
         <div className="grid gap-6 md:grid-cols-3">
           {!empty && <NextCard p={p} base={base} />}

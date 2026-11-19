@@ -42,7 +42,7 @@ function SourceBackup({ restore, tenantId }: { restore: RestoreView; tenantId: s
 
 export function RestoresPage() {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const { page, get, update } = useListParams()
   const status = oneOf(get('status'), restoreStatuses) ?? ''
   const filters: RestoreFilters = { page: 1, pageSize: 100, status, artifactId: get('artifactId'), agentId: get('agentId') }
@@ -84,7 +84,7 @@ export function RestoresPage() {
     {agents.error && <ErrorNotice title={tx("Yedekleme bilgisayarları yüklenemedi")} error={agents.error} onRetry={() => void agents.refetch()} />}
     <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
       {query.data?.items.length === 0
-        ? <Card data-testid="restores-empty" padding="none"><EmptyState icon={History} canAct={filtering || canOperate}
+        ? <Card data-testid="restores-empty" padding="none"><EmptyState icon={History}
           message={filtering ? tx("Bu filtrelere uyan geri yükleme yok.") : tx("Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.")}
           onClearFilters={filtering ? clearFilters : undefined} action={!filtering && <Link className={buttonVariants()} to={`${base}/backup-runs`}>{tx("Yedek dosyalarını aç")}</Link>} /></Card>
         : <DataList rows={query.data?.items ?? []} columns={columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} emptyMessage={tx("Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.")} />}

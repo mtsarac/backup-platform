@@ -20,7 +20,6 @@ import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 export interface SharesTableProps {
   shares: BackupShareView[]
   showTenant?: boolean
-  canAdmin?: boolean
   emptyMessage?: string
   emptyAction?: ReactNode
   caption?: string
@@ -29,7 +28,6 @@ export interface SharesTableProps {
 export function SharesTable({
   shares,
   showTenant = false,
-  canAdmin: canAdminProp,
   emptyMessage,
   emptyAction,
   caption,
@@ -37,7 +35,6 @@ export function SharesTable({
   useLanguage()
   const { user } = useAuth()
   const tenantContext = useContext(TenantContext)
-  const canAdmin = canAdminProp ?? tenantContext?.canAdmin ?? false
 
   const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<BackupShareView | null>(null)
@@ -138,8 +135,8 @@ export function SharesTable({
       key: 'actions',
       header: tx('İşlemler'),
       render: (share: BackupShareView) => {
-        const canManage = canManageShare(share, user?.role, canAdmin)
-        const canExtend = canExtendShare(share, user?.role, canAdmin)
+        const canManage = canManageShare(share, user?.role)
+        const canExtend = canExtendShare(share, user?.role)
         const canDownload = user?.role === 'PlatformAdmin' && share.status === 'Active'
         if (!canManage && !canDownload) {
           return '—'
@@ -187,7 +184,6 @@ export function SharesTable({
       <EmptyState
         icon={Share2}
         message={emptyMessage || tx('Henüz paylaşım yapılmamış.')}
-        canAct={emptyAction ? canAdmin : true}
         action={emptyAction}
       />
     )

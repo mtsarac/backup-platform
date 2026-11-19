@@ -23,7 +23,7 @@ import { oneOf, useListParams } from '@/features/platform/use-list-params'
 
 export function ClientsPage() {
   useLanguage()
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const { get, update } = useListParams()
   const showRevoked = get('revoked') === 'true'
   const query = useAgents(tenantId, showRevoked)
@@ -41,7 +41,7 @@ export function ClientsPage() {
     { key: 'lastSeenAt', header: tx('Son görülme'), render: (agent) => agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı') },
   ]
   const empty = query.data?.length === 0
-  const addButton = canAdmin && <Button onClick={() => setAddingTenant(tenantId)}>{tx("Yedekleme bilgisayarı ekle")}</Button>
+  const addButton = <Button onClick={() => setAddingTenant(tenantId)}>{tx("Yedekleme bilgisayarı ekle")}</Button>
   return <div className="space-y-6">
     <PageHeader title={tx("Bilgisayarlar")} description={tx("Veritabanı yedeklerini alan bilgisayarlar ve açık olup olmadıkları.")} actions={!empty && addButton} />
     <AgentsTabs />
@@ -51,9 +51,9 @@ export function ClientsPage() {
       <FilterField label={tx("Durum")}><Select value={connectivity ?? 'all'} onChange={(event) => update({ connectivity: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></Select></FilterField>
     </Filters>}
     <QueryState isPending={query.isPending} error={query.error}>
-      {empty ? <Card padding="none"><EmptyState icon={Server} message={tx("Henüz yedekleme bilgisayarı eklenmedi.")} canAct={canAdmin} action={addButton} /></Card>
+      {empty ? <Card padding="none"><EmptyState icon={Server} message={tx("Henüz yedekleme bilgisayarı eklenmedi.")} action={addButton} /></Card>
         : <DataList rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} caption={tx("Yedekleme bilgisayarları")} emptyMessage={filtered ? tx('Filtrelere uygun bilgisayar bulunamadı.') : tx('Henüz yedekleme bilgisayarı eklenmedi.')} onClearFilters={filtered ? () => update({ search: '', connectivity: '' }) : undefined} />}
     </QueryState>
-    {canAdmin && addingTenant === tenantId && <AddAgentDialog key={tenantId} tenantId={tenantId} onClose={() => setAddingTenant(null)} />}
+    {addingTenant === tenantId && <AddAgentDialog key={tenantId} tenantId={tenantId} onClose={() => setAddingTenant(null)} />}
   </div>
 }

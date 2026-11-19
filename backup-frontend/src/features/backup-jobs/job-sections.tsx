@@ -3,7 +3,6 @@ import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { useTenant } from '@/features/tenancy/use-tenant'
 import { DiscardDialog, UnsavedChangesGuard } from '@/features/backup-jobs/discard-changes-link'
 import { fieldKit } from '@/features/backup-jobs/job-field-kit'
 import { FormGrid } from '@/features/backup-jobs/job-form-fields'
@@ -49,12 +48,11 @@ function SourceFields({ form }: { form: JobFormState }) {
 /** A job's Kaynak, Hedef, Zamanlama and Saklama sections: each reads as plain rows and turns into its own form with Kaydet and Vazgeç. */
 export function JobSections({ job }: { job: BackupJob }) {
   useLanguage()
-  const { canOperate } = useTenant()
   const [editing, setEditing] = useState<EditSection | null>(null)
   const [asked, setAsked] = useState<EditSection | null>(null)
   const form = useJobForm({ job, onSaved: () => setEditing(null) })
   const input = summaryInput(form)
-  const rows = summaryRows({ ...input, agentLabel: job.agentRevoked ? `${job.agentName ?? tx('Adsız bilgisayar')} · ${tx('Bilgisayar iptal edildi')}` : input.agentLabel, values: initialValues(job), canAdmin: true })
+  const rows = summaryRows({ ...input, agentLabel: job.agentRevoked ? `${job.agentName ?? tx('Adsız bilgisayar')} · ${tx('Bilgisayar iptal edildi')}` : input.agentLabel, values: initialValues(job) })
   const dirty = editing !== null && form.dirty
   function begin(section: EditSection) {
     form.restart(job)
@@ -76,7 +74,7 @@ export function JobSections({ job }: { job: BackupJob }) {
     {editSections.map(section => {
       const title = sectionTitle(section)
       const open = editing === section
-      return <Section key={section} headingLevel={3} title={title} actions={canOperate && !open && <Button type="button" variant="outline" size="sm" aria-label={tx('Değiştir: {0}', { '0': title })} onClick={() => dirty ? setAsked(section) : begin(section)}>{tx('Değiştir')}</Button>}>
+      return <Section key={section} headingLevel={3} title={title} actions={!open && <Button type="button" variant="outline" size="sm" aria-label={tx('Değiştir: {0}', { '0': title })} onClick={() => dirty ? setAsked(section) : begin(section)}>{tx('Değiştir')}</Button>}>
         {open ? <form noValidate aria-label={title} className="space-y-4" onSubmit={submit}>
           {section === 'source' && <SourceFields form={form} />}
           {section === 'storage' && <StorageStep form={form} />}

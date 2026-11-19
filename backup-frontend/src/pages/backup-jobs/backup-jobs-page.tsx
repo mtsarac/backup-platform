@@ -26,7 +26,7 @@ import { ApiError } from '@/lib/api/client'
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 
 function JobDetail({ job }: { job: BackupJob }) {
-  const { tenantId, canOperate, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const navigate = useNavigate()
   const client = useQueryClient()
   const base = `/tenants/${tenantId}`
@@ -71,7 +71,7 @@ function JobDetail({ job }: { job: BackupJob }) {
     <Link className={`inline-flex items-center gap-1 text-sm md:hidden ${linkClass}`} to={`${base}/backup-jobs`}><ArrowLeft aria-hidden="true" className="size-4" />{tx('İşlere dön')}</Link>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="text-lg font-semibold text-text-heading">{job.name}</h2><p className="text-sm text-text-muted">{job.agentName ?? tx('Adsız bilgisayar')} · {job.configuration.database}</p></div>
-      {canAdmin && <Menu.Root><Menu.Trigger className={buttonVariants({ variant: 'outline' })}>{tx('Diğer')}</Menu.Trigger><Menu.Portal><Menu.Positioner sideOffset={4} className="z-50"><Menu.Popup className="rounded-lg border border-border bg-surface-raised p-1 shadow-overlay"><Menu.Item className="cursor-pointer rounded-sm px-3 py-2 text-sm hover:bg-surface-2" onClick={() => setConfirm(true)}>{tx('Korunan veriyi kaldır…')}</Menu.Item></Menu.Popup></Menu.Positioner></Menu.Portal></Menu.Root>}
+      <Menu.Root><Menu.Trigger className={buttonVariants({ variant: 'outline' })}>{tx('Diğer')}</Menu.Trigger><Menu.Portal><Menu.Positioner sideOffset={4} className="z-50"><Menu.Popup className="rounded-lg border border-border bg-surface-raised p-1 shadow-overlay"><Menu.Item className="cursor-pointer rounded-sm px-3 py-2 text-sm hover:bg-surface-2" onClick={() => setConfirm(true)}>{tx('Korunan veriyi kaldır…')}</Menu.Item></Menu.Popup></Menu.Positioner></Menu.Portal></Menu.Root>
     </div>
     <div role="status" className="space-y-1">
       {status && <p className="font-medium"><StatusPill level={jobStatusLevel[status]}>{jobStatusLabel(status, lastRun.data?.attempts.at(-1)?.progressPercent)}</StatusPill></p>}
@@ -82,12 +82,12 @@ function JobDetail({ job }: { job: BackupJob }) {
       ? <Notice title={tx('Zaten sürüyor')} action={<Link className={linkClass} to={`${base}/backup-runs/${overlap}`}>{tx('Süren denemeyi aç')}</Link>}>{tx('Başka bir yedekleme denemesi sürdüğü için yenisi başlatılmadı.')}</Notice>
       : <ErrorNotice title={tx('İşlem tamamlanamadı')} error={actionError} />)}
     {startedRun && <Notice tone="success" title={tx('Yedekleme denemesi başlatıldı')}><Link className={linkClass} to={`${base}/backup-runs/${startedRun}`}>{tx('Denemeyi aç')}</Link></Notice>}
-    {canOperate && <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2">
       <Button disabled={run.isPending || !job.enabled || job.agentRevoked} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx('Şimdi yedekle')}</Button>
       {job.schedule && <Button variant="outline" disabled={toggle.isPending || job.agentRevoked} onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}>{job.enabled ? tx('Zamanlamayı durdur') : tx('Zamanlamayı sürdür')}</Button>}
       {offline && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/agents/${job.agentId}`}>{tx('Bilgisayarı kontrol et')}</Link>}
       {!offline && reasons.includes('capacity_critical') && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/storage`}>{tx('Depolamayı yönet')}</Link>}
-    </div>}
+    </div>
     <JobSections job={job} />
     <Link className={`inline-block text-sm ${linkClass}`} to={`${base}/backup-runs?jobId=${encodeURIComponent(job.id)}`}>{tx('Tüm denemeler')}</Link>
     <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title={tx('Korunan veriyi kaldır…')} name={job.name} pending={archive.isPending} error={archive.error} confirmLabel={tx('Korunan veriyi kaldır')} onConfirm={() => archive.mutate()} consequence={{ what: tx('Yedekleriniz silinmez; bu iş artık çalışmaz ve listede görünmez.'), who: job.name, reversible: tx('Bu işlem geri alınamaz.') }} />
@@ -97,7 +97,7 @@ function JobDetail({ job }: { job: BackupJob }) {
 export function BackupJobsPage() {
   useLanguage()
   const { id } = useParams()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const jobs = useBackupJobs()
   const { get, update } = useListParams()
   const search = get('search')
@@ -109,10 +109,10 @@ export function BackupJobsPage() {
   const filtering = Boolean(search || state)
   const create = <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx('Yedekleme işi oluştur')}</Link>
   return <QueryState isPending={jobs.isPending} error={jobs.error}>
-    {all.length === 0 ? <EmptyState icon={DatabaseBackup} message={tx('Henüz yedekleme işi oluşturulmadı.')} canAct={canOperate} action={create} />
+    {all.length === 0 ? <EmptyState icon={DatabaseBackup} message={tx('Henüz yedekleme işi oluşturulmadı.')} action={create} />
       : <div className="grid gap-4 md:grid-cols-[minmax(14rem,1fr)_minmax(0,2fr)]">
         <div className={id ? 'hidden space-y-3 md:block' : 'space-y-3'}>
-          {canOperate && create}
+          {create}
           <TextInput type="search" value={search} aria-label={tx('İş, yedekleme bilgisayarı veya veritabanı ara')} onChange={event => update({ search: event.target.value }, { replace: true })} />
           <Select value={state || 'all'} aria-label={tx('Durum')} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx('Tümü')}</option><option value="enabled">{tx('Etkin')}</option><option value="disabled">{tx('Devre dışı')}</option></Select>
           {filtered.length ? <ul className="divide-y divide-border rounded-lg border border-border bg-surface">{filtered.map(job => <li key={job.id}><Link aria-current={job.id === id ? 'page' : undefined} className="block px-4 py-3 hover:bg-surface-2 aria-[current=page]:bg-surface-2" to={`${base}/backup-jobs/${encodeURIComponent(job.id)}`}><span className="block font-medium">{job.name}</span><span className="block text-sm text-text-muted">{job.agentName ?? tx('Adsız bilgisayar')} · {job.configuration.database}</span>{job.agentRevoked && <span className="block text-sm text-text-muted">{jobStatusLabel('revoked')}</span>}</Link></li>)}</ul>

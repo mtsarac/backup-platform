@@ -26,12 +26,12 @@ import { AgentDatabases } from './agent-databases'
 
 export function ClientDetailPage() {
   useLanguage()
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const { id = '' } = useParams()
-  return <AgentDetailContent key={`${tenantId}:${id}`} tenantId={tenantId} id={id} canAdmin={canAdmin} />
+  return <AgentDetailContent key={`${tenantId}:${id}`} tenantId={tenantId} id={id} />
 }
 
-function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: string; canAdmin: boolean }) {
+function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) {
   useLanguage()
   const query = useAgent(tenantId, id)
   const client = useQueryClient()
@@ -53,7 +53,7 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
           meta={<><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
           actions={<>
             {supportsDiscovery(agent.capabilities) && <Link className={buttonVariants({ variant: 'outline' })} to={`${discoveredDatabasesPath(tenantId)}?agentId=${encodeURIComponent(id)}`}>{tx("Bulunan veritabanı sunucuları")}</Link>}
-            {canAdmin && agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
+            {agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
           </>} />
         {agent.status === 'Active' && agent.connectivity === 'offline' && <Notice tone="warning">{tx("Bu bilgisayar çevrimdışı; yedeklemeler bilgisayar yeniden bağlanana kadar çalışmaz. Bilgisayarın açık olduğunu ve yedekleme programının çalıştığını kontrol edin.")}</Notice>}
         {supportsDiscovery(agent.capabilities) && <AgentDatabases agentId={id} />}
@@ -67,7 +67,7 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
         who: tx("Bu bilgisayarda çalışan yedekleme işleri durur."),
         reversible: tx("Hayır. Yeniden kayıt için yeni bir kimlik gerekir."),
       }}
-      confirmLabel={tx("İptali onayla")} pending={revoke.isPending} error={revoke.error} onConfirm={() => { if (canAdmin) revoke.mutate() }} />
+      confirmLabel={tx("İptali onayla")} pending={revoke.isPending} error={revoke.error} onConfirm={() => { revoke.mutate() }} />
   </div>
 }
 

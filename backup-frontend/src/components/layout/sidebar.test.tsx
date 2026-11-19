@@ -8,13 +8,13 @@ import { tenantRoutes } from '@/route-tables'
 import { AppShell } from './app-shell'
 import { Sidebar } from './sidebar'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, isPlatformAdmin: false }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', isPlatformAdmin: false }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ ...access, tenant: { tenantId: 'tenant-a', name: 'Acme' }, switchTenant: vi.fn() }) }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: access.isPlatformAdmin ? 'PlatformAdmin' : 'UserAdmin', displayName: 'Ada' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' }], logout: vi.fn() }) }))
 
 vi.mock('@/hooks/use-theme', () => ({ useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }))
 
-beforeEach(() => { access.canAdmin = true; access.isPlatformAdmin = false })
+beforeEach(() => { access.isPlatformAdmin = false })
 
 const base = '/tenants/tenant-a'
 const nav = () => screen.getAllByRole('navigation')[0]
@@ -31,12 +31,6 @@ describe('Tenant sidebar', () => {
       ['Ayarlar', `${base}/settings`],
     ])
     expect(within(nav().closest('aside')!).queryByRole('link', { name: 'Platform Yönetimi' })).not.toBeInTheDocument()
-  })
-
-  it('sends non-administrators to upload bandwidth, the only settings section they can use', () => {
-    access.canAdmin = false
-    render(<MemoryRouter><Sidebar /></MemoryRouter>)
-    expect(within(nav()).getByRole('link', { name: 'Ayarlar' })).toHaveAttribute('href', `${base}/settings/bandwidth`)
   })
 
   it('pins Platform Yönetimi below the menu, only for platform administrators', () => {

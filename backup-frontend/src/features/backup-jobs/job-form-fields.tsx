@@ -15,9 +15,9 @@ export function Question({ title, why, children, headingLevel, compact }: { titl
 }
 
 /** A ready-made choice for a setting: exactly one option is pressed, or none when the current value is custom. */
-export function PresetChoice({ label, options, disabled }: { label: string; options: readonly { text: string; pressed: boolean; onSelect: () => void }[]; disabled?: boolean }) {
+export function PresetChoice({ label, options }: { label: string; options: readonly { text: string; pressed: boolean; onSelect: () => void }[]}) {
   useLanguage()
   return <div role="group" aria-label={label} className="flex flex-wrap gap-2 md:col-span-2">
-    {options.map(option => <Button key={option.text} type="button" variant={option.pressed ? 'default' : 'outline'} aria-pressed={option.pressed} disabled={disabled} onClick={option.onSelect}>{option.text}</Button>)}
+    {options.map(option => <Button key={option.text} type="button" variant={option.pressed ? 'default' : 'outline'} aria-pressed={option.pressed} onClick={option.onSelect}>{option.text}</Button>)}
   </div>
 }

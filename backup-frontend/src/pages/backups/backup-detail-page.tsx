@@ -86,7 +86,7 @@ export function BackupDetailPage() {
 
 function BackupDetail({ id }: { id: string }) {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const navigate = useNavigate()
   const { search } = useLocation()
   const query = useBackup(id)
@@ -124,14 +124,13 @@ function BackupDetail({ id }: { id: string }) {
   const failure = describeFailure(failureCode)
   const failureNotice = (run: BackupRun) => ({
     title: tx("Yedekleme denemesi başarısız oldu"), ...failure,
-    action: canOperate ? failure.action : tx("Yöneticinize danışın."),
-    onAction: canOperate && failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
+    onAction: failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
       if (failure.actionKind === 'checkComputer') navigate(`/tenants/${tenantId}/agents/${run.agentId}`)
       else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}`)
       else if (failure.actionKind === 'manageStorage') navigate(`/tenants/${tenantId}/storage`)
       else if (failure.actionKind === 'backupNow' && canRetryRun(run.status)) void perform('retry')
     } : undefined,
-    onRetry: canOperate && canRetryRun(run.status) ? () => void perform('retry') : undefined,
+    onRetry: canRetryRun(run.status) ? () => void perform('retry') : undefined,
   })
 
   return (
@@ -142,7 +141,7 @@ function BackupDetail({ id }: { id: string }) {
           <h2 className="break-words text-lg font-semibold text-text-heading">{run?.jobName ?? tx('Yedekleme denemesi')}</h2>
           {run && <div className="flex flex-wrap items-center gap-2"><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</div>}
         </div>
-        {run && canOperate && <div className="flex flex-wrap items-center gap-2">
+        {run && <div className="flex flex-wrap items-center gap-2">
           {run.status === 'Succeeded' && artifact && artifactState(artifact) !== 'DeleteFailed' && !restoreIneligibility(artifact) && <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs/${run.id}/restore`}>{tx('Geri yükle')}</Link>}
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
@@ -152,7 +151,7 @@ function BackupDetail({ id }: { id: string }) {
       </div>
       <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run} emptyState={<EmptyState icon={History} message={tx("Bu yedekleme denemesi bulunamadı. Yedekleme denemeleri listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx("Yedekleme denemeleri")}</Link>} />}>
         {run && <>
-          <ConfirmDialog open={confirmCancel && canOperate && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
+          <ConfirmDialog open={confirmCancel && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
             consequence={{
               what: tx("Yedekleme bilgisayarına iptal isteği iletilir. İşlem durana kadar deneme iptal edilmiş sayılmaz; yarım kalan yedek kullanılamaz."),
               who: tx("Yalnızca bu yedekleme denemesi etkilenir; önceki yedekleriniz korunur."),
@@ -170,7 +169,7 @@ function BackupDetail({ id }: { id: string }) {
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
               <SizeAnomalyComparison run={run} />
-              {(run.status === 'Failed' || run.status === 'AgentLost') && (canOperate && failure.certificateUntrusted
+              {(run.status === 'Failed' || run.status === 'AgentLost') && (failure.certificateUntrusted
                 ? <TrustJobCertificate jobId={run.jobId}>{trust => <ErrorNotice {...failureNotice(run)} trust={trust} />}</TrustJobCertificate>
                 : <ErrorNotice {...failureNotice(run)} />)}
               {run.status === 'RetryPending' && <Notice tone="warning">{tx("Otomatik yeniden deneme bekleniyor. Sonraki deneme:")}{' '}{formatDateTime(run.retry.nextAttemptAt)}. {describeFailure(run.retry.lastFailureCode).what}</Notice>}

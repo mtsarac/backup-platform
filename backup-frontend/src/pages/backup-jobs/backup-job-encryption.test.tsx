@@ -11,7 +11,7 @@ import { ApiError } from '@/lib/api/client'
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
 import { catalog, makeConnection, makeManaged } from '@/features/storage-connections/test-fixtures'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
@@ -35,7 +35,6 @@ function renderWizard(route = '/tenants/tenant-a/backup-jobs/new') {
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
   vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))

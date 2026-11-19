@@ -7,24 +7,17 @@ import { useRestoreTargets } from '@/features/restores/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { FileRestoreWizard } from '@/features/restores/file-restore-wizard'
 import { RestoreWizard } from '@/features/restores/restore-wizard'
-import { AccessDenied } from '@/components/auth/access-denied'
 
 export function RestoreWizardPage() {
   useLanguage()
   const { id = '' } = useParams<{ id: string }>()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const runQuery = useBackup(id)
   const latest = runQuery.data?.attempts.flatMap(attempt => attempt.artifacts).at(-1)
   const targetsQuery = useRestoreTargets(latest?.id ?? '')
   // A PostgreSQL artifact may carry no database name; the run's configuration always does.
   const artifact = latest && (targetsQuery.data?.engine === 'file-system' ? latest : { ...latest, databaseName: latest.databaseName ?? runQuery.data?.configuration.database })
 
-  if (!canOperate) {
-    return <div className="space-y-6">
-      <PageHeader title={tx("Yedek dosyasını geri yükle")} crumbs={[{ label: tx('Yedekleme denemeleri'), to: `/tenants/${tenantId}/backup-runs` }, { label: tx('Yedekleme denemesi'), to: `/tenants/${tenantId}/backup-runs/${id}` }, { label: tx('Geri yükleme') }]} />
-      <AccessDenied what={tx("Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur.")} />
-    </div>
-  }
 
   const title = targetsQuery.data?.engine === 'file-system' ? tx('Dosyaları geri yükle') : targetsQuery.data ? tx('Veritabanını geri yükle') : tx('Yedek dosyasını geri yükle')
   return (

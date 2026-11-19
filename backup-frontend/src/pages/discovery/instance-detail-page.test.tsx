@@ -14,7 +14,7 @@ import { ApiError } from '@/lib/api/client'
 import { BackupJobWizardPage } from '@/pages/backup-jobs/backup-job-wizard-page'
 import { InstanceDetailPage } from './instance-detail-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme' }, canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme' } }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/discovery/api')
 vi.mock('@/features/agents/api')
@@ -29,7 +29,6 @@ function mount() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getAgents).mockResolvedValue([supportedAgent] as never)
   vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
   vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail())
@@ -96,13 +95,6 @@ describe('instance detail page', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Güven ve yeniden dene' }))
       await waitFor(() => expect(saveDiscoveryCredential).toHaveBeenCalledWith('tenant-a', 'inst-1', { credentialReference: 'sql-main', databaseLogin: null, integratedSecurity: false, encrypt: true, trustServerCertificate: true }))
       await waitFor(() => expect(verifyDiscoveryInstance).toHaveBeenCalledWith('tenant-a', 'inst-1'))
-    })
-    it('is not offered to a Viewer', async () => {
-      Object.assign(access, { canOperate: false, canAdmin: false })
-      vi.mocked(getDiscoveryInstance).mockResolvedValue(untrusted())
-      mount()
-      await screen.findByText(/Sunucunun sertifikası doğrulanamadı/)
-      expect(screen.queryByText(trustTitle)).not.toBeInTheDocument()
     })
   })
   it('says the missing address once instead of on every database row', async () => {
@@ -287,14 +279,5 @@ describe('instance detail page', () => {
       await userEvent.click(within(notices).getByRole('button', { name: 'Teknik ayrıntılar' }))
       expect(within(within(notices).getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('server_tls_unavailable')).toBeInTheDocument()
     })
-  })
-  it('is read-only for a Viewer', async () => {
-    Object.assign(access, { canOperate: false, canAdmin: false })
-    mount()
-    expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByLabelText('ERP seç')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Giriş bilgilerini değiştir'))
-    expect(screen.queryByRole('button', { name: 'Kaydet ve doğrula' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Yedekleme işi oluştur/ })).not.toBeInTheDocument()
   })
 })

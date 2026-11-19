@@ -69,7 +69,7 @@ export function RestoreDetailPage() {
 }
 function RestoreDetail({ id }: { id: string }) {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const query = useRestore(id)
   const cancel = useCancelRestore(id)
   const agents = useAgents(tenantId, true)
@@ -79,14 +79,14 @@ function RestoreDetail({ id }: { id: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [tab, setTab] = useState<'summary' | 'details' | 'attempts' | 'checks'>('summary')
-  const mayCancel = Boolean(restore && canOperate && canCancelRestore(restore.status, restore.cancellationRequestedAt))
+  const mayCancel = Boolean(restore && canCancelRestore(restore.status, restore.cancellationRequestedAt))
   const computer = agents.data?.find((agent) => agent.agentId === restore?.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
   const { name: databaseOfBackup, createdAt: backupCreatedAt } = useSourceDatabaseName(restore)
   const sourceName = restore && sourceBackupLabel(databaseOfBackup, backupCreatedAt)
   const title = restore ? restoreTitle(restore, databaseOfBackup) : ''
   const failure = describeFailure(restore?.failureCode, 'restore')
   function failureControl(code: string | null | undefined) {
-    if (!restore || !canOperate || !code) return undefined
+    if (!restore || !code) return undefined
     const kind = describeFailure(code, 'restore').actionKind
     if (!kind || kind === 'backupNow' || (kind !== 'checkComputer' && kind !== 'manageStorage' && !artifact.data?.runId)) return undefined
     const to = kind === 'checkComputer' ? `/tenants/${tenantId}/agents/${restore.agentId}` : kind === 'manageStorage' ? `/tenants/${tenantId}/storage` : `/tenants/${tenantId}/backup-runs/${artifact.data?.runId}/restore`

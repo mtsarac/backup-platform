@@ -10,7 +10,7 @@ import { legacyAgent, makeInstance, makeStatus, supportedAgent } from '@/feature
 import { ApiError } from '@/lib/api/client'
 import { DiscoveryPage } from './discovery-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme' }, canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme' } }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/discovery/api')
 vi.mock('@/features/agents/api')
@@ -20,7 +20,6 @@ function mount(path: string | { pathname: string; state: unknown } = '/') {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getAgents).mockResolvedValue([supportedAgent, legacyAgent] as never)
   vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
   vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance(), makeInstance({ id: 'inst-2', displayName: 'Other server', access: 'CredentialsRequired' })] })
@@ -142,13 +141,6 @@ describe('discovery page', () => {
     expect(await screen.findByText('Şifreli bağlantı yok')).toBeInTheDocument()
     expect(screen.queryByText('Hata')).not.toBeInTheDocument()
   })
-  it('hides every mutating control from a Viewer', async () => {
-    Object.assign(access, { canOperate: false, canAdmin: false })
-    mount()
-    await screen.findByRole('link', { name: 'SQL Server (default)' })
-    expect(screen.queryByRole('button', { name: /yeniden tara/ })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Otomatik tarama açık')).not.toBeInTheDocument()
-  })
   it('offers nobody scan settings: automatic scans and Docker stay on, the interval is shown read-only', async () => {
     mount()
     await screen.findByRole('region', { name: 'SQL Agent' })
@@ -180,13 +172,6 @@ describe('discovery page', () => {
     mount()
     expect(await screen.findByText(/henüz veritabanı bulunamadı/)).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'SQL Agent yeniden tara' })).toHaveLength(1)
-  })
-  it('tells Viewers who can add the missing computer', async () => {
-    Object.assign(access, { canOperate: false, canAdmin: false })
-    vi.mocked(getAgents).mockResolvedValue([])
-    mount()
-    expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
   })
   it('renders a permission state on 403', async () => {
     vi.mocked(getDiscoveryInstances).mockRejectedValue(new ApiError(403))

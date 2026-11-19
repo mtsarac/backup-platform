@@ -39,7 +39,7 @@ function DeleteCountdown({ deleteAfter }: { deleteAfter: string }) {
 
 export function ArtifactDetail({ id }: { id: string }) {
   useLanguage()
-  const { tenantId, canAdmin, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const { user } = useAuth()
   const query = useArtifact(tenantId, id)
   const artifact = query.data
@@ -76,7 +76,6 @@ export function ArtifactDetail({ id }: { id: string }) {
 
   const canRepair = Boolean(
     isFeatureEnabled('replicaRepair') &&
-    canOperate &&
     artifact &&
     artifact.state !== 'Deleted' &&
     (expiresAt === null || expiresAt > now || Boolean(pinnedAt)) &&
@@ -107,7 +106,7 @@ export function ArtifactDetail({ id }: { id: string }) {
   }
 
   function handleCancelRepair() {
-    if (!canOperate || !activeRepairId || cancelRepair.isPending) return
+    if (!activeRepairId || cancelRepair.isPending) return
     cancelRepair.mutate(activeRepairId, {
       onSuccess: () => setNotice(tx('Onarım iptal isteği gönderildi.')),
       onError: (err) => setRepairError(describeError(err)),
@@ -131,8 +130,8 @@ export function ArtifactDetail({ id }: { id: string }) {
     setNotice('')
     cancelDelete.mutate(undefined, { onSuccess: () => setNotice(tx('Silme iptal edildi. Backup dosyaları korunuyor.')) })
   }
-  const canRequestDelete = Boolean(canAdmin && artifact && artifact.state !== 'Deleted' && artifact.replicas.some((replica) => replica.status === 'Available'))
-  const canDownload = Boolean(user?.role === 'UserAdmin' && canAdmin && artifact?.state === 'Available')
+  const canRequestDelete = Boolean(artifact && artifact.state !== 'Deleted' && artifact.replicas.some((replica) => replica.status === 'Available'))
+  const canDownload = Boolean(user?.role === 'UserAdmin' && artifact?.state === 'Available')
   return (
     <div className="space-y-6">
       <QueryState isPending={query.isPending} error={query.error}>
@@ -141,32 +140,31 @@ export function ArtifactDetail({ id }: { id: string }) {
             <summary className="cursor-pointer">{tx('Diğer')}</summary>
             <div className="flex flex-wrap gap-2 pt-2">
               {canDownload && <Button variant="outline" onClick={() => setShowDownload(shown => !shown)}>{tx('İndir')}</Button>}
-              {canAdmin && artifact.state === 'Available' && <Button variant="outline" onClick={() => setShowShares(shown => !shown)}>{tx('Paylaş')}</Button>}
+              {artifact.state === 'Available' && <Button variant="outline" onClick={() => setShowShares(shown => !shown)}>{tx('Paylaş')}</Button>}
               {canRequestDelete && <Button variant="destructive" disabled={busy} onClick={() => { requestDelete.reset(); cancelDelete.reset(); setDialogOpen(true) }}>{tx('Sil')}</Button>}
             </div>
           </details>}
           <ArtifactDeletedNotice artifact={artifact} />
           {artifactState(artifact) === 'DeleteFailed' && <p className="text-sm text-text">{tx('Fiziksel silme tamamlanamadı; dosyalar hâlâ depolamada olabilir.')}{' '}<Link className={linkClass} to={`/tenants/${tenantId}/storage`}>{tx('Depolama')}</Link></p>}
-          <ArtifactAnswers artifact={artifact} canOperate={canOperate} now={now} />
+          <ArtifactAnswers artifact={artifact} now={now} />
           {user?.role === 'PlatformAdmin' && <Notice tone="info">{tx('Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.')}</Notice>}
           {pending && <Section title={tx("Silme süreci")} className="border-warning-border">
             <div className="space-y-3">
               {artifact.deleteAfter && <DeleteCountdown deleteAfter={artifact.deleteAfter} />}
               <p className="text-sm text-text-muted">{cancellable ? tx('Fiziksel silme henüz başlamadı. Yönetici silme isteğini iptal edebilir.') : tx('Fiziksel silme başladığı için işlem artık iptal edilemez.')}</p>
-              {canAdmin && cancellable && <Button variant="outline" disabled={busy} onClick={cancelDeletion}>{cancelDelete.isPending ? tx('İptal ediliyor…') : tx('Silmeyi iptal et')}</Button>}
+              {cancellable && <Button variant="outline" disabled={busy} onClick={cancelDeletion}>{cancelDelete.isPending ? tx('İptal ediliyor…') : tx('Silmeyi iptal et')}</Button>}
             </div>
           </Section>}
-          {!canAdmin && artifact.state !== 'Deleted' && <Notice tone="info">{tx("Silme ve silmeyi iptal etme işlemleri yalnızca yöneticilere açıktır. Yöneticinize danışın.")}</Notice>}
           {visibleNotice && <Notice tone="success">{visibleNotice}</Notice>}
           {mutationError && !dialogOpen && <ErrorNotice error={mutationError} />}
           {visibleRepairError && <ErrorNotice title={tx("Onarım başarısız")} {...visibleRepairError} />}
           {activeRepairId && repairQuery.data && !repairFinished && <Notice tone="info" title={tx("Onarım işlemi devam ediyor")}
-            action={canOperate && <Button variant="outline" size="sm" disabled={cancelRepair.isPending} onClick={handleCancelRepair}>{cancelRepair.isPending ? tx('İptal ediliyor…') : tx('Onarımı iptal et')}</Button>}>{tx("Durum:")}{' '}{repairQuery.data.status === 'InProgress' ? tx('Aktarılıyor ve doğrulanıyor') : tx('Sırada')}
+            action={<Button variant="outline" size="sm" disabled={cancelRepair.isPending} onClick={handleCancelRepair}>{cancelRepair.isPending ? tx('İptal ediliyor…') : tx('Onarımı iptal et')}</Button>}>{tx("Durum:")}{' '}{repairQuery.data.status === 'InProgress' ? tx('Aktarılıyor ve doğrulanıyor') : tx('Sırada')}
             {repairQuery.data.transferredBytes > 0 && tx(" · {0} MB aktarıldı", { "0": Math.round(repairQuery.data.transferredBytes / (1024 * 1024)) })}
           </Notice>}
-          {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />}
+          {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} eligible={artifact.state === 'Available'} />}
           {artifact.backupMetadata?.engine !== 'file-system' && <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />}
-          {showShares && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} canAdmin={canAdmin} />}
+          {showShares && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} />}
           <ArtifactTechnical artifact={artifact} replication={artifact.replication && <ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} />} />
         </>}
       </QueryState>

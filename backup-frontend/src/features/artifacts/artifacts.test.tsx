@@ -16,8 +16,8 @@ vi.mock('@/lib/api/client', () => ({
   tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
   ApiError: class ApiError extends Error {},
 }))
-const permissions = vi.hoisted(() => ({ canAdmin: true, canOperate: true, role: 'UserAdmin' }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: permissions.canAdmin, canOperate: permissions.canOperate }) }))
+const permissions = vi.hoisted(() => ({ role: 'UserAdmin' }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: permissions.role } }) }))
 
 vi.mock('./api', async (importOriginal) => ({
@@ -59,7 +59,7 @@ const request = vi.mocked(apiRequest)
 const noRestoreTargets = { agents: [], targets: [] }
 const answering = (path: string, current: unknown) => path.endsWith('/restore-targets') ? noRestoreTargets : current
 afterEach(() => { cleanup(); vi.clearAllMocks() })
-beforeEach(() => { permissions.canAdmin = true; permissions.canOperate = true; permissions.role = 'UserAdmin' })
+beforeEach(() => { permissions.role = 'UserAdmin' })
 const trigger = () => screen.getByRole("button", { name: "Teknik ayrıntılar" })
 const openDetails = () => fireEvent.click(trigger())
 
@@ -183,14 +183,6 @@ describe('Backup dosyaları', () => {
     expect(screen.queryByText('attempt-internal')).not.toBeInTheDocument()
   })
 
-  it('Viewer ve Operator için yıkıcı işlemleri gizler', async () => {
-    permissions.canAdmin = false
-    request.mockResolvedValue(artifact())
-    mount()
-    await screen.findByText(/yalnızca yöneticilere açıktır/)
-    expect(screen.queryByRole('button', { name: 'Sil' })).not.toBeInTheDocument()
-  })
-
   it('önce dosyanın sağlam olup olmadığını, geri yüklenip yüklenemeyeceğini ve ne zaman silineceğini söyler', async () => {
     request.mockResolvedValue(artifact())
     mount()
@@ -218,14 +210,6 @@ describe('Backup dosyaları', () => {
     expect(screen.queryByText('Kısaca durum')).not.toBeInTheDocument()
   })
 
-  it('geri yükleme yetkisi olmayana Yöneticinize danışın der', async () => {
-    permissions.canOperate = false
-    request.mockResolvedValue(artifact())
-    mount()
-    await screen.findByText('Kısaca durum')
-    expect(screen.getByText(/Yöneticinize danışın/)).toBeVisible()
-  })
-
   it('saklama süresini ve etkin silme korumasını silme cevabında gösterir', async () => {
     request.mockResolvedValue(artifact({ retentionExpiresAt: '2099-01-01T00:00:00Z', retentionPinnedAt: null }))
     mount()
@@ -236,14 +220,6 @@ describe('Backup dosyaları', () => {
     mount()
     await screen.findByText('Kısaca durum')
     expect(screen.getByText(/Otomatik silme koruması etkin/)).toBeVisible()
-  })
-
-  it('read-only kullanıcıya bekleyen silmeyi iptal etme yetkisi vermez', async () => {
-    permissions.canAdmin = false
-    request.mockResolvedValue(pending())
-    mount()
-    await screen.findByRole('region', { name: 'Silme süreci' })
-    expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
   })
 
   it('bekleyen ve başarısız silmeyi takip eder, terminal geçmişte polling durur', () => {
