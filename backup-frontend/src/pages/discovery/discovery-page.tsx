@@ -1,8 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { CheckField } from '@/components/ui/check-field'
 import { Card } from '@/components/ui/card'
-import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Loader2, Radar } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
@@ -37,8 +37,11 @@ export function DiscoveryPage() {
   useLanguage()
   const { tenantId } = useTenant()
   const agents = useAgents(tenantId, false, list => awaitingCapabilities(list) ? CAPABILITY_POLL_MS : false)
-  // Route state from the first-backup flow; lives in history only, so a reload or leaving the page drops it.
-  const added = (useLocation().state as { addedAgentId?: string } | null)?.addedAgentId ?? ''
+  // Route state from the first-backup flow. Browsers keep history state across a reload, so it is read once and then cleared from the entry.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [added] = useState(() => (location.state as { addedAgentId?: string } | null)?.addedAgentId ?? '')
+  useEffect(() => { if (added) navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null }) }, []) // oxlint-disable-line react-hooks/exhaustive-deps -- once, on arrival
   const [dismissed, setDismissed] = useState(false)
   const statuses = useDiscoveryAgents()
   const { get, update } = useListParams()

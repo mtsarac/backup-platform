@@ -233,6 +233,17 @@ describe('instance detail page', () => {
       await waitFor(() => expect(screen.queryByText('Doğrulanıyor…')).not.toBeInTheDocument(), { timeout: 8000 })
       expect(screen.queryByText(/Doğrulama istendi/)).not.toBeInTheDocument()
     }, 15000)
+    it('does not show the previous failure above "Doğrulanıyor…"', async () => {
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'AuthenticationFailed', accessReasonCode: 'authentication_failed' }))
+      vi.mocked(verifyDiscoveryInstance).mockResolvedValue(makeStatus({ scanState: 'Requested' }))
+      mount()
+      expect(await screen.findByText(/Giriş bilgilerini kontrol edip yeniden kaydedin/)).toBeInTheDocument()
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Requested' })] })
+      await fill()
+      await screen.findByText('Doğrulanıyor…')
+      expect(screen.queryByText(/Giriş bilgilerini kontrol edip yeniden kaydedin/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Uyarılar' })).not.toBeInTheDocument()
+    })
     it('keeps the login form reachable as a closed section after the login worked, with the typed values still in it', async () => {
       vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'AuthenticationFailed', accessReasonCode: 'authentication_failed' }))
       vi.mocked(verifyDiscoveryInstance).mockResolvedValue(makeStatus())

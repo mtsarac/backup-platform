@@ -446,8 +446,30 @@ describe('MultiDestinationPicker', () => {
     const onChange = vi.fn()
     render(<MultiDestinationPicker configuration={config} connections={[connection]} providers={dummyProviders} pending={false} error={null} existingTarget compact onChange={onChange} onRefresh={() => {}} />)
     const destination = screen.getByLabelText('Depolama hedefi')
-    expect(destination).toHaveValue(JSON.stringify(['central', 'managed']))
-    expect(within(destination).getByRole('option', { name: /^Managed · .* · Platform yönetimli · Devre dışı$/ })).toBeDisabled()
+    expect(destination).toHaveValue(JSON.stringify(['central', null]))
+    expect(within(destination).getByRole('option', { name: 'Managed · Platform yönetimli · Devre dışı' })).toBeDisabled()
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('lists the central default once in the compact picker and in the replication select', () => {
+    const central = { ...dummyConnections[0], id: 'conn-central', name: 'Managed Storage', providerType: 'central', providerDisplayName: 'Managed Storage (Central)', ownership: 'PlatformManaged', isDefault: true } as ConnectionView
+    const config = {
+      destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    render(<MultiDestinationPicker configuration={config} connections={[dummyConnections[0], central]} providers={dummyProviders} pending={false} error={null} existingTarget={false} compact onChange={() => {}} onRefresh={() => {}} />)
+    const names = (select: HTMLElement) => within(select).getAllByRole('option').map(option => option.textContent)
+    expect(names(screen.getByLabelText('Depolama hedefi')).filter(text => text?.includes('Merkezi depolama'))).toEqual(['Merkezi depolama · Platform yönetimli · Kullanılabilir'])
+    expect(names(screen.getByLabelText('Yeni Çoğaltma Hedefi Ekle')).filter(text => text?.includes('Merkezi depolama')).map(text => text?.trim())).toEqual(['Merkezi depolama'])
+  })
+
+  it('lists the central default once in the wizard connection select', () => {
+    const central = { ...dummyConnections[0], id: 'conn-central', name: 'Managed Storage', providerType: 'central', providerDisplayName: 'Managed Storage (Central)', ownership: 'PlatformManaged', isDefault: true } as ConnectionView
+    const config = {
+      destinations: [{ storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    render(<MultiDestinationPicker configuration={config} connections={[dummyConnections[0], central]} providers={dummyProviders} pending={false} error={null} existingTarget={false} onChange={() => {}} onRefresh={() => {}} />)
+    expect(within(screen.getByLabelText('Depolama bağlantısı')).getAllByRole('option').map(option => option.textContent)).toEqual(['Merkezi depolama · Platform yönetimli · Kullanılabilir'])
   })
 })

@@ -141,15 +141,18 @@ export function InstanceDetailPage() {
   const { scanning } = useDiscoveryAgents(Boolean(instance), instance?.agentId)
   const computer = instance && (agents.data?.find(item => item.agentId === instance.agentId)?.hostName || tx('Adsız bilgisayar'))
   const needsLogin = instance !== undefined && instance.access !== 'Authenticated'
-  const feedbackError = save.error ?? verify.error
   const noAddress = instance !== undefined && instance.access === 'Authenticated' && !canCreateJob(instance) && instance.presence === 'Present'
-  const warned = instance !== undefined && (instance.presence === 'Missing' || needsLogin || noAddress || Boolean(feedbackError))
   // The request is accepted at once; the result is there when the computer's scan is over (the page polls while it runs).
   // It also ends as soon as the access result differs from the one the request started from.
   const result = instance && `${instance.access}|${instance.accessReasonCode}|${instance.databasesCheckedAt}`
   const [requestedFrom, setRequestedFrom] = useState(result)
   if (!verify.isSuccess && requestedFrom !== result) setRequestedFrom(result)
   const verifying = verify.isPending || (verify.isSuccess && scanning && result === requestedFrom)
+  // The access result and the last error are of the previous attempt while a new one runs: they come back with the new result.
+  const busy = save.isPending || verifying
+  const feedbackError = busy ? null : save.error ?? verify.error
+  const accessWarning = needsLogin && !busy
+  const warned = instance !== undefined && (instance.presence === 'Missing' || accessWarning || noAddress || Boolean(feedbackError))
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Bulunan veritabanları'), to: discoveredDatabasesPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
       description={instance && <>{tx("Bilgisayar")}: <Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(instance.agentId)}`}>{computer}</Link></>}
@@ -162,7 +165,7 @@ export function InstanceDetailPage() {
         {warned && <section aria-labelledby="instance-warnings" className="space-y-3">
           <h2 id="instance-warnings" className="text-base font-semibold text-text-heading">{tx("Uyarılar")}</h2>
           {instance.presence === 'Missing' && <Notice tone="warning" title={tx("Sunucu bulunamadı")}>{tx("Son aramalarda bu veritabanı sunucusu bulunamadı; kaydı silinmedi.")}</Notice>}
-          {needsLogin && <AccessNotice instance={instance} save={save} verify={verify} />}
+          {accessWarning && <AccessNotice instance={instance} save={save} verify={verify} />}
           {noAddress && <Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice>}
           {feedbackError && <CredentialFeedback error={feedbackError} />}
         </section>}
