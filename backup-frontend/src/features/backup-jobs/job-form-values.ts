@@ -19,7 +19,7 @@ export interface JobPrefill { instance: DiscoveryInstanceDetail; databases: stri
 export type Engine = BackupConfiguration['engine']
 export const defaultFiles: FileBackupPolicy = { paths: ['.'], includes: ['**'], excludes: [], symlinkPolicy: 'Skip' }
 
-const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Optional' }
+const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' }
 const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, missedRunGraceSeconds: 1800, overlapPolicy: 'Skip' }
 const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 600, backoff: 'Exponential', jitter: 0.2 }
 const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 2592000, deleteGracePeriodSeconds: 86400 }

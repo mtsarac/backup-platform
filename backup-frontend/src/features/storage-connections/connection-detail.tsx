@@ -19,7 +19,7 @@ import { useGoogleOAuth } from './use-google-oauth'
 import { describeFailure, errorMessage } from '@/lib/api/failure-messages'
 import { CapabilityChips, CapacityPill, HealthBadge, SecretStatus } from './connection-parts'
 import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
-import { configurationSummary, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, testMessage, testTechnical } from './labels'
+import { configurationSummary, connectionDisplayName, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, showsDefaultBadge, testMessage, testTechnical } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { formatBytes, formatDateTime, formatRelativeTime } from '@/lib/format'
 import { RelativeTime } from '@/components/data/relative-time'
@@ -146,7 +146,7 @@ function OverviewTechnical({ connection, total }: { connection: ConnectionView; 
     { label: tx("Bağlantı kimliği"), value: connection.id },
   ]
   return <TechnicalDetails items={items}>
-    <div className="space-y-2"><p className="text-sm font-medium text-text-heading">{tx("Yetenekler")}</p><CapabilityChips capabilities={connection.capabilities} label={tx("{0} yetenekleri", { "0": connection.name })} /><CopyButton label={tx("Kopyala: {0}", { "0": tx("Yetenekler") })} value={connection.capabilities.join('\n')} /></div>
+    <div className="space-y-2"><p className="text-sm font-medium text-text-heading">{tx("Yetenekler")}</p><CapabilityChips capabilities={connection.capabilities} label={tx("{0} yetenekleri", { "0": connectionDisplayName(connection) })} /><CopyButton label={tx("Kopyala: {0}", { "0": tx("Yetenekler") })} value={connection.capabilities.join('\n')} /></div>
     {history.length > 0 && <div className="space-y-2">
       <p aria-hidden="true" className="text-sm font-medium text-text-heading">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })}</p>
       <DataList caption={tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })} emptyMessage={tx("Bu depolama için henüz kapasite ölçümü yok.")} rows={history} keyExtractor={measurement => `${measurement.reportedAt}-${history.indexOf(measurement)}`} columns={[
@@ -231,14 +231,14 @@ export function ConnectionDetail() {
   const visibleTabs = tabs.filter((tab) => tab.value !== 'credentials' || hasCredentials)
   const requested = params.get('tab')
   const active: TabValue = visibleTabs.find((tab) => tab.value === requested)?.value ?? 'overview'
-  const crumbs = [{ label: tx('Depolama'), to: storage }, { label: connection?.name ?? tx('Bağlantı') }]
+  const crumbs = [{ label: tx('Depolama'), to: storage }, { label: connection ? connectionDisplayName(connection) : tx('Bağlantı') }]
 
   if (connections.isPending || connections.error) return <><PageHeader title={tx("Depolama bağlantısı")} crumbs={crumbs} /><QueryState isPending={connections.isPending} error={connections.error} /></>
   if (!connection) return <><PageHeader title={tx("Bağlantı bulunamadı")} crumbs={crumbs} /><Notice tone="warning" title={tx("Bu bağlantı yok veya bu tenant altında erişilemiyor")} action={<Link to={storage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{tx("Bağlantılara dön")}</Link>} /></>
 
   return <>
-    <PageHeader crumbs={crumbs} title={connection.name} description={<>{tx(connection.providerDisplayName)}{connection.lastTest && <> · {tx("Son test")}: <RelativeTime value={connection.lastTest.testedAt} /></>}</>}
-      meta={<><HealthBadge connection={connection} /><StatusPill domain="ownership" status={connection.ownership} />{connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</>}
+    <PageHeader crumbs={crumbs} title={connectionDisplayName(connection)} description={<>{tx(connection.providerDisplayName)}{connection.lastTest && <> · {tx("Son test")}: <RelativeTime value={connection.lastTest.testedAt} /></>}</>}
+      meta={<><HealthBadge connection={connection} /><StatusPill domain="ownership" status={connection.ownership} />{showsDefaultBadge(connection) && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</>}
       actions={<ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['test']} />} />
     <Tabs idPrefix="connection" label={tx("Bağlantı bölümleri")} value={active} items={visibleTabs} onChange={(value) => setParams(value === 'overview' ? {} : { tab: value }, { replace: true })} />
     <div role="tabpanel" id={`connection-panel-${active}`} aria-labelledby={`connection-tab-${active}`} className="space-y-5">

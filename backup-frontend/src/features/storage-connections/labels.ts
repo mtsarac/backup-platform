@@ -59,6 +59,16 @@ export function capabilityLabel(capability: string): string {
   return Object.hasOwn(capabilityLabels, capability) ? capabilityLabels[capability] : capability
 }
 
+/** The two system defaults are stored as "Local" and "Managed Storage"; users see plain names. A default the user renamed keeps its own name. */
+export function connectionDisplayName(connection: Pick<ConnectionView, 'name' | 'providerType' | 'isDefault'>): string {
+  if (connection.isDefault && connection.providerType === 'local' && connection.name === 'Local') return tx('Yerel disk')
+  if (connection.isDefault && connection.providerType === 'central' && connection.name === 'Managed Storage') return tx('Merkezi depolama')
+  return connection.name
+}
+
+/** The backend marks one default per provider type; the one users care about is the local disk, used when no connection is chosen. */
+export const showsDefaultBadge = (connection: Pick<ConnectionView, 'providerType' | 'isDefault'>) => connection.isDefault && connection.providerType === 'local'
+
 export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'agent-side' | 'healthy'; label: string; level: StatusLevel }
 
 /**
