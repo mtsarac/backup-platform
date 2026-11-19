@@ -65,7 +65,7 @@ function AttentionBand({ band, base }: { band: Band; base: string }) {
 function Row({ row, base }: { row: ProtectionRow; base: string }) {
   const { job } = row
   const day = lastSucceededDay(row.days)
-  return <li className="grid items-center gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto_auto]">
+  return <li className="grid items-center gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_9rem_max-content_10rem_11rem]">
     <div className="min-w-0">
       <Link className={`font-medium ${linkClass}`} to={`${base}/backup-jobs/${job.id}`}>{job.name}</Link>
       <p className="truncate text-sm text-text-muted">{job.configuration.database}</p>
