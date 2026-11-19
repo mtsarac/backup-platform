@@ -10,7 +10,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { JobSummary } from '@/features/backup-jobs/job-summary'
 import { summaryInput } from '@/features/backup-jobs/job-summary-rows'
 import type { useJobOccurrences } from '@/features/backup-jobs/hooks'
-import { changedSections, stepLabel, type EditSection } from '@/features/backup-jobs/job-wizard-model'
+import type { EditSection } from '@/features/backup-jobs/job-wizard-model'
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
@@ -47,15 +47,4 @@ export function ReviewStep({ form, onGo }: { form: JobFormState; onGo: (step: Ed
     {values.selected.length > 1 && <CreatedJobsGroup name={values.name} selected={values.selected} results={form.results} />}
     {form.cannotSave && <StorageBlockedNotice onFix={() => onGo('storage')} />}
   </>
-}
-
-/** Edit page: which sections the save will change. The values themselves are already on the page, so they are not repeated. */
-export function ChangesSummary({ form }: { form: JobFormState }) {
-  useLanguage()
-  const changed = changedSections(form.saved, form.values)
-  if (changed.length === 0) return null
-  return <div className="text-sm">
-    <p>{tx("Değişen bölümler:")}{' '}{changed.map(step => stepLabel(step)).join(', ')}</p>
-    <p className="mt-1 text-text-muted">{tx("Değişiklikler sonraki çalıştırmalardan itibaren geçerli olur; mevcut yedekler ve geçmiş çalıştırmalar değişmez.")}</p>
-  </div>
 }

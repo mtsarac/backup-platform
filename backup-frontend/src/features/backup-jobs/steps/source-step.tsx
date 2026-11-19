@@ -107,32 +107,31 @@ function DiscoverySourceChoice({ form }: { form: JobFormState }) {
 /** Questions: what the job is called, which computer runs it, and what is backed up. */
 export function SourceStep({ form }: { form: JobFormState }) {
   useLanguage()
-  const { values, errors, agents, set, setConfiguration, job } = form
+  const { values, errors, agents, set, setConfiguration } = form
   const { configuration } = values
   const { text, select } = fieldKit(errors)
   const isFiles = configuration.engine === 'file-system'
-  // Existing jobs are edited by hand; a new job starts from discovery and falls back to typing.
-  const manual = Boolean(job) || values.sourceMode === 'manual'
+  // A new job starts from discovery and falls back to typing.
+  const manual = values.sourceMode === 'manual'
   const picked = Boolean(form.discovered) && values.selected.length > 0
   const sourceError = sourceErrorKeys.map(key => errors[key]).find(Boolean)
   const group = { configuration, errors, onChange: setConfiguration }
   return <>
-    <Question compact={Boolean(job)} title={manual ? tx("Yedekleme işi ve bilgisayar") : tx("Yedekleme işi")} why={manual ? tx("İşi listelerde bu adla tanırsınız; yedeği, kaynağa ulaşabilen yedekleme bilgisayarındaki program alır.") : tx("İşi listelerde bu adla tanırsınız.")}>
+    <Question title={manual ? tx("Yedekleme işi ve bilgisayar") : tx("Yedekleme işi")} why={manual ? tx("İşi listelerde bu adla tanırsınız; yedeği, kaynağa ulaşabilen yedekleme bilgisayarındaki program alır.") : tx("İşi listelerde bu adla tanırsınız.")}>
       <FormGrid>
         {text('name', tx('İş adı'), values.name, name => set({ name }))}
-        {job && <div className="md:col-span-2"><EngineGroup engine={configuration.engine} onEngine={form.changeEngine} /></div>}
         {manual && <div className="min-w-0 space-y-1">
           {select('agentId', tx('Yedekleme bilgisayarı'), values.agentId, [['', tx('Yedekleme bilgisayarı seçin')], ...(values.agentId && !agents.data?.some(item => item.agentId === values.agentId) ? [[values.agentId, `${tx('Adsız bilgisayar')} · ${values.agentId}`] as const] : []), ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', item.operationalStatus)}`] as const)], agentId => set({ agentId }))}
           {agents.isPending && <p role="status" className="text-sm text-text-muted">{tx("Bilgisayar listesi yükleniyor…")}</p>}{agents.error && <p role="alert" className="text-sm text-error">{errorMessage(agents.error)}</p>}
         </div>}
       </FormGrid>
     </Question>
-    {manual ? <Question compact={Boolean(job)} title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
-      {!job && <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => set({ sourceMode: 'discovery' })}>{tx("Otomatik keşiften seç")}</Button>}
-      {!job && <EngineGroup engine={configuration.engine} onEngine={form.changeEngine} />}
+    {manual ? <Question title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
+      <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => set({ sourceMode: 'discovery' })}>{tx("Otomatik keşiften seç")}</Button>
+      <EngineGroup engine={configuration.engine} onEngine={form.changeEngine} />
       {isFiles ? <FileSourceGroup key={configuration.engine} {...group} /> : <DatabaseSourceGroup key={configuration.engine} {...group} />}
     </Question>
-    : <Question compact={Boolean(job)} title={tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
+    : <Question title={tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
       {picked ? <DiscoveredSource form={form} /> : <DiscoverySourceChoice form={form} />}
       {sourceError && <p role="alert" className="mt-3 text-sm text-error">{sourceError}</p>}
     </Question>}

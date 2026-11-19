@@ -50,8 +50,8 @@ const configurationKeys: Record<EditSection, readonly (keyof BackupConfiguration
 const requestFields: Record<EditSection, readonly string[]> = {
   source: ['name', 'enabled', 'agentId'],
   storage: [],
-  schedule: ['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy', 'retention'],
-  protection: [],
+  schedule: ['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy'],
+  protection: ['retention'],
 }
 const owners = Object.fromEntries(editSections.map(step => [step, [...requestFields[step], ...configurationKeys[step].map(key => `configuration.${key}`)]])) as Record<EditSection, string[]>
 
@@ -65,18 +65,11 @@ export function stepOfField(field: string): EditSection | undefined {
   return editSections.find(step => owners[step].some(prefix => owns(prefix, name)))
 }
 
-/** What each step edits, for comparing a form against its saved state. */
-function sectionValues(step: EditSection, values: JobValues) {
-  const configuration = Object.fromEntries(configurationKeys[step].map(key => [key, values.configuration[key]]))
-  switch (step) {
-    case 'source': return { name: values.name, agentId: values.agentId, enabled: values.enabled, configuration }
-    case 'schedule': return { scheduled: values.scheduled, schedule: values.schedule, overlap: values.overlap, retry: values.retry, retention: values.retention }
-    default: return configuration
-  }
-}
-/** The sections whose values differ from the saved ones; the edit page lists them before saving. */
-export function changedSections(saved: JobValues, current: JobValues) {
-  return editSections.filter(step => JSON.stringify(sectionValues(step, saved)) !== JSON.stringify(sectionValues(step, current)))
+/** What an existing job's section form shows is checked; hidden saved values (retry, tolerance, computer, host…) are sent back as they are and the server stays the judge of them. */
+export function validateEdit(section: EditSection, values: JobValues): StepErrors {
+  if (section === 'schedule' || section === 'protection') return {}
+  const errors = validateStep(section, values)
+  return section === 'storage' ? errors : Object.fromEntries(Object.entries(errors).filter(([key]) => key === 'name' || key.startsWith('configuration.files')))
 }
 
 export type StepErrors = Record<string, string>

@@ -16,6 +16,7 @@ import { useAgents } from '@/features/agents/hooks'
 import { archiveBackupJob, getBackupJobHealth, getHealthTimeline } from '@/features/backup-jobs/api'
 import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
 import { jobStatus, jobStatusLabel, jobStatusLevel } from '@/features/backup-jobs/job-status'
+import { JobSections } from '@/features/backup-jobs/job-sections'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { useBackup, useBackups } from '@/features/backups/hooks'
 import { isActiveRun } from '@/features/backups/presentation'
@@ -81,6 +82,7 @@ function JobDetail({ job }: { job: BackupJob }) {
       {offline && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/agents/${job.agentId}`}>{tx('Bilgisayarı kontrol et')}</Link>}
       {!offline && reasons.includes('capacity_critical') && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/storage`}>{tx('Depolamayı yönet')}</Link>}
     </div>}
+    <JobSections job={job} />
     <Link className={`inline-block text-sm ${linkClass}`} to={`${base}/backup-runs?jobId=${encodeURIComponent(job.id)}`}>{tx('Tüm denemeler')}</Link>
     <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title={tx('Korunan veriyi kaldır…')} name={job.name} pending={archive.isPending} error={archive.error} confirmLabel={tx('Korunan veriyi kaldır')} onConfirm={() => archive.mutate()} consequence={{ what: tx('Yedekleriniz silinmez; bu iş artık çalışmaz ve listede görünmez.'), who: job.name, reversible: tx('Bu işlem geri alınamaz.') }} />
   </section>

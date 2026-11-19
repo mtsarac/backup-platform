@@ -31,7 +31,7 @@ export function summaryRows({ values, agentLabel, canAdmin, connections }: Summa
       {c.destinations.length > 1 && <span className="block text-sm text-text-muted">{tx("{0} hedeften en az {1} tanesi doğrulanmalıdır.", { "0": c.destinations.length, "1": c.requiredVerifiedReplicaCount })}</span>}
     </> },
     { label: tx('Zamanlama'), step: 'schedule', value: scheduled ? schedulePresetLabel(schedule.cronExpression) ?? tx('Özel zamanlama') : tx('Elle çalıştırılır (zamanlama yok)') },
-    { label: tx('Saklama'), step: 'schedule', value: <>{retentionText}{!canAdmin && <span className="block text-sm text-text-muted">{tx("Yalnızca Owner / Admin değiştirebilir.")}</span>}</> },
+    { label: tx('Saklama'), step: 'protection', value: <>{retentionText}{!canAdmin && <span className="block text-sm text-text-muted">{tx("Yalnızca Owner / Admin değiştirebilir.")}</span>}</> },
     { label: tx('Şifreleme'), step: 'protection', value: policyLabels[c.encryptionPolicy] },
   ]
 }

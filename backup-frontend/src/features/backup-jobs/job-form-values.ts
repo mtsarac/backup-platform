@@ -22,14 +22,25 @@ const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, max
 const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 2592000, deleteGracePeriodSeconds: 86400 }
 
 export function initialValues(job?: BackupJob, prefill?: JobPrefill): JobValues {
-  // The PostgreSQL dump has no COPY_ONLY switch, so the saved flag is not resubmitted.
-  const saved = job && (job.configuration.engine === 'postgres' ? { ...job.configuration, copyOnly: false } : job.configuration)
+  const saved = job?.configuration
   return {
     name: job?.name ?? '', agentId: job?.agentId ?? prefill?.instance.agentId ?? '', enabled: job?.enabled ?? true,
     configuration: saved ?? (prefill?.databases.length ? discoveredConfiguration(initialConfiguration, prefill.instance, prefill.databases) : initialConfiguration),
     scheduled: job ? Boolean(job.schedule) : true, schedule: job?.schedule ?? initialSchedule, overlap: job?.overlapPolicy ?? 'Skip',
     retry: job?.retryPolicy ?? initialRetry, retention: job?.retention ?? initialRetention, selected: prefill?.databases ?? [], sourceMode: job ? 'manual' : 'discovery',
   }
+}
+
+/** Whether a saved job carries values the form never shows (retry, tolerance, copy-only, checksum, file filters…) that differ from what a new job gets; the edit form keeps them and says so. */
+export function hasNonStandardSettings(job: BackupJob) {
+  const { configuration: c, schedule, retention } = job
+  const standard = { ...initialConfiguration, ...engineDefaults[c.engine] }
+  const hidden = ['stagingReference', 'storagePrefix', 'compressionPolicy', 'checksumPolicy', 'copyOnly'] as const
+  const files = c.files && (c.files.includes.join() !== defaultFiles.includes.join() || c.files.excludes.length > 0 || c.files.symlinkPolicy !== defaultFiles.symlinkPolicy)
+  return hidden.some(key => c[key] !== standard[key]) || Boolean(c.sourceSite) || Boolean(c.enforceThreeTwoOne) || Boolean(files)
+    || Object.entries(initialRetry).some(([key, value]) => job.retryPolicy[key as keyof RetryPolicy] !== value) || job.overlapPolicy !== 'Skip'
+    || (schedule != null && schedule.missedRunGraceSeconds !== initialSchedule.missedRunGraceSeconds)
+    || (retention != null && retention.deleteGracePeriodSeconds !== initialRetention.deleteGracePeriodSeconds)
 }
 
 const sourceKeys = ['database', 'host', 'port', 'integratedSecurity', 'databaseCredentialReference', 'databaseLogin', 'files', 'copyOnly', 'checksumPolicy'] as const

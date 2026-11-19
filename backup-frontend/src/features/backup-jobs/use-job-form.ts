@@ -18,8 +18,8 @@ import { ApiError } from '@/lib/api/client'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 
-/** State, validation inputs and saving shared by the create wizard and the single-page edit form. */
-export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPrefill }) {
+/** State, validation inputs and saving shared by the create wizard and the section forms of an existing job. `onSaved` replaces the return to the list. */
+export function useJobForm({ job, prefill, onSaved }: { job?: BackupJob; prefill?: JobPrefill; onSaved?: () => void }) {
   const { tenantId, canAdmin } = useTenant()
   const navigate = useNavigate()
   const save = useSaveBackupJob(job?.id)
@@ -86,7 +86,16 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   }, [finished, listPath, navigate])
   function finish() {
     setSaved(values)
-    setFinished(true)
+    if (onSaved) onSaved()
+    else setFinished(true)
+  }
+  /** Starts a section edit from the job as it is now, or drops the edit in progress (`next` omitted). */
+  function restart(next?: BackupJob) {
+    const fresh = next ? initialValues(next) : saved
+    setSaved(fresh)
+    setValues(fresh)
+    setClientErrors({})
+    save.reset()
   }
   function submit() {
     if (saving.current || cannotSave) return
@@ -132,7 +141,7 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   }, [clientErrors])
 
   return {
-    job, tenantId, canAdmin, listPath, saved, values, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery, discovered, prefillInstanceId: prefill?.instance.id,
+    job, tenantId, canAdmin, listPath, saved, values, restart, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery, discovered, prefillInstanceId: prefill?.instance.id,
     agents, agent: agents.data?.find(item => item.agentId === values.agentId),
     picker: { connections: connectionItems, providers: providerItems, pending: pickerPending, error: pickerError, existingTarget, onRefresh: refreshConnections },
     cannotSave, results, failedCount: Object.values(results).filter(value => value !== 'ok').length,

@@ -2,12 +2,14 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { BackupJobsPage } from './backup-jobs-page'
 import { archiveBackupJob, getBackupJobHealth, getBackupJobs, getHealthTimeline, setJobEnabled, startJobRun } from '@/features/backup-jobs/api'
-import { healthyJobHealth } from '@/features/backup-jobs/test-fixtures'
+import { healthyJobHealth, savedJob } from '@/features/backup-jobs/test-fixtures'
+import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
+import { catalog, makeConnection } from '@/features/storage-connections/test-fixtures'
 import { getAgents } from '@/features/agents/api'
 import { getBackup, getBackups } from '@/features/backups/api'
 import { makeRun } from '@/features/backups/test-data'
@@ -16,9 +18,8 @@ import type { Agent } from '@/features/agents/types'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import type { BackupJobHealth } from '@/features/backup-jobs/health'
 
-const schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'UTC', missedRunGraceSeconds: 1800, overlapPolicy: 'Skip' } as const
-const job = { id: 'job-a', name: 'Muhasebe', agentId: 'agent-a', agentName: 'Ofis', enabled: true, configuration: { engine: 'mssql', database: 'ERP' }, schedule, lastRun: null } as unknown as BackupJob
-const other = { ...job, id: 'job-b', name: 'Satış', configuration: { engine: 'mssql', database: 'CRM' } } as BackupJob
+const job = savedJob
+const other = { ...job, id: 'job-b', name: 'Satış', configuration: { ...job.configuration, database: 'CRM' } } as BackupJob
 const critical: BackupJobHealth = { ...healthyJobHealth, state: 'Critical', factors: { ...healthyJobHealth.factors, freshness: { ...healthyJobHealth.factors.freshness, score: 0, reason: 'backup_stale' } } }
 
 const permissions = vi.hoisted(() => ({ canOperate: true, canAdmin: true }))
@@ -26,13 +27,13 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 
 vi.mock('@/features/backup-jobs/api')
 vi.mock('@/features/agents/api')
 vi.mock('@/features/backups/api')
+vi.mock('@/features/storage-connections/api')
 
 const agent = (connectivity: Agent['connectivity']) => [{ agentId: 'agent-a', connectivity }] as Agent[]
 function mount(url = '/tenants/tenant-a/backup-jobs/job-a') {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={[url]}>
-    <Routes><Route path="/tenants/:tenantId/backup-jobs/:id?" element={<BackupJobsPage />} /></Routes><LocationProbe />
-  </MemoryRouter></QueryClientProvider>)
+  const router = createMemoryRouter([{ path: '/tenants/:tenantId/backup-jobs/:id?', element: <><BackupJobsPage /><LocationProbe /></> }], { initialEntries: [url] })
+  return render(<QueryClientProvider client={cache}><RouterProvider router={router} /></QueryClientProvider>)
 }
 
 beforeEach(() => {
@@ -44,6 +45,8 @@ beforeEach(() => {
   vi.mocked(getAgents).mockResolvedValue(agent('online'))
   vi.mocked(getBackups).mockResolvedValue({ items: [], totalCount: 1, page: 1, pageSize: 1 })
   vi.mocked(startJobRun).mockResolvedValue({ id: 'run-a' })
+  vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection()] })
+  vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
 })
 
 it('opens the job with the list beside it and marks it current', async () => {
