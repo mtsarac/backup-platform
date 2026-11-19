@@ -6,7 +6,8 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { describeStartFailure, restoreModeLabel } from './presentation'
-import type { RestoreMode, RestoreTarget, RestoreTargetAgent } from './types'
+import { PrecheckResults } from './precheck-results'
+import type { RestoreMode, RestoreTarget, RestoreTargetAgent, RestoreView } from './types'
 import { ApiError } from '@/lib/api/client'
 
 interface RestoreConfirmStepProps {
@@ -16,17 +17,19 @@ interface RestoreConfirmStepProps {
   activeAgent: RestoreTargetAgent | undefined
   selectedAgentId: string
   effectiveTarget: RestoreTarget
+  precheckData: RestoreView | undefined
   precheckPassed: boolean
   precheckStarting: boolean
   restoreStarting: boolean
   executionError: unknown
   executionRetryable: boolean
   eligibleForRestore: boolean
+  onRecheck: () => void
   onBack: () => void
   onStart: () => void
 }
 
-export function RestoreConfirmStep({ isPg, mode, targetDatabaseName, activeAgent, selectedAgentId, effectiveTarget, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligibleForRestore, onBack, onStart }: RestoreConfirmStepProps) {
+export function RestoreConfirmStep({ isPg, mode, targetDatabaseName, activeAgent, selectedAgentId, effectiveTarget, precheckData, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligibleForRestore, onRecheck, onBack, onStart }: RestoreConfirmStepProps) {
   useLanguage()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const replacing = mode === 'ReplaceExistingDatabase'
@@ -59,6 +62,9 @@ export function RestoreConfirmStep({ isPg, mode, targetDatabaseName, activeAgent
           <TechnicalDetails items={[{ label: tx('Yedekleme bilgisayarı kimliği'), value: selectedAgentId }]} />
         </div>
       </Section>
+      {precheckData && <Section title={tx("Ön kontrol")}>
+        <PrecheckResults data={precheckData} failed={false} passed={precheckPassed} onRecheck={onRecheck} recheckDisabled={precheckStarting || restoreStarting} />
+      </Section>}
       {failure && !confirmOpen && (failure instanceof ApiError ? <ErrorNotice error={failure} scope="restore" /> : <ErrorNotice {...failure} />)}
 
       <div className="flex flex-wrap justify-between gap-3">

@@ -1,14 +1,12 @@
-import { useId } from 'react'
-import { CheckField } from '@/components/ui/check-field'
+import { useId, type ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
 import { Select, TextInput } from '@/components/ui/text-input'
 import { tx, useLanguage } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import type { RestoreMode, RestoreOptions, RestoreView } from './types'
+import type { RestoreMode, RestoreView } from './types'
 import { describeError, errorMessage } from '@/lib/api/failure-messages'
-import { Disclosure } from '@/components/ui/disclosure'
 
 interface RestoreModeStepProps {
   instancePrefix: string
@@ -16,7 +14,6 @@ interface RestoreModeStepProps {
   mode: RestoreMode
   targetDatabaseName: string
   databaseNameValid: boolean
-  options: RestoreOptions
   discoveryData: RestoreView | undefined
   discoveryError: unknown
   discoveryQueryError: Error | null
@@ -32,16 +29,18 @@ interface RestoreModeStepProps {
   targetValid: boolean
   /** A typed database login that is not stored yet: the target is not usable until it is. */
   loginPending: boolean
+  /** The pre-check running or failing after "Devam et"; empty until then. */
+  checkPanel: ReactNode
   onSelectNewDatabase: () => void
   onSelectReplaceExisting: () => void
   onRefreshDiscovery: () => void
   changeDatabaseName: (value: string) => void
-  changeOptions: (value: RestoreOptions) => void
-  onBack: () => void
-  onRunPrecheck: () => void
+  onBack?: () => void
+  onContinue: () => void
 }
 
-export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, options, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckStarting, restoreStarting, eligibleForRestore, targetValid, loginPending, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, changeOptions, onBack, onRunPrecheck }: RestoreModeStepProps) {
+/** Where the backup lands and how; continuing runs the pre-check, and only a passed check opens the confirmation. */
+export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckStarting, restoreStarting, eligibleForRestore, targetValid, loginPending, checkPanel, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, onBack, onContinue }: RestoreModeStepProps) {
   useLanguage()
   const newDescriptionId = useId()
   const replaceDescriptionId = useId()
@@ -57,7 +56,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
               className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'NewDatabase' ? 'border-primary bg-accent ring-1 ring-primary' : 'border-border bg-surface'}`}
               onClick={onSelectNewDatabase}
             >
-              <p className="font-semibold text-text-heading">{tx("Yeni bir veritabanı olarak (önerilen)")}</p>
+              <p className="font-semibold text-text-heading">{tx("Yeni veritabanı")}</p>
               <p id={newDescriptionId} className="mt-1 text-base text-text-muted">{tx("Mevcut veritabanlarına dokunulmaz. Yedek, vereceğiniz yeni bir adla ayrı bir veritabanı olarak açılır.")}</p>
             </button>
 
@@ -69,7 +68,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
               disabled={discoveryStarting}
               onClick={onSelectReplaceExisting}
             >
-              <p className="font-semibold text-error">{tx("Mevcut bir veritabanının yerine (riskli)")}</p>
+              <p className="font-semibold text-error">{tx("Yerine geç")} <span className="text-sm font-normal">({tx("riskli")})</span></p>
               <p id={replaceDescriptionId} className="mt-1 text-base text-text-muted">
                 {isPg ? tx('Seçtiğiniz veritabanı yedektekiyle değiştirilir.') : tx('Seçtiğiniz veritabanının içeriği yedektekiyle değiştirilir.')}
               </p>
@@ -93,7 +92,8 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
           {mode === 'ReplaceExistingDatabase' && (
             <Card tone="danger" className="space-y-4">
               <Notice tone="warning" title={tx("Veri kaybı riski")}>
-                {isPg ? tx('Seçtiğiniz veritabanı değiştirilecek. Eski veritabanı kenarda saklanır; kurtarma ve temizlik size aittir.') : tx('Seçtiğiniz veritabanının içeriği tamamen silinecek. İşlem geri alınamaz.')}
+                <p>{tx("Açık bağlantılar kapatılacak ve mevcut veritabanının üzerine yazılacak.")}</p>
+                <p className="mt-1">{isPg ? tx('Seçtiğiniz veritabanı değiştirilecek. Eski veritabanı kenarda saklanır; kurtarma ve temizlik size aittir.') : tx('Seçtiğiniz veritabanının içeriği tamamen silinecek. İşlem geri alınamaz.')}</p>
               </Notice>
 
               <div className="space-y-2">
@@ -129,34 +129,26 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
                   <div role="alert" className="text-sm text-error">{errorMessage(discoveryError || discoveryQueryError, 'restore')}</div>
                 )}
               </div>
-
-              <CheckField className="items-start" label={<span>{tx("Açık bağlantıları kapat")}<span className="block text-text-muted">{tx("Veritabanını şu an kullanan bağlantılar varsa önce kapatılır; kapatılmazsa geri yükleme engellenebilir.")}</span></span>} checked={options.terminateActiveConnections ?? false}
-                  onChange={(e) => changeOptions({ ...options, terminateActiveConnections: e.target.checked })} />
             </Card>
           )}
-
-          <Disclosure title={tx("Gelişmiş seçenekler")}><div className="grid gap-2 sm:grid-cols-2">
-              <CheckField label={tx("Yedek dosyasının bütünlüğünü doğrula (SHA-256)")} checked={options.verifyChecksum ?? true}
-                  onChange={(e) => changeOptions({ ...options, verifyChecksum: e.target.checked })} />
-              <CheckField label={<>{isPg ? tx('Yedek arşivini doğrula (pg_restore)') : tx('Yedeği geri yüklemeden önce sına (RESTORE VERIFYONLY)')}</>} checked={options.verifyBackup ?? true}
-                  onChange={(e) => changeOptions({ ...options, verifyBackup: e.target.checked })} />
-            </div></Disclosure>
         </div>
       </Section>
 
       {precheckError != null && (
         <ErrorNotice error={precheckError} scope="restore"
           onAction={describeError(precheckError, 'restore').actionKind === 'fixCredentials' ? onBack : undefined}
-          onRetry={describeError(precheckError, 'restore').actionKind === 'retry' && eligibleForRestore && targetValid && !loginPending && !precheckStarting && !restoreStarting ? onRunPrecheck : undefined} />
+          onRetry={describeError(precheckError, 'restore').actionKind === 'retry' && eligibleForRestore && targetValid && !loginPending && !precheckStarting && !restoreStarting ? onContinue : undefined} />
       )}
 
+      {checkPanel}
+
       <div className="flex flex-wrap justify-between gap-3">
-        <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button>
+        {onBack ? <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button> : <span />}
         <Button
           disabled={!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || precheckStarting || restoreStarting}
-          onClick={() => onRunPrecheck()}
+          onClick={() => onContinue()}
         >
-          {precheckStarting ? tx('Ön Kontrol Başlatılıyor…') : precheckRetryable ? tx('Tekrar Dene') : tx('Ön Kontrolü Çalıştır →')}
+          {precheckStarting ? tx('Ön Kontrol Başlatılıyor…') : precheckRetryable ? tx('Tekrar Dene') : tx('Devam et →')}
         </Button>
       </div>
     </div>
