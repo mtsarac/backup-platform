@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { BackupCenterLayout } from '@/pages/backup-center/backup-center-layout'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +13,7 @@ const access = vi.hoisted(() => ({ tenantId: 'tenant-a', isPlatformAdmin: false 
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ ...access, tenant: { tenantId: 'tenant-a', name: 'Acme' }, switchTenant: vi.fn() }) }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: access.isPlatformAdmin ? 'PlatformAdmin' : 'UserAdmin', displayName: 'Ada' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' }], logout: vi.fn() }) }))
 
+vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/hooks/use-theme', () => ({ useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }))
 
 beforeEach(() => { access.isPlatformAdmin = false })
@@ -93,7 +95,7 @@ describe('Tenant sidebar', () => {
   it('does not repeat any backup center tab name as a sidebar entry', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     const names = within(nav()).getAllByRole('link').map((link) => link.textContent)
-    render(<MemoryRouter initialEntries={[`${base}/backup-jobs`]}><Routes><Route path="/tenants/:tenantId" element={<BackupCenterLayout />}><Route path="backup-jobs" element={null} /></Route></Routes></MemoryRouter>)
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[`${base}/backup-jobs`]}><Routes><Route path="/tenants/:tenantId" element={<BackupCenterLayout />}><Route path="backup-jobs" element={null} /></Route></Routes></MemoryRouter></QueryClientProvider>)
     const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' })).getAllByRole('link').map((link) => link.textContent)
     expect(tabs).toHaveLength(4)
     for (const tab of tabs) expect(names).not.toContain(tab)

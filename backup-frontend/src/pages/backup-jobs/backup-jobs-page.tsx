@@ -1,124 +1,127 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Menu } from '@base-ui/react/menu'
-import { ArrowLeft, DatabaseBackup, Plus } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { DatabaseBackup } from 'lucide-react'
+import { DataList, type Column, type SortDirection } from '@/components/data/data-list'
+import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
+import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
-import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Card } from '@/components/ui/card'
+import { CheckField } from '@/components/ui/check-field'
 import { EmptyState } from '@/components/ui/empty-state'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Select, TextInput } from '@/components/ui/text-input'
-import { useAgents } from '@/features/agents/hooks'
-import { archiveBackupJob, getBackupJobHealth, getHealthTimeline } from '@/features/backup-jobs/api'
-import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
-import { jobStatus, jobStatusLabel, jobStatusLevel } from '@/features/backup-jobs/job-status'
-import { JobSections } from '@/features/backup-jobs/job-sections'
-import type { BackupJob } from '@/features/backup-jobs/types'
-import { useBackup, useBackups } from '@/features/backups/hooks'
-import { isActiveRun } from '@/features/backups/presentation'
-import { useListParams } from '@/features/platform/use-list-params'
+import { jobStatusLabel, jobStatusLevel, type JobStatus } from '@/features/backup-jobs/job-status'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
+import type { ProtectionRow } from '@/features/dashboard/protection'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { ApiError } from '@/lib/api/client'
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { useJobRows } from '@/pages/dashboard/use-protection'
 
-function JobDetail({ job }: { job: BackupJob }) {
-  const { tenantId } = useTenant()
-  const navigate = useNavigate()
-  const client = useQueryClient()
-  const base = `/tenants/${tenantId}`
-  const [confirm, setConfirm] = useState(false)
-  const [startedRun, setStartedRun] = useState<string>()
-  const [actionError, setActionError] = useState<unknown>(null)
-  const health = useQuery({ queryKey: ['tenant', tenantId, 'backup-jobs', job.id, 'health'], queryFn: ({ signal }) => getBackupJobHealth(tenantId, job.id, signal) })
-  const timeline = useQuery({ queryKey: ['tenant', tenantId, 'backup-jobs', 'health-timeline'], queryFn: ({ signal }) => getHealthTimeline(tenantId, signal) })
-  const agents = useAgents(tenantId)
-  const successes = useBackups({ status: 'Succeeded', jobId: job.id, page: 1, pageSize: 1 })
-  const active = Boolean(job.lastRun && isActiveRun(job.lastRun.status))
-  const lastRun = useBackup(active ? job.lastRun!.id : '')
-  const run = useRunBackupJob()
-  const toggle = useToggleBackupJob()
-  const archive = useMutation({ mutationFn: () => archiveBackupJob(tenantId, job.id), onSuccess: async () => {
-    await Promise.all(['backup-jobs', 'dashboard', 'backup-runs'].map(key => client.invalidateQueries({ queryKey: ['tenant', tenantId, key] })))
-    navigate(`${base}/backup-jobs`)
-  } })
-  const days = timeline.data?.jobs.find(item => item.jobId === job.id)?.days ?? []
-  const offline = agents.data?.find(agent => agent.agentId === job.agentId)?.connectivity === 'offline'
-  const failedRecently = days.some(day => day.status === 'Failed')
-  const hasSucceeded = (successes.data?.totalCount ?? 0) > 0
-  const status = job.agentRevoked ? 'revoked' as const : health.data && timeline.data && successes.data && agents.data
-    ? jobStatus({ job, health: health.data, failedRecently, hasSucceeded, offline, running: active }) : undefined
-  const reasons = health.data ? Object.values(health.data.factors).map(factor => factor.reason) : []
-  const reason = status === 'revoked' ? tx('Bu bilgisayar iptal edildi; yeni bir yedekleme işi oluşturun.')
-    : status !== 'attention' ? null
-    : offline ? tx('Yedekleme bilgisayarı çevrimdışı.')
-    : !hasSucceeded && failedRecently ? tx('İlk yedek alınamadı.')
-    : reasons.includes('backup_stale') || reasons.includes('backup_missing') ? tx('Son başarılı yedek, planlanan periyodu aştı.')
-    : reasons.includes('capacity_critical') ? tx('Depolama alanı doluyor')
-    : reasons.includes('no_verified_replica') || reasons.includes('replicas_missing') ? tx('Kullanılabilir doğrulanmış kopya yok.')
-    : reasons.includes('restore_failed') ? tx('Son izole geri yükleme testi başarısız oldu.') : null
-  // A run that just ended changes the status, the last success and the health: read them again once.
-  const wasActive = useRef(active)
-  useEffect(() => {
-    if (wasActive.current && !active) void Promise.all(['backup-jobs', 'backup-runs', 'dashboard'].map(key => client.invalidateQueries({ queryKey: ['tenant', tenantId, key] })))
-    wasActive.current = active
-  }, [active, client, tenantId])
-  const overlap = actionError instanceof ApiError && actionError.status === 409 && actionError.activeRunId
-  return <section aria-label={tx('İş ayrıntıları')} className="min-w-0 space-y-5 rounded-lg border border-border bg-surface p-4">
-    <Link className={`inline-flex items-center gap-1 text-sm md:hidden ${linkClass}`} to={`${base}/backup-jobs`}><ArrowLeft aria-hidden="true" className="size-4" />{tx('İşlere dön')}</Link>
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h2 className="text-lg font-semibold text-text-heading">{job.name}</h2><p className="text-sm text-text-muted">{job.agentName ?? tx('Adsız bilgisayar')} · {job.configuration.database}</p></div>
-      <Menu.Root><Menu.Trigger className={buttonVariants({ variant: 'outline' })}>{tx('Diğer')}</Menu.Trigger><Menu.Portal><Menu.Positioner sideOffset={4} className="z-50"><Menu.Popup className="rounded-lg border border-border bg-surface-raised p-1 shadow-overlay"><Menu.Item className="cursor-pointer rounded-sm px-3 py-2 text-sm hover:bg-surface-2" onClick={() => setConfirm(true)}>{tx('Korunan veriyi kaldır…')}</Menu.Item></Menu.Popup></Menu.Positioner></Menu.Portal></Menu.Root>
-    </div>
-    <div role="status" className="space-y-1">
-      {status && <p className="font-medium"><StatusPill level={jobStatusLevel[status]}>{jobStatusLabel(status, lastRun.data?.attempts.at(-1)?.progressPercent)}</StatusPill></p>}
-      {reason && <p className="text-sm text-text-muted">{reason}</p>}
-    </div>
-    {(health.isError || timeline.isError || agents.isError || successes.isError) && <ErrorNotice title={tx('Sağlık bilgisi alınamadı.')} error={health.error ?? timeline.error ?? agents.error ?? successes.error} />}
-    {actionError !== null && (overlap
-      ? <Notice title={tx('Zaten sürüyor')} action={<Link className={linkClass} to={`${base}/backup-runs/${overlap}`}>{tx('Süren denemeyi aç')}</Link>}>{tx('Başka bir yedekleme denemesi sürdüğü için yenisi başlatılmadı.')}</Notice>
-      : <ErrorNotice title={tx('İşlem tamamlanamadı')} error={actionError} />)}
-    {startedRun && !(job.lastRun?.id === startedRun && !active) && <Notice tone="success" title={tx('Yedekleme denemesi başlatıldı')}><Link className={linkClass} to={`${base}/backup-runs/${startedRun}`}>{tx('Denemeyi aç')}</Link></Notice>}
-    <div className="flex flex-wrap gap-2">
-      <Button disabled={run.isPending || !job.enabled || job.agentRevoked} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx('Şimdi yedekle')}</Button>
-      {job.schedule && <Button variant="outline" disabled={toggle.isPending || job.agentRevoked} onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}>{job.enabled ? tx('Zamanlamayı durdur') : tx('Zamanlamayı sürdür')}</Button>}
-      {offline && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/agents/${job.agentId}`}>{tx('Bilgisayarı kontrol et')}</Link>}
-      {!offline && reasons.includes('capacity_critical') && <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/storage`}>{tx('Depolamayı yönet')}</Link>}
-    </div>
-    <JobSections job={job} />
-    <Link className={`inline-block text-sm ${linkClass}`} to={`${base}/backup-runs?jobId=${encodeURIComponent(job.id)}`}>{tx('Tüm denemeler')}</Link>
-    <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title={tx('Korunan veriyi kaldır…')} name={job.name} pending={archive.isPending} error={archive.error} confirmLabel={tx('Korunan veriyi kaldır')} onConfirm={() => archive.mutate()} consequence={{ what: tx('Yedekleriniz silinmez; bu iş artık çalışmaz ve listede görünmez.'), who: job.name, reversible: tx('Bu işlem geri alınamaz.') }} />
-  </section>
+const sortKeys = ['name', 'agent', 'last', 'next', 'created'] as const
+type SortKey = typeof sortKeys[number]
+/** The direction a column sorts in when it is chosen first: names and the next backup upwards, the newest dates on top. */
+const firstDirection: Record<SortKey, SortDirection> = { name: 'asc', agent: 'asc', last: 'desc', next: 'asc', created: 'desc' }
+
+// The filter's "Pasif" covers both jobs that do not run on their own: stopped ones and ones without a schedule.
+const statusFilters = { current: ['current'], attention: ['attention'], first: ['first'], running: ['running'], inactive: ['paused', 'manual'] } as const
+type StatusFilter = keyof typeof statusFilters
+const statusFilterKeys = Object.keys(statusFilters) as StatusFilter[]
+
+const time = (value?: string | null) => value ? Date.parse(value) : null
+/** Only an active schedule has a next backup. */
+const nextAt = ({ job }: ProtectionRow) => job.enabled && !job.agentRevoked && job.schedule?.enabled !== false ? job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt : null
+const sortValue: Record<SortKey, (row: ProtectionRow) => string | number | null> = {
+  name: row => row.job.name,
+  agent: row => row.job.agentName ?? null,
+  last: row => time(row.lastSuccessAt),
+  next: row => time(nextAt(row)),
+  created: row => time(row.job.createdAt),
+}
+
+/** A row without a value goes last in either direction. */
+function compare(a: ProtectionRow, b: ProtectionRow, key: SortKey, direction: SortDirection) {
+  const x = sortValue[key](a), y = sortValue[key](b)
+  const byName = a.job.name.localeCompare(b.job.name, currentLocale()) || a.job.id.localeCompare(b.job.id)
+  if (x === null || y === null) return x === y ? byName : x === null ? 1 : -1
+  const order = typeof x === 'string' ? x.localeCompare(String(y), currentLocale()) : x - (y as number)
+  return (direction === 'asc' ? order : -order) || byName
 }
 
 export function BackupJobsPage() {
   useLanguage()
-  const { id } = useParams()
   const { tenantId } = useTenant()
-  const jobs = useBackupJobs()
-  const { get, update } = useListParams()
-  const search = get('search')
-  const state = get('state')
+  const { search: urlSearch } = useLocation()
+  const { page, get, update } = useListParams()
+  const data = useJobRows(tenantId)
   const base = `/tenants/${tenantId}`
-  const all = jobs.data ?? []
-  const selected = all.find(job => job.id === id)
-  const filtered = all.filter(job => (!state || (job.enabled && !job.agentRevoked) === (state === 'enabled')) && `${job.name} ${job.configuration.database} ${job.agentName ?? ''}`.toLocaleLowerCase(currentLocale()).includes(search.toLocaleLowerCase(currentLocale())))
-  const filtering = Boolean(search || state)
-  const create = <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx('Yedekleme işi oluştur')}</Link>
-  return <QueryState isPending={jobs.isPending} error={jobs.error}>
-    {all.length === 0 ? <EmptyState icon={DatabaseBackup} message={tx('Henüz yedekleme işi oluşturulmadı.')} action={create} />
-      : <div className="grid gap-4 md:grid-cols-[minmax(14rem,1fr)_minmax(0,2fr)]">
-        <div className={id ? 'hidden space-y-3 md:block' : 'space-y-3'}>
-          {create}
-          <TextInput type="search" value={search} aria-label={tx('İş, yedekleme bilgisayarı veya veritabanı ara')} placeholder={tx('İş, yedekleme bilgisayarı veya veritabanı ara')} onChange={event => update({ search: event.target.value }, { replace: true })} />
-          <Select value={state || 'all'} aria-label={tx('Durum')} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx('Tümü')}</option><option value="enabled">{tx('Etkin')}</option><option value="disabled">{tx('Devre dışı')}</option></Select>
-          {filtered.length ? <ul className="divide-y divide-border rounded-lg border border-border bg-surface">{filtered.map(job => <li key={job.id}><Link aria-current={job.id === id ? 'page' : undefined} className="block px-4 py-3 hover:bg-surface-2 aria-[current=page]:bg-surface-2" to={`${base}/backup-jobs/${encodeURIComponent(job.id)}`}><span className="block font-medium">{job.name}</span><span className="block text-sm text-text-muted">{job.agentName ?? tx('Adsız bilgisayar')} · {job.configuration.database}</span>{job.agentRevoked && <span className="block text-sm text-text-muted">{jobStatusLabel('revoked')}</span>}</Link></li>)}</ul>
-            : <EmptyState message={tx('Aramanızla eşleşen iş yok.')} onClearFilters={filtering ? () => update({ search: '', state: '' }) : undefined} />}
-        </div>
-        {selected ? <JobDetail key={selected.id} job={selected} /> : id ? <p>{tx('Yedekleme işi bulunamadı.')}</p> : <p className="hidden text-sm text-text-muted md:block">{tx('Ayrıntıları görmek için bir iş seçin.')}</p>}
+  const search = get('search')
+  const showRevoked = get('revoked') === 'true'
+  const status = oneOf(get('status'), statusFilterKeys)
+  const sortKey = oneOf(get('sort'), sortKeys) ?? 'created'
+  const direction = oneOf(get('dir'), ['asc', 'desc'] as const) ?? firstDirection[sortKey]
+
+  const all = data.rows
+  const hasRevoked = all.some(row => row.job.agentRevoked)
+  const scope = showRevoked ? all : all.filter(row => !row.job.agentRevoked)
+  const computers = [...new Map(scope.map(row => [row.job.agentId, row.job.agentName ?? tx('Adsız bilgisayar')])).entries()].toSorted((a, b) => a[1].localeCompare(b[1], currentLocale()))
+  const engines = [...new Set(scope.map(row => row.job.configuration.engine))]
+  // A value the list no longer offers (a computer that is gone, a hand-edited address) filters nothing.
+  const agentId = computers.find(([id]) => id === get('agent') && computers.length > 1)?.[0]
+  const engine = engines.find(item => item === get('engine'))
+  const needle = search.trim().toLocaleLowerCase(currentLocale())
+  const filtering = Boolean(needle || status || agentId || engine)
+  const matching = scope.filter(row => (!status || (statusFilters[status] as readonly JobStatus[]).includes(row.status))
+    && (!agentId || row.job.agentId === agentId) && (!engine || row.job.configuration.engine === engine)
+    && `${row.job.name} ${row.job.agentName ?? ''} ${row.job.configuration.database}`.toLocaleLowerCase(currentLocale()).includes(needle))
+  const byOrder = (a: ProtectionRow, b: ProtectionRow) => compare(a, b, sortKey, direction)
+  const sorted = [...matching.filter(row => !row.job.agentRevoked).toSorted(byOrder), ...matching.filter(row => row.job.agentRevoked).toSorted(byOrder)]
+  const lastPage = Math.max(1, Math.ceil(sorted.length / LIST_PAGE_SIZE))
+  const current = Math.min(page, lastPage)
+  const visible = sorted.slice((current - 1) * LIST_PAGE_SIZE, current * LIST_PAGE_SIZE)
+  const clear = () => update({ search: '', status: '', agent: '', engine: '' })
+
+  const muted = (row: ProtectionRow, node: ReactNode) => row.job.agentRevoked ? <span className="text-text-muted">{node}</span> : node
+  const columns: Column<ProtectionRow>[] = [
+    { key: 'name', header: tx('Ad'), sortable: firstDirection.name, card: 'title', wrap: true, render: row => <Link className={`font-medium ${linkClass}`} state={{ listSearch: urlSearch }} to={`${base}/backup-jobs/${encodeURIComponent(row.job.id)}`}>{row.job.name}</Link> },
+    { key: 'status', header: tx('Durum'), card: 'status', render: row => <StatusPill level={jobStatusLevel[row.status]}>{jobStatusLabel(row.status, row.percent)}</StatusPill> },
+    { key: 'agent', header: tx('Bilgisayar'), sortable: firstDirection.agent, render: row => muted(row, row.job.agentName ?? tx('Adsız bilgisayar')) },
+    { key: 'database', header: tx('Veritabanı'), render: row => muted(row, row.job.configuration.database || '—') },
+    { key: 'last', header: tx('Son yedek'), sortable: firstDirection.last, render: row => muted(row, <RelativeTime value={row.lastSuccessAt} />) },
+    { key: 'next', header: tx('Sonraki yedek'), sortable: firstDirection.next, render: row => muted(row, <RelativeTime value={nextAt(row)} />) },
+    { key: 'created', header: tx('Oluşturulma'), sortable: firstDirection.created, render: row => muted(row, <RelativeTime value={row.job.createdAt} />) },
+  ]
+  const create = <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}>{tx('Yedekleme işi oluştur')}</Link>
+  return <QueryState isPending={data.isPending} error={data.error}>
+    {all.length === 0 ? <Card padding="none"><EmptyState icon={DatabaseBackup} message={tx('Henüz yedekleme işi oluşturulmadı.')} action={create} /></Card>
+      : <div className="space-y-4">
+        <Filters label={tx('İş filtreleri')} onClear={filtering && sorted.length > 0 ? clear : undefined}
+          footer={hasRevoked && <CheckField className="w-fit" label={tx('İptal edilmiş bilgisayarların işlerini göster')} checked={showRevoked} onChange={event => update({ revoked: event.target.checked ? 'true' : '' })} />}>
+          <FilterField label={tx('Ara')}>
+            <TextInput type="search" aria-label={tx('İş, yedekleme bilgisayarı veya veritabanı ara')} placeholder={tx('İş, bilgisayar veya veritabanı')} value={search} onChange={event => update({ search: event.target.value }, { replace: true })} />
+          </FilterField>
+          <FilterField label={tx('Durum')}>
+            <Select aria-label={tx('Durum')} value={status ?? ''} onChange={event => update({ status: event.target.value })}>
+              <option value="">{tx('Tümü')}</option>{statusFilterKeys.map(key => <option key={key} value={key}>{key === 'inactive' ? tx('Pasif') : jobStatusLabel(statusFilters[key][0])}</option>)}
+            </Select>
+          </FilterField>
+          {computers.length > 1 && <FilterField label={tx('Bilgisayar')}>
+            <Select aria-label={tx('Bilgisayar')} value={agentId ?? ''} onChange={event => update({ agent: event.target.value })}>
+              <option value="">{tx('Tümü')}</option>{computers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </Select>
+          </FilterField>}
+          {engines.length > 1 && <FilterField label={tx('Veritabanı türü')}>
+            <Select aria-label={tx('Veritabanı türü')} value={engine ?? ''} onChange={event => update({ engine: event.target.value })}>
+              <option value="">{tx('Tümü')}</option>{engines.map(item => <option key={item} value={item}>{item === 'mssql' ? tx('SQL Server') : item === 'file-system' ? tx('Dosya / Klasör') : 'PostgreSQL'}</option>)}
+            </Select>
+          </FilterField>}
+        </Filters>
+        <DataList rows={visible} columns={columns} keyExtractor={row => row.job.id} caption={tx('Yedekleme işleri')}
+          sort={{ key: sortKey, direction, onChange: (key, dir) => update(key === 'created' && dir === 'desc' ? { sort: '', dir: '' } : { sort: key, dir }) }}
+          emptyMessage={filtering ? tx('Aramanızla eşleşen iş yok.') : tx('Tüm işler iptal edilmiş bilgisayarlara ait.')} onClearFilters={filtering ? clear : undefined} />
+        {sorted.length > LIST_PAGE_SIZE && <Pagination label={tx('Yedekleme işi sayfaları')} page={current} pageSize={LIST_PAGE_SIZE} totalCount={sorted.length} onPageChange={next => update({ page: next })} />}
       </div>}
   </QueryState>
 }

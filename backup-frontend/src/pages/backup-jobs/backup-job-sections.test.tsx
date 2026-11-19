@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { BackupJobsPage } from './backup-jobs-page'
+import { BackupJobDetailPage } from './backup-job-detail-page'
 import { getBackupJobHealth, getBackupJobs, getHealthTimeline, saveBackupJob } from '@/features/backup-jobs/api'
 import { healthyJobHealth, savedJob } from '@/features/backup-jobs/test-fixtures'
 import { getAgents } from '@/features/agents/api'
@@ -26,7 +26,7 @@ const withConfiguration = (patch: Partial<BackupJob['configuration']>, rest: Par
 
 function mount(jobs: BackupJob[] = [job, other]) {
   vi.mocked(getBackupJobs).mockResolvedValue(jobs)
-  const router = createMemoryRouter([{ path: '/tenants/:tenantId/backup-jobs/:id?', element: <BackupJobsPage /> }], { initialEntries: ['/tenants/tenant-a/backup-jobs/job-a'] })
+  const router = createMemoryRouter([{ path: '/tenants/:tenantId/backup-jobs/:id', element: <BackupJobDetailPage /> }, { path: '/tenants/:tenantId/backup-jobs', element: <p>jobs list</p> }], { initialEntries: ['/tenants/tenant-a/backup-jobs/job-a'] })
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
   return router
 }
@@ -245,14 +245,14 @@ describe('leaving with unsaved changes', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('asks before another job opens', async () => {
+  it('asks before the page is left for the list', async () => {
     const router = mount()
     await change('Kaynak')
     fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'Yeni ad' } })
-    await userEvent.click(screen.getByRole('link', { name: /Satış/ }))
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Sayfa yolu' })).getByRole('link', { name: 'Yedekleme işleri' }))
     const dialog = within(await screen.findByRole('dialog', { name: 'Değişiklikler kaydedilmedi' }))
     expect(router.state.location.pathname).toBe('/tenants/tenant-a/backup-jobs/job-a')
     fireEvent.click(dialog.getByRole('button', { name: 'Değişiklikleri at' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/tenants/tenant-a/backup-jobs/job-b'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/tenants/tenant-a/backup-jobs'))
   })
 })
