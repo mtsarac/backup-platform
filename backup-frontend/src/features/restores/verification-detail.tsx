@@ -1,17 +1,20 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { useRemoveRollbackCopy, useRetryRestoreCleanup } from './hooks'
+import { useRemoveRollbackCopy, useRetryRestoreCleanup, useStartRestoreVerification } from './hooks'
 import { isActiveRestore, verificationCheckLabel, verificationCleanupText } from './presentation'
 import type { RestoreView } from './types'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { describeFailure } from '@/lib/api/failure-messages'
+import { useIdempotencyKey } from '@/lib/idempotency-key'
+import { restorePath } from '@/lib/routes'
 
 /** Detail of a disposable-database restore test: outcome, checks and whether the temporary database is gone. */
 export function VerificationDetail({ restore }: { restore: RestoreView }) {
@@ -27,7 +30,7 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
           {restore.verificationOutcome && <Fact label={tx("Sonuç")}><StatusPill domain="verification" status={restore.verificationOutcome} /></Fact>}
           {verification && <Fact label={tx("Tablolar")}>{verification.readableTableCount ?? '—'}{' '}{tx("okunabilir /")}{' '}{verification.userTableCount ?? '—'}{' '}{tx("kullanıcı tablosu")}</Fact>}
         </Facts>}
-        {restore.verificationOutcome === 'Failed' && (restore.reason || restore.failureCode) && <ErrorNotice {...describeFailure(restore.failureCode, 'restore')} technical={[...describeFailure(restore.failureCode, 'restore').technical, ...(restore.reason ? [{ label: tx('Sunucu mesajı'), value: restore.reason }] : [])]} />}
+        {restore.verificationOutcome === 'Failed' && (restore.reason || restore.failureCode) && <VerificationFailure restore={restore} />}
         {verification && verification.checks.length > 0 && <><ul aria-label={tx("Doğrulama kontrolleri")} className="divide-y divide-border text-sm">{verification.checks.map((check) => <li key={check.checkId} className="flex flex-wrap justify-between gap-2 py-3">
           <span className="min-w-0 break-words">{verificationCheckLabel(check.checkId)}</span><span className="font-medium">{check.status === 'Passed' ? tx('Geçti') : tx('Başarısız')}</span></li>)}</ul>
           <TechnicalDetails items={verification.checks.filter(check => check.message).map(check => ({ label: verificationCheckLabel(check.checkId), value: check.message }))} /></>}
@@ -46,6 +49,31 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
       </div>
     </Section>}
   </>
+}
+
+/** Why a restore test failed; an unverifiable server certificate offers to run the test again with it trusted, for that test only. */
+function VerificationFailure({ restore }: { restore: RestoreView }) {
+  useLanguage()
+  const { tenantId, canOperate } = useTenant()
+  const navigate = useNavigate()
+  const start = useStartRestoreVerification()
+  const idempotencyKey = useIdempotencyKey()
+  const failure = describeFailure(restore.failureCode, 'restore')
+  const technical = [...failure.technical, ...(restore.reason ? [{ label: tx('Sunucu mesajı'), value: restore.reason }] : [])]
+  async function retryTrusting() {
+    const request = { agentId: restore.agentId, target: { ...restore.target, trustServerCertificate: true }, options: { verifyChecksum: true, verifyBackup: true } }
+    try {
+      const started = await start.mutateAsync({ artifactId: restore.artifactId, idempotencyKey: idempotencyKey.keyFor(request), request })
+      idempotencyKey.settle()
+      navigate(restorePath(tenantId, started.id))
+    } catch (error) {
+      idempotencyKey.settle(error)
+    }
+  }
+  return <div className="space-y-3">
+    <ErrorNotice {...failure} technical={technical} trust={canOperate ? { note: tx("Bu güven yalnızca bu geri yükleme testi için geçerlidir; sertifika kaydedilmez."), pending: start.isPending, onConfirm: () => void retryTrusting() } : undefined} />
+    {start.error && <ErrorNotice error={start.error} scope="restore" />}
+  </div>
 }
 
 /** An ordinary replace restore keeps the previous database; only a tenant administrator may ask for its removal. */

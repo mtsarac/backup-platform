@@ -54,6 +54,9 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     trustServerCertificate: false,
   })
 
+  // Set from the error panel when the server's certificate cannot be verified; it holds for this restore only and drops as soon as the computer or server changes.
+  const [trustCertificate, setTrustCertificate] = useState(false)
+
   const [mode, setMode] = useState<RestoreMode>('NewDatabase')
   const newDatabaseName = (() => {
     const name = artifact.databaseName ? `${artifact.databaseName}_restored` : 'RestoredDB'
@@ -96,16 +99,17 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   }, [])
 
   const activeAgent = targets.agents.find((a) => a.agentId === selectedAgentId)
-  const effectiveTarget = useMemo<RestoreTarget>(() => {
-    return targetType === 'own' && ownTarget ? ownTarget : otherTarget
-  }, [targetType, ownTarget, otherTarget])
+  const baseTarget = targetType === 'own' && ownTarget ? ownTarget : otherTarget
+  const targetWithTrust = (trust: boolean): RestoreTarget => ({ ...baseTarget, trustServerCertificate: baseTarget.trustServerCertificate || trust })
+  const effectiveTarget = targetWithTrust(trustCertificate)
 
   const eligibleForRestore = artifact.state === 'Available' && activeAgent?.canRestore && activeAgent?.sourceEligible
   const targetValid = Boolean(effectiveTarget.host) && (!isPg || (!effectiveTarget.integratedSecurity && Boolean(effectiveTarget.databaseCredentialReference)))
   const databaseNameValid = Boolean(targetDatabaseName.trim()) && (!isPg || new TextEncoder().encode(targetDatabaseName.trim()).length <= 63)
 
+  const precheckFingerprintFor = (target: RestoreTarget) => JSON.stringify([JSON.stringify([selectedAgentId, target]), targetDatabaseName.trim(), mode, options])
   const discoveryFingerprint = JSON.stringify([selectedAgentId, effectiveTarget])
-  const precheckFingerprint = JSON.stringify([discoveryFingerprint, targetDatabaseName.trim(), mode, options])
+  const precheckFingerprint = precheckFingerprintFor(effectiveTarget)
   const currentDiscovery = discoveryOperation?.fingerprint === discoveryFingerprint
   const currentPrecheck = precheckOperation?.fingerprint === precheckFingerprint
   const discoveryRetryable = isUncertainError(discoveryError)
@@ -150,6 +154,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
   function changeOtherTarget(value: RestoreTarget) {
     invalidateDiscovery()
+    setTrustCertificate(false)
     setOtherTarget(value)
   }
 
@@ -179,18 +184,20 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     }
   }
 
-  async function triggerPrecheck(fresh = false) {
+  // `trust` lets the trust confirmation check again before the state it sets has rendered.
+  async function triggerPrecheck(fresh = false, trust = trustCertificate) {
     if (!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || pendingRef.current.precheck || pendingRef.current.execution) return
     if (fresh) precheckKey.reset()
+    const target = targetWithTrust(trust)
     const request = {
       agentId: selectedAgentId,
-      target: { ...effectiveTarget },
+      target,
       databaseName: targetDatabaseName.trim(),
       mode,
       options: { ...options },
     }
     const attempt: RequestAttempt<StartRestorePrecheckVariables> = {
-      fingerprint: precheckFingerprint,
+      fingerprint: precheckFingerprintFor(target),
       variables: { artifactId: artifact.id, idempotencyKey: precheckKey.keyFor(request), request },
     }
     invalidateExecution()
@@ -273,7 +280,8 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   const shown = confirming && precheckPassed ? 'confirm' : step
   const checking = confirming && !precheckPassed && precheckError == null
   const checkPanel = checking && (precheckFailed && precheckData
-    ? <Section title={tx("Ön kontrol")}><PrecheckResults data={precheckData} failed passed={false} onRecheck={() => void triggerPrecheck(true)} recheckDisabled={startPrecheck.isPending || startRestore.isPending} /></Section>
+    ? <Section title={tx("Ön kontrol")}><PrecheckResults data={precheckData} failed passed={false} onRecheck={() => void triggerPrecheck(true)} recheckDisabled={startPrecheck.isPending || startRestore.isPending}
+      trust={{ note: tx("Bu güven yalnızca bu geri yükleme için geçerlidir; sertifika kaydedilmez."), pending: startPrecheck.isPending, onConfirm: () => { setTrustCertificate(true); void triggerPrecheck(true, true) } }} /></Section>
     : <p role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Ön kontrol çalışıyor…")}</p>)
   const stepLabels = skipSource ? [tx('Nereye ve nasıl'), tx('Onay')] : [tx('Kaynak'), tx('Nereye ve nasıl'), tx('Onay')]
   const current = (shown === 'source' ? 0 : shown === 'target' ? 1 : 2) - (skipSource ? 1 : 0)
@@ -292,7 +300,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           selectedAgentId={selectedAgentId}
           eligibleForRestore={Boolean(eligibleForRestore)}
           invalidateDiscovery={invalidateDiscovery}
-          setSelectedAgentId={setSelectedAgentId}
+          setSelectedAgentId={(id) => { setTrustCertificate(false); setSelectedAgentId(id) }}
           onContinue={() => setStep('target')}
         />
       )}
@@ -309,7 +317,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           targetType={targetType}
           otherTarget={otherTarget}
           invalidateDiscovery={invalidateDiscovery}
-          setTargetType={setTargetType}
+          setTargetType={(type) => { setTrustCertificate(false); setTargetType(type) }}
           changeOtherTarget={changeOtherTarget}
           onLoginPendingChange={setLoginPending}
         />

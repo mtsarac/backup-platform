@@ -39,6 +39,17 @@ export function useSaveBackupJob(id?: string) {
     return id ? saveBackupJob(tenantId, body, id) : saveBackupJob(tenantId, body, undefined, idempotency.keyFor(body))
   }, onSuccess: invalidate, onError: invalidate, onSettled: (_data, error) => idempotency.settle(error ?? undefined) })
 }
+/** Saves the job's own configuration with the server certificate trusted, then runs it again: the trust stays on the job. */
+export function useTrustJobCertificate() {
+  const { tenantId, canOperate, canAdmin } = useTenant()
+  const invalidate = useInvalidateJobs()
+  return useMutation({ mutationFn: async (id: string) => {
+    if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
+    const { name, agentId, configuration, retryPolicy, overlapPolicy, schedule, retention } = await getBackupJob(tenantId, id)
+    await saveBackupJob(tenantId, { name, agentId, configuration: { ...configuration, trustServerCertificate: true }, retryPolicy, overlapPolicy, schedule, ...(canAdmin ? { retention } : {}) }, id)
+    return startJobRun(tenantId, id, crypto.randomUUID())
+  }, retry: false, onSettled: invalidate })
+}
 export function useToggleBackupJob() {
   const { tenantId, canOperate } = useTenant()
   const invalidate = useInvalidateJobs()

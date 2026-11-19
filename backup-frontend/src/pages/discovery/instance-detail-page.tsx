@@ -20,7 +20,7 @@ import { loginErrors } from '@/features/backup-jobs/database-login-validation'
 import type { DatabaseLogin } from '@/features/backup-jobs/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
-import { describeError, failureMessage } from '@/lib/api/failure-messages'
+import { describeError, describeFailure, failureMessage } from '@/lib/api/failure-messages'
 import { discoveredDatabasesPath } from '@/lib/routes'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
@@ -38,7 +38,6 @@ function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
   const usesPassword = !(isMssql && integrated)
   const loginProblem = usesPassword && submitted ? loginErrors(login, hasStored) : undefined
   const [encrypt, setEncrypt] = useState(instance.credential.encrypt)
-  const [trust, setTrust] = useState(instance.credential.trustServerCertificate)
   const otherError = save.error ? { ...describeError(save.error), ...(save.error instanceof ApiError && Object.values(save.error.fields).length > 0 ? { what: failureMessage(Object.values(save.error.fields)[0]) } : {}) } : undefined
   const verifyStarted = verify.isSuccess
   return <Section title={tx("Veritabanı sunucusuna giriş")} description={tx("Veritabanlarını listelemek için bu sunucuda kullanılacak kullanıcı. Parola şifrelenerek saklanır ve bir daha gösterilmez.")}>
@@ -46,14 +45,13 @@ function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
       event.preventDefault()
       setSubmitted(true)
       if (usesPassword && loginErrors(login, hasStored)) return
-      save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: trust })
+      save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: instance.credential.trustServerCertificate })
       setLogin(null)
       setSubmitted(false)
     }}>
       {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} disabled={!canOperate} errors={loginProblem} onChange={setLogin} />}
       {isMssql && <CheckField label={tx("Windows hesabıyla giriş yap")} checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />}
       <CheckField label={tx("Bağlantıyı şifrele")} checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />
-      <CheckField label={tx("Sunucu sertifikasına güven")} checked={trust} disabled={!canOperate} onChange={event => setTrust(event.target.checked)} />
       {otherError && <ErrorNotice {...otherError} />}
       {save.isSuccess && <Notice tone="success">{tx("Veritabanı girişi kaydedildi. Veritabanlarını listelemek için bağlantıyı doğrulayın.")}</Notice>}
       {verifyStarted && <Notice tone="info">{tx("Doğrulama istendi; sonuç bilgisayarın bir sonraki bağlantısında gelir.")}</Notice>}
@@ -66,10 +64,28 @@ function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
   </Section>
 }
 
+/** The bound login stays as it is; the trust is saved on the server's binding, so it holds for every later scan, then the scan runs again. */
+function CertificateNotice({ instance }: { instance: DiscoveryInstanceDetail }) {
+  useLanguage()
+  const { canOperate } = useTenant()
+  const save = useSaveCredential(instance.id)
+  const verify = useVerifyInstance()
+  const { credentialReference, integratedSecurity, encrypt } = instance.credential
+  const failure = describeFailure(instance.accessReasonCode)
+  const trust = canOperate ? { note: tx("Bu sunucunun sertifikası kalıcı olarak güvenilir sayılacak."), pending: save.isPending || verify.isPending, onConfirm: () => save.mutate(
+    { credentialReference, databaseLogin: null, integratedSecurity, encrypt, trustServerCertificate: true }, { onSuccess: () => verify.mutate(instance.id) }) } : undefined
+  return <div className="space-y-3">
+    <ErrorNotice {...failure} action={canOperate ? failure.action : tx("Yöneticinize danışın.")} trust={trust} />
+    {verify.isSuccess && <Notice tone="info">{tx("Doğrulama istendi; sonuç bilgisayarın bir sonraki bağlantısında gelir.")}</Notice>}
+    {(save.error || verify.error) && <ErrorNotice error={save.error ?? verify.error} />}
+  </div>
+}
+
 /** The one explanation of why the databases cannot be listed: the reason, what it means for the list below, and the next step (the login form). */
 function AccessNotice({ instance }: { instance: DiscoveryInstanceDetail }) {
   useLanguage()
   const { canOperate } = useTenant()
+  if (instance.accessReasonCode && describeFailure(instance.accessReasonCode).certificateUntrusted) return <CertificateNotice instance={instance} />
   if (instance.access === 'CredentialsRequired') return <Notice tone="warning">{tx("Bu sunucuya giriş bilgisi verilmediği için veritabanları listelenemedi. Sunucuda veritabanı olmadığı anlamına gelmez; aşağıdaki bilgileri girin.")}</Notice>
   const reason = plainReasonText(instance.accessReasonCode)
   return <Notice tone="warning">

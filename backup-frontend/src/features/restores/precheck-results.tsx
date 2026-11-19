@@ -33,8 +33,10 @@ const columns: Column<PrecheckItem>[] = [
 ]
 
 /** The precheck verdict first, the individual checks second: what happened, and what the user may do next. */
-export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabled, fileArchive = false }: {
+export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabled, fileArchive = false, trust }: {
   data: RestoreView; failed: boolean; passed: boolean; onRecheck: () => void; recheckDisabled: boolean; fileArchive?: boolean
+  /** Offered with an untrusted server certificate: checks again with the trust on, for this restore only. */
+  trust?: { note: string; onConfirm: () => void; pending?: boolean }
 }) {
   useLanguage()
   const { tenantId, canOperate } = useTenant()
@@ -48,7 +50,7 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
       <div className="flex items-center gap-2"><span className="font-medium text-text-heading">{tx("Durum:")}</span><StatusPill status={data.status} /></div>
       <Button variant="outline" size="sm" onClick={onRecheck} disabled={recheckDisabled}><RotateCcw aria-hidden="true" className="size-4" />{tx("Yeniden Kontrol Et")}</Button>
     </div>
-    {failed && <ErrorNotice title={tx("Ön kontrol başarısız oldu! Restore başlatılamaz.")} {...(failure ?? { what: tx('Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.'), dataImpact: fileArchive ? tx('Geri yükleme başlamadı; hedefteki dosyalar değişmedi.') : tx('Geri yükleme başlamadı; hedef veritabanı değişmedi.'), action: tx('Başarısız kontrolleri giderip ön kontrolü yeniden çalıştırın.'), technical: [] })} control={canOperate && destination && failure?.actionKind ? <Link className={buttonVariants({ variant: 'outline' })} to={destination}>{actionLabel(failure.actionKind)}</Link> : undefined} onRetry={canOperate && !recheckDisabled && (!failure || failure.actionKind === 'retry') ? onRecheck : undefined} />}
+    {failed && <ErrorNotice title={tx("Ön kontrol başarısız oldu! Restore başlatılamaz.")} {...(failure ?? { what: tx('Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.'), dataImpact: fileArchive ? tx('Geri yükleme başlamadı; hedefteki dosyalar değişmedi.') : tx('Geri yükleme başlamadı; hedef veritabanı değişmedi.'), action: tx('Başarısız kontrolleri giderip ön kontrolü yeniden çalıştırın.'), technical: [] })} control={canOperate && destination && failure?.actionKind ? <Link className={buttonVariants({ variant: 'outline' })} to={destination}>{actionLabel(failure.actionKind)}</Link> : undefined} onRetry={canOperate && !recheckDisabled && (!failure || failure.actionKind === 'retry') ? onRecheck : undefined} trust={canOperate ? trust : undefined} />}
     {passed && warnings.length > 0 && <Notice tone="warning" title={tx("Ön kontrol uyarılarla geçti.")}>{tx("Aşağıdaki uyarıları inceleyerek devam edebilirsiniz.")}</Notice>}
     {passed && warnings.length === 0 && <Notice tone="success" title={tx("Tüm ön kontroller başarıyla tamamlandı. Geri yükleme güvenle başlatılabilir.")} />}
     <DataList rows={items} columns={columns} keyExtractor={(item) => `${item.checkId}:${item.reasonCode}:${item.status}:${items.indexOf(item)}`} emptyMessage={tx("Henüz kontrol sonucu bildirilmedi.")} />
