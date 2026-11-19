@@ -113,8 +113,11 @@ public static class BackupEndpoints
         return job is null ? Results.NotFound() : Results.Ok(job);
     }
 
-    private static async Task<IResult> ListJobsAsync(bool? includeArchived, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken) =>
-        Results.Ok(await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), includeArchived ?? false, cancellationToken));
+    private static async Task<IResult> ListJobsAsync(bool? includeArchived, bool? enabled, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken)
+    {
+        var jobs = await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), includeArchived ?? false, cancellationToken);
+        return Results.Ok(enabled is null ? jobs : jobs.Where(job => (job.Enabled && !job.AgentRevoked) == enabled.Value));
+    }
 
     /// <summary>The home page strip. The client always names its zone: a missing or unknown one is refused rather than guessed as UTC, which would hide the mistake.</summary>
     private static async Task<IResult> GetHealthTimelineAsync(string? timeZone, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken)

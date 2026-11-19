@@ -23,6 +23,11 @@ public sealed class AgentRevocationJobsApiTests(PostgreSqlFixture fixture) : ICl
         var job = await ReadAsync(scenario.Admin, scenario.Root + $"/backup-jobs/{jobId}");
         Assert.True(job.GetProperty("enabled").GetBoolean());
         Assert.False(job.GetProperty("agentRevoked").GetBoolean());
+        Assert.Equal(jobId, Assert.Single((await ReadAsync(scenario.Admin, scenario.Root + "/backup-jobs?enabled=true")).EnumerateArray()).GetProperty("id").GetGuid());
+        Assert.Empty((await ReadAsync(scenario.Admin, scenario.Root + "/backup-jobs?enabled=false")).EnumerateArray());
+        var platformAdmin = await scenario.World.SignInAsync(await scenario.World.SeedUserAsync(platformAdmin: true));
+        var tenantPath = $"/api/platform/tenants/{scenario.Setup.Tenant.Id.Value}";
+        Assert.Equal(1, (await ReadAsync(platformAdmin, tenantPath)).GetProperty("enabledBackupJobs").GetInt32());
         Assert.Equal(1, (await ReadAsync(scenario.Admin, scenario.Root + "/dashboard")).GetProperty("jobs").GetProperty("total").GetInt32());
 
         using var revoked = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + $"/agents/{scenario.Agent.AgentId}/revoke");
@@ -32,6 +37,8 @@ public sealed class AgentRevocationJobsApiTests(PostgreSqlFixture fixture) : ICl
         var listed = Assert.Single(list.EnumerateArray());
         Assert.False(listed.GetProperty("enabled").GetBoolean());
         Assert.True(listed.GetProperty("agentRevoked").GetBoolean());
+        Assert.Empty((await ReadAsync(scenario.Admin, scenario.Root + "/backup-jobs?enabled=true")).EnumerateArray());
+        Assert.Equal(jobId, Assert.Single((await ReadAsync(scenario.Admin, scenario.Root + "/backup-jobs?enabled=false")).EnumerateArray()).GetProperty("id").GetGuid());
         var detail = await ReadAsync(scenario.Admin, scenario.Root + $"/backup-jobs/{jobId}");
         Assert.False(detail.GetProperty("enabled").GetBoolean());
         Assert.True(detail.GetProperty("agentRevoked").GetBoolean());
@@ -47,7 +54,14 @@ public sealed class AgentRevocationJobsApiTests(PostgreSqlFixture fixture) : ICl
         // A job still enabled on an already revoked computer (revoked before jobs were disabled with it) is excluded all the same.
         var stored = await context.BackupJobs.SingleAsync(row => row.Id == jobId);
         stored.Enable(DateTimeOffset.UtcNow);
+        var summaryBefore = (await ReadAsync(platformAdmin, "/api/platform/summary")).GetProperty("enabledBackupJobs").GetInt64();
         await context.SaveChangesAsync();
+        Assert.Equal(summaryBefore, (await ReadAsync(platformAdmin, "/api/platform/summary")).GetProperty("enabledBackupJobs").GetInt64());
+        Assert.Equal(0, (await ReadAsync(platformAdmin, tenantPath)).GetProperty("enabledBackupJobs").GetInt32());
+        Assert.Empty((await ReadAsync(scenario.Admin, scenario.Root + "/backup-jobs?enabled=true")).EnumerateArray());
+        var disabled = Assert.Single((await ReadAsync(scenario.Admin, scenario.Root + "/backup-jobs?enabled=false")).EnumerateArray());
+        Assert.Equal(jobId, disabled.GetProperty("id").GetGuid());
+        Assert.True(disabled.GetProperty("agentRevoked").GetBoolean());
         Assert.Equal(0, (await ReadAsync(scenario.Admin, scenario.Root + "/dashboard")).GetProperty("jobs").GetProperty("total").GetInt32());
         Assert.True((await ReadAsync(scenario.Admin, scenario.Root + "/backup-jobs")).EnumerateArray().Single().GetProperty("agentRevoked").GetBoolean());
     }
