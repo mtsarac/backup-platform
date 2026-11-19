@@ -146,7 +146,7 @@ describe('restore verification detail', () => {
   it('shows the run status once while no outcome is reported, and no outcome row', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Running', verificationOutcome: undefined, completedAt: null })
     renderDetail()
-    await screen.findByRole('heading', { level: 1, name: /Geri yükleme testi/ })
+    await screen.findByRole('heading', { level: 1, name: /Doğrulama denemesi/ })
     expect(screen.getAllByText(statusLabel('general', 'Running'))).toHaveLength(1)
     expect(screen.queryByText('Sonuç')).not.toBeInTheDocument()
   })
@@ -154,7 +154,7 @@ describe('restore verification detail', () => {
   it('keeps the server reason in copyable technical details', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(withResult({ ...base, status: 'Failed', verificationOutcome: 'Failed', failureCode: 'VerificationFailed', reason: 'The backup restored, but checks failed.', cleanup: cleanupOf({}) }, false))
     renderDetail()
-    await screen.findByRole('heading', { level: 1, name: /Geri yükleme testi/ })
+    await screen.findByRole('heading', { level: 1, name: /Doğrulama denemesi/ })
     expect(screen.queryByText('The backup restored, but checks failed.')).not.toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
     expect(await screen.findByText('The backup restored, but checks failed.')).toBeInTheDocument()
@@ -203,7 +203,7 @@ describe('restore verification detail', () => {
   it.each(['DatabaseUnavailable', 'AuthenticationFailed', 'VerificationFailed'])('does not offer the certificate step for the general %s failure', async (failureCode) => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Failed', verificationOutcome: 'Failed', failureCode, cleanup: cleanupOf({}) })
     renderDetail()
-    await screen.findByRole('heading', { level: 1, name: /Geri yükleme testi/ })
+    await screen.findByRole('heading', { level: 1, name: /Doğrulama denemesi/ })
     expect(screen.queryByText('Bu sunucunun sertifikasına yine de güven')).not.toBeInTheDocument()
   })
 
@@ -260,7 +260,8 @@ describe('restores list', () => {
       : [{ ...base, id: 'real-1', purpose: 'Execution', databaseName: 'RestoredDb' }]))
     renderAt(<RestoresPage />)
     expect(await screen.findByRole('link', { name: 'RestoredDb' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'SalesDB' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Doğrulama denemesi: SalesDB' })).toBeInTheDocument()
+    expect(screen.queryByText('bp_verify_1')).not.toBeInTheDocument()
     expect(screen.getAllByText('Deneme')).toHaveLength(1)
     expect(screen.queryByRole('combobox', { name: 'Liste türü' })).not.toBeInTheDocument()
   })

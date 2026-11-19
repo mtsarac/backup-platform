@@ -7,8 +7,8 @@ export const restoreStatuses: readonly RestoreStatus[] = ['Pending', 'Leased', '
 export function isActiveRestore(status: string): boolean { return ['Pending', 'Leased', 'Running'].includes(status) }
 export function canCancelRestore(status: string, cancellationRequestedAt?: string | null): boolean { return isActiveRestore(status) && !cancellationRequestedAt }
 export function restoreModeLabel(mode: RestoreMode): string { return mode === 'NewDatabase' ? tx('Yeni Database') : tx('Mevcut Database üzerine yaz') }
-export function targetStateLabel(state?: RestoreTargetState | null): string {
-  return state ? ({ NotModified: tx('Değiştirilmedi'), Online: tx('Çevrimiçi'), PartiallyRestored: tx('Kısmen geri yüklendi'), Unknown: tx('Bilinmiyor') })[state] : tx('Henüz bildirilmedi')
+export function targetStateLabel(state?: RestoreTargetState | null, files = false): string {
+  return state ? ({ NotModified: files ? tx('Hedef dosyalar değiştirilmedi') : tx('Hedef veritabanı değiştirilmedi'), Online: tx('Çevrimiçi'), PartiallyRestored: tx('Kısmen geri yüklendi'), Unknown: tx('Bilinmiyor') })[state] : tx('Henüz bildirilmedi')
 }
 export function targetStateDescription(state?: RestoreTargetState | null): string {
   switch (state) {

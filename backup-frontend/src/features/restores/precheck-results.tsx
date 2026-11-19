@@ -32,6 +32,12 @@ const columns: Column<PrecheckItem>[] = [
   { key: 'message', get header() { return tx("Açıklama") }, wrap: true, render: (item) => <span className="text-text-muted">{item.status === 'Failed' ? failureMessage(item.reasonCode, 'restore') : item.status === 'Warning' ? precheckWarningText(item) : ''}</span> },
 ]
 
+/** The reason a failed check reports says more than the run's overall code (which may be a generic "database unavailable"); an untrusted certificate stays first because it alone offers the trust step. */
+function failureCodeOf(data: RestoreView, items: PrecheckItem[]): string | null {
+  const reasons = items.filter((item) => item.status === 'Failed').map((item) => item.reasonCode)
+  return [...reasons, data.failureCode].find((code) => code && describeFailure(code).certificateUntrusted) || reasons.find(Boolean) || data.failureCode
+}
+
 /** The precheck verdict first, the individual checks second: what happened, and what the user may do next. */
 export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabled, fileArchive = false, trust }: {
   data: RestoreView; failed: boolean; passed: boolean; onRecheck: () => void; recheckDisabled: boolean; fileArchive?: boolean
@@ -40,9 +46,10 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
 }) {
   useLanguage()
   const { tenantId, canOperate } = useTenant()
-  const failure = data.failureCode ? describeFailure(data.failureCode, 'restore') : undefined
-  const destination = failure?.actionKind === 'checkComputer' ? `/tenants/${tenantId}/agents/${data.agentId}` : failure?.actionKind === 'manageStorage' ? `/tenants/${tenantId}/storage` : undefined
   const items = dedupeChecks(data.result?.preCheck ?? [])
+  const code = failureCodeOf(data, items)
+  const failure = code ? describeFailure(code, 'restore') : undefined
+  const destination = failure?.actionKind === 'checkComputer' ? `/tenants/${tenantId}/agents/${data.agentId}` : failure?.actionKind === 'manageStorage' ? `/tenants/${tenantId}/storage` : undefined
   const warnings = items.filter((item) => item.status === 'Warning')
   const source = data.result?.sourceBackup
   return <div className="space-y-4">

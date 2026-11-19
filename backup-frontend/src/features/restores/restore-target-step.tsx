@@ -51,6 +51,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
               />
             </div>
             {!isPg && <CheckField label={tx("Kullanıcı adı ve parola gerekiyor")} className="sm:col-span-2" checked={!otherTarget.integratedSecurity} onChange={(e) => changeOtherTarget({ ...otherTarget, integratedSecurity: !e.target.checked, databaseCredentialReference: null })} />}
+            <CheckField label={tx("Bağlantıyı şifrele")} className="sm:col-span-2" checked={otherTarget.encrypt} onChange={(e) => changeOtherTarget({ ...otherTarget, encrypt: e.target.checked })} />
             {needsLogin && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={otherTarget.databaseCredentialReference} onPendingChange={onLoginPendingChange} onStored={(reference) => changeOtherTarget({ ...otherTarget, databaseCredentialReference: reference })} />}
           </div>
         )}
