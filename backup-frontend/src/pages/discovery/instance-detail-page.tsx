@@ -25,11 +25,11 @@ import { discoveredDatabasesPath } from '@/lib/routes'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 
-function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
+type CredentialActions = { save: ReturnType<typeof useSaveCredential>; verify: ReturnType<typeof useVerifyInstance> }
+
+function CredentialForm({ instance, save, verify }: { instance: DiscoveryInstanceDetail } & CredentialActions) {
   useLanguage()
   const { canOperate } = useTenant()
-  const save = useSaveCredential(instance.id)
-  const verify = useVerifyInstance()
   const isMssql = instance.engine === 'mssql'
   const [login, setLogin] = useState<DatabaseLogin | null>(null)
   const [submitted, setSubmitted] = useState(false)
@@ -38,61 +38,61 @@ function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
   const usesPassword = !(isMssql && integrated)
   const loginProblem = usesPassword && submitted ? loginErrors(login, hasStored) : undefined
   const [encrypt, setEncrypt] = useState(instance.credential.encrypt)
-  const otherError = save.error ? { ...describeError(save.error), ...(save.error instanceof ApiError && Object.values(save.error.fields).length > 0 ? { what: failureMessage(Object.values(save.error.fields)[0]) } : {}) } : undefined
-  const verifyStarted = verify.isSuccess
   return <Section title={tx("Veritabanı sunucusuna giriş")} description={tx("Veritabanlarını listelemek için bu sunucuda kullanılacak kullanıcı. Parola şifrelenerek saklanır ve bir daha gösterilmez.")}>
     <form className="space-y-3" noValidate onSubmit={event => {
       event.preventDefault()
       setSubmitted(true)
       if (usesPassword && loginErrors(login, hasStored)) return
-      save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: instance.credential.trustServerCertificate })
-      setLogin(null)
-      setSubmitted(false)
+      // The typed login stays in the form until the screen is left, so one wrong character can be corrected and sent again.
+      save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: instance.credential.trustServerCertificate },
+        { onSuccess: () => verify.mutate(instance.id) })
     }}>
       {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} disabled={!canOperate} errors={loginProblem} onChange={setLogin} />}
       {isMssql && <CheckField label={tx("Windows hesabıyla giriş yap")} checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />}
       <CheckField label={tx("Bağlantıyı şifrele")} checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />
-      {otherError && <ErrorNotice {...otherError} />}
-      {save.isSuccess && <Notice tone="success">{tx("Veritabanı girişi kaydedildi. Veritabanlarını listelemek için bağlantıyı doğrulayın.")}</Notice>}
-      {verifyStarted && <Notice tone="info">{tx("Doğrulama istendi; sonuç bilgisayarın bir sonraki bağlantısında gelir.")}</Notice>}
-      {verify.error && <ErrorNotice error={verify.error} />}
       {canOperate && <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={save.isPending}>{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet')}</Button>
-        <Button type="button" variant="outline" disabled={!instance.credential.bound || verify.isPending} onClick={() => verify.mutate(instance.id)}>{verify.isPending && <Loader2 aria-hidden="true" className="animate-spin" />}{tx("Bağlantıyı doğrula")}</Button>
+        <Button type="submit" disabled={save.isPending || verify.isPending}>{(save.isPending || verify.isPending) && <Loader2 aria-hidden="true" className="animate-spin" />}{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet ve doğrula')}</Button>
       </div>}
     </form>
   </Section>
 }
 
 /** The bound login stays as it is; the trust is saved on the server's binding, so it holds for every later scan, then the scan runs again. */
-function CertificateNotice({ instance }: { instance: DiscoveryInstanceDetail }) {
+function CertificateNotice({ instance, save, verify }: { instance: DiscoveryInstanceDetail } & CredentialActions) {
   useLanguage()
   const { canOperate } = useTenant()
-  const save = useSaveCredential(instance.id)
-  const verify = useVerifyInstance()
   const { credentialReference, integratedSecurity, encrypt } = instance.credential
   const failure = describeFailure(instance.accessReasonCode)
   const trust = canOperate ? { note: tx("Bu sunucunun sertifikası kalıcı olarak güvenilir sayılacak."), pending: save.isPending || verify.isPending, onConfirm: () => save.mutate(
     { credentialReference, databaseLogin: null, integratedSecurity, encrypt, trustServerCertificate: true }, { onSuccess: () => verify.mutate(instance.id) }) } : undefined
   return <div className="space-y-3">
     <ErrorNotice {...failure} action={canOperate ? failure.action : tx("Yöneticinize danışın.")} trust={trust} />
-    {verify.isSuccess && <Notice tone="info">{tx("Doğrulama istendi; sonuç bilgisayarın bir sonraki bağlantısında gelir.")}</Notice>}
-    {(save.error || verify.error) && <ErrorNotice error={save.error ?? verify.error} />}
   </div>
 }
 
 /** The one explanation of why the databases cannot be listed: the reason, what it means for the list below, and the next step (the login form). */
-function AccessNotice({ instance }: { instance: DiscoveryInstanceDetail }) {
+function AccessNotice({ instance, save, verify }: { instance: DiscoveryInstanceDetail } & CredentialActions) {
   useLanguage()
   const { canOperate } = useTenant()
-  if (instance.accessReasonCode && describeFailure(instance.accessReasonCode).certificateUntrusted) return <CertificateNotice instance={instance} />
+  if (instance.accessReasonCode && describeFailure(instance.accessReasonCode).certificateUntrusted) return <CertificateNotice instance={instance} save={save} verify={verify} />
   if (instance.access === 'CredentialsRequired') return <Notice tone="warning">{tx("Bu sunucuya giriş bilgisi verilmediği için veritabanları listelenemedi. Sunucuda veritabanı olmadığı anlamına gelmez; aşağıdaki bilgileri girin.")}</Notice>
   const reason = plainReasonText(instance.accessReasonCode)
   return <Notice tone="warning">
     {reason && <p>{reason}</p>}
     <p>{tx("Son denemede sunucuya giriş yapılamadı; aşağıdaki liste eski bir aramadan kalmadır ve yedekleme işi oluşturmak için sunulmaz.")}</p>
-    {canOperate && <p>{tx("Giriş bilgilerini kontrol edip bağlantıyı doğrulayın.")}</p>}
+    {canOperate && <p>{tx("Giriş bilgilerini kontrol edip yeniden kaydedin; bağlantı otomatik doğrulanır.")}</p>}
   </Notice>
+}
+
+/** What saving or verifying the login produced; it is shown with the access notice so every warning and error of this page sits in one place. */
+function CredentialFeedback({ save, verify }: CredentialActions) {
+  useLanguage()
+  const error = save.error ?? verify.error
+  const detail = error instanceof ApiError && Object.values(error.fields).length > 0 ? { what: failureMessage(Object.values(error.fields)[0]) } : {}
+  return <>
+    {error && <ErrorNotice {...describeError(error)} {...detail} />}
+    {verify.isSuccess && !error && <Notice tone="info">{tx("Doğrulama istendi; sonuç bilgisayarın bir sonraki bağlantısında gelir.")}</Notice>}
+  </>
 }
 
 function Databases({ instance }: { instance: DiscoveryInstanceDetail }) {
@@ -105,7 +105,6 @@ function Databases({ instance }: { instance: DiscoveryInstanceDetail }) {
   const picks = selected.filter(name => instance.databases.some(db => db.name === name && databaseSelectable(db, instance)))
   return <Section title={tx("Veritabanları")} description={tx("Yedeklenebilir olanları seçip yedekleme işi oluşturabilirsiniz. Sistem veritabanları ve zaten yedeklenenler seçilemez.")} flush
     actions={canOperate && creatable ? <Button disabled={picks.length === 0} onClick={() => navigate(`/tenants/${tenantId}/backup-jobs/new?${new URLSearchParams([['discoveryInstance', instance.id], ...picks.map(name => ['database', name])])}`)}>{tx("Yedekleme işi oluştur")}{picks.length > 0 ? ` (${picks.length})` : ''}</Button> : undefined}>
-    {instance.access === 'Authenticated' && !creatable && instance.presence === 'Present' && <div className="p-4"><Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice></div>}
     {!canOperate && <p className="p-4 text-sm text-text-muted">{tx("Yöneticinize danışın")}</p>}
     <DatabaseTable instance={instance} selected={picks} onChange={canOperate && creatable ? setSelected : undefined} />
   </Section>
@@ -133,6 +132,8 @@ export function InstanceDetailPage() {
   const { instanceId = '' } = useParams()
   const { tenantId } = useTenant()
   const query = useDiscoveryInstance(instanceId)
+  const save = useSaveCredential(instanceId)
+  const verify = useVerifyInstance()
   const agents = useAgents(tenantId)
   const { scanning } = useDiscoveryAgents()
   const instance = query.data
@@ -147,11 +148,15 @@ export function InstanceDetailPage() {
       </>} />
     <QueryState isPending={query.isPending} error={query.error}>
       {instance && <>
-        {instance.presence === 'Missing' && <Notice tone="warning" title={tx("Sunucu bulunamadı")}>{tx("Son aramalarda bu veritabanı sunucusu bulunamadı; kaydı silinmedi.")}</Notice>}
-        {needsLogin && <AccessNotice instance={instance} />}
-        {needsLogin && <CredentialForm key={instance.id} instance={instance} />}
+        <section aria-label={tx("Uyarılar")} className="space-y-3 empty:hidden">
+          {instance.presence === 'Missing' && <Notice tone="warning" title={tx("Sunucu bulunamadı")}>{tx("Son aramalarda bu veritabanı sunucusu bulunamadı; kaydı silinmedi.")}</Notice>}
+          {needsLogin && <AccessNotice instance={instance} save={save} verify={verify} />}
+          {instance.access === 'Authenticated' && !canCreateJob(instance) && instance.presence === 'Present' && <Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice>}
+          <CredentialFeedback save={save} verify={verify} />
+        </section>
+        {needsLogin && <CredentialForm key={instance.id} instance={instance} save={save} verify={verify} />}
         <Databases key={`${instance.id}:db`} instance={instance} />
-        <TechnicalDetails items={technicalItems(instance)}>{!needsLogin && <CredentialForm key={instance.id} instance={instance} />}</TechnicalDetails>
+        <TechnicalDetails items={technicalItems(instance)}>{!needsLogin && <CredentialForm key={instance.id} instance={instance} save={save} verify={verify} />}</TechnicalDetails>
       </>}
     </QueryState>
   </div>
