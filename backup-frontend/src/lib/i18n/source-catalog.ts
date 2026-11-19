@@ -2251,6 +2251,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Geri yüklemeler": {"tr":"Geri yüklemeler","en":"Restores"},
   "Yükleme bant genişliği": {"tr":"Yükleme bant genişliği","en":"Upload bandwidth"},
   "Platform özeti": {"tr":"Platform özeti","en":"Platform overview"},
+  "Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.": { tr: "Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.", en: "The platform recovery key is not configured: new encrypted backups can only be opened with the application's key. If that key is lost, these files may not be recoverable." },
   "Çalışma alanları": {"tr":"Çalışma alanları","en":"Workspaces"},
   "Kota ilkeleri": {"tr":"Kota ilkeleri","en":"Quota policies"},
   "Güvenlik ve destek": {"tr":"Güvenlik ve destek","en":"Security and support"},

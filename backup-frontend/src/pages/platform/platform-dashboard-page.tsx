@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
 import { StatusPill } from '@/components/data/status-pill'
 import { PageHeader } from '@/components/ui/page-header'
-import { usePlatformSummary } from '@/features/platform/hooks'
+import { Notice } from '@/components/ui/notice'
+import { usePlatformEncryptionStatus, usePlatformSummary } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
 import { DashboardStorage } from '@/features/platform/storage/dashboard-storage'
 import type { PlatformSummary } from '@/features/platform/types'
@@ -27,10 +28,12 @@ export function PlatformDashboardPage() {
   useLanguage()
   const query = usePlatformSummary()
   const data = query.data
+  const encryption = usePlatformEncryptionStatus().data
   return <div className="space-y-6">
     <PageHeader title={tx("Platform özeti")} description={tx("Tüm çalışma alanlarının genel durumu.")} />
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <>
+        {encryption?.platformRecovery.configured === false && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
         <DashboardAttention data={data} />
         <div className="grid gap-x-6 gap-y-4 grid-cols-2 xl:grid-cols-4">
           <Link to={platformPaths.tenants} className="block rounded-lg"><KpiCard label={tx("Çalışma alanları")} value={data.tenants} className="h-full hover:bg-surface-2" /></Link>

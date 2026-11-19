@@ -24,6 +24,10 @@ export function getSummary(signal?: AbortSignal) {
   return apiRequest<PlatformSummary>('platform/summary', { signal })
 }
 
+export function getPlatformEncryptionStatus(signal?: AbortSignal) {
+  return apiRequest<{ platformRecovery: { configured: boolean; keyId: string | null } }>('platform/encryption/status', { signal })
+}
+
 export function getTenants(params: SearchParams, signal?: AbortSignal) {
   return apiRequest<PagedResult<PlatformTenant>>(`platform/tenants${query(params)}`, { signal })
 }
