@@ -205,7 +205,8 @@ it.each([
   ['Dikkat gerekiyor', ['Dikkatli iş']],
   ['İlk yedek bekleniyor', ['Yeni iş']],
   ['Çalışıyor', ['Koşan iş']],
-  ['Pasif', ['Elle iş', 'Duran iş']],
+  ['Elle çalışır', ['Elle iş']],
+  ['Pasif', ['Duran iş']],
 ])('filters by the status "%s", the way the status column says it', async (label, expected) => {
   vi.mocked(getBackupJobs).mockResolvedValue(statusJobs())
   health = [{ ...critical, jobId: 'job-attention' }]
@@ -214,10 +215,10 @@ it.each([
   mount()
   await ready()
   await waitFor(() => expect(within(screen.getByRole('row', { name: /Dikkatli iş/ })).getAllByRole('cell')[1]).toHaveTextContent('Dikkat gerekiyor'))
-  expect([...within(filter('Durum')).getAllByRole('option')].map(option => option.textContent)).toEqual(['Tümü', 'Güncel', 'Dikkat gerekiyor', 'İlk yedek bekleniyor', 'Çalışıyor', 'Pasif'])
+  expect([...within(filter('Durum')).getAllByRole('option')].map(option => option.textContent)).toEqual(['Tümü', 'Güncel', 'Dikkat gerekiyor', 'İlk yedek bekleniyor', 'Çalışıyor', 'Elle çalışır', 'Pasif'])
   fireEvent.change(filter('Durum'), { target: { value: [...within(filter('Durum')).getAllByRole('option')].find(option => option.textContent === label)!.getAttribute('value')! } })
   expect(names().toSorted()).toEqual(expected.toSorted())
-  for (const row of screen.getAllByRole('row').slice(1)) expect(within(row).getAllByRole('cell')[1]).toHaveTextContent(label === 'Pasif' ? /Durduruldu|Elle çalışır/ : label)
+  for (const row of screen.getAllByRole('row').slice(1)) expect(within(row).getAllByRole('cell')[1]).toHaveTextContent(label === 'Pasif' ? 'Durduruldu' : label)
   expect(location()).toHaveTextContent(/status=/)
 })
 

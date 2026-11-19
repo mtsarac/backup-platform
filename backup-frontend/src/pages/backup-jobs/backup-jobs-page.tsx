@@ -25,8 +25,7 @@ type SortKey = typeof sortKeys[number]
 /** The direction a column sorts in when it is chosen first: names and the next backup upwards, the newest dates on top. */
 const firstDirection: Record<SortKey, SortDirection> = { name: 'asc', agent: 'asc', last: 'desc', next: 'asc', created: 'desc' }
 
-// The filter's "Pasif" covers both jobs that do not run on their own: stopped ones and ones without a schedule.
-const statusFilters = { current: ['current'], attention: ['attention'], first: ['first'], running: ['running'], inactive: ['paused', 'manual'] } as const
+const statusFilters = { current: ['current'], attention: ['attention'], first: ['first'], running: ['running'], manual: ['manual'], inactive: ['paused'] } as const
 type StatusFilter = keyof typeof statusFilters
 const statusFilterKeys = Object.keys(statusFilters) as StatusFilter[]
 
