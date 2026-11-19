@@ -218,6 +218,18 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         Assert.DoesNotMatch(@"[^\x00-\x7F]", text.TrimStart('\uFEFF'));
     }
 
+    [Fact]
+    public async Task Windows_replace_removes_the_update_staging_directory_next_to_the_store_after_checking_it_like_the_store()
+    {
+        var install = await _client.GetStringAsync("/api/agent-dist/install.ps1");
+        var removal = install[install.IndexOf("function Remove-ExistingAgent", StringComparison.Ordinal)..];
+
+        Assert.Contains("\"$store.updates\"", removal, StringComparison.Ordinal);
+        var preflight = removal.IndexOf("Assert-PurgeUpdateStage", StringComparison.Ordinal);
+        var deletion = removal.IndexOf("Remove-Item -LiteralPath $stage", StringComparison.Ordinal);
+        Assert.True(preflight >= 0 && deletion > preflight, "the update staging directory must be validated before anything is deleted");
+    }
+
     [Theory]
     [InlineData("--non-interactive", "Server and enrollment token are required")]
     [InlineData("--non-interactive --server", "Missing option value")]

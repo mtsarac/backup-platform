@@ -63,6 +63,17 @@ function Assert-PurgeStore([string] $Path) {
     }
     return $full
 }
+# The update staging directory the service installer creates next to the store ("<store>.updates"): only the agent's own staged releases, so refuse reparse points anywhere inside it.
+function Assert-PurgeUpdateStage([string] $Path) {
+    $full = (Assert-SafePath $Path).TrimEnd('\')
+    if (Test-Path -LiteralPath $full) {
+        if (-not (Test-Path -LiteralPath $full -PathType Container)) { Fail 'The update staging path must be a directory; nothing was removed.' 'Guncelleme hazirlik yolu bir dizin olmalidir; hicbir sey silinmedi.' }
+        if (@(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
+            Fail 'Refusing removal through a reparse point.' 'Yeniden ayristirma noktasi uzerinden silme reddedildi.'
+        }
+    }
+    return $full
+}
 function Get-ServiceSetting([string] $Name) {
     $environment = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\BackupAgent' -Name Environment -ErrorAction SilentlyContinue).Environment
     $setting = @($environment | Where-Object { $_ -like "$Name=*" }) | Select-Object -First 1
@@ -74,6 +85,8 @@ function Remove-ExistingAgent([string] $InstallPath, [string] $StorePath) {
     $registered = Get-ServiceSetting 'Agent__CredentialStoreDirectory'
     if ($registered -and -not $registered.Equals($StorePath, [StringComparison]::OrdinalIgnoreCase)) { $stores += $registered }
     $stores = @($stores | ForEach-Object { Assert-PurgeStore $_ })
+    $stages = @()
+    foreach ($store in $stores) { $stages += Assert-PurgeUpdateStage "$store.updates" }
     if (Test-Path -LiteralPath $InstallPath) {
         if (-not (Test-Path -LiteralPath $InstallPath -PathType Container)) { Fail 'The installation path is not a directory; nothing was removed.' 'Kurulum yolu bir dizin degil; hicbir sey silinmedi.' }
         if (@(Get-ChildItem -LiteralPath $InstallPath -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
@@ -98,6 +111,7 @@ function Remove-ExistingAgent([string] $InstallPath, [string] $StorePath) {
     }
     if ([Diagnostics.EventLog]::SourceExists('BackupAgent')) { Remove-EventLog -Source 'BackupAgent' }
     foreach ($store in $stores) { if (Test-Path -LiteralPath $store) { Remove-Item -LiteralPath $store -Recurse -Force } }
+    foreach ($stage in $stages) { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
     if (Test-Path -LiteralPath $InstallPath) { Remove-Item -LiteralPath $InstallPath -Recurse -Force }
 }
 if ($Interactive -and $NonInteractive) { Fail 'Choose only one interaction mode.' 'Yalnizca bir etkilesim kipi secin.' }

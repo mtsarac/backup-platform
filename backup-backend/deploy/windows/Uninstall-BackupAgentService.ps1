@@ -68,6 +68,11 @@ if ([Diagnostics.EventLog]::SourceExists($ServiceName)) { Remove-EventLog -Sourc
 if ($RemoveIdentity) {
     $StoreDirectory = Assert-PurgeStore $StoreDirectory
     if (Test-Path -LiteralPath $StoreDirectory) { Remove-Item -LiteralPath $StoreDirectory -Recurse -Force }
+    $updateStage = "$StoreDirectory.updates"
+    if (Test-Path -LiteralPath $updateStage -PathType Container) {
+        if (@(Get-ChildItem -LiteralPath $updateStage -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw 'Refusing removal of the update staging directory: it contains a reparse point.' }
+        Remove-Item -LiteralPath $updateStage -Recurse -Force
+    }
     Write-Host 'BackupAgent removed. Identity explicitly purged; a new enrollment token is required.'
 }
 else {
