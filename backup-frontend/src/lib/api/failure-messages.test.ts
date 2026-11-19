@@ -75,7 +75,7 @@ describe('error description', () => {
 
   it('adds a next step only where one is known', () => {
     expect(describeError(new ApiError(500)).action).toBeUndefined()
-    expect(describeError(new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded' })).action).toContain('yöneticinize')
+    expect(describeError(new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded' })).action).toBe('Depolama alanında yer açın.')
   })
 
 

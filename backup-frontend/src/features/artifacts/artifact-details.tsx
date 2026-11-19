@@ -98,7 +98,7 @@ export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation 
       <Fact label={tx("Doğrulama başladı")}>{formatDateTime(meta.verification?.startedAt)}</Fact>
       <Fact label={tx("Doğrulama tamamlandı")}>{formatDateTime(meta.verification?.finishedAt)}</Fact>
       {!isPg && !isFiles && <Fact label={tx("COPY_ONLY")}>{meta.appliedOptions?.copyOnly == null ? tx('Bildirilmedi') : meta.appliedOptions.copyOnly ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>}
-      {([[isFiles ? 'SHA-256' : isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], [tx('Compression'), meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
+      {([[isFiles ? tx('Bütünlük') : isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], [tx('Compression'), meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
     </Facts> : <p className="text-sm text-text-muted">{tx("Bu history kaydında Database backup metadata bulunmuyor.")}</p>}
   </Section>
 }
