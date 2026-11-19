@@ -75,12 +75,11 @@ function AccessNotice({ instance, save, verify }: { instance: DiscoveryInstanceD
   useLanguage()
   const { canOperate } = useTenant()
   if (instance.accessReasonCode && describeFailure(instance.accessReasonCode).certificateUntrusted) return <CertificateNotice instance={instance} save={save} verify={verify} />
-  if (instance.access === 'CredentialsRequired') return <Notice tone="warning">{tx("Bu sunucuya giriş bilgisi verilmediği için veritabanları listelenemedi. Sunucuda veritabanı olmadığı anlamına gelmez; aşağıdaki bilgileri girin.")}</Notice>
+  if (instance.access === 'CredentialsRequired') return <Notice tone="warning">{tx("Veritabanlarını listelemek için giriş bilgilerini girin.")}</Notice>
   const reason = plainReasonText(instance.accessReasonCode)
   return <Notice tone="warning">
     {reason && <p>{reason}</p>}
-    <p>{tx("Son denemede sunucuya giriş yapılamadı; aşağıdaki liste eski bir aramadan kalmadır ve yedekleme işi oluşturmak için sunulmaz.")}</p>
-    {canOperate && <p>{tx("Giriş bilgilerini kontrol edip yeniden kaydedin; bağlantı otomatik doğrulanır.")}</p>}
+    {canOperate && <p>{tx("Giriş bilgilerini kontrol edip yeniden kaydedin.")}</p>}
   </Notice>
 }
 

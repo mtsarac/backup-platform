@@ -43,7 +43,7 @@ describe('instance detail page', () => {
   it('does not claim no databases exist when credentials are required', async () => {
     vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'CredentialsRequired', databases: [], credential: { bound: false, credentialReference: null, integratedSecurity: false, encrypt: true, trustServerCertificate: false } }))
     mount()
-    expect(await screen.findByText(/veritabanları listelenemedi/)).toBeInTheDocument()
+    expect(await screen.findByText(/Veritabanlarını listelemek için giriş bilgilerini girin/)).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Yedekleme işi oluştur/ })).not.toBeInTheDocument()
   })
@@ -52,7 +52,7 @@ describe('instance detail page', () => {
     mount()
     expect(await screen.findByText('Kimlik doğrulaması başarısız.')).toBeInTheDocument()
     expect(screen.getAllByText('Kimlik doğrulaması başarısız')).toHaveLength(1)
-    expect(screen.getAllByText(/eski bir aramadan kalmadır/)).toHaveLength(1)
+    expect(screen.queryByText(/eski bir aramadan kalmadır/)).not.toBeInTheDocument()
     expect(screen.getByText(/Giriş bilgilerini kontrol edip yeniden kaydedin/)).toBeInTheDocument()
     expect(screen.getByLabelText('Veritabanı kullanıcı adı')).toBeVisible()
     expect(screen.getByRole('table')).toHaveTextContent('ERP')
@@ -207,7 +207,7 @@ describe('instance detail page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet ve doğrula' }))
     const notices = await screen.findByRole('region', { name: 'Uyarılar' })
     expect(within(notices).getAllByRole('alert').length).toBeGreaterThan(0)
-    expect(within(notices).getByText(/eski bir aramadan kalmadır/)).toBeInTheDocument()
+    expect(within(notices).getByText(/Giriş bilgilerini kontrol edip yeniden kaydedin/)).toBeInTheDocument()
     const form = screen.getByLabelText('Veritabanı parolası').closest('form')!
     expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
   })
