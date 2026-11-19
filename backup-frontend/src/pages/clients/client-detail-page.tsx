@@ -16,7 +16,7 @@ import { useAgent, agentQueryKeys } from '@/features/agents/hooks'
 import { revokeAgent } from '@/features/agents/api'
 import { AgentTechnicalDetails } from '@/features/agents/agent-technical-details'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { useBackupJobs } from '@/features/backup-jobs/hooks'
+import { backupJobQueryKeys, useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { notFound } from '@/lib/api/failure-messages'
 import { supportsDiscovery } from '@/features/discovery/status'
@@ -40,6 +40,7 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
     setConfirmOpen(false)
     await Promise.all([
       client.invalidateQueries({ queryKey: agentQueryKeys.all(tenantId) }),
+      client.invalidateQueries({ queryKey: backupJobQueryKeys.all(tenantId) }),
       client.invalidateQueries({ queryKey: ['tenant', tenantId, 'dashboard'] }),
     ])
   } })
@@ -50,7 +51,7 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
       {agent && <>
         <PageHeader crumbs={crumbs} title={agent.hostName ?? tx('Adsız bilgisayar')}
           description={<>{tx("Son görülme")}: {agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
-          meta={<><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
+          meta={agent.status === 'Revoked' ? <StatusPill domain="agent" status="Revoked" /> : <><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
           actions={<>
             {supportsDiscovery(agent.capabilities) && <Link className={buttonVariants({ variant: 'outline' })} to={`${discoveredDatabasesPath(tenantId)}?agentId=${encodeURIComponent(id)}`}>{tx("Bulunan veritabanı sunucuları")}</Link>}
             {agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
@@ -67,7 +68,7 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
         who: tx("Bu bilgisayarda çalışan yedekleme işleri durur."),
         reversible: tx("Hayır. Yeniden kayıt için yeni bir kimlik gerekir."),
       }}
-      confirmLabel={tx("İptali onayla")} pending={revoke.isPending} error={revoke.error} onConfirm={() => { revoke.mutate() }} />
+      confirmLabel={tx("İptali onayla")} destructive pending={revoke.isPending} error={revoke.error} onConfirm={() => { revoke.mutate() }} />
   </div>
 }
 
@@ -78,9 +79,9 @@ function AgentJobs({ agentId }: { agentId: string }) {
   const rows = (jobs.data ?? []).filter((job) => job.agentId === agentId)
   const columns: Column<BackupJob>[] = [
     { key: 'name', header: tx('Yedekleme işi'), card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}`}>{job.name}</Link> },
-    { key: 'enabled', card: 'status', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
+    { key: 'enabled', card: 'status', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled && !job.agentRevoked ? 'Active' : 'Disabled'} /> },
     { key: 'lastRun', header: tx('Son sonuç'), render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted"><RelativeTime value={job.lastRun.createdAt} /></span></div> : tx('Henüz çalışmadı') },
-    { key: 'next', header: tx('Sonraki yedek'), render: (job) => job.nextOccurrenceAt ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },
+    { key: 'next', header: tx('Sonraki yedek'), render: (job) => job.nextOccurrenceAt && !job.agentRevoked ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },
   ]
   return <Section title={tx("Bu bilgisayarın yedekleme işleri")} flush>
     <QueryState isPending={jobs.isPending} error={jobs.error}>

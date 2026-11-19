@@ -5,7 +5,7 @@ import type { BackupJobHealth } from './health'
 export type JobStatus = 'revoked' | 'attention' | 'running' | 'first' | 'manual' | 'paused' | 'current'
 
 export interface JobStatusInput {
-  job: Pick<BackupJob, 'enabled' | 'schedule' | 'agentRevoked'>
+  job: Pick<BackupJob, 'enabled' | 'schedule' | 'agentRevoked' | 'lastRun'>
   health: BackupJobHealth
   /** A failed attempt in the last 14 days (strip day `Failed`). */
   failedRecently: boolean
@@ -29,7 +29,7 @@ export function jobStatus({ job, health, failedRecently, hasSucceeded, offline, 
   if (running) return 'running'
   if (first) return 'first'
   if (paused) return 'paused'
-  if (manual) return 'manual'
+  if (manual && job.lastRun?.status !== 'Succeeded') return 'manual'
   return 'current'
 }
 

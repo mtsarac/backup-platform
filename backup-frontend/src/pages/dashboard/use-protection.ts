@@ -25,8 +25,9 @@ export function useProtection(tenantId: string) {
   const lastSuccess = useQuery({ queryKey: backupQueryKeys.list(tenantId, latestSuccess), queryFn: ({ signal }) => getBackups(tenantId, latestSuccess, signal), ...poll })
   const quota = useQuery({ queryKey: storageQueryKeys.quota(tenantId), queryFn: ({ signal }) => getTenantStorageQuota(tenantId, signal), ...poll })
   const jobList = jobs.data
-  const noJobs = jobList?.length === 0
-  const restoreTrial = useQuery({ queryKey: ['tenant', tenantId, 'restores', 'verified'], queryFn: ({ signal }) => getRestores(tenantId, { purpose: 'Verification', status: 'Succeeded', pageSize: 1 }, signal), enabled: noJobs, ...poll })
+  // Revoked computers' jobs never count towards the first-steps checklist.
+  const noLiveJobs = jobList?.every(job => job.agentRevoked) ?? false
+  const restoreTrial = useQuery({ queryKey: ['tenant', tenantId, 'restores', 'verified'], queryFn: ({ signal }) => getRestores(tenantId, { purpose: 'Verification', status: 'Succeeded', pageSize: 1 }, signal), enabled: noLiveJobs, ...poll })
   const successes = useQueries({ queries: (jobList ?? []).map(job => {
     const filters = { ...latestSuccess, jobId: job.id }
     return { queryKey: backupQueryKeys.list(tenantId, filters), queryFn: ({ signal }: { signal: AbortSignal }) => getBackups(tenantId, filters, signal), ...poll }
@@ -54,8 +55,8 @@ export function useProtection(tenantId: string) {
   const rows = allRows.filter(row => !row.job.agentRevoked)
   const revokedRows = allRows.filter(row => row.job.agentRevoked)
   return {
-    isPending, error, rows, revokedRows, agents: agents.data ?? [], dashboard: dashboard.data, lastSuccess: lastSuccess.data?.items[0], hasSucceededEver: (lastSuccess.data?.totalCount ?? 0) > 0,
-    quota: quota.data, hasRestoreTrial: (restoreTrial.data?.totalCount ?? 0) > 0,
+    isPending, error, rows, revokedRows, agents: (agents.data ?? []).filter(agent => agent.status !== 'Revoked'), dashboard: dashboard.data, lastSuccess: lastSuccess.data?.items[0], hasSucceededEver: rows.some(row => row.hasSucceeded),
+    quota: quota.data, hasRestoreTrial: rows.some(row => row.hasSucceeded) && (restoreTrial.data?.totalCount ?? 0) > 0,
     refetch: () => { for (const query of [...core, ...perJob]) if (query.error) void query.refetch() },
   }
 }

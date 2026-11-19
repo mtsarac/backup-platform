@@ -228,6 +228,32 @@ describe('Backup computer page', () => {
     await waitFor(() => expect(api.revokeAgent).toHaveBeenCalledWith('tenant-a', 'agent-a'))
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'agents'] }))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-jobs'] })
+  })
+
+  it('colours the confirm button red like the button that opened the dialog', async () => {
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const trigger = await screen.findByRole('button', { name: 'Bilgisayar kaydını iptal et' })
+    fireEvent.click(trigger)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'İptali onayla' }).className).toBe(trigger.className)
+  })
+
+  it('updates the page at once after the revoke: one status, and its jobs inactive', async () => {
+    let revoked = false
+    vi.mocked(api.getAgent).mockImplementation(async () => revoked ? { ...agent, status: 'Revoked', operationalStatus: 'Revoked' } : agent)
+    vi.mocked(api.revokeAgent).mockImplementation(async () => { revoked = true })
+    vi.mocked(jobsApi.getBackupJobs).mockImplementation(async () => [{ id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, agentRevoked: revoked, lastRun: null, nextOccurrenceAt: '2026-11-20T02:00:00Z' }] as never)
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const jobRow = (await screen.findByRole('link', { name: 'Muhasebe' })).closest('tr')!
+    expect(within(jobRow).getByText('Etkin')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Bilgisayar kaydını iptal et' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'İptali onayla' }))
+    const header = (await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).closest('header')!
+    await waitFor(() => expect(within(header).getByText('İptal edildi')).toBeInTheDocument())
+    expect(within(header).queryByText('Çevrimiçi')).not.toBeInTheDocument()
+    await waitFor(() => expect(within(jobRow).getByText('Devre dışı')).toBeInTheDocument())
+    expect(within(jobRow).getByText('Zamanlanmadı')).toBeInTheDocument()
   })
 })
 describe('Adding a computer from the new-computer page', () => {

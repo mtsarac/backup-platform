@@ -21,6 +21,8 @@ interface ConfirmProps {
   onConfirm: () => void
   confirmLabel: string
   confirmDisabled?: boolean
+  /** The action cannot be undone: the confirm button is red like the button that opened the dialog. */
+  destructive?: boolean
   /** Inputs the action needs (for example a value to set), shown under the consequences. */
   children?: ReactNode
   /** When set, the action stays blocked until the user types this name exactly; for deletions and other hard-to-undo actions. */
@@ -39,7 +41,7 @@ function Consequences({ consequence }: { consequence: Consequence }) {
 }
 
 /** The typed name lives inside the popup, so it is forgotten whenever the dialog closes. */
-function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, children, name }: Omit<ConfirmProps, 'open' | 'onClose'>) {
+function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, destructive, children, name }: Omit<ConfirmProps, 'open' | 'onClose'>) {
   const cancelRef = useRef<HTMLButtonElement>(null)
   const inputId = useId()
   const [typed, setTyped] = useState('')
@@ -57,7 +59,7 @@ function Body({ title, consequence, pending, error, errorScope, onConfirm, confi
       {error ? isDescribed(error) ? <ErrorNotice {...error} /> : <ErrorNotice error={error} scope={errorScope} /> : null}
       <div className="flex flex-wrap justify-end gap-2">
         <Dialog.Close render={<Button ref={cancelRef} type="button" variant="outline" disabled={pending} />}>{tx("Vazgeç")}</Dialog.Close>
-        <Button type="submit" disabled={blocked}>{pending ? tx('İşleniyor…') : confirmLabel}</Button>
+        <Button type="submit" variant={destructive ? 'destructive' : undefined} disabled={blocked}>{pending ? tx('İşleniyor…') : confirmLabel}</Button>
       </div>
     </form>
   </Dialog.Popup>
