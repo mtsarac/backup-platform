@@ -39,6 +39,8 @@ beforeEach(() => {
   vi.mocked(saveBackupJob).mockResolvedValue({} as never)
 })
 
+const trustTitle = 'Bu sunucunun sertifikasına yine de güven'
+
 describe('instance detail page', () => {
   it('does not claim no databases exist when credentials are required', async () => {
     vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'CredentialsRequired', databases: [], credential: { bound: false, credentialReference: null, integratedSecurity: false, encrypt: true, trustServerCertificate: false } }))
@@ -61,8 +63,7 @@ describe('instance detail page', () => {
     expect(screen.queryByRole('button', { name: /Yedekleme işi oluştur/ })).not.toBeInTheDocument()
   })
   describe('server certificate', () => {
-    const trustTitle = 'Bu sunucunun sertifikasına yine de güven'
-    const untrusted = (patch = {}) => makeDetail({ access: 'Error', accessReasonCode: 'server_certificate_untrusted', credential: { bound: true, credentialReference: 'sql-main', integratedSecurity: false, encrypt: true, trustServerCertificate: false }, ...patch })
+        const untrusted = (patch = {}) => makeDetail({ access: 'Error', accessReasonCode: 'server_certificate_untrusted', credential: { bound: true, credentialReference: 'sql-main', integratedSecurity: false, encrypt: true, trustServerCertificate: false }, ...patch })
     it('has no trust box in the credential form, and keeps the stored trust when the login is saved', async () => {
       vi.mocked(getDiscoveryInstance).mockResolvedValue(untrusted({ accessReasonCode: 'authentication_failed', access: 'AuthenticationFailed', credential: { bound: true, credentialReference: 'sql-main', integratedSecurity: false, encrypt: true, trustServerCertificate: true } }))
       mount()
@@ -163,7 +164,7 @@ describe('instance detail page', () => {
   })
   it('asks for credentials without revealing a stored password', async () => {
     mount()
-    fireEvent.click(await screen.findByText('Teknik ayrıntılar'))
+    fireEvent.click(await screen.findByText('Giriş bilgilerini değiştir'))
     expect(screen.getByLabelText('Veritabanı kullanıcı adı')).toHaveValue('')
     expect(screen.getByLabelText('Veritabanı parolası')).toHaveValue('')
     expect(screen.queryByRole('button', { name: 'Bağlantıyı doğrula' })).not.toBeInTheDocument()
@@ -171,7 +172,7 @@ describe('instance detail page', () => {
   it('saves the typed credentials, verifies the connection by itself and keeps the typed values so a wrong character can be fixed', async () => {
     vi.mocked(verifyDiscoveryInstance).mockResolvedValue(makeStatus())
     mount()
-    fireEvent.click(await screen.findByText('Teknik ayrıntılar'))
+    fireEvent.click(await screen.findByText('Giriş bilgilerini değiştir'))
     fireEvent.change(screen.getByLabelText('Veritabanı kullanıcı adı'), { target: { value: 'sa' } })
     fireEvent.change(screen.getByLabelText('Veritabanı parolası'), { target: { value: 'Secret123!' } })
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet ve doğrula' }))
@@ -179,7 +180,7 @@ describe('instance detail page', () => {
       credentialReference: 'sql-main', databaseLogin: { userName: 'sa', password: 'Secret123!' }, integratedSecurity: false, encrypt: true, trustServerCertificate: true,
     }))
     await waitFor(() => expect(verifyDiscoveryInstance).toHaveBeenCalledWith('tenant-a', 'inst-1'))
-    expect(await screen.findByText(/Doğrulama istendi/)).toBeInTheDocument()
+    expect(screen.queryByText(/Doğrulama istendi/)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Veritabanı kullanıcı adı')).toHaveValue('sa')
     expect(screen.getByLabelText('Veritabanı parolası')).toHaveValue('Secret123!')
     fireEvent.change(screen.getByLabelText('Veritabanı parolası'), { target: { value: 'Secret124!' } })
@@ -190,7 +191,7 @@ describe('instance detail page', () => {
   it('does not verify when saving the credentials failed, and keeps what was typed', async () => {
     vi.mocked(saveDiscoveryCredential).mockRejectedValue(new ApiError(500, { error: 'internal' }))
     mount()
-    fireEvent.click(await screen.findByText('Teknik ayrıntılar'))
+    fireEvent.click(await screen.findByText('Giriş bilgilerini değiştir'))
     fireEvent.change(screen.getByLabelText('Veritabanı kullanıcı adı'), { target: { value: 'sa' } })
     fireEvent.change(screen.getByLabelText('Veritabanı parolası'), { target: { value: 'Secret123!' } })
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet ve doğrula' }))
@@ -211,12 +212,88 @@ describe('instance detail page', () => {
     const form = screen.getByLabelText('Veritabanı parolası').closest('form')!
     expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
   })
+  describe('verifying the login', () => {
+    const fill = async () => {
+      fireEvent.change(await screen.findByLabelText('Veritabanı kullanıcı adı'), { target: { value: 'sa' } })
+      fireEvent.change(screen.getByLabelText('Veritabanı parolası'), { target: { value: 'Secret123!' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Kaydet ve doğrula' }))
+    }
+    it('shows a live "Doğrulanıyor…" with its time note while the computer verifies, never the old grey "Doğrulama istendi" text, and drops it when the result is in', async () => {
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'AuthenticationFailed', accessReasonCode: 'authentication_failed' }))
+      vi.mocked(verifyDiscoveryInstance).mockResolvedValue(makeStatus({ scanState: 'Requested' }))
+      mount()
+      await screen.findByLabelText('Veritabanı kullanıcı adı')
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Requested' })] })
+      await fill()
+      const status = (await screen.findByText('Doğrulanıyor…')).closest('[role=status]') as HTMLElement
+      expect(within(status).getByText('En fazla 30 saniye sürebilir.')).toBeInTheDocument()
+      expect(screen.queryByText(/Doğrulama istendi/)).not.toBeInTheDocument()
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail())
+      await waitFor(() => expect(screen.queryByText('Doğrulanıyor…')).not.toBeInTheDocument(), { timeout: 8000 })
+      expect(screen.queryByText(/Doğrulama istendi/)).not.toBeInTheDocument()
+    }, 15000)
+    it('keeps the login form reachable as a closed section after the login worked, with the typed values still in it', async () => {
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'AuthenticationFailed', accessReasonCode: 'authentication_failed' }))
+      vi.mocked(verifyDiscoveryInstance).mockResolvedValue(makeStatus())
+      mount()
+      expect(screen.queryByText('Giriş bilgilerini değiştir')).not.toBeInTheDocument()
+      await fill()
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail())
+      const summary = await screen.findByText('Giriş bilgilerini değiştir', { selector: 'summary' })
+      const section = summary.closest('details')!
+      expect(section).not.toHaveAttribute('open')
+      expect(within(section).getByLabelText('Veritabanı kullanıcı adı')).toHaveValue('sa')
+      expect(within(section).getByLabelText('Veritabanı parolası')).toHaveValue('Secret123!')
+      await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+      expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).queryByLabelText('Veritabanı kullanıcı adı')).not.toBeInTheDocument()
+      fireEvent.click(summary)
+      expect(within(section).getByRole('button', { name: 'Kaydet ve doğrula' })).toBeVisible()
+    })
+  })
+  describe('warnings block', () => {
+    it('has no "Uyarılar" heading when there is nothing to warn about', async () => {
+      mount()
+      await screen.findByText('Giriş bilgilerini değiştir')
+      expect(screen.queryByRole('heading', { name: 'Uyarılar' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Uyarılar' })).not.toBeInTheDocument()
+    })
+    it('has a visible "Uyarılar" heading that names the block when there is something to say', async () => {
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'AuthenticationFailed', accessReasonCode: 'authentication_failed' }))
+      mount()
+      const heading = await screen.findByRole('heading', { name: 'Uyarılar' })
+      expect(heading).toBeVisible()
+      expect(within(screen.getByRole('region', { name: 'Uyarılar' })).getByText('Kimlik doğrulaması başarısız.')).toBeInTheDocument()
+    })
+  })
+  describe('PostgreSQL server without TLS', () => {
+    const noTls = () => makeDetail({ engine: 'postgres', access: 'Error', accessReasonCode: 'server_tls_unavailable' })
+    it('says what is wrong in the badge and in one sentence, with no login hint and no button that turns the encryption off', async () => {
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(noTls())
+      mount()
+      expect(await screen.findByText('Sunucu şifreli bağlantıyı desteklemiyor. Sunucuya TLS ekleyin ya da "Bağlantıyı şifrele"yi kapatın (parolanız ağda açık gidebilir).')).toBeInTheDocument()
+      expect(screen.getByText('Şifreli bağlantı yok')).toBeInTheDocument()
+      expect(screen.queryByText('Hata')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Giriş bilgilerini kontrol edip yeniden kaydedin/)).not.toBeInTheDocument()
+      const notices = screen.getByRole('region', { name: 'Uyarılar' })
+      expect(within(notices).queryByRole('button', { name: /Yeniden dene|Bilgileri düzelt|şifrele/i })).not.toBeInTheDocument()
+      expect(screen.queryByText(trustTitle)).not.toBeInTheDocument()
+    })
+    it('keeps the raw code in the collapsed technical details', async () => {
+      vi.mocked(getDiscoveryInstance).mockResolvedValue(noTls())
+      mount()
+      const notices = await screen.findByRole('region', { name: 'Uyarılar' })
+      expect(within(notices).queryByText('server_tls_unavailable')).not.toBeInTheDocument()
+      await userEvent.click(within(notices).getByRole('button', { name: 'Teknik ayrıntılar' }))
+      expect(within(within(notices).getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('server_tls_unavailable')).toBeInTheDocument()
+    })
+  })
   it('is read-only for a Viewer', async () => {
     Object.assign(access, { canOperate: false, canAdmin: false })
     mount()
     expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
     expect(screen.queryByLabelText('ERP seç')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
+    fireEvent.click(screen.getByText('Giriş bilgilerini değiştir'))
     expect(screen.queryByRole('button', { name: 'Kaydet ve doğrula' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Yedekleme işi oluştur/ })).not.toBeInTheDocument()
   })

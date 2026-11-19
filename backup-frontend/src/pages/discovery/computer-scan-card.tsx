@@ -1,18 +1,20 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { linkClass } from '@/components/ui/form-styles'
-import { ErrorNotice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
 import type { Agent } from '@/features/agents/types'
 import { useRescanAgent } from '@/features/discovery/hooks'
-import { plainReasonText, reasonText, sourceLabels, supportsDiscovery } from '@/features/discovery/status'
+import { isRescanThrottled, plainReasonText, reasonText, sourceLabels, supportsDiscovery } from '@/features/discovery/status'
 import type { DiscoveryAgentStatus } from '@/features/discovery/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 
 /** The one plain answer to "is the list of databases current?": a status pill and a sentence. */
@@ -35,6 +37,13 @@ export function ComputerScanCard({ agent, status }: { agent: Agent; status: Disc
   useLanguage()
   const { tenantId, canOperate } = useTenant()
   const rescan = useRescanAgent()
+  const throttled = isRescanThrottled(rescan.error)
+  const { reset } = rescan
+  useEffect(() => {
+    if (!throttled) return
+    const timer = setTimeout(reset, 6000)
+    return () => clearTimeout(timer)
+  }, [throttled, reset])
   const name = agent.hostName || tx('Adsız bilgisayar')
   const supported = supportsDiscovery(agent.capabilities)
   const busy = status ? status.scanState !== 'Idle' : false
@@ -56,7 +65,7 @@ export function ComputerScanCard({ agent, status }: { agent: Agent; status: Disc
     <div className="space-y-3">
       <ScanSummary supported={supported} status={status} />
       {supported && agent.connectivity === 'offline' && <p className="text-sm text-warning">{tx("Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.")}</p>}
-      {rescan.error && <ErrorNotice error={rescan.error} />}
+      {throttled ? <Notice>{failureMessage('rescan_too_soon')}</Notice> : rescan.error && <ErrorNotice error={rescan.error} />}
       <TechnicalDetails items={items} />
     </div>
   </Section>

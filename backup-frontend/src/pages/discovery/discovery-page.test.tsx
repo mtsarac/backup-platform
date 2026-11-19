@@ -111,12 +111,36 @@ describe('discovery page', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.queryByText(/Henüz yedekleme bilgisayarı yok/)).not.toBeInTheDocument()
   })
-  it('shows a friendly text for a throttled rescan', async () => {
-    vi.mocked(rescanDiscoveryAgent).mockRejectedValue(new ApiError(429, { error: 'rescan_too_soon' }))
+  describe('a rescan asked twice in a row', () => {
+    const rescan = async () => {
+      vi.mocked(rescanDiscoveryAgent).mockRejectedValue(new ApiError(429, { error: 'rescan_too_soon' }))
+      mount()
+      fireEvent.click(await screen.findByRole('button', { name: 'SQL Agent yeniden tara' }))
+      await waitFor(() => expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a'))
+      return (await screen.findByText(/Az önce tarama istendi/)).closest('[role]') as HTMLElement
+    }
+    it('is an info notice, not a red error, and has no technical details of its own', async () => {
+      const notice = await rescan()
+      expect(notice).toHaveAttribute('role', 'status')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(within(notice).queryByRole('button', { name: 'Teknik ayrıntılar' })).not.toBeInTheDocument()
+    })
+    it('goes away by itself after a few seconds', async () => {
+      await rescan()
+      await waitFor(() => expect(screen.queryByText(/Az önce tarama istendi/)).not.toBeInTheDocument(), { timeout: 8000 })
+    }, 15000)
+  })
+  it('still offers to clear the filters when a chosen filter matches nothing', async () => {
+    vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
+    mount('/?engine=mssql')
+    expect(await screen.findByText(/Seçilen filtrelere uyan/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Filtreleri temizle' })).toBeInTheDocument()
+  })
+  it('names a missing TLS in the status of the server row instead of a bare "Hata"', async () => {
+    vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance({ access: 'Error', accessReasonCode: 'server_tls_unavailable' })] })
     mount()
-    fireEvent.click(await screen.findByRole('button', { name: 'SQL Agent yeniden tara' }))
-    expect(await screen.findByText(/Az önce tarama istendi/)).toBeInTheDocument()
-    expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a')
+    expect(await screen.findByText('Şifreli bağlantı yok')).toBeInTheDocument()
+    expect(screen.queryByText('Hata')).not.toBeInTheDocument()
   })
   it('hides every mutating control from a Viewer', async () => {
     Object.assign(access, { canOperate: false, canAdmin: false })
@@ -222,6 +246,48 @@ describe('discovery page', () => {
       expect(screen.getByRole('link', { name: 'Elle yapılandır' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/new')
       await userEvent.click(screen.getByRole('button', { name: 'Kapat' }))
       expect(screen.queryByRole('link', { name: 'Elle yapılandır' })).not.toBeInTheDocument()
+    })
+    it('offers the way back to the first-backup flow in every state of the guide', async () => {
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Running' })] })
+      mount(added)
+      expect(await screen.findByRole('link', { name: 'İlk yedeği almaya devam et' })).toHaveAttribute('href', '/tenants/tenant-a/first-backup')
+      cleanup()
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
+      mount(added)
+      await screen.findByText('Yedeklemek istediğiniz veritabanını seçin.')
+      expect(screen.getByRole('link', { name: 'İlk yedeği almaya devam et' })).toHaveAttribute('href', '/tenants/tenant-a/first-backup')
+      cleanup()
+      vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
+      mount(added)
+      await screen.findByText(/veritabanı bulunamadı; dosya yedeklemek/)
+      expect(screen.getByRole('link', { name: 'İlk yedeği almaya devam et' })).toHaveAttribute('href', '/tenants/tenant-a/first-backup')
+    })
+    it('does not turn a throttled automatic scan into an error', async () => {
+      vi.mocked(rescanDiscoveryAgent).mockRejectedValue(new ApiError(429, { error: 'rescan_too_soon' }))
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Running' })] })
+      mount(added)
+      expect(await screen.findByText('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')).toBeInTheDocument()
+      await waitFor(() => expect(rescanDiscoveryAgent).toHaveBeenCalled())
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+    it.each([
+      ['a scan that is running', { items: [makeStatus({ scanState: 'Running', lastScanAt: null, lastOutcome: null })] }],
+      ['no scan report from the computer yet', { items: [] }],
+    ])('shows the scan state, not "no match" with "Filtreleri temizle", for %s', async (_, statuses) => {
+      vi.mocked(getDiscoveryAgents).mockResolvedValue(statuses)
+      vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
+      mount(added)
+      expect(await screen.findByText('Veritabanları aranıyor…')).toBeInTheDocument()
+      expect(screen.queryByText(/Seçilen filtrelere uyan/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+      expect(screen.getByText('Veritabanı bulma filtreleri', { selector: 'summary' }).parentElement).not.toHaveAttribute('open')
+    })
+    it('says nothing was found, still without a filter button, once the first scan is over', async () => {
+      vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
+      mount(added)
+      expect(await screen.findByText(/henüz veritabanı bulunamadı/)).toBeInTheDocument()
+      expect(screen.queryByText('Veritabanları aranıyor…')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
     })
     it('shows the normal page without the route state', async () => {
       mount()

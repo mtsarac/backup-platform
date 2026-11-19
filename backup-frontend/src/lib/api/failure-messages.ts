@@ -27,6 +27,7 @@ const messages: Record<string, string> = {
   get verification_failed() { return tx("Fiziksel dosyanın silindiği doğrulanamadı.") },
   get PermissionDenied() { return tx("İşlem için gerekli izinler bulunmuyor.") },
   get AuthenticationFailed() { return tx("Database kimlik doğrulaması başarısız oldu. Credential referansını kontrol edin.") },
+  get server_tls_unavailable() { return tx('Sunucu şifreli bağlantıyı desteklemiyor. Sunucuya TLS ekleyin ya da "Bağlantıyı şifrele"yi kapatın (parolanız ağda açık gidebilir).') },
   get ServerCertificateUntrusted() { return tx("Sunucunun sertifikası doğrulanamadı.") },
   get StorageAuthenticationFailed() { return tx("Storage kullanıcı adı veya parola/anahtar reddedildi. Bağlantının kimlik bilgilerini kontrol edin.") },
   get StorageHostKeyMismatch() { return tx("SFTP sunucusunun SSH anahtarı kayıtlı parmak iziyle uyuşmuyor; kimlik bilgisi gönderilmedi. Sunucuyu doğrulamadan parmak izini değiştirmeyin.") },

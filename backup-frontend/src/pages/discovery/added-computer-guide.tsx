@@ -7,7 +7,7 @@ import { linkClass } from '@/components/ui/form-styles'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import type { Agent } from '@/features/agents/types'
 import { useDiscoveryAgents, useDiscoveryInstances, useRescanAgent } from '@/features/discovery/hooks'
-import { canCreateJob, supportsDiscovery } from '@/features/discovery/status'
+import { canCreateJob, isRescanThrottled, supportsDiscovery } from '@/features/discovery/status'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { discoveryInstancePath } from '@/lib/routes'
 
@@ -26,15 +26,18 @@ export function AddedComputerGuide({ agent, agentId, onDismiss }: { agent: Agent
   const { scanning: polling } = useDiscoveryAgents(capable)
   const instances = useDiscoveryInstances({ agentId }, capable)
   const dismiss = <Button variant="outline" onClick={onDismiss}>{tx('Kapat')}</Button>
-  if (rescan.error) return <ErrorNotice error={rescan.error} onRetry={() => rescan.mutate(agentId)} />
+  // A throttled rescan means one is already queued: the scan state below tells it.
+  if (rescan.error && !isRescanThrottled(rescan.error)) return <ErrorNotice error={rescan.error} onRetry={() => rescan.mutate(agentId)} />
 
   const scanning = !capable || rescan.isIdle || rescan.isPending || polling || !instances.data
   const found = instances.data?.items.filter(item => item.presence === 'Present') ?? []
   const usable = found.find(item => canCreateJob(item) && item.databaseCounts.backupEligible > 0)
   const needsLogin = found.find(item => item.access === 'CredentialsRequired')
   const jobsNew = `/tenants/${tenantId}/backup-jobs/new`
-  if (scanning) return <Notice tone="info" action={dismiss}>{tx('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')}</Notice>
-  if (usable) return <Notice tone="success" action={<span className="flex gap-2">{dismiss}<Link className={buttonVariants()} to={`${jobsNew}?${new URLSearchParams({ discoveryInstance: usable.id })}`}>{tx('Yedekleme işi oluştur')}</Link></span>}>{tx('Yedeklemek istediğiniz veritabanını seçin.')}</Notice>
-  if (needsLogin) return <Notice tone="warning" action={dismiss}>{tx('Bilgisayarda veritabanı sunucusu bulundu. Yedek alabilmek için sunucuyu açıp giriş bilgilerini girin:')} <Link className={linkClass} to={discoveryInstancePath(tenantId, needsLogin.id)}>{needsLogin.displayName}</Link></Notice>
-  return <Notice tone="info" action={dismiss}>{tx('Bu bilgisayarda veritabanı bulunamadı; dosya yedeklemek veya elle eklemek için')} <Link className={linkClass} to={jobsNew}>{tx('Elle yapılandır')}</Link></Notice>
+  const next = <Link className={buttonVariants()} to={`/tenants/${tenantId}/first-backup`}>{tx('İlk yedeği almaya devam et')}</Link>
+  const actions = <span className="flex flex-wrap justify-end gap-2">{dismiss}{next}</span>
+  if (scanning) return <Notice tone="info" action={actions}>{tx('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')}</Notice>
+  if (usable) return <Notice tone="success" action={<span className="flex flex-wrap justify-end gap-2">{dismiss}<Link className={buttonVariants({ variant: 'outline' })} to={`${jobsNew}?${new URLSearchParams({ discoveryInstance: usable.id })}`}>{tx('Yedekleme işi oluştur')}</Link>{next}</span>}>{tx('Yedeklemek istediğiniz veritabanını seçin.')}</Notice>
+  if (needsLogin) return <Notice tone="warning" action={actions}>{tx('Bilgisayarda veritabanı sunucusu bulundu. Yedek alabilmek için sunucuyu açıp giriş bilgilerini girin:')} <Link className={linkClass} to={discoveryInstancePath(tenantId, needsLogin.id)}>{needsLogin.displayName}</Link></Notice>
+  return <Notice tone="info" action={actions}>{tx('Bu bilgisayarda veritabanı bulunamadı; dosya yedeklemek veya elle eklemek için')} <Link className={linkClass} to={jobsNew}>{tx('Elle yapılandır')}</Link></Notice>
 }
