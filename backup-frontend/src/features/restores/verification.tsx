@@ -42,7 +42,7 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
 }
 
 /** One button: the test runs on the backup's own server and computer; a computer is asked only when more than one can run it. */
-function RestoreTestStarter({ tenantId, artifact }: { tenantId: string; artifact: BackupArtifact }) {
+export function RestoreTestStarter({ tenantId, artifact, label, onStarted }: { tenantId: string; artifact: BackupArtifact; label?: string; onStarted?: (restoreId: string) => void }) {
   useLanguage()
   const navigate = useNavigate()
   const targets = useRestoreTargets(artifact.id)
@@ -62,7 +62,8 @@ function RestoreTestStarter({ tenantId, artifact }: { tenantId: string; artifact
     try {
       const restore = await start.mutateAsync({ artifactId: artifact.id, idempotencyKey: idempotencyKey.keyFor(request), request })
       idempotencyKey.settle()
-      navigate(restorePath(tenantId, restore.id))
+      if (onStarted) onStarted(restore.id)
+      else navigate(restorePath(tenantId, restore.id))
     } catch (caught) {
       idempotencyKey.settle(caught)
       setError(caught)
@@ -74,7 +75,7 @@ function RestoreTestStarter({ tenantId, artifact }: { tenantId: string; artifact
     <div className="flex flex-wrap items-end gap-3">
       {agents.length > 1 && <div><label htmlFor="verify-agent" className="block text-sm font-medium">{tx("Yedekleme bilgisayarı")}</label>
         <Select id="verify-agent" value={selectedAgent} onChange={(event) => setAgentId(event.target.value)}>{agents.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} ({statusLabel('agent', agent.connectivity)})</option>)}</Select></div>}
-      <Button variant="outline" disabled={start.isPending} onClick={() => void submit()}>{start.isPending ? tx('Başlatılıyor…') : tx('Restore testi başlat')}</Button>
+      <Button variant="outline" disabled={start.isPending} onClick={() => void submit()}>{start.isPending ? tx('Başlatılıyor…') : label ?? tx('Restore testi başlat')}</Button>
     </div>
     {error != null && <p role="alert" className="text-sm text-error">{errorMessage(error, 'restore')}</p>}
   </div>
