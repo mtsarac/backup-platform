@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Platform;
+using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -26,7 +27,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         return new PlatformCounts(
             await context.Tenants.LongCountAsync(cancellationToken),
             await context.Users.LongCountAsync(cancellationToken),
-            await context.BackupJobs.LongCountAsync(job => job.Enabled, cancellationToken),
+            await context.BackupJobs.LongCountAsync(job => job.Enabled && !context.Agents.Any(agent => agent.TenantId == job.TenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked), cancellationToken),
             await context.BackupRuns.LongCountAsync(run => run.CompletedAt >= since && (run.Status == BackupStatus.Failed || run.Status == BackupStatus.AgentLost), cancellationToken));
     }
 
@@ -57,7 +58,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         return new PlatformTenantDetail(
             tenant.Id, tenant.Name,
             await context.TenantMemberships.CountAsync(membership => membership.TenantId == tenantId, cancellationToken),
-            await context.BackupJobs.CountAsync(job => job.TenantId == tenantId && job.Enabled, cancellationToken),
+            await context.BackupJobs.CountAsync(job => job.TenantId == tenantId && job.Enabled && !context.Agents.Any(agent => agent.TenantId == job.TenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked), cancellationToken),
             policy?.IsEnabled ?? false, policy?.ChangedAt);
     }
 
