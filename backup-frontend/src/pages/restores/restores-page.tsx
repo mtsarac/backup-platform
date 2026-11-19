@@ -21,10 +21,24 @@ import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 import { useRestores } from '@/features/restores/hooks'
 import { restoreModeLabel, restoreStatuses, targetStateLabel } from '@/features/restores/presentation'
+import { restoreTitle, sourceBackupLabel, useSourceDatabaseName } from '@/features/restores/source-backup'
 import type { RestoreFilters, RestoreView } from '@/features/restores/types'
 import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { statusLabel } from '@/lib/status'
+
+function RestoreLink({ restore, to }: { restore: RestoreView; to: string }) {
+  const { name } = useSourceDatabaseName(restore)
+  return <Link className={linkClass} to={to}>{restoreTitle(restore, name)}</Link>
+}
+
+function SourceBackup({ restore, tenantId }: { restore: RestoreView; tenantId: string }) {
+  const { name, createdAt } = useSourceDatabaseName(restore)
+  return <div className="space-y-1">
+    <ArtifactRunLink className={linkClass} tenantId={tenantId} artifactId={restore.artifactId}>{sourceBackupLabel(name, createdAt)}</ArtifactRunLink>
+    {restore.sourceJobName && <p className="text-xs text-text-muted">{restore.sourceJobName}</p>}
+  </div>
+}
 
 export function RestoresPage() {
   useLanguage()
@@ -46,14 +60,11 @@ export function RestoresPage() {
   const filtering = Boolean(status || filters.artifactId || filters.agentId)
   const clearFilters = () => update({ status: '', artifactId: '', agentId: '' })
   const computer = (restore: RestoreView) => agents.data?.find((agent) => agent.agentId === restore.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
-  const sourceBackup = (restore: RestoreView) => <div className="space-y-1">
-    <ArtifactRunLink className={linkClass} tenantId={tenantId} artifactId={restore.artifactId}>{restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? tx('Yedek dosyasını aç')}</ArtifactRunLink>
-    {restore.sourceJobName && <p className="text-xs text-text-muted">{restore.sourceJobName}</p>}
-  </div>
+  const sourceBackup = (restore: RestoreView) => <SourceBackup restore={restore} tenantId={tenantId} />
   const when = { key: 'when', header: tx('Ne zaman'), wrap: true, render: (restore: RestoreView) => <RelativeTime value={restore.createdAt} /> } satisfies Column<RestoreView>
   const columns: Column<RestoreView>[] = [
-    { key: 'database', card: 'title', header: tx('Hedef veritabanı'), wrap: true, render: (restore) => <div className="space-y-1"><Link className={linkClass} to={`${base}/restores/${restore.id}`}>{restore.purpose === 'Verification' ? restore.sourceDatabaseName ?? restore.databaseName : restore.databaseName}</Link>{restore.purpose === 'Verification' && <Badge tone="accent">{tx('Deneme')}</Badge>}<p className="text-sm font-normal">{restore.options.files ? tx('Dosya / klasör geri yükleme') : restoreModeLabel(restore.mode)}</p>{restore.options.files && <p className="break-all text-xs font-normal">{restore.options.files.relativeDirectory || '.'}</p>}</div> },
-    { key: 'status', card: 'status', header: tx('Durum'), wrap: true, render: (restore) => <div className="space-y-1"><StatusPill status={restore.status} /><p className="text-xs text-text-muted">{targetStateLabel(restore.targetState)}</p></div> },
+    { key: 'database', card: 'title', header: tx('Hedef veritabanı'), wrap: true, render: (restore) => <div className="space-y-1"><RestoreLink restore={restore} to={`${base}/restores/${restore.id}`} />{restore.purpose === 'Verification' && <Badge tone="accent">{tx('Deneme')}</Badge>}<p className="text-sm font-normal">{restore.options.files ? tx('Dosya / klasör geri yükleme') : restoreModeLabel(restore.mode)}</p>{restore.options.files && <p className="break-all text-xs font-normal">{restore.options.files.relativeDirectory || '.'}</p>}</div> },
+    { key: 'status', card: 'status', header: tx('Durum'), wrap: true, render: (restore) => <div className="space-y-1"><StatusPill status={restore.status} /><p className="text-xs text-text-muted">{targetStateLabel(restore.targetState, Boolean(restore.options.files))}</p></div> },
     { key: 'source', header: tx('Kaynak yedek'), wrap: true, render: sourceBackup },
     { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: computer },
     when,

@@ -17,6 +17,7 @@ import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAgents } from '@/features/agents/hooks'
 import { useArtifact } from '@/features/artifacts/hooks'
+import { restoreTitle, sourceBackupLabel, useSourceDatabaseName } from '@/features/restores/source-backup'
 import { useCancelRestore, useRestore } from '@/features/restores/hooks'
 import { RollbackCopyPanel, VerificationDetail } from '@/features/restores/verification-detail'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, precheckLabel, restoreModeLabel, restoreProgressPercent, restoreStageLabel, safeRestoreCode, targetStateDescription, targetStateLabel, technicalChecks, dedupeChecks } from '@/features/restores/presentation'
@@ -42,6 +43,7 @@ function technicalItems(restore: RestoreView): TechnicalItem[] {
   const target = `${restore.target.host}${restore.target.port ? `:${restore.target.port}` : ''}`
   return [
     { label: tx('Geri yükleme kimliği'), value: restore.id },
+    ...(restore.purpose === 'Verification' ? [{ label: tx('Geçici veritabanı'), value: restore.databaseName }] : []),
     { label: tx('Yedek dosyası kimliği'), value: restore.artifactId },
     { label: tx('Yedekleme bilgisayarı kimliği'), value: restore.agentId },
     { label: tx('Yedek kopyası kimliği'), value: restore.replicaId },
@@ -79,7 +81,9 @@ function RestoreDetail({ id }: { id: string }) {
   const [tab, setTab] = useState<'summary' | 'details' | 'attempts' | 'checks'>('summary')
   const mayCancel = Boolean(restore && canOperate && canCancelRestore(restore.status, restore.cancellationRequestedAt))
   const computer = agents.data?.find((agent) => agent.agentId === restore?.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
-  const sourceName = restore && (restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? artifact.data?.databaseName ?? tx('Yedek dosyasını aç'))
+  const { name: databaseOfBackup, createdAt: backupCreatedAt } = useSourceDatabaseName(restore)
+  const sourceName = restore && sourceBackupLabel(databaseOfBackup, backupCreatedAt)
+  const title = restore ? restoreTitle(restore, databaseOfBackup) : ''
   const failure = describeFailure(restore?.failureCode, 'restore')
   function failureControl(code: string | null | undefined) {
     if (!restore || !canOperate || !code) return undefined
@@ -107,8 +111,8 @@ function RestoreDetail({ id }: { id: string }) {
   return <div className="space-y-6">
     <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore} emptyState={<EmptyState message={tx("Bu geri yükleme bulunamadı. Geri yüklemeler listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/restores`}>{tx("Geri yüklemeler")}</Link>} />} onRetry={() => void query.refetch()}>
       {restore && <>
-        <PageHeader title={`${restore.purpose === 'Verification' ? tx('Geri yükleme testi') : restore.purpose === 'Precheck' ? tx('Geri yükleme ön kontrolü') : restore.purpose === 'Discovery' ? tx('Hedef veritabanı bulma') : tx('Geri yükleme')} · ${restore.databaseName}`}
-          crumbs={[{ label: tx('Geri yüklemeler'), to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}
+        <PageHeader title={restore.purpose === 'Verification' ? title : `${restore.purpose === 'Precheck' ? tx('Geri yükleme ön kontrolü') : restore.purpose === 'Discovery' ? tx('Hedef veritabanı bulma') : tx('Geri yükleme')} · ${title}`}
+          crumbs={[{ label: tx('Geri yüklemeler'), to: `/tenants/${tenantId}/restores` }, { label: title }]}
           description={fileRestore ? tx('Dosya / klasör geri yükleme') : undefined}
           meta={<><StatusPill status={restore.status} /><span className="text-sm text-text-muted"><RelativeTime value={restore.createdAt} /></span></>}
           actions={mayCancel && <Button variant="destructive" disabled={cancel.isPending} onClick={() => { cancel.reset(); setConfirmOpen(true) }}>{tx("Geri yüklemeyi iptal et")}</Button>} />
@@ -128,7 +132,7 @@ function RestoreDetail({ id }: { id: string }) {
             {restore.purpose === 'Verification' && <VerificationDetail restore={restore} />}
             <RollbackCopyPanel restore={restore} />
             {restore.purpose !== 'Verification' && <Section title={fileRestore ? tx('Hedef dosyaların durumu') : tx("Hedef veritabanının durumu")} description={fileRestore ? undefined : targetStateDescription(restore.targetState)}>
-              <p className="font-medium text-text-heading">{targetStateLabel(restore.targetState)}</p>
+              <p className="font-medium text-text-heading">{targetStateLabel(restore.targetState, Boolean(fileRestore))}</p>
               {restore.result && !fileRestore && <p className="mt-2 text-sm">{tx("Veritabanı durumu:")}{' '}{databaseStateLabel(restore.result.databaseState)}</p>}
             </Section>}
             <Section title={tx("İlerleme")}><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label={tx("Geri yükleme ilerlemesi")} /></Section>
@@ -157,7 +161,7 @@ function RestoreDetail({ id }: { id: string }) {
                 <Fact label={tx('Yedekleme bilgisayarı aldı')}><RelativeTime value={attempt.leasedAt} /></Fact>
                 <Fact label={tx('Başlangıç')}><RelativeTime value={attempt.startedAt} /></Fact>
                 <Fact label={tx('Bitiş')}><RelativeTime value={attempt.completedAt} /></Fact>
-                <Fact label={tx('Hedef veritabanının durumu')}>{targetStateLabel(attempt.targetState)}</Fact>
+                <Fact label={tx('Hedef veritabanının durumu')}>{targetStateLabel(attempt.targetState, Boolean(fileRestore))}</Fact>
               </Facts>
               <RestoreProgress stage={attempt.progressStage} percent={attempt.progressPercent} at={attempt.progressAt} label={tx("{0}. deneme ilerlemesi", { "0": attempt.number })} />
               {attempt.failureCode && <ErrorNotice failureCode={attempt.failureCode} scope="restore" control={restore.purpose === 'Execution' ? failureControl(attempt.failureCode) : undefined} />}

@@ -16,6 +16,7 @@ import * as BackupApi from '@/features/backups/api'
 import { makeRun } from '@/features/backups/test-data'
 import type { RestorePage, RestoreResult, RestoreTargetsResponse, RestoreView } from './types'
 import { PrecheckResults } from './precheck-results'
+import { describeFailure } from '@/lib/api/failure-messages'
 
 const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
@@ -319,14 +320,38 @@ describe('RestoresPage', () => {
     listRestores({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
     renderWithClient(<RestoresPage />)
     expect(await screen.findByText('SalesDB')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'SalesDB' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^SalesDB/ })).not.toBeInTheDocument()
   })
 
   it('names the source backup and the backup computer instead of showing ids', async () => {
     listRestores({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
     renderWithClient(<RestoresPage />)
-    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
+    expect(await screen.findByRole('link', { name: /^SalesDB/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
     expect(within(screen.getByRole('table')).getByText('SQL Server Agent 1')).toBeInTheDocument()
+  })
+
+  it('titles a verification trial by the backup\'s database, tells the sources apart by date, and explains the untouched target', async () => {
+    const unnamed = { ...sampleArtifact, databaseName: null }
+    vi.mocked(ArtifactApi.getArtifact).mockResolvedValue(unnamed)
+    vi.mocked(BackupApi.getBackup).mockResolvedValue(makeRun({ id: 'run-1', status: 'Succeeded', attempts: [{ ...makeRun().attempts[0], artifacts: [unnamed] }] }))
+    vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => ({ ...sampleRestorePage, items: filters?.purpose === 'Verification'
+      ? [{ ...sampleRestore, id: 'trial-1', purpose: 'Verification' as const, databaseName: 'bp_verify_a042480e4a9c408f96a1852a850514fc', status: 'Succeeded' as const, targetState: 'NotModified' as const, sourceDatabaseName: null }]
+      : [] }))
+    renderWithClient(<RestoresPage />)
+    expect(await screen.findByRole('link', { name: 'Doğrulama denemesi: Uygulama' })).toHaveAttribute('href', '/tenants/tenant-a/restores/trial-1')
+    expect(screen.queryByText(/bp_verify_/)).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /^Uygulama · .*2026/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
+    expect(screen.getByText('Hedef veritabanı değiştirilmedi')).toBeInTheDocument()
+    expect(screen.queryByText('Değiştirilmedi')).not.toBeInTheDocument()
+  })
+
+  it('names a verification trial on its page and keeps the temporary database name in the technical details', async () => {
+    const trial: RestoreView = { ...sampleRestore, purpose: 'Verification', databaseName: 'bp_verify_abc', sourceDatabaseName: 'SalesDB' }
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(trial)
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/restores/:id" element={<RestoreDetailPage />} /></Routes>, '/tenants/tenant-a/restores/restore-1')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Doğrulama denemesi: SalesDB' })).toBeInTheDocument()
+    expect(screen.queryByText('bp_verify_abc')).not.toBeInTheDocument()
+    expect((await technicalWith('bp_verify_abc')).getByText('bp_verify_abc')).toBeInTheDocument()
   })
 
   describe('when there is nothing to list', () => {
@@ -410,9 +435,9 @@ describe('RestoreDetailPage', () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
     expect(await screen.findByRole('link', { name: 'Geri yüklemeler' })).toHaveAttribute('href', '/tenants/tenant-a/restores')
-    expect(await screen.findAllByRole('link', { name: 'SalesDB' })).toHaveLength(1)
+    expect(await screen.findAllByRole('link', { name: /^SalesDB/ })).toHaveLength(1)
     fireEvent.click(screen.getByRole('tab', { name: 'Seçenekler' }))
-    expect(screen.queryByRole('link', { name: 'SalesDB' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^SalesDB/ })).not.toBeInTheDocument()
   })
 
   it('renders warning when restore failed or cancelled that database may not be healthy', async () => {
@@ -445,7 +470,7 @@ describe('RestoreDetailPage', () => {
   it('names the source backup and the backup computer, and never shows ids or codes outside the technical details', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
-    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
+    expect(await screen.findByRole('link', { name: /^SalesDB/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
     expect(screen.getByText('SQL Server Agent 1')).toBeInTheDocument()
     expect(screen.getByText(/Kısmen geri yüklendi/)).toBeInTheDocument()
     for (const raw of ['restore-1', 'artifact-1', 'agent-1', 'replica-1', 'PartiallyRestored', 'SqlRestoreFailed', 'localhost']) expect(visibleLeaves(raw), raw).toEqual([])
@@ -454,7 +479,7 @@ describe('RestoreDetailPage', () => {
   it('keeps the technical details collapsed and copyable as one block', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(detailRoutes, detailUrl)
-    await screen.findByRole('link', { name: 'SalesDB' })
+    await screen.findByRole('link', { name: /^SalesDB/ })
     expect(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' }).length).toBeGreaterThan(0)
     expect(technicalRegions()).toHaveLength(0)
     for (const label of ['Geri yükleme kimliği', 'Yedek dosyası kimliği', 'Yedekleme bilgisayarı kimliği', 'Yedek kopyası kimliği', 'Hedef durumu kodu', 'Hedef sunucu']) {
@@ -549,7 +574,7 @@ describe('RestoreWizardPage', () => {
     const view = renderWithClient(wizardRoutes, wizardUrl)
     expect(await screen.findByRole('heading', { level: 1, name: 'Veritabanını geri yükle' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Yedekleme denemeleri' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
-    expect(screen.getByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
+    expect(screen.getByRole('link', { name: /^SalesDB/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-1')
     view.unmount()
     vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'file-system' })
     renderWithClient(wizardRoutes, wizardUrl)
@@ -646,13 +671,13 @@ describe('RestoreWizardPage', () => {
     }))
   })
 
-  it('has no certificate trust box and no verification options anywhere in the form', async () => {
+  it('has no certificate trust box up front and no verification options anywhere in the form', async () => {
     renderWithClient(wizardRoutes, wizardUrl)
     await next()
     fireEvent.click(screen.getByRole('radio', { name: 'Başka sunucu' }))
     fireEvent.click(screen.getByRole('button', { name: /Yerine geç/i }))
-    expect(screen.queryByRole('checkbox')).toBeInTheDocument() // only "Kullanıcı adı ve parola gerekiyor"
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2) // "Kullanıcı adı ve parola gerekiyor" and "Bağlantıyı şifrele"
+    expect(screen.getByRole('checkbox', { name: 'Bağlantıyı şifrele' })).toBeChecked()
     expect(screen.queryByText(/Sertifika/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Açık bağlantıları kapat$/)).not.toBeInTheDocument()
     expect(screen.queryByText(/RESTORE VERIFYONLY|SHA-256/)).not.toBeInTheDocument()
@@ -726,6 +751,86 @@ describe('RestoreWizardPage', () => {
     expect(await screen.findByText(/Ön kontrol başarısız oldu/)).toBeInTheDocument()
     expect(screen.queryByText('Bu sunucunun sertifikasına yine de güven')).not.toBeInTheDocument()
     expect(screen.queryByText(/yalnızca kendi sunucunuz olduğundan eminseniz/)).not.toBeInTheDocument()
+  })
+
+  describe('PostgreSQL', () => {
+    const pgTargets: RestoreTargetsResponse = { ...sampleTargets, engine: 'postgres', targets: [] }
+    beforeEach(() => vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue(pgTargets))
+    const unnamed = { ...sampleArtifact, databaseName: null }
+    const pgRun = () => makeRun({ id: 'run-1', status: 'Succeeded', attempts: [{ ...makeRun().attempts[0], artifacts: [unnamed] }] })
+
+    async function fillAlternate() {
+      fireEvent.change(await screen.findByLabelText('PostgreSQL Sunucusu'), { target: { value: 'pg-target' } })
+      vi.mocked(RestoreApi.storeDatabaseLogin).mockResolvedValue({ reference: 'pg-restore' })
+      fireEvent.change(screen.getByLabelText('Veritabanı kullanıcı adı'), { target: { value: 'pg_user' } })
+      fireEvent.change(screen.getByLabelText('Veritabanı parolası'), { target: { value: 'pg-secret' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Girişi kaydet' }))
+      await waitFor(() => expect(screen.getByRole('button', { name: /Devam et/i })).toBeEnabled())
+    }
+
+    it('names the database from the run when the artifact has no name, and explains the restore in two plain sentences with the full text collapsed', async () => {
+      vi.mocked(BackupApi.getBackup).mockResolvedValue(pgRun())
+      renderWithClient(wizardRoutes, wizardUrl)
+      const source = await screen.findByRole('region', { name: 'Yedek dosyası bilgisi' })
+      expect(within(source).getByText(/Uygulama/)).toBeInTheDocument()
+      expect(within(source).queryByText(/Bilinmeyen veritabanı/)).not.toBeInTheDocument()
+      expect(within(source).getByText('Yedek, seçtiğiniz veritabanına geri yüklenir. Mevcut bir veritabanının üzerine yazmak için ayrıca onay istenir.')).toBeInTheDocument()
+      expect(screen.queryByText(/pg_restore içindeki SQL/)).not.toBeInTheDocument()
+      fireEvent.click(within(source).getByRole('button', { name: 'Teknik ayrıntılar' }))
+      expect(within(source).getByText(/pg_restore içindeki SQL/)).toBeInTheDocument()
+      expect(within(source).getByText(/WAL\/PITR desteklenmez/)).toBeInTheDocument()
+    })
+
+    it('offers "Bağlantıyı şifrele" for another server (on by default) and sends the choice with the check', async () => {
+      renderWithClient(wizardRoutes, wizardUrl)
+      const encrypt = await screen.findByRole('checkbox', { name: 'Bağlantıyı şifrele' })
+      expect(encrypt).toBeChecked()
+      fireEvent.click(encrypt)
+      await fillAlternate()
+      fireEvent.click(screen.getByRole('button', { name: /Devam et/i }))
+      await startButton()
+      expect(sentPrecheck().target).toEqual({ host: 'pg-target', port: 5432, integratedSecurity: false, databaseCredentialReference: 'pg-restore', encrypt: false, trustServerCertificate: false })
+    })
+
+    it('trusts an unverifiable certificate for this restore only, on request', async () => {
+      const untrusted: RestoreView = { ...sampleRestore, id: 'untrusted-precheck', purpose: 'Precheck', status: 'Failed', failureCode: 'ServerCertificateUntrusted' }
+      vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValueOnce(untrusted).mockResolvedValue(passedPrecheck('precheck-1'))
+      vi.mocked(RestoreApi.getRestore).mockImplementation((_tenantId, id) => Promise.resolve(id === 'precheck-1' ? passedPrecheck(id) : untrusted))
+      renderWithClient(wizardRoutes, wizardUrl)
+      await fillAlternate()
+      fireEvent.click(screen.getByRole('button', { name: /Devam et/i }))
+      fireEvent.click(await screen.findByText('Bu sunucunun sertifikasına yine de güven'))
+      fireEvent.click(screen.getByRole('button', { name: 'Güven ve yeniden dene' }))
+      await startButton()
+      expect(vi.mocked(RestoreApi.startRestorePrecheck).mock.calls[0][2].target).toEqual(expect.objectContaining({ encrypt: true, trustServerCertificate: false }))
+      expect(vi.mocked(RestoreApi.startRestorePrecheck).mock.calls[1][2].target).toEqual(expect.objectContaining({ encrypt: true, trustServerCertificate: true }))
+    })
+
+    const failedWith = (failureCode: string | null, reasonCode: string): RestoreView => ({
+      ...sampleRestore, id: 'pg-failed', purpose: 'Precheck', status: 'Failed', failureCode,
+      result: { checksumVerified: true, backupVerified: true, databaseState: null, targetStateNote: null, preCheck: [{ checkId: 'postgres.restore', status: 'Failed', reasonCode, message: 'English backend message.' }], warnings: [], sourceBackup: null, targetServer: null, fileMappings: [], startedAt: null, finishedAt: null, restoreStartedAt: null, restoreFinishedAt: null },
+    })
+    async function runFailed(view: RestoreView) {
+      vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(view)
+      vi.mocked(RestoreApi.getRestore).mockResolvedValue(view)
+      renderWithClient(wizardRoutes, wizardUrl)
+      await fillAlternate()
+      fireEvent.click(screen.getByRole('button', { name: /Devam et/i }))
+    }
+
+    it('says the server offers no encrypted connection instead of asking to check the computer', async () => {
+      await runFailed(failedWith('DatabaseUnavailable', 'server_tls_unavailable'))
+      await screen.findByText(/Ön kontrol başarısız oldu/)
+      expect(screen.getAllByText(describeFailure('server_tls_unavailable').what).length).toBeGreaterThan(0)
+      expect(screen.queryByText(/Bilgisayarın açık ve ağa bağlı olduğundan emin olun/)).not.toBeInTheDocument()
+    })
+
+    it('shows the generic unexpected-failure text, never "geçici olarak kullanılamıyor", for an unmapped reason', async () => {
+      await runFailed(failedWith('DatabaseUnavailable', 'some-new-reason'))
+      await screen.findByText(/Ön kontrol başarısız oldu/)
+      expect(screen.getAllByText(/Beklenmeyen bir sorun oluştu/).length).toBeGreaterThan(0)
+      expect(screen.queryByText(/geçici olarak kullanılamıyor/)).not.toBeInTheDocument()
+    })
   })
 
   it('shows the check running on the first screen until it ends', async () => {

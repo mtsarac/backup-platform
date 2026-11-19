@@ -14,8 +14,10 @@ export function RestoreWizardPage() {
   const { id = '' } = useParams<{ id: string }>()
   const { tenantId, canOperate } = useTenant()
   const runQuery = useBackup(id)
-  const artifact = runQuery.data?.attempts.flatMap(attempt => attempt.artifacts).at(-1)
-  const targetsQuery = useRestoreTargets(artifact?.id ?? '')
+  const latest = runQuery.data?.attempts.flatMap(attempt => attempt.artifacts).at(-1)
+  const targetsQuery = useRestoreTargets(latest?.id ?? '')
+  // A PostgreSQL artifact may carry no database name; the run's configuration always does.
+  const artifact = latest && (targetsQuery.data?.engine === 'file-system' ? latest : { ...latest, databaseName: latest.databaseName ?? runQuery.data?.configuration.database })
 
   if (!canOperate) {
     return <div className="space-y-6">
