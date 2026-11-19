@@ -178,22 +178,44 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
             return Task.CompletedTask;
         }
     }
-    // The refusal over an existing install is the same sentence on both platforms (documented in the root README). The Windows script cannot run here,
-    // so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
-    private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.";
-    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin.";
+    // The refusal sentence is the same on both platforms (documented in the root README) and is followed by a hint naming the consent switch.
+    // The Windows script cannot run here, so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
+    private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again. Alternatively run it in a terminal to be asked, or add ";
+    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin ";
 
     [Theory]
-    [InlineData("install.sh", "refuse_existing() { fail ")]
-    [InlineData("install.ps1", "Fail ")]
-    public async Task Linux_and_Windows_installers_refuse_an_existing_install_with_the_same_documented_message(string script, string call)
+    [InlineData("install.sh", "refuse_existing() { fail ", "--replace-existing")]
+    [InlineData("install.ps1", "function Refuse-Existing { Fail ", "-ReplaceExisting")]
+    public async Task Installers_refuse_an_existing_install_without_consent_with_the_same_message_and_name_the_switch(string script, string call, string option)
     {
         var text = await _client.GetStringAsync($"/api/agent-dist/{script}");
 
-        Assert.Contains($"{call}'{ExistingInstallEnglish}' '{ExistingInstallTurkish}'", text, StringComparison.Ordinal);
+        Assert.Contains($"{call}'{ExistingInstallEnglish}{option} to remove", text, StringComparison.Ordinal);
+        Assert.Contains($"' '{ExistingInstallTurkish}{option} ekleyin.'", text, StringComparison.Ordinal);
         Assert.DoesNotContain("service is already registered", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("will not be reused", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Existing agent binaries", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("install.sh", "--replace-existing", "Invalid archive root", "\n    remove_existing\n", "[[ \"$confirm\" =~ $accepted ]] || refuse_existing")]
+    [InlineData("install.ps1", "-ReplaceExisting", "Invalid release layout", "\n        Remove-ExistingAgent $installPath $storePath\n", "if ($answer -notmatch $accepted) { Refuse-Existing }")]
+    public async Task Installers_ask_before_replacing_default_to_no_and_remove_only_after_the_package_is_validated(string script, string option, string packageCheck, string removeCall, string declined)
+    {
+        var text = await _client.GetStringAsync($"/api/agent-dist/{script}");
+
+        Assert.Contains("Remove it and reinstall? (y/n)", text, StringComparison.Ordinal);
+        Assert.Contains("Mevcut ajan kurulumu bulundu. Kaldirilip yeniden kurulsun mu? (e/h)", text, StringComparison.Ordinal);
+        Assert.Contains("Backups already stored in backup storage locations are not deleted.", text, StringComparison.Ordinal);
+        Assert.Contains(option, text, StringComparison.Ordinal);
+        // Only an explicit y/e answer proceeds; everything else (including Enter) refuses.
+        Assert.Contains(declined, text, StringComparison.Ordinal);
+        Assert.Contains("'^[eE]$'", text, StringComparison.Ordinal);
+        Assert.Contains("'^[yY]$'", text, StringComparison.Ordinal);
+        var validated = text.IndexOf(packageCheck, StringComparison.Ordinal);
+        var removed = text.IndexOf(removeCall, StringComparison.Ordinal);
+        Assert.True(validated >= 0 && removed > validated, "the old installation must be removed only after the new package was downloaded and validated");
+        Assert.True(text.IndexOf(declined, StringComparison.Ordinal) < removed, "the consent question must precede the removal");
+        Assert.DoesNotMatch(@"[^\x00-\x7F]", text.TrimStart('\uFEFF'));
     }
 
     [Theory]
