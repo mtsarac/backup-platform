@@ -2,7 +2,7 @@ import userEvent from '@testing-library/user-event'
 import { screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ThemeProvider } from '@/components/theme-provider'
-import { renderPlatform } from '@/features/platform/test-utils'
+import { platformAdmin, renderPlatform } from '@/features/platform/test-utils'
 import { TopBar } from './top-bar'
 
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Acme' }, switchTenant: vi.fn() }) }))
@@ -47,5 +47,11 @@ describe('Top bar', () => {
     for (const name of ['Oturumlarım', 'Güvenlik', 'Geçiş anahtarları']) expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()
     expect(screen.queryByText('Platform Operatörü')).not.toBeInTheDocument()
+  })
+
+  it('names a tenant user "Kullanıcı", not "Kullanıcı Yöneticisi"', () => {
+    renderPlatform(<ThemeProvider><TopBar onMenuToggle={vi.fn()} /></ThemeProvider>, { user: { ...platformAdmin, role: 'UserAdmin' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' } as never] })
+    expect(screen.getByText('Kullanıcı')).toBeInTheDocument()
+    expect(screen.queryByText('Kullanıcı Yöneticisi')).not.toBeInTheDocument()
   })
 })

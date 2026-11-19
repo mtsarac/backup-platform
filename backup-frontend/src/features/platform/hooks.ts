@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  addMembership, assignTemporaryPassword, createTenant, createUser, disableUser, enableUser, getAudit, getMemberships, getPlatformAgent,
+  addMembership, assignTemporaryPassword, createTenant, createUser, disableUser, enableUser, getAudit, getMemberships, getPlatformAgent, getPlatformEncryptionStatus,
   getPlatformAgents, getSummary, getTenant, getTenants, getUsers, removeMembership, renameTenant, setTenantEnrollment, updateUser,
 } from './api'
 import type { PlanFilters } from './plans/types'
@@ -10,6 +10,7 @@ import type { AuditFilters, CreateUserInput, PageParams, PlatformAgentFilters, S
 export const platformKeys = {
   all: ['platform'] as const,
   summary: ['platform', 'summary'] as const,
+  encryptionStatus: ['platform', 'encryption-status'] as const,
   tenants: ['platform', 'tenants'] as const,
   tenantList: (params: SearchParams) => ['platform', 'tenants', 'list', params] as const,
   tenant: (tenantId: string) => ['platform', 'tenants', 'detail', tenantId] as const,
@@ -35,6 +36,10 @@ export const platformKeys = {
 
 export function usePlatformSummary() {
   return useQuery({ queryKey: platformKeys.summary, queryFn: ({ signal }) => getSummary(signal) })
+}
+
+export function usePlatformEncryptionStatus() {
+  return useQuery({ queryKey: platformKeys.encryptionStatus, queryFn: ({ signal }) => getPlatformEncryptionStatus(signal) })
 }
 
 export function usePlatformTenants(params: SearchParams) {
