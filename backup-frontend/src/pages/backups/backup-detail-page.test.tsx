@@ -225,18 +225,14 @@ describe('run detail controls and attention', () => {
     await waitFor(() => expect(screen.getByText('Yedekleme denemesi özeti')).toBeInTheDocument())
   })
 
-  it('says what went wrong, that data is safe and what to do, with the code only under collapsed technical details', async () => {
+  it('says what went wrong and what to do in one sentence, with the code only under collapsed technical details', async () => {
     state.query.data = makeRun({ status: 'Failed', reasonCode: 'PermissionDenied' })
     renderDetail()
     const alert = within(screen.getByRole('alert'))
-    expect(alert.getByText('İşlem için gerekli izinler bulunmuyor.')).toBeInTheDocument()
-    expect(alert.getByText(/Verileriniz için:/)).toBeInTheDocument()
-    expect(alert.getByText(/Ne yapmalı:/).closest('p')).toHaveTextContent('Bağlantı bilgilerini kontrol edip düzeltin.')
+    expect(alert.getByText(/İşlem için gerekli izinler bulunmuyor\./)).toHaveTextContent('Bağlantı bilgilerini kontrol edip düzeltin.')
     expect(screen.queryByText('PermissionDenied')).not.toBeInTheDocument()
     await userEvent.click(alert.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('PermissionDenied')).toBeInTheDocument()
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('PermissionDenied')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Yeniden dene' })).toBeEnabled()
   })
 
@@ -244,7 +240,7 @@ describe('run detail controls and attention', () => {
     state.canOperate = false
     state.query.data = makeRun({ status: 'AgentLost' })
     renderDetail()
-    expect(within(screen.getByRole('alert')).getByText(/Ne yapmalı:/).closest('p')).toHaveTextContent('Yöneticinize danışın')
+    expect(screen.getByRole('alert')).toHaveTextContent('Yöneticinize danışın')
     expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
   })
 
@@ -255,10 +251,10 @@ describe('run detail controls and attention', () => {
     expect(screen.queryByText('run-id')).not.toBeInTheDocument()
     expect(screen.queryByText('Elle başlatıldı')).not.toBeInTheDocument()
     await userEvent.click(within(region).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const details = within(await screen.findByRole('dialog'))
-    for (const label of ['Yedekleme denemesi kimliği', 'Tetikleyici', 'Planlanan zaman', 'Deneme sayısı', 'Veritabanı motoru']) expect(details.getByText(label)).toBeInTheDocument()
+    const details = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
+    for (const label of ['Yedekleme denemesi kimliği', 'Tetikleyici', 'Planlanan zaman', 'Deneme sayısı', 'Veritabanı motoru']) expect(details.getByText(`${label}:`)).toBeInTheDocument()
     expect(details.getByText('run-id')).toBeInTheDocument()
-    expect(details.getByRole('button', { name: 'Kopyala: Yedekleme denemesi kimliği' })).toBeInTheDocument()
+    expect(details.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
     expect(details.getByText('Elle başlatıldı')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Zamanlama ve politika' })).not.toBeInTheDocument()
   })

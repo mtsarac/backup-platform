@@ -26,11 +26,7 @@ const openTab = async (name: RegExp) => fireEvent.click(await screen.findByRole(
 const row = (name: string) => screen.getByRole('row', { name: new RegExp(`^${name}`) })
 const technicalDetails = async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-  return within(await screen.findByRole('dialog'))
-}
-const closeDialog = async () => {
-  await userEvent.keyboard('{Escape}')
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  return within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
 }
 const rawRate = /\d B\/sn/
 
@@ -66,11 +62,9 @@ describe('upload bandwidth page', () => {
     await screen.findByTestId('tenant-limit')
     expect(screen.queryByText('12.500.000 B/sn')).not.toBeInTheDocument()
     expect((await technicalDetails()).getByText('12.500.000 B/sn')).toBeInTheDocument()
-    await closeDialog()
     await openTab(/^Yedekleme bilgisayarları$/)
     await screen.findByRole('row', { name: /^SQL-01/ })
     expect((await technicalDetails()).getByText('1.250.000 B/sn')).toBeInTheDocument()
-    await closeDialog()
     await openTab(/^Yedekleme işleri$/)
     await screen.findByRole('row', { name: /^Günlük ERP/ })
     expect((await technicalDetails()).getByText('16.000 B/sn')).toBeInTheDocument()
@@ -96,12 +90,13 @@ describe('upload bandwidth page', () => {
     await openTab(/^Yedekleme bilgisayarları$/)
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
-    const details = within(dialog).getByText('Teknik ayrıntılar').closest('details')!
-    expect(details).not.toHaveAttribute('open')
+    expect(within(dialog).queryByText('1.250.000 B/sn')).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    const details = within(dialog).getByRole('region', { name: 'Teknik ayrıntılar' })
     expect(within(details).getByText('1.250.000 B/sn')).toBeInTheDocument()
     fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '20' } })
     expect(within(details).getByText('2.500.000 B/sn')).toBeInTheDocument()
-    expect(within(dialog).queryByText(rawRate, { ignore: 'details *' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(rawRate, { ignore: '[role=region] *' })).not.toBeInTheDocument()
   })
 
   it('saves an agent limit in bytes per second after unit conversion', async () => {

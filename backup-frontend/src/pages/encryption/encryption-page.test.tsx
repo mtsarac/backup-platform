@@ -32,8 +32,8 @@ describe('tenant encryption page', () => {
     expect(screen.getByText('Şifreli yedekleriniz korunuyor')).toBeInTheDocument()
     expect(screen.queryByText(keyId)).not.toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
-    const details = await screen.findByRole('dialog')
-    expect(within(details).getByRole('button', { name: 'Kopyala: Yedekleme anahtarı kimliği' })).toBeInTheDocument()
+    const details = screen.getByRole('region', { name: 'Teknik ayrıntılar' })
+    expect(within(details).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('warns when the platform has no recovery key configured', async () => {

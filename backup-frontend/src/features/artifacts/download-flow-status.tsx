@@ -9,7 +9,7 @@ export function DownloadFlowStatus({ flow, unsafeAction = tx('Yeni bir indirme b
   useLanguage()
   const { session, status, state, unsafe, error } = flow
   return <>
-    {unsafe && <ErrorNotice what={tx("İndirme bağlantısı güvenli değil.")} dataImpact={tx("Dosya indirilmedi; yedeğiniz değişmedi.")} action={unsafeAction} onRetry={onRetry} />}
+    {unsafe && <ErrorNotice what={tx("İndirme bağlantısı güvenli değil.")} action={unsafeAction} onRetry={onRetry} />}
     {error && !hideError ? <ErrorNotice error={error} onRetry={onRetry} /> : null}
     {session?.direct && <DirectDownloadButton key={session.sessionId} session={session} onFinished={flow.forget} />}
     {session && !unsafe && !status && !error && <p role="status" className="text-sm text-text-muted">{tx("İndirme hazırlanıyor…")}</p>}

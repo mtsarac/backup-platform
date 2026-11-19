@@ -59,13 +59,13 @@ describe('platform failure messages', () => {
   })
 })
 
-describe('three-part error description', () => {
-  it('says what happened, what it means for the data and what to do, for every kind of failure', () => {
+describe('error description', () => {
+  it('is a plain message for every kind of failure, with no generic data reassurance', () => {
     const failures: unknown[] = [new ApiError(401), new ApiError(403), new ApiError(404), new ApiError(409, { error: 'already_member' }), new ApiError(500), new Error('offline')]
     for (const failure of failures) {
-      const { what, dataImpact, action } = describeError(failure)
-      expect([what, dataImpact, action].every(part => part.trim().length > 0)).toBe(true)
-      expect(new Set([what, dataImpact, action]).size).toBe(3)
+      const { what, dataImpact } = describeError(failure)
+      expect(what.trim().length).toBeGreaterThan(0)
+      expect(dataImpact).toBeUndefined()
     }
   })
 
@@ -73,10 +73,11 @@ describe('three-part error description', () => {
     expect(describeError(new ApiError(500)).what).toBe(errorMessage(new ApiError(500)))
   })
 
-  it('reassures about stored backups for quota failures', () => {
-    const { dataImpact } = describeError(new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded' }))
-    expect(dataImpact).toContain('silinmedi')
+  it('adds a next step only where one is known', () => {
+    expect(describeError(new ApiError(500)).action).toBeUndefined()
+    expect(describeError(new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded' })).action).toContain('yöneticinize')
   })
+
 
   it('moves the raw code, status and field into technical details, never the plain message', () => {
     const { technical } = describeError(new ApiError(400, { error: 'invalid_request', field: 'name', code: 'invalid_length' }))
@@ -143,9 +144,9 @@ describe('failure classes', () => {
     expect(describeFailure('ServerCertificateUntrusted').actionKind).toBeUndefined()
   })
 
-  it('says all three parts for a known code and keeps the raw code out of them', () => {
-    const { what, dataImpact, action, technical } = describeFailure('StorageAuthenticationFailed')
-    for (const part of [what, dataImpact, action]) expect(part).not.toContain('StorageAuthenticationFailed')
+  it('keeps the raw code out of the message and in the technical details', () => {
+    const { what, action, technical } = describeFailure('StorageAuthenticationFailed')
+    for (const part of [what, action]) expect(part ?? '').not.toContain('StorageAuthenticationFailed')
     expect(technical.map(item => item.value)).toEqual(['StorageAuthenticationFailed'])
   })
 })

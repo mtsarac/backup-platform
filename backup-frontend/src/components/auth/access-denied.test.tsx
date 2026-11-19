@@ -8,13 +8,11 @@ afterEach(cleanup)
 const mount = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 
 describe('AccessDenied', () => {
-  it('says what is denied, that nothing changed, and points to someone who can grant access', () => {
+  it('says what is denied and points to someone who can grant access', () => {
     mount(<AccessDenied what="Bu sayfayı yalnızca yöneticiler görebilir." />)
     const alert = screen.getByRole('alert')
     expect(screen.getByRole('heading', { name: 'Bu alan için yetkiniz yok' })).toBeInTheDocument()
-    expect(alert).toHaveTextContent('Bu sayfayı yalnızca yöneticiler görebilir.')
-    expect(alert).toHaveTextContent('Yöneticinize danışın')
-    expect(alert).toHaveTextContent('Verileriniz için')
+    expect(alert).toHaveTextContent('Bu sayfayı yalnızca yöneticiler görebilir. Yöneticinize danışın.')
   })
   it('links home by default and accepts a nearer next step', () => {
     mount(<AccessDenied what="x" />)

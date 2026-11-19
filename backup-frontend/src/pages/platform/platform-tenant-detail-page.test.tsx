@@ -164,10 +164,9 @@ describe('platform tenant detail', () => {
     expect(screen.getByRole('link', { name: "Tüm denetim kayıtları" })).toHaveAttribute('href', '/platform/audit?tenantId=tenant-a')
     expect(await screen.findByText('Üyelik rolü değiştirildi')).toBeInTheDocument()
     expect(screen.queryByText('Evet')).not.toBeInTheDocument()
-    await userEvent.click(within(screen.getByText('Üyelik rolü değiştirildi').closest('tr') as HTMLElement).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('Evet')).toBeInTheDocument()
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const auditRow = (screen.getByText('Üyelik rolü değiştirildi').closest('tr') as HTMLElement)
+    await userEvent.click(within(auditRow).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(within(auditRow).getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('Evet')).toBeInTheDocument()
     expect(api.getAudit).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 3 }, expect.any(AbortSignal))
     expect(api.getMemberships).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
@@ -266,7 +265,7 @@ describe('platform tenant detail', () => {
   it('shows a not-found message for an unknown tenant', async () => {
     vi.mocked(api.getTenant).mockRejectedValue(new ApiError(404, { error: 'tenant_not_found' }))
     mount()
-    expect(await screen.findByText("Çalışma alanı bulunamadı.")).toBeInTheDocument()
+    expect(await screen.findByText(/Çalışma alanı bulunamadı\./)).toBeInTheDocument()
   })
 
   it('paginates memberships through the memberPage URL parameter', async () => {

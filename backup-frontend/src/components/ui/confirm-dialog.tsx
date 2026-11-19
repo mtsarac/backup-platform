@@ -27,7 +27,7 @@ interface ConfirmProps {
   name?: string
 }
 
-const isDescribed = (error: unknown): error is ErrorDescription => typeof error === 'object' && error !== null && 'dataImpact' in error
+const isDescribed = (error: unknown): error is ErrorDescription => typeof error === 'object' && error !== null && 'what' in error
 
 function Consequences({ consequence }: { consequence: Consequence }) {
   return <dl className="space-y-2 text-sm">
