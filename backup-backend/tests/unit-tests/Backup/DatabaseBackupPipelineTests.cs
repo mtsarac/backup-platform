@@ -172,6 +172,7 @@ public sealed class DatabaseBackupPipelineTests : IDisposable
         Assert.Equal(BackupPipelineReasons.EngineNotAvailable, engine.Failure!.ReasonCode);
         Assert.Equal(BackupFailureKind.PreCheckFailed, engine.Failure.Kind);
         Assert.Equal(BackupPipelineReasons.StorageNotAvailable, storage.Failure!.ReasonCode);
+        Assert.Equal(BackupFailureCause.AgentNotConfigured, storage.Failure.Cause);
         Assert.Empty(_h.Provider.Requests);
     }
 

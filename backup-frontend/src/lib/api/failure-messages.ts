@@ -33,7 +33,7 @@ const messages: Record<string, string> = {
   get StorageHostKeyMismatch() { return tx("SFTP sunucusunun SSH anahtarı kayıtlı parmak iziyle uyuşmuyor; kimlik bilgisi gönderilmedi. Sunucuyu doğrulamadan parmak izini değiştirmeyin.") },
   get SnapshotFailed() { return tx("Kaynağın anlık görüntüsü (snapshot) alınamadı.") },
   get StagingInvalid() { return tx("Staging dizini veya SQL Server dosya eşlemesi geçersiz.") },
-  get AgentNotConfigured() { return tx("Yedekleme bilgisayarındaki program bu yedek için hazır değil: geçici klasör, yedek klasörü veya veritabanı araçları eksik. Programı yeniden kurun ya da yöneticinize danışın.") },
+  get AgentNotConfigured() { return tx("Yedekleme bilgisayarındaki program bu yedek için hazır değil: geçici klasör, yedek klasörü, seçilen depolama veya veritabanı araçları eksik. Programı yeniden kurun veya depolama ayarını kontrol edin.") },
   get AgentLost() { return tx("Agent bağlantısı kaybedildi; bu attempt tamamlanamadı.") },
   get ScheduleGraceExpired() { return tx("Zamanlanan backup için tolerans süresi doldu.") },
   get storage_not_configured() { return tx("Storage yapılandırılmamış.") },
