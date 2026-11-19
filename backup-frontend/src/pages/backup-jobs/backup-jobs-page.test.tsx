@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -238,4 +238,62 @@ it('a failed load says what happened and keeps the code under technical details'
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('Depolama geçici olarak kullanılamıyor.')
   expect(within(alert).queryByText('storage_unavailable')).toBeNull()
+})
+
+const revokedJob = { ...job, enabled: false, agentRevoked: true, agentName: 'Eski bilgisayar' } as BackupJob
+
+it('marks a job of a revoked computer in the list and the detail, and offers no action on it', async () => {
+  vi.mocked(getBackupJobs).mockResolvedValue([revokedJob, { ...job, id: 'job-c', agentId: 'agent-c', agentName: 'Yeni bilgisayar' }])
+  mount()
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Bilgisayar iptal edildi'))
+  const detail = screen.getByRole('region', { name: 'İş ayrıntıları' })
+  expect(within(detail).queryByText('Güncel')).not.toBeInTheDocument()
+  expect(within(detail).queryByText('Bilgisayar bulunamadı')).not.toBeInTheDocument()
+  expect(within(detail).getByText('Bu bilgisayar iptal edildi; yeni bir yedekleme işi oluşturun.')).toBeVisible()
+  expect(within(detail).getByRole('button', { name: 'Şimdi yedekle' })).toBeDisabled()
+  expect(within(detail).getByRole('button', { name: 'Zamanlamayı sürdür' })).toBeDisabled()
+  const [revokedRow, otherRow] = screen.getAllByRole('link', { name: /Muhasebe/ })
+  expect(revokedRow).toHaveTextContent('Eski bilgisayar')
+  expect(revokedRow).toHaveTextContent('Bilgisayar iptal edildi')
+  expect(otherRow).toHaveTextContent('Yeni bilgisayar')
+  expect(otherRow).not.toHaveTextContent('Bilgisayar iptal edildi')
+})
+
+it('shows no "Zamanlamayı durdur" for a job without a schedule', async () => {
+  vi.mocked(getBackupJobs).mockResolvedValue([{ ...job, schedule: null }, other])
+  mount()
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Elle çalışır'))
+  expect(screen.getByRole('button', { name: 'Şimdi yedekle' })).toBeEnabled()
+  expect(screen.queryByRole('button', { name: /Zamanlamayı/ })).not.toBeInTheDocument()
+})
+
+it('answers a second start while one runs with a calm notice, not a failure', async () => {
+  vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'run_already_active', activeRunId: 'run-x' }))
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Şimdi yedekle' }), { detail: 1 })
+  const link = await screen.findByRole('link', { name: 'Süren denemeyi aç' })
+  const notice = link.closest('[role=status]') as HTMLElement
+  expect(notice).toHaveTextContent('Zaten sürüyor')
+  expect(notice).toHaveTextContent('Başka bir yedekleme denemesi sürdüğü için yenisi başlatılmadı.')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByText('İşlem tamamlanamadı')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Teknik ayrıntılar' })).not.toBeInTheDocument()
+})
+
+it('follows a started run to its end without a reload', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  try {
+    const finished = { ...job, lastRun: { id: 'run-r', status: 'Succeeded', createdAt: '', startedAt: null, completedAt: '2026-11-19T10:00:00Z', reasonCode: null } } as BackupJob
+    vi.mocked(getBackupJobs).mockResolvedValue([job, other])
+    vi.mocked(getBackup).mockResolvedValue(makeRun({ id: 'run-r' }))
+    mount()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Güncel'))
+    vi.mocked(getBackupJobs).mockResolvedValue([runningJob, other])
+    fireEvent.click(screen.getByRole('button', { name: 'Şimdi yedekle' }), { detail: 1 })
+    await waitFor(() => expect(screen.getByRole('region', { name: 'İş ayrıntıları' })).toHaveTextContent('Çalışıyor'))
+    vi.mocked(getBackupJobs).mockResolvedValue([finished, other])
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000) })
+    await waitFor(() => expect(screen.getByRole('region', { name: 'İş ayrıntıları' })).not.toHaveTextContent('Çalışıyor'))
+    expect(screen.getByRole('region', { name: 'İş ayrıntıları' })).toHaveTextContent('Güncel')
+  } finally { vi.useRealTimers() }
 })

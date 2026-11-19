@@ -369,3 +369,43 @@ it('asks for fresh data every 15 seconds', async () => {
   expect(vi.mocked(getHealthTimeline).mock.calls.length).toBeGreaterThan(1)
   expect(vi.mocked(getDashboard).mock.calls.length).toBeGreaterThan(1)
 })
+
+describe('jobs of a revoked computer', () => {
+  const revoked = (id: string, name: string) => makeJob(id, name, { agentId: 'agent-r', agentName: 'Eski bilgisayar', enabled: false, agentRevoked: true, schedule: { ...schedule, nextOccurrenceAt: '2026-11-20T02:00:00Z' } })
+
+  it('keeps them out of the counts and the badge and lists them in their own quiet group at the bottom', async () => {
+    jobs = [makeJob('job-a', 'Muhasebe'), revoked('job-r', 'Eski iş')]
+    healths = [health('job-a', null), health('job-r', 'backup_stale')]
+    mount()
+    expect(await screen.findByText('1 veri korunuyor · 1 güncel · 0 dikkat gerekiyor')).toBeVisible()
+    expect(screen.getByText('Hepsi güncel')).toBeVisible()
+    expect(screen.queryByRole('region', { name: /Dikkat gerekiyor/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Eski bilgisayar' })).not.toBeInTheDocument()
+    const group = screen.getByRole('region', { name: 'Bilgisayarı iptal edilmiş işler' })
+    expect(within(group).getByRole('link', { name: 'Eski iş' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-r')
+    expect(within(group).getByText(/Eski bilgisayar/)).toBeVisible()
+    expect(within(group).getByText('Bilgisayar iptal edildi')).toBeVisible()
+    expect(within(group).queryByRole('list', { name: /Son 14 gün/ })).not.toBeInTheDocument()
+    const regions = screen.getAllByRole('region')
+    expect(regions.indexOf(group)).toBeGreaterThan(regions.indexOf(screen.getByRole('region', { name: 'Ofis' })))
+  })
+
+  it('never offers a job of a revoked computer as the next backup', async () => {
+    jobs = [makeJob('job-a', 'Muhasebe'), revoked('job-r', 'Eski iş')]
+    healths = [health('job-a', null), health('job-r', null)]
+    vi.mocked(getDashboard).mockResolvedValue({ artifacts: { total: 1, sizeBytes: 1, deletePending: 0, deleteFailed: 0 }, recentRuns: [], upcomingJobs: [jobs[1]] })
+    mount()
+    const card = (await screen.findByRole('heading', { name: 'Sıradaki ve son yedek' })).closest('section')!
+    expect(within(card).queryByRole('link', { name: 'Eski iş' })).not.toBeInTheDocument()
+    expect(within(card).getByText('Etkin zamanlama yok.')).toBeVisible()
+  })
+
+  it('says there is nothing protected when only revoked computers remain', async () => {
+    jobs = [revoked('job-r', 'Eski iş')]
+    healths = [health('job-r', null)]
+    mount()
+    expect(await screen.findByText('Korunan verileriniz burada görünecek.')).toBeVisible()
+    expect(screen.queryByText('Hepsi güncel')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Bilgisayarı iptal edilmiş işler' })).getByRole('link', { name: 'Eski iş' })).toBeVisible()
+  })
+})

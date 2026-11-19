@@ -28,7 +28,7 @@ export interface BackupConfiguration {
 }
 export interface RetryPolicy { maxAttempts: number; initialDelaySeconds: number; maxDelaySeconds: number; backoff: string; jitter: number }
 export interface RetentionPolicy { enabled: boolean; keepForSeconds: number; deleteGracePeriodSeconds: number }
-export interface BackupJob extends BackupJobInput { id: string; enabled: boolean; backupType: string; createdAt: string; archivedAt?: string | null; agentName?: string | null; nextOccurrenceAt?: string | null; lastRun?: { id: string; status: string; createdAt: string; startedAt: string | null; completedAt: string | null; reasonCode: string | null } | null }
+export interface BackupJob extends BackupJobInput { id: string; enabled: boolean; backupType: string; createdAt: string; archivedAt?: string | null; agentName?: string | null; /** The job's computer is revoked: its schedule is off and it can never run again. */ agentRevoked: boolean; nextOccurrenceAt?: string | null; lastRun?: { id: string; status: string; createdAt: string; startedAt: string | null; completedAt: string | null; reasonCode: string | null } | null }
 export interface BackupJobInput { name: string; agentId: string; configuration: BackupConfiguration; retryPolicy: RetryPolicy; overlapPolicy: 'Skip' | 'Queue'; schedule: Schedule | null; retention?: RetentionPolicy; enabled?: boolean }
 export interface Schedule { enabled: boolean; cronExpression: string; timeZone: string; missedRunGraceSeconds: number; overlapPolicy: 'Skip' | 'Queue'; effectiveFrom?: string; nextOccurrenceAt?: string | null }
 export interface Occurrence { id: string; scheduledAt: string; outcome: string; reason: string; runId: string | null; decidedAt: string; delaySeconds: number }

@@ -83,7 +83,7 @@ describe('Backup computers list', () => {
     expect(api.getAgents).toHaveBeenLastCalledWith('tenant-a', expect.any(AbortSignal), true)
   })
 
-  it('keeps revoked and disabled lifecycle separate from offline connectivity', async () => {
+  it('shows one status for a revoked computer, and lifecycle beside connectivity for a disabled one', async () => {
     vi.mocked(api.getAgents).mockResolvedValue([
       { ...agent, hostName: 'Revoked host', status: 'Revoked', operationalStatus: 'Revoked', connectivity: 'offline' },
       { ...agent, agentId: 'agent-b', hostName: 'Disabled host', status: 'Disabled', operationalStatus: 'Disabled', connectivity: 'online' },
@@ -91,7 +91,7 @@ describe('Backup computers list', () => {
     mount(<ClientsPage />)
     const revoked = (await screen.findByRole('link', { name: 'Revoked host' })).closest('tr')!
     expect(within(revoked).getByText('İptal edildi')).toBeInTheDocument()
-    expect(within(revoked).getByText('Çevrimdışı')).toBeInTheDocument()
+    expect(within(revoked).queryByText('Çevrimdışı')).not.toBeInTheDocument()
     const disabled = screen.getByRole('link', { name: 'Disabled host' }).closest('tr')!
     expect(within(disabled).getByText('Devre dışı')).toBeInTheDocument()
     expect(within(disabled).getByText('Çevrimiçi')).toBeInTheDocument()

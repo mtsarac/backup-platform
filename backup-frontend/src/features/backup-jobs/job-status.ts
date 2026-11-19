@@ -2,10 +2,10 @@ import { tx } from '@/lib/i18n'
 import type { BackupJob } from './types'
 import type { BackupJobHealth } from './health'
 
-export type JobStatus = 'attention' | 'running' | 'first' | 'manual' | 'paused' | 'current'
+export type JobStatus = 'revoked' | 'attention' | 'running' | 'first' | 'manual' | 'paused' | 'current'
 
 export interface JobStatusInput {
-  job: Pick<BackupJob, 'enabled' | 'schedule'>
+  job: Pick<BackupJob, 'enabled' | 'schedule' | 'agentRevoked'>
   health: BackupJobHealth
   /** A failed attempt in the last 14 days (strip day `Failed`). */
   failedRecently: boolean
@@ -19,6 +19,7 @@ const scheduleReasons = ['backup_missing', 'backup_stale', 'schedule_unavailable
 
 /** The row status of the spec's table, first match wins; shared by the job panel and the home page. */
 export function jobStatus({ job, health, failedRecently, hasSucceeded, offline, running }: JobStatusInput): JobStatus {
+  if (job.agentRevoked) return 'revoked'
   const first = !hasSucceeded && !failedRecently
   const paused = !job.enabled || job.schedule?.enabled === false
   const manual = !job.schedule
@@ -32,10 +33,11 @@ export function jobStatus({ job, health, failedRecently, hasSucceeded, offline, 
   return 'current'
 }
 
-export const jobStatusLevel = { attention: 'urgent', running: 'running', first: 'neutral', manual: 'neutral', paused: 'neutral', current: 'safe' } as const
+export const jobStatusLevel = { revoked: 'neutral', attention: 'urgent', running: 'running', first: 'neutral', manual: 'neutral', paused: 'neutral', current: 'safe' } as const
 
 export function jobStatusLabel(status: JobStatus, percent?: number | null): string {
   switch (status) {
+    case 'revoked': return tx('Bilgisayar iptal edildi')
     case 'attention': return tx('Dikkat gerekiyor')
     case 'running': return percent == null ? tx('Çalışıyor') : tx('Çalışıyor %{0}', { '0': Math.round(percent) })
     case 'first': return tx('İlk yedek bekleniyor')

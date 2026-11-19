@@ -65,17 +65,21 @@ function AttentionBand({ band, base }: { band: Band; base: string }) {
 function Row({ row, base }: { row: ProtectionRow; base: string }) {
   const { job } = row
   const day = lastSucceededDay(row.days)
-  return <li className="grid items-center gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_9rem_max-content_10rem_11rem]">
-    <div className="min-w-0">
-      <Link className={`font-medium ${linkClass}`} to={`${base}/backup-jobs/${job.id}`}>{job.name}</Link>
-      <p className="truncate text-sm text-text-muted">{job.configuration.database}</p>
+  return <li className="grid items-center gap-x-4 gap-y-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_9rem_auto]">
+    <div className="min-w-0 space-y-2">
+      <div>
+        <Link className={`break-words font-medium ${linkClass}`} to={`${base}/backup-jobs/${job.id}`}>{job.name}</Link>
+        <p className="truncate text-sm text-text-muted">{job.configuration.database}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <ProtectionStrip days={row.days} jobName={job.name} />
+        <p className="text-sm text-text-muted">{tx('Son başarılı')}: {day ? formatDay(day) : row.hasSucceeded ? tx('14 günden önce') : '—'}</p>
+      </div>
     </div>
     <div className="min-w-0 space-y-0.5">
       <StatusPill level={jobStatusLevel[row.status]}>{jobStatusLabel(row.status, row.percent)}</StatusPill>
       {row.note && <p className="text-sm text-text-muted">{row.note}</p>}
     </div>
-    <ProtectionStrip days={row.days} jobName={job.name} />
-    <p className="text-sm text-text-muted">{tx('Son başarılı')}: {day ? formatDay(day) : row.hasSucceeded ? tx('14 günden önce') : '—'}</p>
     <div className="flex flex-wrap items-center gap-2">
       {row.lastSuccessId
         ? <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-runs/${row.lastSuccessId}/restore`} aria-label={tx('{0} için geri yükle', { '0': job.name })}>{tx('Geri yükle')}</Link>
@@ -84,23 +88,40 @@ function Row({ row, base }: { row: ProtectionRow; base: string }) {
   </li>
 }
 
-function ProtectedData({ rows, agents, base }: { rows: ProtectionRow[]; agents: Protection['agents']; base: string }) {
+/** Jobs that can never run again: shown quietly, apart from the protected data, with their computer's name so same-named jobs can be told apart. */
+function RevokedJobs({ rows, base }: { rows: ProtectionRow[]; base: string }) {
+  return <section aria-label={tx('Bilgisayarı iptal edilmiş işler')} className="overflow-hidden rounded-lg border border-dashed border-border">
+    <header className="border-b border-border px-4 py-2"><h3 className="font-medium text-text-muted">{tx('Bilgisayarı iptal edilmiş işler')}</h3></header>
+    <ul className="divide-y divide-border">{rows.map(({ job }) => <li key={job.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3">
+      <div className="min-w-0">
+        <Link className={`break-words font-medium ${linkClass}`} to={`${base}/backup-jobs/${job.id}`}>{job.name}</Link>
+        <p className="truncate text-sm text-text-muted">{job.agentName ?? tx('Adsız bilgisayar')} · {job.configuration.database}</p>
+      </div>
+      <StatusPill level={jobStatusLevel.revoked}>{jobStatusLabel('revoked')}</StatusPill>
+    </li>)}</ul>
+  </section>
+}
+
+function ProtectedData({ rows, revokedRows, agents, base }: { rows: ProtectionRow[]; revokedRows: ProtectionRow[]; agents: Protection['agents']; base: string }) {
   const groups = new Map<string, ProtectionRow[]>()
   for (const row of rows) groups.set(row.job.agentId, [...groups.get(row.job.agentId) ?? [], row])
   return <Section title={tx('Korunan veriler')}>
-    {rows.length === 0
-      ? <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">{tx('Korunan verileriniz burada görünecek.')}</p>
-      : <div className="space-y-4">{[...groups].map(([agentId, items]) => {
-        const connectivity = agents.find(agent => agent.agentId === agentId)?.connectivity ?? 'unknown'
-        const sorted = items.toSorted((a, b) => Number(b.baseStatus === 'attention') - Number(a.baseStatus === 'attention') || a.score - b.score || a.job.name.localeCompare(b.job.name))
-        return <section key={agentId} aria-label={items[0].job.agentName ?? agentId} className="overflow-hidden rounded-lg border border-border bg-surface">
-          <header className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">
-            <h3 className="font-medium text-text-heading">{items[0].job.agentName ?? agentId}</h3>
-            <StatusPill status={connectivity} />
-          </header>
-          <ul className="divide-y divide-border">{sorted.map(row => <Row key={row.job.id} row={row} base={base} />)}</ul>
-        </section>
-      })}</div>}
+    <div className="space-y-4">
+      {rows.length === 0
+        ? <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">{tx('Korunan verileriniz burada görünecek.')}</p>
+        : [...groups].map(([agentId, items]) => {
+          const connectivity = agents.find(agent => agent.agentId === agentId)?.connectivity ?? 'unknown'
+          const sorted = items.toSorted((a, b) => Number(b.baseStatus === 'attention') - Number(a.baseStatus === 'attention') || a.score - b.score || a.job.name.localeCompare(b.job.name))
+          return <section key={agentId} aria-label={items[0].job.agentName ?? agentId} className="overflow-hidden rounded-lg border border-border bg-surface">
+            <header className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">
+              <h3 className="font-medium text-text-heading">{items[0].job.agentName ?? agentId}</h3>
+              <StatusPill status={connectivity} />
+            </header>
+            <ul className="divide-y divide-border">{sorted.map(row => <Row key={row.job.id} row={row} base={base} />)}</ul>
+          </section>
+        })}
+      {revokedRows.length > 0 && <RevokedJobs rows={revokedRows} base={base} />}
+    </div>
   </Section>
 }
 
@@ -135,7 +156,8 @@ function StorageCard({ p, base }: { p: Protection; base: string }) {
 }
 
 function NextCard({ p, base }: { p: Protection; base: string }) {
-  const upcoming = (p.dashboard?.upcomingJobs ?? []).filter(job => job.schedule?.nextOccurrenceAt)
+  const revoked = new Set(p.revokedRows.map(row => row.job.id))
+  const upcoming = (p.dashboard?.upcomingJobs ?? []).filter(job => job.schedule?.nextOccurrenceAt && !revoked.has(job.id))
     .toSorted((a, b) => a.schedule!.nextOccurrenceAt!.localeCompare(b.schedule!.nextOccurrenceAt!))[0]
   const last = p.lastSuccess
   return <Section title={tx('Sıradaki ve son yedek')}><dl className="space-y-2 text-sm">
@@ -175,7 +197,7 @@ export function DashboardPage() {
       <div className="space-y-6">
         {band && <AttentionBand band={band} base={base} />}
         {empty && <Steps p={p} base={base} canOperate={canOperate} />}
-        <ProtectedData rows={p.rows} agents={p.agents} base={base} />
+        <ProtectedData rows={p.rows} revokedRows={p.revokedRows} agents={p.agents} base={base} />
         <div className="grid gap-6 md:grid-cols-3">
           {!empty && <NextCard p={p} base={base} />}
           <StorageCard p={p} base={base} />
