@@ -41,7 +41,7 @@ export function useProtection(tenantId: string) {
   const perJob = [...successes, ...running]
   const error = [...core, ...perJob].find(query => query.error)?.error ?? null
   const isPending = core.some(query => query.isPending) || successes.some(query => query.isPending)
-  const rows = (jobList ?? []).map((job, index) => buildRow({
+  const allRows = (jobList ?? []).map((job, index) => buildRow({
     job,
     health: health.data?.jobs.find(item => item.jobId === job.id),
     days: timeline.data?.jobs.find(item => item.jobId === job.id)?.days ?? [],
@@ -50,8 +50,11 @@ export function useProtection(tenantId: string) {
     offline: agents.data?.find(agent => agent.agentId === job.agentId)?.connectivity === 'offline',
     percent: running[activeJobs.indexOf(job)]?.data?.attempts.at(-1)?.progressPercent,
   }))
+  // A revoked computer's jobs can never run: they are not protected data, so counts, the badge, the band and the next backup leave them out.
+  const rows = allRows.filter(row => !row.job.agentRevoked)
+  const revokedRows = allRows.filter(row => row.job.agentRevoked)
   return {
-    isPending, error, rows, agents: agents.data ?? [], dashboard: dashboard.data, lastSuccess: lastSuccess.data?.items[0], hasSucceededEver: (lastSuccess.data?.totalCount ?? 0) > 0,
+    isPending, error, rows, revokedRows, agents: agents.data ?? [], dashboard: dashboard.data, lastSuccess: lastSuccess.data?.items[0], hasSucceededEver: (lastSuccess.data?.totalCount ?? 0) > 0,
     quota: quota.data, hasRestoreTrial: (restoreTrial.data?.totalCount ?? 0) > 0,
     refetch: () => { for (const query of [...core, ...perJob]) if (query.error) void query.refetch() },
   }

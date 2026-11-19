@@ -5,7 +5,8 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
 import { useIdempotencyKey } from '@/lib/idempotency-key'
 import { getBackupJob, getBackupJobs, getOccurrences, saveBackupJob, setJobEnabled, startJobRun } from './api'
-import type { BackupJobInput } from './types'
+import { isActiveRun } from '@/features/backups/presentation'
+import type { BackupJob, BackupJobInput } from './types'
 
 export const backupJobQueryKeys = {
   all: (tenantId: string) => ['tenant', tenantId, 'backup-jobs'] as const,
@@ -13,7 +14,9 @@ export const backupJobQueryKeys = {
 }
 export function useBackupJobs({ includeArchived = false }: { includeArchived?: boolean } = {}) {
   const { tenantId } = useTenant()
-  return useQuery({ queryKey: includeArchived ? [...backupJobQueryKeys.all(tenantId), 'with-archived'] : backupJobQueryKeys.all(tenantId), queryFn: ({ signal }) => getBackupJobs(tenantId, signal, includeArchived) })
+  // While a run is active the list is re-read, so a finished run shows its result without a reload.
+  const whileRunning = (query: { state: { data?: BackupJob[] } }) => query.state.data?.some(job => job.lastRun && isActiveRun(job.lastRun.status)) ? 5000 : false
+  return useQuery({ queryKey: includeArchived ? [...backupJobQueryKeys.all(tenantId), 'with-archived'] : backupJobQueryKeys.all(tenantId), queryFn: ({ signal }) => getBackupJobs(tenantId, signal, includeArchived), refetchInterval: whileRunning })
 }
 export function useBackupJob(id: string) {
   const { tenantId } = useTenant()

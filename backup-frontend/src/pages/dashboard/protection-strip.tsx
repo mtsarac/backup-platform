@@ -24,7 +24,7 @@ export function ProtectionStrip({ days, jobName }: { days: StripDay[]; jobName: 
     setActive(index)
     items.current[index]?.focus()
   }
-  return <div role="list" aria-label={tx('Son 14 gün · {0}', { '0': jobName })} onKeyDown={move} className="flex gap-1">
+  return <div role="list" aria-label={tx('Son 14 gün · {0}', { '0': jobName })} onKeyDown={move} className="flex max-w-full flex-wrap gap-0.5 sm:gap-1">
     {days.map((day, index) => {
       const cell = cells[day.status] ?? cells.NoBackup
       const Icon = cell.icon

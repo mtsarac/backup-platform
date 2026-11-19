@@ -10,7 +10,7 @@ import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import type { FieldErrors } from '@/features/backup-jobs/job-field-kit'
 import { initialValues, resetSource, switchEngine, type Engine, type EngineMemory, type JobDraft, type JobPrefill, type JobValues } from '@/features/backup-jobs/job-form-values'
-import { stepOfField } from '@/features/backup-jobs/job-wizard-model'
+import { stepOfField, validateJob } from '@/features/backup-jobs/job-wizard-model'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
 import type { BackupConfiguration, BackupJob, BackupJobInput } from '@/features/backup-jobs/types'
@@ -50,6 +50,8 @@ export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }
   const multi = selected.length > 1
   const saveError = multi ? null : save.error
   const serverErrors: FieldErrors = saveError instanceof ApiError ? { ...Object.fromEntries(Object.entries(saveError.fields).map(([field, code]) => [field.replace(/^schedule\./, ''), failureMessage(code)])), ...(saveError.field ? { [saveError.field.replace(/^schedule\./, '')]: errorMessage(saveError) } : {}) } : {}
+  // A message shown by Devam/Kaydet goes away as soon as its field is fixed, without pressing the button again.
+  const stillInvalid = Object.keys(clientErrors).length ? validateJob(values).errors : {}
   const nextOccurrence = job && (job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt)
 
   function refreshConnections() {
@@ -154,7 +156,7 @@ export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }
     agents, agent: agents.data?.find(item => item.agentId === values.agentId),
     picker: { connections: connectionItems, providers: providerItems, pending: pickerPending, error: pickerError, existingTarget, onRefresh: refreshConnections },
     cannotSave, results, failedCount: Object.values(results).filter(value => value !== 'ok').length,
-    save, saveError, serverErrors, clientErrors, setClientErrors, errors: { ...serverErrors, ...clientErrors } as FieldErrors,
+    save, saveError, serverErrors, clientErrors, setClientErrors, errors: { ...serverErrors, ...Object.fromEntries(Object.entries(clientErrors).filter(([field]) => field in stillInvalid)) } as FieldErrors,
     errorSteps: [...new Set(Object.keys(serverErrors).map(stepOfField).filter(step => step !== undefined))],
     dirty: JSON.stringify(values) !== JSON.stringify(saved), submit,
     nextRun: job ? nextOccurrence ? formatDateTime(nextOccurrence) : tx('Planlanmamış') : undefined,

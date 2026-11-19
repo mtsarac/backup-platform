@@ -53,7 +53,8 @@ export function JobSections({ job }: { job: BackupJob }) {
   const [editing, setEditing] = useState<EditSection | null>(null)
   const [asked, setAsked] = useState<EditSection | null>(null)
   const form = useJobForm({ job, onSaved: () => setEditing(null) })
-  const rows = summaryRows({ ...summaryInput(form), values: initialValues(job), canAdmin: true })
+  const input = summaryInput(form)
+  const rows = summaryRows({ ...input, agentLabel: job.agentRevoked ? `${job.agentName ?? tx('Adsız bilgisayar')} · ${tx('Bilgisayar iptal edildi')}` : input.agentLabel, values: initialValues(job), canAdmin: true })
   const dirty = editing !== null && form.dirty
   function begin(section: EditSection) {
     form.restart(job)
