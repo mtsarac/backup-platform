@@ -20,6 +20,8 @@ public static class ArtifactEncryptionEndpoints
 {
     public static IEndpointRouteBuilder MapArtifactEncryptionEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet("/api/platform/encryption/status", GetPlatformEncryptionStatus).RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+
         var platform = endpoints.MapGroup("/api/platform/tenants/{tenantId:guid}/wrap-keys").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("", ListWrapKeysAsync);
         platform.MapPost("/rotate", RotateWrapKeyAsync);
@@ -34,6 +36,9 @@ public static class ArtifactEncryptionEndpoints
     }
 
     private static object ToResponse(TenantWrapKeyView key) => new { version = key.Version, keyId = key.KeyId, state = key.State.ToString(), createdAt = key.CreatedAt, artifactCount = key.ArtifactCount };
+
+    private static IResult GetPlatformEncryptionStatus(ArtifactRecoveryOptions platform) =>
+        Results.Ok(new { platformRecovery = new { configured = platform.PlatformRecovery is not null, keyId = platform.PlatformRecovery?.KeyId } });
 
     private static IResult TenantNotFound() => Results.NotFound(new { error = "tenant_not_found" });
 

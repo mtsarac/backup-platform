@@ -347,6 +347,7 @@ public sealed partial class DiscoveryScanner
                 DatabaseFailureKind.PermissionDenied => (DiscoveryAccess.Error, "permission_denied"),
                 DatabaseFailureKind.InvalidConfiguration => (DiscoveryAccess.Error, "invalid_configuration"),
                 DatabaseFailureKind.ServerCertificateUntrusted => (DiscoveryAccess.Error, "server_certificate_untrusted"),
+                DatabaseFailureKind.ServerTlsUnavailable => (DiscoveryAccess.Error, "server_tls_unavailable"),
                 _ => (DiscoveryAccess.Error, "unexpected"),
             };
             LogEnrichmentFailed(instance.Key, reason);
@@ -355,7 +356,7 @@ public sealed partial class DiscoveryScanner
                 Access = access,
                 AccessReasonCode = reason,
                 Reachability = exception.Kind is DatabaseFailureKind.Unreachable or DatabaseFailureKind.Timeout && !answered ? DiscoveryReachability.Unreachable
-                    : exception.Kind is DatabaseFailureKind.AuthenticationFailed or DatabaseFailureKind.PermissionDenied or DatabaseFailureKind.ServerCertificateUntrusted ? DiscoveryReachability.Reachable
+                    : exception.Kind is DatabaseFailureKind.AuthenticationFailed or DatabaseFailureKind.PermissionDenied or DatabaseFailureKind.ServerCertificateUntrusted or DatabaseFailureKind.ServerTlsUnavailable ? DiscoveryReachability.Reachable
                     : basic.Reachability,
             };
         }

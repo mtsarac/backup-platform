@@ -1,6 +1,7 @@
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Storage;
@@ -22,7 +23,8 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
     public async Task<IReadOnlyList<BackupHealthEvidence>> ReadAsync(TenantId tenantId, Guid? jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        var rows = await db.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null && (jobId == null || job.Id == jobId))
+        var rows = await db.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null && (jobId == null || job.Id == jobId)
+                && (jobId != null || !db.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked)))
             .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new
             {
                 Job = job,

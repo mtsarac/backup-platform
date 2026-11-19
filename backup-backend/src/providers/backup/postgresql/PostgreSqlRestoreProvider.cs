@@ -203,7 +203,9 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider, IResto
                 DatabaseFailureKind.Timeout => (PostgreSqlReasons.ConnectionTimeout, BackupFailureCause.Timeout),
                 DatabaseFailureKind.InvalidConfiguration => (PostgreSqlReasons.ConnectionSettingsInvalid, BackupFailureCause.Unclassified),
                 DatabaseFailureKind.ServerCertificateUntrusted => (PostgreSqlReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted),
-                _ => (PostgreSqlReasons.ServerUnreachable, BackupFailureCause.DatabaseUnavailable)
+                DatabaseFailureKind.ServerTlsUnavailable => (PostgreSqlReasons.ServerTlsUnavailable, BackupFailureCause.InvalidConfiguration),
+                DatabaseFailureKind.Unreachable => (PostgreSqlReasons.ServerUnreachable, BackupFailureCause.DatabaseUnavailable),
+                _ => (PostgreSqlReasons.UnexpectedError, BackupFailureCause.Unclassified)
             };
             return new(kind, stage, code, provider.Message, cause);
         }

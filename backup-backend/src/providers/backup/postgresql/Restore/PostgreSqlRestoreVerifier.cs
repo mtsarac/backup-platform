@@ -212,6 +212,7 @@ internal static class PostgreSqlRestoreVerifier
         DatabaseFailureKind.Timeout => PostgreSqlVerificationReasons.Timeout,
         DatabaseFailureKind.Unreachable => PostgreSqlVerificationReasons.ConnectionFailed,
         DatabaseFailureKind.ServerCertificateUntrusted => RestoreReasonCodes.ServerCertificateUntrusted,
+        DatabaseFailureKind.ServerTlsUnavailable => PostgreSqlReasons.ServerTlsUnavailable,
         DatabaseFailureKind.InvalidConfiguration => PostgreSqlSession.IsDatabaseMissing(exception) ? PostgreSqlReasons.DatabaseNotFound : PostgreSqlReasons.ConnectionSettingsInvalid,
         _ => fallback
     };

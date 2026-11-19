@@ -20,16 +20,6 @@ public sealed class PostgreSqlConnectionFailureTests
             DatabaseFailureKind.ServerCertificateUntrusted
         },
         {
-            "a server without SSL",
-            new NpgsqlException("SSL connection requested. No SSL enabled connection from this host is configured."),
-            DatabaseFailureKind.Unreachable
-        },
-        {
-            "a TLS problem the server reports in words",
-            new NpgsqlException("The SSL/TLS negotiation failed."),
-            DatabaseFailureKind.InvalidConfiguration
-        },
-        {
             "a wrong password",
             new PostgresException("password authentication failed", "FATAL", "FATAL", PostgresErrorCodes.InvalidPassword),
             DatabaseFailureKind.AuthenticationFailed
@@ -66,6 +56,29 @@ public sealed class PostgreSqlConnectionFailureTests
 
         Assert.Equal((PostgreSqlReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted), (backup.ReasonCode, backup.Cause));
         Assert.Equal((PostgreSqlReasons.ServerCertificateUntrusted, BackupFailureCause.ServerCertificateUntrusted), (restore.ReasonCode, restore.Cause));
+    }
+
+    [Fact]
+    public void AServerWithoutTlsGetsItsOwnReasonAndAConfigurationCause()
+    {
+        var error = new DatabaseProviderException(DatabaseFailureKind.ServerTlsUnavailable, "no TLS");
+
+        var backup = PostgreSqlFailures.FromConnection(error);
+        var restore = PostgreSqlRestoreProvider.Failure(error, RestoreFailureKind.PreCheckFailed, RestoreExecutionStage.PreparingTarget);
+
+        Assert.Equal(("server_tls_unavailable", BackupFailureCause.InvalidConfiguration), (backup.ReasonCode, backup.Cause));
+        Assert.Equal(("server_tls_unavailable", BackupFailureCause.InvalidConfiguration), (restore.ReasonCode, restore.Cause));
+        Assert.Equal("server_tls_unavailable", BackupPlatform.BackupProviders.PostgreSql.Restore.PostgreSqlRestoreVerifier.ReasonFor(error, "unexpected"));
+    }
+
+    [Fact]
+    public void AnUnmappedRestoreFailureIsUnexpectedNotAnUnreachableServer()
+    {
+        var restore = PostgreSqlRestoreProvider.Failure(new DatabaseProviderException(DatabaseFailureKind.Unexpected, "boom"), RestoreFailureKind.SqlRestoreFailed, RestoreExecutionStage.Restoring);
+        var unreachable = PostgreSqlRestoreProvider.Failure(new DatabaseProviderException(DatabaseFailureKind.Unreachable, "down"), RestoreFailureKind.SqlRestoreFailed, RestoreExecutionStage.Restoring);
+
+        Assert.Equal((PostgreSqlReasons.UnexpectedError, BackupFailureCause.Unclassified), (restore.ReasonCode, restore.Cause));
+        Assert.Equal((PostgreSqlReasons.ServerUnreachable, BackupFailureCause.DatabaseUnavailable), (unreachable.ReasonCode, unreachable.Cause));
     }
 
     [Fact]
