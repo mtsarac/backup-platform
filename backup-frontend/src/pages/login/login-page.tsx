@@ -143,7 +143,7 @@ export function LoginPage() {
       navigate(from, { replace: true })
     } catch (error) {
       if (error instanceof ApiError && error.status === 429) {
-        setError({ what: tx('Çok fazla başarısız deneme; giriş geçici olarak kilitlendi.'), action: tx('Lütfen daha sonra tekrar deneyin.'), technical: [] })
+        setError({ what: tx('Çok fazla başarısız deneme.'), dataImpact: tx('Giriş geçici olarak kilitlendi.'), action: tx('Lütfen daha sonra tekrar deneyin.'), technical: [] })
       } else if (error instanceof ApiError && (error.status === 401 || error.status === 400)) {
         setError({ what: factorMode === 'totp' ? tx('Doğrulama kodu hatalı veya süresi dolmuş.') : tx('Kurtarma kodu geçersiz veya daha önce kullanılmış.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] })
       } else {
