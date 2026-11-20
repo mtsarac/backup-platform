@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Capabilities;
@@ -199,11 +200,11 @@ public sealed class RestoreStoreCreateTests(PostgreSqlFixture fixture) : IClassF
 
         Assert.Null(await store.GetAsync(theirs.TenantId, operation.Id, default));
         Assert.Null(await store.RequestCancellationAsync(theirs.TenantId, operation.Id, Now, default));
-        var theirPage = await store.ListAsync(theirs.TenantId, new RestoreQuery(), default);
+        var theirPage = await store.ListAsync(theirs.TenantId, new RestoreQuery(new ListQuery()), default);
         Assert.Empty(theirPage.Items);
         Assert.Equal(0, theirPage.TotalCount);
         Assert.Equal(RestoreStatus.Pending, (await _world.OperationAsync(operation.Id)).Status);
-        var ownPage = await store.ListAsync(mine.TenantId, new RestoreQuery(), default);
+        var ownPage = await store.ListAsync(mine.TenantId, new RestoreQuery(new ListQuery()), default);
         Assert.Equal(operation.Id, Assert.Single(ownPage.Items).Id);
     }
 
@@ -498,13 +499,13 @@ public sealed class RestoreStoreCreateTests(PostgreSqlFixture fixture) : IClassF
         var newest = (await store.CreateAsync(Command(seed.TenantId, seed.ArtifactId, sibling.AgentId, now: Now.AddMinutes(2)), default)).Operation!;
         await store.RequestCancellationAsync(seed.TenantId, middle.Id, Now.AddMinutes(3), default);
 
-        var all = await store.ListAsync(seed.TenantId, new RestoreQuery(), default);
-        var pending = await store.ListAsync(seed.TenantId, new RestoreQuery(Status: RestoreStatus.Pending), default);
-        var cancelled = await store.ListAsync(seed.TenantId, new RestoreQuery(Status: RestoreStatus.Cancelled), default);
-        var byArtifact = await store.ListAsync(seed.TenantId, new RestoreQuery(ArtifactId: seed.ArtifactId), default);
-        var byAgent = await store.ListAsync(seed.TenantId, new RestoreQuery(AgentId: sibling.AgentId.Value), default);
-        var secondPage = await store.ListAsync(seed.TenantId, new RestoreQuery(Page: 2, PageSize: 2), default);
-        var beyond = await store.ListAsync(seed.TenantId, new RestoreQuery(Page: 5, PageSize: 2), default);
+        var all = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery()), default);
+        var pending = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(), Status: RestoreStatus.Pending), default);
+        var cancelled = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(), Status: RestoreStatus.Cancelled), default);
+        var byArtifact = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(), ArtifactId: seed.ArtifactId), default);
+        var byAgent = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(), AgentId: sibling.AgentId.Value), default);
+        var secondPage = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(Page: 2, PageSize: 2)), default);
+        var beyond = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(Page: 5, PageSize: 2)), default);
 
         Assert.Equal([newest.Id, middle.Id, oldest.Id], all.Items.Select(item => item.Id));
         Assert.Equal(3, all.TotalCount);

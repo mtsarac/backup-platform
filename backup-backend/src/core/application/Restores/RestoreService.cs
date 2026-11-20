@@ -36,7 +36,6 @@ public sealed record RestoreStartResult(RestoreStartOutcome Outcome, RestoreView
 public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions options, TimeProvider time)
 {
     public const string StagingReference = "default";
-    private const int MaxListPageSize = 100;
 
     /// <summary>
     /// Validates the request, then asks the store to create the restore. The caller maps <see cref="RestoreStartResult.Outcome"/> to a response.
@@ -93,10 +92,10 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         return operation is null ? null : ToView(operation, includeResult: true, options.RollbackRetention, time.GetUtcNow());
     }
 
-    /// <summary>Newest first. The result of each restore is left out of the list: it can be large, and the detail view has it.</summary>
+    /// <summary>The result of each restore is left out of the list: it can be large, and the detail view has it.</summary>
     public async Task<RestorePageView> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken)
     {
-        var page = await store.ListAsync(tenantId, query with { Page = Math.Max(1, query.Page), PageSize = Math.Clamp(query.PageSize, 1, MaxListPageSize) }, cancellationToken);
+        var page = await store.ListAsync(tenantId, query, cancellationToken);
         return new RestorePageView([.. page.Items.Select(operation => ToView(operation, includeResult: false, options.RollbackRetention, time.GetUtcNow()))], page.TotalCount, page.Page, page.PageSize);
     }
 

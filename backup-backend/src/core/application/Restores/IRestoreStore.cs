@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -77,8 +78,8 @@ public sealed record RestoreProgress(string Stage, double? Percent);
 /// <summary>The outcome of a start or a renewal: the lease the agent now holds and whether the user asked to cancel.</summary>
 public sealed record RestoreLeaseOutcome(BackupMutationResult Result, DateTimeOffset? LeaseExpiresAt = null, bool CancellationRequested = false);
 
-public sealed record RestoreQuery(RestoreStatus? Status = null, Guid? ArtifactId = null, Guid? AgentId = null, int Page = 1, int PageSize = 25,
-    RestorePurpose Purpose = RestorePurpose.Execution);
+/// <summary>The restores a tenant can see: <see cref="Purpose"/> null lists executions and verifications together (prechecks and discoveries are preparation, never listed).</summary>
+public sealed record RestoreQuery(ListQuery List, RestoreStatus? Status = null, Guid? ArtifactId = null, Guid? AgentId = null, RestorePurpose? Purpose = RestorePurpose.Execution);
 
 /// <summary>A removal of a platform-created database leased to its agent: the operation (for the target and the name), the engine and the fencing token.</summary>
 public sealed record RestoreCleanupClaim(RestoreOperation Operation, Guid LeaseToken, string Engine);
@@ -116,7 +117,7 @@ public interface IRestoreStore
 
     Task<RestoreOperation?> GetAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken);
 
-    /// <summary>Newest first. Attempts and the pin are loaded.</summary>
+    /// <summary>Searched, sorted and paged by <see cref="RestoreQuery.List"/>, newest first by default. Attempts and the pin are loaded.</summary>
     Task<RestorePage> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken);
 
     /// <summary>

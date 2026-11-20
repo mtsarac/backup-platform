@@ -28,7 +28,7 @@ public static class RestoreEndpoints
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-verifications", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-discovery", DiscoverAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-artifacts/{artifactId:guid}/restore-targets", TargetsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapGet("/restores", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/restores", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithListQuery();
         tenant.MapGet("/restores/{restoreId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/restores/{restoreId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         // Retrying the removal of a verification's own disposable database is routine; removing the only copy of a replaced database is an administrator's decision.
@@ -205,19 +205,19 @@ public static class RestoreEndpoints
         return targets is null ? Results.NotFound(new { error = "artifact_not_found", message = "The backup does not exist." }) : Results.Ok(targets);
     }
 
-    private static async Task<IResult> ListAsync(string? status, Guid? artifactId, Guid? agentId, string? purpose, int? page, int? pageSize, ITenantContext tenant, RestoreService service,
+    private static async Task<IResult> ListAsync(string? status, Guid? artifactId, Guid? agentId, string? purpose, [AsParameters] ListParams list, ITenantContext tenant, RestoreService service,
         CancellationToken cancellationToken)
     {
-        // Execution restores by default; the isolated verifications of an artifact are the only other list a tenant can ask for.
-        var parsedPurpose = RestorePurpose.Execution;
+        var query = list.ToQuery();
+        // Execution restores by default; Verification lists the isolated verifications of an artifact and All lists both together (what the restores page shows).
+        RestorePurpose? parsedPurpose = RestorePurpose.Execution;
         if (purpose is not null)
         {
-            if (!string.Equals(purpose, "Execution", StringComparison.OrdinalIgnoreCase) && !string.Equals(purpose, "Verification", StringComparison.OrdinalIgnoreCase))
-                return Results.BadRequest(new { error = "invalid_request", field = "purpose", code = "invalid_value", message = "Unknown restore purpose." });
-            parsedPurpose = Enum.Parse<RestorePurpose>(purpose, ignoreCase: true);
+            if (string.Equals(purpose, "All", StringComparison.OrdinalIgnoreCase)) parsedPurpose = null;
+            else if (string.Equals(purpose, "Execution", StringComparison.OrdinalIgnoreCase) || string.Equals(purpose, "Verification", StringComparison.OrdinalIgnoreCase))
+                parsedPurpose = Enum.Parse<RestorePurpose>(purpose, ignoreCase: true);
+            else return Results.BadRequest(new { error = "invalid_request", field = "purpose", code = "invalid_value", message = "Unknown restore purpose." });
         }
-        if (page is < 1 or > 1_000_000 || pageSize is < 1 or > 100)
-            return Results.BadRequest(new { error = "invalid_request", message = "Page must be positive and page size must be between 1 and 100." });
         RestoreStatus? parsed = null;
         if (status is not null)
         {
@@ -225,7 +225,7 @@ public static class RestoreEndpoints
             if (name is null) return Results.BadRequest(new { error = "invalid_request", field = "status", code = "invalid_value", message = "Unknown restore status." });
             parsed = Enum.Parse<RestoreStatus>(name);
         }
-        return Results.Ok(await service.ListAsync(tenant.TenantId!, new RestoreQuery(parsed, artifactId, agentId, page ?? 1, pageSize ?? 25, Purpose: parsedPurpose), cancellationToken));
+        return Results.Ok(await service.ListAsync(tenant.TenantId!, new RestoreQuery(query, parsed, artifactId, agentId, parsedPurpose), cancellationToken));
     }
 
     private static async Task<IResult> GetAsync(Guid restoreId, ITenantContext tenant, RestoreService service, CancellationToken cancellationToken)

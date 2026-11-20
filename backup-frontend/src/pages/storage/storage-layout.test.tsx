@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -45,6 +45,12 @@ describe('Depolama', () => {
     expect(screen.getByText('Silinemeyen yedek dosyaları')).toBeInTheDocument()
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(artifactApi.listArtifacts).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ state: 'DeleteFailed' }), expect.any(AbortSignal))
+  })
+  it('pages failed artifacts through the server', async () => {
+    vi.mocked(artifactApi.listArtifacts).mockResolvedValue({ items: [{ id: 'a', jobName: 'Muhasebe', replicas: [] } as unknown as BackupArtifact], totalCount: 30, page: 1, pageSize: 25 })
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(artifactApi.listArtifacts).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ page: 2, state: 'DeleteFailed' }), expect.any(AbortSignal)))
   })
   it('names the system defaults "Yerel disk" and "Merkezi depolama" and badges only the local default', async () => {
     vi.mocked(connectionApi.getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })

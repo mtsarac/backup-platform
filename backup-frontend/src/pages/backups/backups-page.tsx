@@ -5,13 +5,10 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { BackupDetailPage } from '@/pages/backups/backup-detail-page'
 import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
-import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Card } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Disclosure } from '@/components/ui/disclosure'
 import { FilterField, Filters } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -20,35 +17,40 @@ import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import { useBackups } from '@/features/backups/hooks'
 import { dateFilterInstant, runStatuses } from '@/features/backups/presentation'
 import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
-import type { BackupRun, BackupRunFilters } from '@/features/backups/types'
-import { LIST_PAGE_SIZE, dayParam, oneOf, useListParams } from '@/features/platform/use-list-params'
+import type { BackupRun } from '@/features/backups/types'
+import { ListEmpty } from '@/features/lists/list-empty'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { toServerQuery } from '@/features/lists/server-list-query'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatBytes, formatDateTime, formatDuration } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 
-const pageSize = LIST_PAGE_SIZE
+const listConfig = {
+  search: true,
+  filters: { status: runStatuses, jobId: 'text', agentId: 'text', from: 'date', to: 'date' },
+  sort: { first: { createdAt: 'desc', status: 'asc', jobName: 'asc', size: 'asc', duration: 'asc' }, default: { key: 'createdAt', dir: 'desc' } },
+} as const
 
 export function BackupsPage() {
   useLanguage()
   const { tenantId } = useTenant()
-  const { page, get, update } = useListParams()
+  const state = useListState(listConfig)
   const { id } = useParams()
   const { search } = useLocation()
-  const fromDay = dayParam(get('from'))
-  const toDay = dayParam(get('to'))
-  const status = oneOf(get('status'), runStatuses)
-  const filters: BackupRunFilters = { page, pageSize, status, jobId: get('jobId') || undefined, agentId: get('agentId') || undefined, from: dateFilterInstant(fromDay), to: dateFilterInstant(toDay, true) }
+  const { from: fromDay, to: toDay, status, jobId, agentId } = state.filters
+  const filters = { ...toServerQuery(state), from: dateFilterInstant(fromDay), to: dateFilterInstant(toDay, true) }
   const backups = useBackups(filters)
   const jobs = useBackupJobs({ includeArchived: true })
   const agents = useAgents(tenantId, true)
-  const filtering = Boolean(status || filters.jobId || filters.agentId || fromDay || toDay)
+  const filtering = state.filtering
   const invalidDateRange = Boolean(fromDay && toDay && fromDay > toDay)
-  const clearFilters = () => update({ status: '', jobId: '', agentId: '', trigger: '', from: '', to: '' })
   const columns: Column<BackupRun>[] = [
-    { key: 'job', card: 'title', header: tx('İş'), wrap: true, render: (run) => <Link aria-current={run.id === id ? 'page' : undefined} className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-runs/${run.id}${search}`}>{run.jobName ?? jobs.data?.find((job) => job.id === run.jobId)?.name ?? tx('Yedekleme işi')}</Link> },
-    { key: 'status', card: 'status', header: tx('Durum'), render: (run) => <div className="flex flex-col items-start gap-1"><StatusPill status={run.status} /><SizeAnomalyBadge run={run} /><SizeAnomalyComparison run={run} /></div> },
-    { key: 'artifact', header: tx('Yedek dosyası'), wrap: true, render: (run) => {
+    { key: 'jobName', sortable: true, card: 'title', header: tx('İş'), wrap: true, render: (run) => <Link aria-current={run.id === id ? 'page' : undefined} className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-runs/${run.id}${search}`}>{run.jobName ?? jobs.data?.find((job) => job.id === run.jobId)?.name ?? tx('Yedekleme işi')}</Link> },
+    { key: 'status', sortable: true, card: 'status', header: tx('Durum'), render: (run) => <div className="flex flex-col items-start gap-1"><StatusPill status={run.status} /><SizeAnomalyBadge run={run} /><SizeAnomalyComparison run={run} /></div> },
+    { key: 'size', sortable: true, header: tx('Yedek dosyası'), wrap: true, render: (run) => {
       if (run.status !== 'Succeeded') return '—'
       const artifact = [...run.attempts].reverse().flatMap((attempt) => attempt.artifacts)[0]
       if (!artifact) return '—'
@@ -56,41 +58,41 @@ export function BackupsPage() {
       const deletion = artifact.state === 'DeletePending' ? tx('Silme bekliyor') : artifact.state === 'DeleteFailed' ? tx('Silme başarısız') : artifact.state === 'Deleted' ? tx('Silindi') : null
       return <div><p>{formatBytes(artifact.sizeBytes)} · {tx('{0} kopya', { '0': copies })}</p><p>{artifact.retentionExpiresAt ? tx('Saklama sonu: {0}', { '0': formatDateTime(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p>{deletion && <p>{deletion}</p>}</div>
     } },
-    { key: 'started', header: tx('Başlangıç'), render: (run) => <RelativeTime value={run.startedAt} /> },
-    { key: 'duration', header: tx('Süre'), render: (run) => formatDuration(run.startedAt, run.completedAt) },
+    { key: 'createdAt', sortable: true, header: tx('Başlangıç'), render: (run) => <RelativeTime value={run.startedAt} /> },
+    { key: 'duration', sortable: true, header: tx('Süre'), render: (run) => formatDuration(run.startedAt, run.completedAt) },
   ]
   const filterError = jobs.error ?? agents.error
 
   return (
     <div className={id ? 'grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : undefined}>
       <div className={`min-w-0 space-y-6 ${id ? 'hidden md:block' : ''}`}>
-      <Filters label={tx("Yedekleme filtreleri")} onClear={filtering && backups.data?.totalCount !== 0 ? clearFilters : undefined}>
+      <ListToolbar state={state} label={tx("Yedekleme filtreleri")} total={backups.data?.totalCount} search={{ label: tx('Ara') }}>
         <FilterField label={tx("Durum")}>
-          <Select aria-label={tx("Durum")} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}>
+          <Select aria-label={tx("Durum")} value={status} onChange={(event) => state.setFilter('status', event.target.value)}>
             <option value="">{tx("Tüm durumlar")}</option>
             {runStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}
           </Select>
         </FilterField>
         <FilterField label={tx("İş")}>
-          <Select aria-label={tx("İş")} value={filters.jobId ?? ''} onChange={(event) => update({ jobId: event.target.value })} disabled={jobs.isPending || Boolean(jobs.error)}>
+          <Select aria-label={tx("İş")} value={jobId} onChange={(event) => state.setFilter('jobId', event.target.value)} disabled={jobs.isPending || Boolean(jobs.error)}>
             <option value="">{tx("Tüm işler")}</option>
             {jobs.data?.map((job) => <option key={job.id} value={job.id}>{job.archivedAt ? tx('{0} (kaldırıldı)', { '0': job.name }) : job.name}</option>)}
           </Select>
         </FilterField>
-      </Filters>
-      <Disclosure title={tx('Diğer filtreler')} open={Boolean(filters.agentId || fromDay || toDay)}>
+      </ListToolbar>
+      <Disclosure title={tx('Diğer filtreler')} open={Boolean(agentId || fromDay || toDay)}>
         <Filters label={tx("Diğer filtreler")} footer={<span className="text-sm text-text-muted">{tx("Tarihler yerel saat diliminizdeki oluşturulma günlerini kapsar.")}</span>}>
         <FilterField label={tx("Yedekleme bilgisayarı")}>
-          <Select aria-label={tx("Yedekleme bilgisayarı")} value={filters.agentId ?? ''} onChange={(event) => update({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}>
+          <Select aria-label={tx("Yedekleme bilgisayarı")} value={agentId} onChange={(event) => state.setFilter('agentId', event.target.value)} disabled={agents.isPending || Boolean(agents.error)}>
             <option value="">{tx("Tüm yedekleme bilgisayarları")}</option>
             {agents.data?.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız yedekleme bilgisayarı')}</option>)}
           </Select>
         </FilterField>
         <FilterField label={tx("Oluşturulma başlangıcı")}>
-          <TextInput aria-label={tx("Oluşturulma başlangıcı")} type="date" max={toDay || undefined} value={fromDay} onChange={(event) => update({ from: event.target.value })} />
+          <TextInput aria-label={tx("Oluşturulma başlangıcı")} type="date" max={toDay || undefined} value={fromDay} onChange={(event) => state.setFilter('from', event.target.value)} />
         </FilterField>
         <FilterField label={tx("Oluşturulma sonu")}>
-          <TextInput aria-label={tx("Oluşturulma sonu")} type="date" min={fromDay || undefined} value={toDay} onChange={(event) => update({ to: event.target.value })} />
+          <TextInput aria-label={tx("Oluşturulma sonu")} type="date" min={fromDay || undefined} value={toDay} onChange={(event) => state.setFilter('to', event.target.value)} />
         </FilterField>
       </Filters>
       </Disclosure>
@@ -98,12 +100,11 @@ export function BackupsPage() {
       {filterError && <ErrorNotice title={tx("Filtre seçenekleri yüklenemedi")} error={filterError} />}
       <QueryState isPending={backups.isPending} error={backups.error}>
         {backups.data && (backups.data.totalCount === 0
-          ? <Card padding="none">{filtering
-            ? <EmptyState icon={Activity} message={tx("Bu filtrelere uygun yedekleme denemesi bulunamadı.")} onClearFilters={clearFilters} />
-            : <EmptyState icon={Activity} message={tx("Henüz yedekleme denemesi yok. Bir yedekleme işi çalıştığında burada görünür.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs`}>{tx("Yedekleme işlerine git")}</Link>} />}</Card>
+          ? <ListEmpty icon={Activity} filtering={filtering} onClear={state.clear} filteredMessage={tx("Bu filtrelere uygun yedekleme denemesi bulunamadı.")}
+            message={tx("Henüz yedekleme denemesi yok. Bir yedekleme işi çalıştığında burada görünür.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs`}>{tx("Yedekleme işlerine git")}</Link>} />
           : <>
-            <DataList rows={backups.data.items} columns={id ? columns.filter((column) => column.key === 'job' || column.key === 'status') : columns} keyExtractor={(run) => run.id} emptyMessage={tx("Henüz yedekleme denemesi yok.")} />
-            <Pagination label={tx("Yedekleme sayfaları")} page={page} pageSize={pageSize} totalCount={backups.data.totalCount} disabled={backups.isFetching} onPageChange={(next) => update({ page: next })} />
+            <DataList rows={backups.data.items} columns={id ? columns.filter((column) => column.key === 'jobName' || column.key === 'status') : columns} sort={sortProps(state)} keyExtractor={(run) => run.id} emptyMessage={tx("Henüz yedekleme denemesi yok.")} />
+            <ListPager label={tx("Yedekleme sayfaları")} state={state} total={backups.data.totalCount} disabled={backups.isFetching} />
           </>)}
       </QueryState>
       </div>

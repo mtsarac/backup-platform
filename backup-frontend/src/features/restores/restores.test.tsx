@@ -215,8 +215,7 @@ function renderWithClient(ui: React.ReactElement, initialRoute = '/') {
   )
 }
 
-/** The list merges two purposes; these are the execution restores and no trial ones. */
-const listRestores = (execution: RestorePage) => vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => filters?.purpose === 'Verification' ? { ...execution, items: [], totalCount: 0 } : execution)
+const listRestores = (page: RestorePage) => vi.mocked(RestoreApi.getRestores).mockResolvedValue(page)
 
 beforeEach(() => {
   tenancy.tenantId = 'tenant-a'
@@ -278,6 +277,15 @@ describe('RestoresPage', () => {
     expect(screen.getAllByText('Çalışıyor').length).toBeGreaterThan(0)
   })
 
+  it('sends URL search, sorting and paging in one all-purpose request', async () => {
+    listRestores({ ...sampleRestorePage, totalCount: 75 })
+    renderWithClient(<RestoresPage />, '/?search=sales&status=Failed&sort=target&dir=asc&page=2')
+    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ purpose: 'All', search: 'sales', status: 'Failed', sort: 'target', dir: 'asc', page: 2, pageSize: 25 }), expect.anything()))
+    expect(screen.getByRole('searchbox', { name: 'Ara' })).toHaveValue('sales')
+    fireEvent.click(await screen.findByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ page: 3 }), expect.anything()))
+  })
+
   it('never shows or asks for a raw backup file id', async () => {
     renderWithClient(<RestoresPage />)
     await screen.findByText('RestoredSalesDB')
@@ -332,9 +340,7 @@ describe('RestoresPage', () => {
     const unnamed = { ...sampleArtifact, databaseName: null }
     vi.mocked(ArtifactApi.getArtifact).mockResolvedValue(unnamed)
     vi.mocked(BackupApi.getBackup).mockResolvedValue(makeRun({ id: 'run-1', status: 'Succeeded', attempts: [{ ...makeRun().attempts[0], artifacts: [unnamed] }] }))
-    vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => ({ ...sampleRestorePage, items: filters?.purpose === 'Verification'
-      ? [{ ...sampleRestore, id: 'trial-1', purpose: 'Verification' as const, databaseName: 'bp_verify_a042480e4a9c408f96a1852a850514fc', status: 'Succeeded' as const, targetState: 'NotModified' as const, sourceDatabaseName: null }]
-      : [] }))
+    vi.mocked(RestoreApi.getRestores).mockResolvedValue({ ...sampleRestorePage, items: [{ ...sampleRestore, id: 'trial-1', purpose: 'Verification', databaseName: 'bp_verify_a042480e4a9c408f96a1852a850514fc', status: 'Succeeded', targetState: 'NotModified', sourceDatabaseName: null }] })
     renderWithClient(<RestoresPage />)
     expect(await screen.findByRole('link', { name: 'Doğrulama denemesi: Uygulama' })).toHaveAttribute('href', '/tenants/tenant-a/restores/trial-1')
     expect(screen.queryByText(/bp_verify_/)).not.toBeInTheDocument()
@@ -354,12 +360,11 @@ describe('RestoresPage', () => {
 
   describe('when there is nothing to list', () => {
     beforeEach(() => listRestores({ items: [], totalCount: 0, page: 1, pageSize: 25 }))
-    const emptyActions = () => within(screen.getByTestId('restores-empty')).queryAllByRole('link').concat(within(screen.getByTestId('restores-empty')).queryAllByRole('button'))
+    const emptyActions = () => screen.queryAllByRole('link').concat(screen.queryAllByRole('button'))
 
     it('says why it is empty and offers one way forward: opening the backups to restore one', async () => {
       renderWithClient(<RestoresPage />)
-      await screen.findByTestId('restores-empty')
-      expect(within(screen.getByTestId('restores-empty')).getByText('Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.')).toBeInTheDocument()
+      expect(await screen.findByText('Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.')).toBeInTheDocument()
       const actions = emptyActions()
       expect(actions).toHaveLength(1)
       expect(actions[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
@@ -367,11 +372,11 @@ describe('RestoresPage', () => {
 
     it('clears an empty filtered history from the filters and then offers the backup files', async () => {
       renderWithClient(<RestoresPage />, '/?status=Failed')
-      await screen.findByTestId('restores-empty')
+      await screen.findByText('Bu filtrelere uyan geri yükleme yok.')
       fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
-      await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ status: '' }), expect.anything()))
+      await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ purpose: 'All', page: 1 }), expect.anything()))
       expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
-      expect(within(await screen.findByTestId('restores-empty')).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
+      expect(await screen.findByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
   })
 })

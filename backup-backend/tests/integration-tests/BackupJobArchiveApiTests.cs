@@ -130,6 +130,12 @@ public sealed class BackupJobArchiveApiTests(PostgreSqlFixture fixture) : IClass
         Assert.Equal("Nightly full backup", Assert.Single(runs.GetProperty("items").EnumerateArray()).GetProperty("jobName").GetString());
         Assert.Single((await ReadAsync(scenario.Admin, scenario.Root + $"/backup-runs?jobId={jobId}")).GetProperty("items").EnumerateArray());
         Assert.Single((await ReadAsync(scenario.Admin, scenario.Root + $"/backup-jobs/{jobId}/runs")).GetProperty("items").EnumerateArray());
+        Assert.Single((await ReadAsync(scenario.Admin, scenario.Root + $"/backup-runs?jobId={jobId}&search=MASTER&sort=jobName&dir=asc")).GetProperty("items").EnumerateArray());
+        using (var invalidSort = await scenario.Admin.GetAsync(scenario.Root + "/backup-runs?sort=unknown"))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, invalidSort.StatusCode);
+            Assert.Equal("sort", AgentWorld.ReadJson(invalidSort).GetProperty("field").GetString());
+        }
         Assert.Equal("Nightly full backup", (await scenario.RunAsync(run)).GetProperty("jobName").GetString());
         var artifacts = await ReadAsync(scenario.Admin, scenario.Root + "/backup-artifacts");
         Assert.Equal(artifactId, Assert.Single(artifacts.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());

@@ -30,8 +30,8 @@ public static class BackupEndpoints
         tenant.MapPost("/backup-jobs/{jobId:guid}/enable", EnableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
         tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
         tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithListQuery();
+        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithListQuery();
         tenant.MapGet("/backup-runs/{runId:guid}", GetRunAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-runs/{runId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-runs/{runId:guid}/retry", RetryAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -259,25 +259,25 @@ public static class BackupEndpoints
     };
 
     private static async Task<IResult> ListRunsAsync(Guid? jobId, Guid? agentId, string? status, string? trigger,
-        DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,
+        DateTimeOffset? from, DateTimeOffset? to, [AsParameters] ListParams list,
         ITenantContext tenant, IBackupUiStore views, CancellationToken cancellationToken)
     {
-        if (page is < 1 or > 1_000_000 || pageSize is < 1 or > 100) return Invalid("Invalid history page.");
+        var query = list.ToQuery();
         if (from > to) return Results.BadRequest(new { error = "invalid_request", field = "from", code = "invalid_date_range" });
         if (status is not null && status != "CancellationRequested" && !Enum.GetNames<BackupStatus>().Contains(status, StringComparer.OrdinalIgnoreCase))
             return Results.BadRequest(new { error = "invalid_request", field = "status", code = "invalid_value" });
         if (trigger is not null && trigger is not ("Manual" or "Scheduled" or "Retry"))
             return Results.BadRequest(new { error = "invalid_request", field = "trigger", code = "invalid_value" });
-        return Results.Ok(await views.ListRunsAsync(tenant.TenantId!, new(page ?? 1, pageSize ?? 25, jobId, agentId, status, from?.ToUniversalTime(), to?.ToUniversalTime(), trigger), cancellationToken));
+        return Results.Ok(await views.ListRunsAsync(tenant.TenantId!, new(query, jobId, agentId, status, from?.ToUniversalTime(), to?.ToUniversalTime(), trigger), cancellationToken));
     }
 
     /// <summary>The runs of one job; a job that is not this tenant's is a 404, not an empty list.</summary>
     private static async Task<IResult> ListJobRunsAsync(Guid jobId, Guid? agentId, string? status, string? trigger,
-        DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,
+        DateTimeOffset? from, DateTimeOffset? to, [AsParameters] ListParams list,
         ITenantContext tenant, IBackupUiStore views, TimeProvider time, CancellationToken cancellationToken) =>
         await views.GetJobAsync(tenant.TenantId!, jobId, time.GetUtcNow(), cancellationToken) is null
             ? Results.NotFound()
-            : await ListRunsAsync(jobId, agentId, status, trigger, from, to, page, pageSize, tenant, views, cancellationToken);
+            : await ListRunsAsync(jobId, agentId, status, trigger, from, to, list, tenant, views, cancellationToken);
 
     private static async Task<IResult> GetRunAsync(Guid runId, ITenantContext tenant, IBackupUiStore store, CancellationToken cancellationToken)
     {

@@ -568,6 +568,10 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
         Assert.Equal([three], Ids(await Page($"?agentId={sibling.AgentId}")));
         Assert.Equal([one], Ids(await Page("?page=2&pageSize=2")));
         Assert.Empty(Ids(await Page("?page=9&pageSize=2")));
+        Assert.Equal([one, three, two], Ids(await Page("?sort=target&dir=asc")));
+        Assert.Equal([two, three, one], Ids(await Page("?sort=target&dir=desc")));
+        Assert.Equal([three], Ids(await Page($"?search=THREE&status=Pending&agentId={sibling.AgentId}")));
+        Assert.Equal([three, one], Ids(await Page($"?search=master&artifactId={first.ArtifactId}")));
     }
 
     [Fact]
@@ -593,6 +597,7 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
     [InlineData("?page=0")]
     [InlineData("?pageSize=101")]
     [InlineData("?pageSize=0")]
+    [InlineData("?sort=unknown")]
     public async Task AnInvalidListQueryIsABadRequest(string query)
     {
         await using var scenario = await CreateAsync(fixture);

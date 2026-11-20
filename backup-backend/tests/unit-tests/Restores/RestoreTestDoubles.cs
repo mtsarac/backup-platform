@@ -28,7 +28,7 @@ internal sealed class FakeRestoreStore : IRestoreStore
     public Func<TenantId, Guid, RestoreOperation?> OnGet { get; set; } = (_, _) => null;
     public List<(TenantId Tenant, Guid RestoreId)> Gets { get; } = [];
 
-    public Func<TenantId, RestoreQuery, RestorePage> OnList { get; set; } = (_, query) => new RestorePage([], 0, query.Page, query.PageSize);
+    public Func<TenantId, RestoreQuery, RestorePage> OnList { get; set; } = (_, query) => new RestorePage([], 0, query.List.Page, query.List.PageSize);
     public List<(TenantId Tenant, RestoreQuery Query)> Lists { get; } = [];
 
     public Func<TenantId, Guid, DateTimeOffset, RestoreOperation?> OnCancel { get; set; } = (_, _, _) => null;
