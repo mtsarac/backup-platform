@@ -2,6 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -72,9 +73,9 @@ export function PlatformStorageConnectionsPage() {
 
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <>
-        {data.items.length === 0
+        {data.totalCount === 0
           ? <ListEmpty message={tx("Kriterlere uygun depolama hedefi bulunamadı.")} filtering={state.filtering} onClear={state.clear} />
-          : <PlatformConnectionTable rows={data.items} providers={providers.data?.items ?? []} ops={ops} showTenant sort={sortProps(state)} emptyMessage={tx("Kriterlere uygun depolama hedefi bulunamadı.")} />}
+          : <PlatformConnectionTable rows={data.items} providers={providers.data?.items ?? []} ops={ops} showTenant sort={sortProps(state)} emptyMessage={pastLastPageMessage()} />}
         <ListPager state={state} total={data.totalCount} disabled={query.isFetching} label={tx("Depolama hedefi sayfaları")} />
       </>}
     </QueryState>

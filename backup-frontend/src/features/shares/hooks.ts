@@ -21,6 +21,9 @@ import type {
   RevokeShareRequest,
 } from './types'
 
+/** Every download-history query: a download leaves a new attempt behind, so the history is refreshed after one. */
+export const downloadAttemptsKey = ['download-attempts'] as const
+
 export function useShares(tenantId: string, artifactId?: string) {
   return useQuery({
     queryKey: ['shares', tenantId, artifactId ?? 'all'],
@@ -101,7 +104,7 @@ export function useRevokeShare(tenantId: string) {
 
 export function useDownloadAttempts(scope: DownloadAttemptScope, list: DownloadAttemptQuery) {
   return useQuery({
-    queryKey: ['download-attempts', scope, list],
+    queryKey: [...downloadAttemptsKey, scope, list],
     queryFn: ({ signal }) => listDownloadAttempts(scope, list, signal),
     enabled: scope.route === 'platform' || Boolean(scope.tenantId),
     placeholderData: keepPreviousData,

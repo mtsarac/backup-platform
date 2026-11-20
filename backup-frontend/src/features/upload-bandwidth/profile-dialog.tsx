@@ -50,7 +50,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
 
   return (
     <FormDialog
-      title={profile ? tx("Profili Düzenle: {0}", { "0": profile.name }) : tx("Yeni Bant Genişliği Profili")}
+      title={profile ? tx("Profili düzenle: {0}", { "0": profile.name }) : tx("Yeni bant genişliği profili")}
       description={tx("Profil statik sınırların yerine geçer; pencere dışında sınırsızdır. Duraklatma penceresi aktarımı saklar; devam ettirme manueldir.")}
       submitLabel={tx("Kaydet")}
       pendingLabel={tx("Kaydediliyor…")}

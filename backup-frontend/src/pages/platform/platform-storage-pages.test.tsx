@@ -252,6 +252,7 @@ describe('Platform Quota Policies Page and Dialog', () => {
     fireEvent.click(within(screen.getByRole('columnheader', { name: 'Politika' })).getByRole('button'))
     expect(names()[0]).toContain('Alfa')
     fireEvent.change(screen.getByRole('searchbox', { name: 'Politika ara' }), { target: { value: 'yok' } })
+    fireEvent.blur(screen.getByRole('searchbox', { name: 'Politika ara' }))
     expect(screen.getByText('Aramayla eşleşen kayıt yok.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
     expect(names()[0]).toContain('Alfa')

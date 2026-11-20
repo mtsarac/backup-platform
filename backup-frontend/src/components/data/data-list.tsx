@@ -113,7 +113,7 @@ export function SortMenu({ options, sort }: { options: readonly { key: string; l
 
 function Table<T>({ rows, columns, keyExtractor, className, caption, sort }: ListProps<T>) {
   return (
-    <div data-slot="data-table" className={cn(cardClass, 'overflow-x-auto', className)}>
+    <div data-slot="data-table" className={cn(cardClass, 'scroll-shadow-x overflow-x-auto', className)}>
       <table className="w-full border-collapse text-body">
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>

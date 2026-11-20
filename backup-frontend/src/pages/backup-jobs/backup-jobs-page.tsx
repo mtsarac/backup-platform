@@ -11,6 +11,7 @@ import { FilterField } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
 import { Select } from '@/components/ui/text-input'
 import { jobStatusLabel, jobStatusLevel, type JobStatus } from '@/features/backup-jobs/job-status'
+import { engineLabels } from '@/features/discovery/status'
 import { compareDate, compareText } from '@/features/lists/compare'
 import { ListEmpty } from '@/features/lists/list-empty'
 import { ListPager } from '@/features/lists/list-pager'
@@ -100,7 +101,7 @@ export function BackupJobsPage() {
           </FilterField>}
           {engines.length > 1 && <FilterField label={tx('Veritabanı türü')}>
             <Select aria-label={tx('Veritabanı türü')} value={engine ?? ''} onChange={event => state.setFilter('engine', event.target.value)}>
-              <option value="">{tx('Tümü')}</option>{engines.map(item => <option key={item} value={item}>{item === 'mssql' ? tx('SQL Server') : item === 'file-system' ? tx('Dosya / Klasör') : 'PostgreSQL'}</option>)}
+              <option value="">{tx('Tümü')}</option>{engines.map(item => <option key={item} value={item}>{engineLabels[item] ?? item}</option>)}
             </Select>
           </FilterField>}
         </ListToolbar>

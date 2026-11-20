@@ -1,5 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { searchFor } from '@/test/search'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -84,14 +85,14 @@ describe('run history filters and pagination', () => {
 
   it('shows job, result, start time and duration, with the job linking to the run and no raw ids', () => {
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    for (const name of ['İş', 'Durum', 'Yedek dosyası', 'Başlangıç', 'Süre']) {
+    for (const name of ['İş', 'Durum', 'Yedek dosyası', 'Oluşturulma', 'Başlangıç', 'Süre']) {
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
     }
-    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
+    expect(screen.getAllByRole('columnheader')).toHaveLength(6)
     const row = within(screen.getAllByRole('row')[1])
     expect(row.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id')
     expect(row.getByText('Çalışıyor')).toBeInTheDocument()
-    expect(row.getByText(/önce/)).toBeInTheDocument()
+    expect(row.getAllByText(/önce/)).toHaveLength(2)
     expect(screen.queryByText('job-id')).not.toBeInTheDocument()
     expect(screen.queryByText('agent-id')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Önceki' })).toBeDisabled()
@@ -114,7 +115,7 @@ describe('run history filters and pagination', () => {
     const card = within(screen.getByRole('listitem'))
     expect(card.getByRole('link', { name: 'Günlük SQL yedeği' })).toBeInTheDocument()
     expect(card.getByText('Çalışıyor')).toBeInTheDocument()
-    expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['Yedek dosyası', 'Başlangıç', 'Süre'])
+    expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['Yedek dosyası', 'Oluşturulma', 'Başlangıç', 'Süre'])
   })
 
   it('on a phone clears an empty filtered history from its filters and restores the first-run action', () => {
@@ -204,10 +205,18 @@ describe('run history search, sorting and paging', () => {
   const location = () => screen.getByTestId('location')
   const sortHeaders = ['İş', 'Durum', 'Yedek dosyası', 'Başlangıç', 'Süre']
 
-  it('asks for the newest runs first without sending a sort, and marks no column as the sorted one', () => {
+  it('asks for the newest runs first without sending a sort, and shows that order on the Oluşturulma column', () => {
     mountAt('/')
     expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+    expect(header('Oluşturulma')).toHaveAttribute('aria-sort', 'descending')
     for (const name of sortHeaders) expect(header(name)).toHaveAttribute('aria-sort', 'none')
+  })
+
+  it('on a phone the Sırala select shows the real default order', () => {
+    setViewport(false)
+    mountAt('/')
+    expect(screen.getByRole('combobox', { name: 'Sırala' })).toHaveValue('createdAt:desc')
+    expect(screen.getByRole('option', { name: 'Oluşturulma, azalan' })).toBeInTheDocument()
   })
 
   it.each([
@@ -236,7 +245,7 @@ describe('run history search, sorting and paging', () => {
 
   it('searches the runs, keeps the filters and goes back to the first page', () => {
     mountAt('/?status=Failed&page=2')
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Ara' }), { target: { value: 'günlük' } })
+    searchFor(screen.getByRole('searchbox', { name: 'Ara' }), 'günlük')
     expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, status: 'Failed', search: 'günlük' })
     expect(location()).toHaveTextContent(/^\/\?status=Failed&search=g%C3%BCnl%C3%BCk$/)
   })
@@ -244,9 +253,9 @@ describe('run history search, sorting and paging', () => {
   it('sends the search trimmed and not at all when it is blank', () => {
     mountAt('/')
     const box = screen.getByRole('searchbox', { name: 'Ara' })
-    fireEvent.change(box, { target: { value: '  sql  ' } })
+    searchFor(box, '  sql  ')
     expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, search: 'sql' })
-    fireEvent.change(box, { target: { value: '   ' } })
+    searchFor(box, '   ')
     expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
   })
 
@@ -260,6 +269,7 @@ describe('run history search, sorting and paging', () => {
   it('a direction alone in the URL sorts the default field and an unknown sort is ignored', () => {
     mountAt('/?sort=password&dir=sideways')
     expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+    expect(header('Oluşturulma')).toHaveAttribute('aria-sort', 'descending')
     for (const name of sortHeaders) expect(header(name)).toHaveAttribute('aria-sort', 'none')
   })
 

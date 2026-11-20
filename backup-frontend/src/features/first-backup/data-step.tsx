@@ -14,6 +14,7 @@ import type { Agent } from '@/features/agents/types'
 import { getDiscoveryInstance } from '@/features/discovery/api'
 import { discoveryInstancePath } from '@/lib/routes'
 import { discoveryKeys, useDiscoveryAgents, useDiscoveryInstances, useRescanAgent } from '@/features/discovery/hooks'
+import { foldSearch } from '@/features/lists/fold-search'
 import { canCreateJob, databaseSelectable, engineLabels, isRescanThrottled, isScanActive, supportsDiscovery } from '@/features/discovery/status'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { autoJobName, awaitingCapabilities, itemKey, type FirstBackupItem } from './first-backup-model'
@@ -54,8 +55,8 @@ export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
   const chosenItems = items.filter(item => isPicked(item.key))
   const [renaming, setRenaming] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const needle = search.trim().toLowerCase()
-  const shown = needle ? items.filter(item => `${item.database} ${item.instance.displayName}`.toLowerCase().includes(needle)) : items
+  const needle = foldSearch(search.trim())
+  const shown = needle ? items.filter(item => foldSearch(`${item.database} ${item.instance.displayName}`).includes(needle)) : items
   const toggle = (key: string, checked: boolean) => {
     const next = new Set(picked)
     if (checked) next.add(key); else next.delete(key)

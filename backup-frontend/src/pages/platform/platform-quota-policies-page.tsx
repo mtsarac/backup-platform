@@ -63,7 +63,7 @@ export function PlatformQuotaPoliciesPage() {
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (policy) => <Button variant="outline" size="sm" onClick={() => setEditingPolicy(policy)}>{tx("Düzenle")}</Button> },
   ]
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title={tx("Kota Politikaları")} description={tx("Tenant'ların depolama hesaplama yöntemlerini, eşiklerini ve engelleme kurallarını yönetin.")} actions={<>
+    <PageHeader crumbs={[platformCrumb]} title={tx("Kota politikaları")} description={tx("Tenant'ların depolama hesaplama yöntemlerini, eşiklerini ve engelleme kurallarını yönetin.")} actions={<>
       <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />{tx("Yenile")}</Button>
       <Button onClick={() => setIsCreating(true)}><Plus aria-hidden="true" className="size-4" />{tx("Yeni Politika")}</Button>
     </>} />

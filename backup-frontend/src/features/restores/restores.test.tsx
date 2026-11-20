@@ -287,6 +287,31 @@ describe('RestoresPage', () => {
     await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ page: 3 }), expect.anything()))
   })
 
+  it('keeps focus on a sorted header button while the sorted restores load', async () => {
+    renderWithClient(<RestoresPage />)
+    await screen.findByText('RestoredSalesDB')
+    const button = within(screen.getByRole('columnheader', { name: 'Hedef veritabanı' })).getByRole('button')
+    let release: () => void = () => undefined
+    vi.mocked(RestoreApi.getRestores).mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(sampleRestorePage) }))
+    button.focus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenCalledTimes(2))
+    expect(button).toBeInTheDocument()
+    expect(document.activeElement).toBe(button)
+    release()
+    await waitFor(() => expect(screen.getByRole('columnheader', { name: 'Hedef veritabanı' })).toHaveAttribute('aria-sort', 'ascending'))
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('falls back to the last page when the URL asks for one past it, and never says there are no restores', async () => {
+    vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => (filters?.page ?? 1) > 1 ? { items: [], totalCount: 3, page: filters?.page ?? 1, pageSize: 25 } : { ...sampleRestorePage, totalCount: 3 })
+    renderWithClient(<><RestoresPage /><LocationProbe /></>, '/?page=5')
+    expect(await screen.findByText('RestoredSalesDB')).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+    expect(screen.getByText('3 kayıt')).toBeInTheDocument()
+    expect(screen.queryByText(/Henüz geri yükleme yapılmadı/)).not.toBeInTheDocument()
+  })
+
   it('never shows or asks for a raw backup file id', async () => {
     renderWithClient(<RestoresPage />)
     await screen.findByText('RestoredSalesDB')

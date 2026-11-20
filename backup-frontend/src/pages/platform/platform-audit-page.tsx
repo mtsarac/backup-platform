@@ -1,5 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -32,7 +33,7 @@ export function PlatformAuditPage() {
       {data && <div className="space-y-4">
         {data.items.length === 0
           ? <ListEmpty message={tx('Henüz audit kaydı yok.')} filtering={state.filtering} onClear={state.clear} />
-          : <AuditTable rows={data.items} emptyMessage={tx('Henüz audit kaydı yok.')} sort={sortProps(state)} />}
+          : <AuditTable rows={data.items} emptyMessage={pastLastPageMessage()} sort={sortProps(state)} />}
         <ListPager state={state} total={data.totalCount} disabled={query.isFetching} label={tx("Audit sayfaları")} />
       </div>}
     </QueryState>

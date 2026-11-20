@@ -81,7 +81,7 @@ describe('platform notification transports page', () => {
     vi.mocked(api.setEmailSecret).mockResolvedValue(email({ hasSecret: true, secretUpdatedAt: '2026-10-14T10:00:00Z' }))
     const user = userEvent.setup()
     const { client } = renderPlatform(<PlatformNotificationTransportsPage />)
-    const input = await screen.findByLabelText('Yeni smtp parolası') as HTMLInputElement
+    const input = await screen.findByLabelText('Yeni SMTP parolası') as HTMLInputElement
     expect(input.type).toBe('password')
     await user.type(input, SECRET)
     await user.click(screen.getAllByRole('button', { name: 'Ayarla' })[0])

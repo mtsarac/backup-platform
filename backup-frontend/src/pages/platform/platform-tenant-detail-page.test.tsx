@@ -315,13 +315,13 @@ describe('platform tenant detail', () => {
     mount('storage-computers')
     expect(await screen.findByRole('heading', { name: 'Depolama bağlantıları' })).toBeInTheDocument()
     expect(connectionApi.getPlatformTenantConnections).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
-    const managedHeading = (await screen.findAllByText('Managed Storage')).find(el => el.tagName === 'SPAN')!
+    const managedHeading = (await screen.findAllByText('Merkezi depolama')).find(el => el.tagName === 'SPAN')!
     const managed = within(managedHeading.closest('tr') as HTMLElement)
     expect(managed.getAllByRole('button').map((button) => button.textContent).filter((label) => label !== 'Kopyala' && label !== 'Teknik ayrıntılar')).toEqual(['Düzenle', 'Platform kilidi koy', 'Test et', 'Sil'])
-    const localHeading = screen.getByText('Local')
+    const localHeading = screen.getByText('Yerel disk')
     const local = within(localHeading.closest('tr') as HTMLElement)
     expect(local.getAllByRole('button').map((button) => button.textContent).filter((label) => label !== 'Kopyala' && label !== 'Teknik ayrıntılar')).toEqual(['Düzenle', 'Platform kilidi koy'])
-    expect(screen.queryByRole('columnheader', { name: "Çalışma Alanı" })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: "Çalışma alanı" })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: "Yönetilen hedef ekle" }))
     const dialog = await screen.findByRole('dialog')

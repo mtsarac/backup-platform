@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVisibleTab } from '@/hooks/use-visible-tab'
 import { storageQueryKeys, useRefreshQuotaWhenFinished } from '@/features/storage/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -12,12 +12,15 @@ export const backupQueryKeys = {
   detail: (tenantId: string, id: string) => ['tenant', tenantId, 'backup-runs', 'detail', id] as const,
 }
 
-export function useBackups(filters: BackupRunFilters = {}) {
+/** `enabled: false` loads nothing (a filter the API would refuse). The previous page stays on screen while the next loads, so the list and a focused sort button are never unmounted. */
+export function useBackups(filters: BackupRunFilters = {}, { enabled = true } = {}) {
   const { tenantId } = useTenant()
   const visible = useVisibleTab()
   const query = useQuery({
     queryKey: backupQueryKeys.list(tenantId, filters),
     queryFn: ({ signal }) => getBackups(tenantId, filters, signal),
+    enabled,
+    placeholderData: keepPreviousData,
     refetchInterval: (query) => visible && !query.state.error && query.state.data?.items.some((run) => isActiveRun(run.status)) ? 5000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,

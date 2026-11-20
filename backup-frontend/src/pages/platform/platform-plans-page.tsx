@@ -6,6 +6,7 @@ import { FilterField } from '@/components/ui/filters'
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -68,8 +69,8 @@ export function PlatformPlansPage() {
     </ListToolbar>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {data.items.length === 0 ? <ListEmpty message={tx('Henüz plan yok.')} filtering={state.filtering} filteredMessage={tx('Filtreye uygun plan bulunamadı.')} onClear={state.clear} />
-          : <DataList rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(plan) => plan.planId} emptyMessage={tx('Henüz plan yok.')} onClearFilters={state.filtering ? state.clear : undefined} />}
+        {data.totalCount === 0 ? <ListEmpty message={tx('Henüz plan yok.')} filtering={state.filtering} filteredMessage={tx('Filtreye uygun plan bulunamadı.')} onClear={state.clear} />
+          : <DataList rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(plan) => plan.planId} emptyMessage={pastLastPageMessage()} onClearFilters={state.filtering ? state.clear : undefined} />}
         <ListPager state={state} total={data.totalCount} label={tx('Plan sayfaları')} disabled={query.isFetching} />
       </div>}
     </QueryState>

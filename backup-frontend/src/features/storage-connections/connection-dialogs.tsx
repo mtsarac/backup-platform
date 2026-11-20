@@ -7,7 +7,7 @@ import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
 import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
 import type { ConnectionOps } from './hooks'
-import { errorField, invalidFieldName } from './labels'
+import { connectionDisplayName, errorField, invalidFieldName } from './labels'
 import type { ConfigField, ConnectionView, PlatformUpdateConnectionInput, SecretField } from './types'
 
 interface EditProps {
@@ -35,7 +35,7 @@ export function EditConnectionDialog({ connection, configFields, ops, onClose }:
   const quotaScopeInvalid = canSetQuotaScope && !QUOTA_SCOPE_PATTERN.test(quotaScope.trim())
   const valid = (!canEdit || (name.trim() !== '' && configurationComplete(configFields, values))) && !quotaScopeInvalid
 
-  return <FormDialog title={tx("Bağlantıyı düzenle: {0}", { "0": connection.name })} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={mutation.isPending}
+  return <FormDialog title={tx("Bağlantıyı düzenle: {0}", { "0": connectionDisplayName(connection) })} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={mutation.isPending}
     disabled={Object.keys(input).length === 0 || !valid} error={mutation.error} errorScope="storageConnection"
     onSubmit={() => mutation.mutate({ connection, input }, { onSuccess: onClose })} onClose={onClose}>
     <label className="block text-sm text-text-muted">{tx("Ad")}<TextInput className="mt-1" value={name} required disabled={!canEdit} aria-invalid={errorField(mutation.error) === 'name'} onChange={(event) => setName(event.target.value)} />
@@ -75,7 +75,7 @@ export function SecretDialog({ connection, fields, ops, onClose }: SecretProps) 
     mutation.mutate({ connection, values: secret }, { onSuccess: () => { reset(); onClose() } })
   }
 
-  return <FormDialog title={`${connection.hasSecret ? tx('Kimlik bilgisini yenile') : tx('Kimlik bilgisi ayarla')}: ${connection.name}`}
+  return <FormDialog title={`${connection.hasSecret ? tx('Kimlik bilgisini yenile') : tx('Kimlik bilgisi ayarla')}: ${connectionDisplayName(connection)}`}
     description={tx("Değerler yalnızca sunucuya gönderilir; kaydedildikten sonra bir daha gösterilmez. Hata olursa alanları yeniden girmeniz gerekir.")}
     submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={mutation.isPending}
     disabled={!hasSecretInput(buildSecretValues(activeFields, values)) || !secretsComplete(activeFields, values)} error={mutation.error} errorScope="storageConnection"

@@ -40,7 +40,7 @@ describe('Top bar', () => {
 
   it('keeps workspace, notification, language and theme controls but no account links, name or sign-out', () => {
     renderPlatform(<ThemeProvider><TopBar onMenuToggle={vi.fn()} /></ThemeProvider>, { tenants: [{ tenantId: 'tenant-a', name: 'Acme' } as never] })
-    expect(screen.getByLabelText('Çalışma Alanı')).toBeInTheDocument()
+    expect(screen.getByLabelText('Çalışma alanı')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Bildirimler' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Temayı değiştir' })).toBeInTheDocument()
     expect(screen.getByText('Platform Yöneticisi')).toBeInTheDocument()

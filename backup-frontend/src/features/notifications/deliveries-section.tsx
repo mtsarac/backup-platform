@@ -75,7 +75,7 @@ export function DeliveriesSection() {
         <FilterField label={tx("Olay türü")}><Select aria-label={tx("Olay türü")} value={eventType} onChange={filter('eventType')}><option value="">{tx("Tümü")}</option>{[...visibleEventTypes(), 'test' as const].map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</Select></FilterField>
       </ListToolbar>
       <QueryState isPending={deliveries.isPending} error={deliveries.error}>
-        {data && (data.items.length === 0
+        {data && (data.totalCount === 0
           ? <ListEmpty icon={Send} message={tx("Gönderim kaydı bulunamadı.")} filtering={state.filtering} onClear={state.clear} action={<Button disabled={deliveries.isFetching} onClick={() => void deliveries.refetch()}>{tx('Yenile')}</Button>} />
           : <>
             <SortMenu options={sortOptions()} sort={sortProps(state)} />

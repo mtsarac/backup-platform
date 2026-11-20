@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
+import { searchFor } from '@/test/search'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { ReactNode } from 'react'
@@ -111,10 +112,10 @@ describe('Backup computers list', () => {
     vi.mocked(api.getAgents).mockResolvedValue([agent, { ...agent, agentId: 'agent-b', hostName: 'Depo-PC', connectivity: 'offline' }])
     mount(<ClientsPage />)
     await screen.findByRole('link', { name: 'Depo-PC' })
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), { target: { value: 'sql' } })
+    searchFor(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), 'sql')
     expect(screen.queryByRole('link', { name: 'Depo-PC' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'SQL-01' })).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), { target: { value: '' } })
+    searchFor(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), '')
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'offline' } })
     expect(screen.queryByRole('link', { name: 'SQL-01' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Depo-PC' })).toBeInTheDocument()

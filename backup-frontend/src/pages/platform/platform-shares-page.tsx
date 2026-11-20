@@ -9,7 +9,6 @@ import { TextInput } from '@/components/ui/text-input'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { useUrlParams } from '@/features/lists/url-params'
-import { useListState } from '@/features/lists/use-list-state'
 import { CreatePlatformShareDialog } from '@/features/shares/create-platform-share-dialog'
 import {
   useAuditRetention,
@@ -17,7 +16,7 @@ import {
   useUpdateAuditRetention,
 } from '@/features/shares/hooks'
 import { downloadAttemptsListConfig } from '@/features/shares/download-attempts-config'
-import { DownloadAttemptsList } from '@/features/shares/download-attempts-list'
+import { DownloadAttemptsSection } from '@/features/shares/download-attempts-section'
 import { SharesTable } from '@/features/shares/shares-table'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
 import { tx, useLanguage } from '@/lib/i18n'
@@ -25,8 +24,6 @@ export function PlatformSharesPage() {
   useLanguage()
   const { get, update } = useUrlParams()
   const tenantId = get('tenantId')
-  const attempts = useListState(downloadAttemptsListConfig)
-  const [auditOpen, setAuditOpen] = useState(attempts.filtering)
   const [createOpen, setCreateOpen] = useState(false)
   const [retentionOverride, setRetentionOverride] = useState<string | null>(null)
   const [retentionError, setRetentionError] = useState<string | null>(null)
@@ -69,7 +66,7 @@ export function PlatformSharesPage() {
         <SharesTable
           shares={shares}
           showTenant
-          tenantFilter={<TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value, 'attempts-page': '' })} />}
+          tenantFilter={<TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value, [downloadAttemptsListConfig.pageKey]: '' })} />}
           emptyMessage={
             tenantId
               ? tx('Seçilen filtrelere uygun paylaşım bulunamadı.')
@@ -78,15 +75,7 @@ export function PlatformSharesPage() {
         />
       </QueryState>
 
-      <details open={auditOpen} onToggle={(event) => setAuditOpen(event.currentTarget.open)} className="group">
-        <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('İndirme girişimleri')}</summary>
-      <Section
-        title={tx('İndirme girişimleri')}
-        description={tx('Paylaşımlar ve yedek dosyaları üzerinden yapılan tüm indirme girişimleri.')}
-      >
-        <DownloadAttemptsList scope={{ route: 'platform', tenantId: tenantId || undefined }} />
-      </Section>
-      </details>
+      <DownloadAttemptsSection scope={{ route: 'platform', tenantId: tenantId || undefined }} description={tx('Paylaşımlar ve yedek dosyaları üzerinden yapılan tüm indirme girişimleri.')} />
 
       <details className="group">
         <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('Denetim ve paylaşım geçmişi saklama süresi')}</summary>

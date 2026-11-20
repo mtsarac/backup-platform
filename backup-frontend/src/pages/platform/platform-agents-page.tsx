@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAgents } from '@/features/platform/hooks'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -51,7 +52,7 @@ export function PlatformAgentsPage() {
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.totalCount === 0 ? <ListEmpty message={tx('Henüz hiçbir çalışma alanına yedekleme bilgisayarı eklenmedi.')} filtering={state.filtering} filteredMessage={tx('Filtrelere uygun bilgisayar bulunamadı.')} onClear={state.clear} />
-          : <DataList caption={tx('Yedekleme bilgisayarları')} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(agent) => `${agent.tenantId}:${agent.agentId}`} emptyMessage={tx('Filtrelere uygun bilgisayar bulunamadı.')} onClearFilters={state.filtering ? state.clear : undefined} />}
+          : <DataList caption={tx('Yedekleme bilgisayarları')} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(agent) => `${agent.tenantId}:${agent.agentId}`} emptyMessage={pastLastPageMessage()} onClearFilters={state.filtering ? state.clear : undefined} />}
         <ListPager state={state} total={data.totalCount} label={tx('Bilgisayar sayfaları')} disabled={query.isFetching} />
       </div>}
     </QueryState>

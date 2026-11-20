@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { useCreateTenant, usePlatformTenants } from '@/features/platform/hooks'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -65,7 +66,7 @@ export function PlatformTenantsPage() {
       {data && <div className="space-y-4">
         {data.totalCount === 0
           ? <ListEmpty icon={Building2} message={tx('Henüz tenant yok.')} filtering={state.filtering} filteredMessage={tx('Aramaya uygun tenant bulunamadı.')} onClear={state.clear} />
-          : <DataList caption={tx('Çalışma alanları')} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={tx('Aramaya uygun tenant bulunamadı.')} onClearFilters={state.filtering ? state.clear : undefined} />}
+          : <DataList caption={tx('Çalışma alanları')} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={pastLastPageMessage()} onClearFilters={state.filtering ? state.clear : undefined} />}
         <ListPager state={state} total={data.totalCount} label={tx('Tenant sayfaları')} disabled={query.isFetching} />
       </div>}
     </QueryState>

@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { searchFor } from '@/test/search'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { LocationProbe } from '@/features/platform/location-probe'
@@ -189,7 +190,7 @@ it.each([
   ])
   mount()
   await ready()
-  fireEvent.change(screen.getByRole('searchbox', { name: 'İş, yedekleme bilgisayarı veya veritabanı ara' }), { target: { value: term } })
+  searchFor(screen.getByRole('searchbox', { name: 'İş, yedekleme bilgisayarı veya veritabanı ara' }), term)
   expect(names()).toEqual(expected)
   expect(location()).toHaveTextContent(`search=${encodeURIComponent(term)}`)
 })
@@ -259,12 +260,14 @@ it('ignores a filter value in the URL that the list does not offer', async () =>
 
 const manyJobs = (count: number) => Array.from({ length: count }, (_, index) => makeJob(`job-${index}`, `İş ${String(index).padStart(2, '0')}`, 1 + Math.floor(index / 2), { createdAt: `2026-09-${String(1 + Math.floor(index / 2)).padStart(2, '0')}T${String(index % 2).padStart(2, '0')}:00:00Z` }))
 
-it('has no paging for a list of 25 jobs', async () => {
+it('shows the count but no page buttons for a list of 25 jobs', async () => {
   vi.mocked(getBackupJobs).mockResolvedValue(manyJobs(25))
   mount()
   await ready()
   expect(screen.getAllByRole('row')).toHaveLength(26)
-  expect(screen.queryByRole('navigation', { name: 'Yedekleme işi sayfaları' })).not.toBeInTheDocument()
+  const paging = within(screen.getByRole('navigation', { name: 'Yedekleme işi sayfaları' }))
+  expect(paging.getByText('25 kayıt')).toBeInTheDocument()
+  expect(paging.queryByRole('button')).not.toBeInTheDocument()
 })
 
 it('shows 25 jobs a page and the page lives in the URL', async () => {
@@ -292,7 +295,7 @@ it('going to page 1 after a search, a filter or another sort', async () => {
   vi.mocked(getBackupJobs).mockResolvedValue(manyJobs(60))
   mount('/tenants/tenant-a/backup-jobs?page=3')
   await ready()
-  fireEvent.change(screen.getByRole('searchbox', { name: 'İş, yedekleme bilgisayarı veya veritabanı ara' }), { target: { value: 'İş' } })
+  searchFor(screen.getByRole('searchbox', { name: 'İş, yedekleme bilgisayarı veya veritabanı ara' }), 'İş')
   expect(location()).not.toHaveTextContent('page=')
   expect(screen.getByRole('navigation', { name: 'Yedekleme işi sayfaları' })).toHaveTextContent('Sayfa 1 / 3')
   fireEvent.click(within(screen.getByRole('navigation', { name: 'Yedekleme işi sayfaları' })).getByRole('button', { name: 'Sonraki' }))
