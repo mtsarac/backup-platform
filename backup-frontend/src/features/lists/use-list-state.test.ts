@@ -29,3 +29,9 @@ it('reads the search only when the list has one', () => {
   expect(parse('search=abc').search).toBe('abc')
   expect(parse('search=abc', { ...config, search: false }).search).toBe('')
 })
+
+it('reads the search and sort from prefixed parameters', () => {
+  const state = parse('attempts-search=abc&attempts-sort=name&search=zzz&sort=created', { ...config, paramPrefix: 'attempts-' })
+  expect(state.search).toBe('abc')
+  expect(state.sort).toEqual({ key: 'name', dir: 'asc' })
+})

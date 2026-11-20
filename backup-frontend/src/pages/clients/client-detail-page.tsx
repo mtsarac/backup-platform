@@ -21,6 +21,10 @@ import { notFound } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 import { supportsDiscovery } from '@/features/discovery/status'
 import { linkClass } from '@/components/ui/form-styles'
+import { compareDate, compareNumber, compareText } from '@/features/lists/compare'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { useClientList } from '@/features/lists/use-client-list'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { AgentDatabases } from './agent-databases'
 
 export function ClientDetailPage() {
@@ -70,20 +74,38 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
   </div>
 }
 
+const jobsListConfig = {
+  search: true,
+  sort: { first: { name: 'asc', enabled: 'asc', lastRun: 'asc', next: 'asc', created: 'desc' }, default: { key: 'created', dir: 'desc' } },
+} as const
+const jobComparators = {
+  name: (a: BackupJob, b: BackupJob) => compareText(a.name, b.name),
+  enabled: (a: BackupJob, b: BackupJob) => compareNumber(Number(b.enabled && !b.agentRevoked), Number(a.enabled && !a.agentRevoked)),
+  lastRun: (a: BackupJob, b: BackupJob) => compareText(a.lastRun?.status, b.lastRun?.status),
+  next: (a: BackupJob, b: BackupJob) => compareDate(a.agentRevoked ? null : a.nextOccurrenceAt, b.agentRevoked ? null : b.nextOccurrenceAt),
+  created: (a: BackupJob, b: BackupJob) => compareDate(a.createdAt, b.createdAt),
+}
+
 function AgentJobs({ agentId }: { agentId: string }) {
   useLanguage()
   const { tenantId } = useTenant()
   const jobs = useBackupJobs()
+  const state = useListState(jobsListConfig)
   const rows = (jobs.data ?? []).filter((job) => job.agentId === agentId)
+  const list = useClientList(rows, state, { searchText: job => job.name, comparators: jobComparators, tieBreak: (a, b) => compareText(a.name, b.name) || compareText(a.id, b.id) })
   const columns: Column<BackupJob>[] = [
-    { key: 'name', header: tx('Yedekleme işi'), card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}`}>{job.name}</Link> },
-    { key: 'enabled', card: 'status', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled && !job.agentRevoked ? 'Active' : 'Disabled'} /> },
-    { key: 'lastRun', header: tx('Son sonuç'), render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted"><RelativeTime value={job.lastRun.createdAt} /></span></div> : tx('Henüz çalışmadı') },
-    { key: 'next', header: tx('Sonraki yedek'), render: (job) => job.nextOccurrenceAt && !job.agentRevoked ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },
+    { key: 'name', header: tx('Yedekleme işi'), sortable: true, card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}`}>{job.name}</Link> },
+    { key: 'enabled', card: 'status', header: tx('Durum'), sortable: true, render: (job) => <StatusPill status={job.enabled && !job.agentRevoked ? 'Active' : 'Disabled'} /> },
+    { key: 'lastRun', header: tx('Son sonuç'), sortable: true, render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted"><RelativeTime value={job.lastRun.createdAt} /></span></div> : tx('Henüz çalışmadı') },
+    { key: 'next', header: tx('Sonraki yedek'), sortable: true, render: (job) => job.nextOccurrenceAt && !job.agentRevoked ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },
+    { key: 'created', header: tx('Oluşturulma'), sortable: true, render: job => <RelativeTime value={job.createdAt} /> },
   ]
   return <Section title={tx("Bu bilgisayarın yedekleme işleri")} flush>
     <QueryState isPending={jobs.isPending} error={jobs.error}>
-      <DataList rows={rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={tx("Bu bilgisayar için tanımlı yedekleme işi yok.")} className="rounded-none border-0" />
+      <div className="space-y-4">
+        {rows.length > 10 && <ListToolbar state={state} label={tx('İş filtreleri')} total={list.total} search={{ label: tx('Yedekleme işi ara') }} />}
+        <DataList rows={list.rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={state.filtering ? tx('Aramanızla eşleşen iş yok.') : tx("Bu bilgisayar için tanımlı yedekleme işi yok.")} onClearFilters={state.filtering ? state.clear : undefined} sort={sortProps(state)} className="rounded-none border-0" />
+      </div>
     </QueryState>
   </Section>
 }

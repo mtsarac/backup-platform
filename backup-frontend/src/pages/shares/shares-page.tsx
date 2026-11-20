@@ -2,8 +2,9 @@ import { QueryState } from '@/components/data/query-state'
 import { Link } from 'react-router-dom'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Section } from '@/components/ui/section'
-import { useShares, useTenantDownloadAttempts } from '@/features/shares/hooks'
-import { DownloadAttemptsTable, SharesTable } from '@/features/shares/shares-table'
+import { DownloadAttemptsList } from '@/features/shares/download-attempts-list'
+import { useShares } from '@/features/shares/hooks'
+import { SharesTable } from '@/features/shares/shares-table'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { tx, useLanguage } from '@/lib/i18n'
 
@@ -11,9 +12,7 @@ export function SharesPage() {
   useLanguage()
   const { tenantId } = useTenant()
   const query = useShares(tenantId)
-  const attemptsQuery = useTenantDownloadAttempts(tenantId)
   const shares = query.data ?? []
-  const attempts = attemptsQuery.data?.pages.flatMap((page) => page.items) ?? []
   return (
     <div className="space-y-6">
       <p className="text-sm text-text-muted">{tx('Platform Yöneticisi\'nin bir yedeği süreli indirmesine verdiğiniz izinler. Genellikle destek isterken gerekir.')}</p>
@@ -32,9 +31,7 @@ export function SharesPage() {
         title={tx('İndirme girişimleri')}
         description={tx('Çalışma alanınıza ait paylaşımlar ve yedek dosyaları üzerindeki indirme girişimleri.')}
       >
-        <QueryState isPending={attemptsQuery.isPending} error={attemptsQuery.error}>
-          <DownloadAttemptsTable attempts={attempts} onRefresh={() => void attemptsQuery.refetch()} onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined} loadingMore={attemptsQuery.isFetchingNextPage} />
-        </QueryState>
+        <DownloadAttemptsList scope={{ route: 'tenant', tenantId }} />
       </Section>
       </details>
     </div>

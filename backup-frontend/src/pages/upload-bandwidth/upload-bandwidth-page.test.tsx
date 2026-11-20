@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getBandwidthProfiles, getUploadBandwidth, saveBandwidthProfile, setUploadBandwidth } from '@/features/upload-bandwidth/api'
 import { ApiError } from '@/lib/api/client'
@@ -10,17 +10,22 @@ import { UploadBandwidthPage } from './upload-bandwidth-page'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme A.Ş.' } }))
 const jobs = vi.hoisted(() => vi.fn())
+const agents = vi.hoisted(() => vi.fn())
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/upload-bandwidth/api')
-vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL-01' }, { agentId: 'agent-b', hostName: 'SQL-02' }]) }))
+vi.mock('@/features/agents/api', () => ({ getAgents: agents }))
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: jobs }))
 
 const limits = {
   minimumBytesPerSecond: 16_000, maximumBytesPerSecond: 100_000_000_000,
   tenant: { bytesPerSecond: 12_500_000 as number | null }, agents: [{ agentId: 'agent-a', bytesPerSecond: 1_250_000 }], jobs: [{ jobId: 'job-a', bytesPerSecond: 16_000 }],
 }
-function mount() {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><UploadBandwidthPage /></MemoryRouter></QueryClientProvider>)
+function Location() {
+  const { search } = useLocation()
+  return <output data-testid="location">{search}</output>
+}
+function mount(initialEntry = '/') {
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><UploadBandwidthPage /><Location /></MemoryRouter></QueryClientProvider>)
 }
 const openTab = async (name: RegExp) => fireEvent.click(await screen.findByRole('tab', { name }))
 const row = (name: string) => screen.getByRole('row', { name: new RegExp(`^${name}`) })
@@ -32,6 +37,7 @@ const rawRate = /\d B\/sn/
 
 beforeEach(() => {
   vi.clearAllMocks()
+  agents.mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL-01' }, { agentId: 'agent-b', hostName: 'SQL-02' }])
   jobs.mockResolvedValue([{ id: 'job-a', name: 'Günlük ERP', agentName: 'SQL-01' }])
   vi.mocked(getUploadBandwidth).mockResolvedValue(limits)
   vi.mocked(getBandwidthProfiles).mockResolvedValue([])
@@ -156,6 +162,65 @@ describe('upload bandwidth page', () => {
     expect(screen.getByRole('row', { name: /^Backup 01/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(2)
+  })
+
+  it('restores agent search and sort from the URL and sorts by enrollment by default', async () => {
+    agents.mockResolvedValue([
+      { agentId: 'a', hostName: 'Alpha', enrolledAt: '2024-01-01T00:00:00Z' },
+      { agentId: 'b', hostName: 'Beta', enrolledAt: '2025-01-01T00:00:00Z' },
+    ])
+    mount()
+    await openTab(/^Yedekleme bilgisayarları$/)
+    await screen.findByRole('row', { name: /^Beta/ })
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Beta')
+    fireEvent.click(screen.getByRole('button', { name: /Yedekleme bilgisayarı/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Alpha')
+    expect(screen.getByTestId('location')).toHaveTextContent('sort=name')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Yedekleme bilgisayarı ara' }), { target: { value: 'Beta' } })
+    expect(screen.getByTestId('location')).toHaveTextContent('search=Beta')
+    expect(screen.queryByRole('row', { name: /^Alpha/ })).not.toBeInTheDocument()
+  })
+
+  it('restores job search and sort from the URL and defaults to newest', async () => {
+    jobs.mockResolvedValue([
+      { id: 'a', name: 'Alpha', agentName: 'SQL-01', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 'b', name: 'Beta', agentName: 'SQL-02', createdAt: '2025-01-01T00:00:00Z' },
+    ])
+    mount('?sort=name&dir=asc&search=SQL')
+    await openTab(/^Yedekleme işleri$/)
+    await screen.findByRole('row', { name: /^Alpha/ })
+    expect(screen.getByRole('searchbox', { name: 'Yedekleme işi ara' })).toHaveValue('SQL')
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: /Oluşturulma/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Beta')
+    fireEvent.click(screen.getByRole('button', { name: /Yedekleme bilgisayarı/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Alpha')
+    expect(screen.getByTestId('location')).toHaveTextContent('sort=agent')
+  })
+
+  it('sorts numeric limits and assigned profile names for both tables', async () => {
+    vi.mocked(getUploadBandwidth).mockResolvedValue({
+      ...limits,
+      agents: [{ agentId: 'agent-a', bytesPerSecond: 100, profileId: 'z' }, { agentId: 'agent-b', bytesPerSecond: 20, profileId: 'a' }],
+      jobs: [{ jobId: 'a', bytesPerSecond: 100, profileId: 'z' }, { jobId: 'b', bytesPerSecond: 20, profileId: 'a' }],
+    })
+    vi.mocked(getBandwidthProfiles).mockResolvedValue([
+      { id: 'z', name: 'Zulu', timeZoneId: 'UTC', windows: [] },
+      { id: 'a', name: 'Alpha', timeZoneId: 'UTC', windows: [] },
+    ])
+    jobs.mockResolvedValue([{ id: 'a', name: 'Job A' }, { id: 'b', name: 'Job B' }])
+    mount()
+    await openTab(/^Yedekleme bilgisayarları$/)
+    await screen.findByRole('row', { name: /^SQL-01/ })
+    fireEvent.click(screen.getByRole('button', { name: /Hız sınırı/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('SQL-02')
+    fireEvent.click(screen.getByRole('button', { name: /Bant Genişliği Profili/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('SQL-02')
+    await openTab(/^Yedekleme işleri$/)
+    await screen.findByRole('row', { name: /^Job A/ })
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Job B')
+    fireEvent.click(screen.getByRole('button', { name: /Hız sınırı/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Job B')
   })
 
   it('creates an explicit pause window as zero and round-trips it without showing an unlimited or zero-rate label', async () => {

@@ -40,6 +40,8 @@ export interface ListConfig<K extends string = string, F extends Record<string, 
   pageSize?: number
   /** The page URL parameter, for a page with two lists. */
   pageKey?: string
+  /** Prefix of the `search`, `sort` and `dir` URL parameters (e.g. `'attempts-'`), for a page with two lists; filter names must differ between the lists. */
+  paramPrefix?: string
 }
 type FilterValues<F> = { [N in keyof F]: F[N] extends readonly (infer V)[] ? V | '' : string }
 
@@ -74,9 +76,10 @@ export function parseListState<K extends string, F extends Record<string, Filter
     const value = get(name)
     return [name, spec === 'text' ? value : spec === 'date' ? dayParam(value) : oneOf(value, spec) ?? '']
   })) as FilterValues<F>
-  const key = oneOf(get('sort'), Object.keys(config.sort.first) as K[])
-  const dir = oneOf(get('dir'), ['asc', 'desc'] as const) ?? (key ? config.sort.first[key] : config.sort.default.dir)
-  return { search: config.search ? get('search') : '', filters, sort: { key: key ?? config.sort.default.key, dir } }
+  const prefix = config.paramPrefix ?? ''
+  const key = oneOf(get(`${prefix}sort`), Object.keys(config.sort.first) as K[])
+  const dir = oneOf(get(`${prefix}dir`), ['asc', 'desc'] as const) ?? (key ? config.sort.first[key] : config.sort.default.dir)
+  return { search: config.search ? get(`${prefix}search`) : '', filters, sort: { key: key ?? config.sort.default.key, dir } }
 }
 
 export function useListState<const F extends Record<string, FilterSpec> = Record<never, FilterSpec>, K extends string = string>(config: ListConfig<K, F>): ListState<K, F> {
@@ -84,7 +87,8 @@ export function useListState<const F extends Record<string, FilterSpec> = Record
   const { search, filters, sort } = parseListState(get, config)
   const names = Object.keys(config.filters ?? {})
   const isDefault = (key: K, dir: SortDirection) => key === config.sort.default.key && dir === config.sort.default.dir
-  const setSort = (key: K, dir: SortDirection) => update(isDefault(key, dir) ? { sort: '', dir: '' } : { sort: key, dir })
+  const prefix = config.paramPrefix ?? ''
+  const setSort = (key: K, dir: SortDirection) => update(isDefault(key, dir) ? { [`${prefix}sort`]: '', [`${prefix}dir`]: '' } : { [`${prefix}sort`]: key, [`${prefix}dir`]: dir })
   return {
     search, filters, sort, page, setSort,
     pageSize: config.pageSize ?? LIST_PAGE_SIZE,
@@ -92,11 +96,11 @@ export function useListState<const F extends Record<string, FilterSpec> = Record
     first: config.sort.first,
     defaultSort: isDefault(sort.key, sort.dir),
     filtering: Boolean(search.trim() || Object.values(filters).some(Boolean)),
-    setSearch: value => update({ search: value }, { replace: true }),
+    setSearch: value => update({ [`${prefix}search`]: value }, { replace: true }),
     setFilter: (name, value) => update({ [name]: value }),
     toggleSort: key => setSort(key, key === sort.key ? (sort.dir === 'asc' ? 'desc' : 'asc') : config.sort.first[key]),
     setPage: next => update({ [config.pageKey ?? 'page']: next }),
-    clear: () => update(Object.fromEntries([...(config.search ? ['search'] : []), ...names].map(name => [name, '']))),
+    clear: () => update(Object.fromEntries([...(config.search ? [`${prefix}search`] : []), ...names].map(name => [name, '']))),
   }
 }
 

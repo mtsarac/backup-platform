@@ -206,6 +206,21 @@ describe('Backup computer page', () => {
     expect(screen.queryByText('Başka bilgisayarın işi')).not.toBeInTheDocument()
   })
 
+  it('sorts this computer’s jobs by newest creation and lets the reader sort by name', async () => {
+    vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([
+      { id: 'a', name: 'Alfa', agentId: 'agent-a', enabled: true, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', name: 'Zeta', agentId: 'agent-a', enabled: true, createdAt: '2026-02-01T00:00:00Z' },
+    ] as never)
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const section = within(await screen.findByRole('region', { name: 'Bu bilgisayarın yedekleme işleri' }))
+    await section.findByRole('link', { name: 'Zeta' })
+    const names = () => section.getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)
+    expect(names()).toEqual(['Zeta', 'Alfa'])
+    fireEvent.click(within(section.getByRole('columnheader', { name: 'Yedekleme işi' })).getByRole('button'))
+    expect(names()).toEqual(['Alfa', 'Zeta'])
+    expect(section.queryByRole('searchbox')).not.toBeInTheDocument()
+  })
+
   it('links each job to its details and lists the discovered databases only for a computer that can scan', async () => {
     vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([{ id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, lastRun: null, nextOccurrenceAt: null }] as never)
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] })

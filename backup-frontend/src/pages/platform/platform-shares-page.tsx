@@ -2,29 +2,27 @@ import { useState, type FormEvent } from 'react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
-import { Select, TextInput } from '@/components/ui/text-input'
+import { TextInput } from '@/components/ui/text-input'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { useListParams } from '@/features/platform/use-list-params'
 import { CreatePlatformShareDialog } from '@/features/shares/create-platform-share-dialog'
 import {
   useAuditRetention,
-  usePlatformDownloadAttempts,
   usePlatformShares,
   useUpdateAuditRetention,
 } from '@/features/shares/hooks'
-import { DownloadAttemptsTable, SharesTable } from '@/features/shares/shares-table'
+import { DownloadAttemptsList } from '@/features/shares/download-attempts-list'
+import { SharesTable } from '@/features/shares/shares-table'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
 import { tx, useLanguage } from '@/lib/i18n'
 export function PlatformSharesPage() {
   useLanguage()
   const { get, update } = useListParams()
   const tenantId = get('tenantId')
-  const status = get('status')
   const shareFilter = get('shareId')
   const artifactFilter = get('artifactId')
   const userFilter = get('userId')
@@ -34,17 +32,8 @@ export function PlatformSharesPage() {
   const [retentionOverride, setRetentionOverride] = useState<string | null>(null)
   const [retentionError, setRetentionError] = useState<string | null>(null)
 
-  const query = usePlatformShares({ tenantId, status })
+  const query = usePlatformShares({ tenantId })
   const shares = query.data ?? []
-
-  const attemptsQuery = usePlatformDownloadAttempts({
-    shareId: shareFilter || undefined,
-    tenantId: tenantId || undefined,
-    artifactId: artifactFilter || undefined,
-    userId: userFilter || undefined,
-    result: resultFilter || undefined,
-  })
-  const attempts = attemptsQuery.data?.pages.flatMap((page) => page.items) ?? []
 
   const retentionQuery = useAuditRetention()
   const updateRetention = useUpdateAuditRetention()
@@ -76,27 +65,14 @@ export function PlatformSharesPage() {
         }
       />
 
-      <Filters
-        label={tx('Paylaşım filtreleri')}
-        onClear={tenantId || status ? () => update({ tenantId: '', status: '' }) : undefined}
-      >
-        <TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />
-        <FilterField label={tx('Durum')}>
-          <Select value={status} onChange={(e) => update({ status: e.target.value })}>
-            <option value="">{tx('Tümü')}</option>
-            <option value="Active">{tx('Aktif')}</option>
-            <option value="Expired">{tx('Süresi doldu')}</option>
-            <option value="Revoked">{tx('İptal edildi')}</option>
-          </Select>
-        </FilterField>
-      </Filters>
 
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         <SharesTable
           shares={shares}
           showTenant
+          tenantFilter={<TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value, 'attempts-page': '' })} />}
           emptyMessage={
-            tenantId || status
+            tenantId
               ? tx('Seçilen filtrelere uygun paylaşım bulunamadı.')
               : tx('Henüz paylaşım yapılmamış.')
           }
@@ -109,65 +85,7 @@ export function PlatformSharesPage() {
         title={tx('İndirme girişimleri')}
         description={tx('Paylaşımlar ve yedek dosyaları üzerinden yapılan tüm indirme girişimleri.')}
       >
-        <div className="space-y-4">
-          <Filters
-            label={tx('İndirme girişimi filtreleri')}
-            onClear={
-              shareFilter || artifactFilter || userFilter || resultFilter
-                ? () => update({ shareId: '', artifactId: '', userId: '', result: '' })
-                : undefined
-            }
-          >
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-text-muted">{tx('Paylaşım')}</label>
-              <TextInput
-                aria-label={tx('Paylaşım ID')}
-                value={shareFilter}
-                onChange={(e) => update({ shareId: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-text-muted">{tx('Yedek dosyası')}</label>
-              <TextInput
-                aria-label={tx('Yedek dosyası ID')}
-                value={artifactFilter}
-                onChange={(e) => update({ artifactId: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-text-muted">{tx('Kullanıcı')}</label>
-              <TextInput
-                aria-label={tx('Kullanıcı ID')}
-                value={userFilter}
-                onChange={(e) => update({ userId: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-text-muted">{tx('Sonuç')}</label>
-              <Select
-                aria-label={tx('Sonuç')}
-                value={resultFilter}
-                onChange={(e) => update({ result: e.target.value })}
-              >
-                <option value="">{tx('Tümü')}</option>
-                <option value="Completed">{tx('Tamamlandı')}</option>
-                <option value="Failed">{tx('Başarısız')}</option>
-                <option value="Cancelled">{tx('İptal edildi')}</option>
-                <option value="Refused">{tx('Reddedildi')}</option>
-              </Select>
-            </div>
-          </Filters>
-
-          <QueryState forbiddenMessage={platformOnlyMessage} isPending={attemptsQuery.isPending} error={attemptsQuery.error}>
-            <DownloadAttemptsTable
-              attempts={attempts}
-              showTenant
-              onLoadMore={attemptsQuery.hasNextPage ? () => { void attemptsQuery.fetchNextPage() } : undefined}
-              loadingMore={attemptsQuery.isFetchingNextPage}
-              emptyMessage={tx('Henüz indirme girişimi kaydı yok.')}
-            />
-          </QueryState>
-        </div>
+        <DownloadAttemptsList scope={{ route: 'platform', tenantId: tenantId || undefined }} />
       </Section>
       </details>
 

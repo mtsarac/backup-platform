@@ -1,8 +1,9 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { setViewport } from '@/test/viewport'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 import { SharesPage } from '@/pages/shares/shares-page'
@@ -214,14 +215,22 @@ async function renderDetailPage() {
   fireEvent.click(await screen.findByRole('button', { name: 'Paylaş' }))
   return queryClient
 }
+function LocationSearch() {
+  return <output data-testid="location-search">{useLocation().search}</output>
+}
 
-function renderSharesPage() {
+
+const attemptPage = (items: DownloadAttemptView[], totalCount = items.length) => ({ items, totalCount, page: 1, pageSize: 25 })
+const attemptCalls = () => request.mock.calls.map(call => String(call[0])).filter(path => path.includes('download-attempts'))
+
+function renderSharesPage(path = '/tenants/tenant-a/backup-shares') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/tenants/tenant-a/backup-shares']}>
+      <MemoryRouter initialEntries={[path]}>
+        <LocationSearch />
         <Routes>
           <Route path="/tenants/:tenantId/backup-shares" element={<SharesPage />} />
         </Routes>
@@ -238,6 +247,7 @@ function renderPlatformSharesPage(path = '/platform/shares') {
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>
+        <LocationSearch />
         <Routes>
           <Route path="/platform/shares" element={<PlatformSharesPage />} />
         </Routes>
@@ -253,7 +263,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return [testShare]
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     await renderDetailPage()
@@ -275,7 +285,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return []
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     await renderDetailPage()
@@ -312,7 +322,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return []
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     await renderDetailPage()
@@ -337,7 +347,7 @@ describe('BackupShare frontend', () => {
       if (path.includes('backup-shares') || path.includes('/shares')) return []
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return unverifiedArtifact
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     await renderDetailPage()
@@ -352,21 +362,21 @@ describe('BackupShare frontend', () => {
   })
 
   it('renders Paylaşımlarım page with active, expired, and revoked shares', async () => {
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, expiredShare, revokedShare]))
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
     await waitFor(() => {
       expect(screen.getByRole('table', { name: 'Paylaşımlarım' })).toBeInTheDocument()
       expect(screen.getAllByText('ProductionDb')).toHaveLength(3)
-      expect(screen.getByText('Aktif')).toBeInTheDocument()
-      expect(screen.getByText('Süresi doldu')).toBeInTheDocument()
-      expect(screen.getByText('İptal edildi')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Aktif')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Süresi doldu')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('İptal edildi')).toBeInTheDocument()
     })
   })
 
   it('renders empty state in Paylaşımlarım when no shares exist', async () => {
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : []))
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []))
 
     renderSharesPage()
 
@@ -377,7 +387,7 @@ describe('BackupShare frontend', () => {
   })
 
   it('shows PlatformAdmin-created shares in Paylaşımlarım as read-only with PlatformAdmin role', async () => {
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [platformShare]))
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [platformShare]))
 
     renderSharesPage()
 
@@ -386,7 +396,7 @@ describe('BackupShare frontend', () => {
       expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
       expect(screen.getByText('Super Admin')).toBeInTheDocument()
       expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()
-      expect(screen.getByText('Aktif')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Aktif')).toBeInTheDocument()
       // Ensure tenant view is read-only (no extend or revoke buttons exist)
       expect(screen.queryByRole('button', { name: /uzat|iptal/i })).not.toBeInTheDocument()
     })
@@ -407,7 +417,7 @@ describe('BackupShare frontend', () => {
           page: 1,
         }
       }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     renderPlatformSharesPage()
@@ -421,6 +431,52 @@ describe('BackupShare frontend', () => {
       expect(screen.getByRole('region', { name: 'Paylaşım filtreleri' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
     })
+  })
+
+  it('restores and updates client search, status and sorting on the shares page', async () => {
+    request.mockImplementation(async (path: string) => path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare, { ...expiredShare, artifactName: 'ArchiveDb', createdAtUtc: '2026-11-13T12:00:00Z' }])
+    renderSharesPage('/tenants/tenant-a/backup-shares?status=Expired&search=archive')
+    const table = await screen.findByRole('table', { name: 'Paylaşımlarım' })
+    expect(within(table).getByText('ArchiveDb')).toBeInTheDocument()
+    expect(within(table).queryByText('ProductionDb')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Paylaşım ara' }), { target: { value: 'missing' } })
+    expect(screen.getByText('Seçilen filtrelere uygun paylaşım bulunamadı.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(screen.getByTestId('location-search')).toHaveTextContent('')
+    const rows = within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getAllByRole('row')
+    expect(rows[1]).toHaveTextContent('ArchiveDb')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: /Yedek dosyası/ }))
+    expect(screen.getByTestId('location-search')).toHaveTextContent('sort=artifact')
+    expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getAllByRole('row')[1]).toHaveTextContent('ArchiveDb')
+  })
+
+  it('filters platform shares locally while retaining the tenant URL filter', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('platform/backup-shares')) return [platformShare, { ...testShare, status: 'Expired' }]
+      if (path.includes('platform/tenants')) return { items: [{ tenantId: 'tenant-b', name: 'Acme Corp' }], totalCount: 1, pageSize: 100, page: 1 }
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
+    })
+    renderPlatformSharesPage('/platform/shares?tenantId=tenant-b&status=Expired')
+    const table = await screen.findByRole('table', { name: 'Paylaşımlar' })
+    expect(within(table).getByText('ProductionDb')).toBeInTheDocument()
+    expect(within(table).queryByText('AnalyticsDb')).not.toBeInTheDocument()
+    expect(request.mock.calls.filter(([path]) => String(path).includes('platform/backup-shares')).every(([path]) => !String(path).includes('status='))).toBe(true)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Active' } })
+    expect(screen.getByTestId('location-search')).toHaveTextContent('tenantId=tenant-b')
+    expect(screen.getByTestId('location-search')).toHaveTextContent('status=Active')
+    expect(within(screen.getByRole('table', { name: 'Paylaşımlar' })).getByRole('link', { name: 'Acme Corp' })).toHaveAttribute('href', '/platform/tenants/tenant-b')
+  })
+
+  it('sorts share cards on narrow screens', async () => {
+    setViewport(false)
+    request.mockImplementation(async (path: string) => path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare, { ...expiredShare, artifactName: 'ArchiveDb', createdAtUtc: '2026-11-13T12:00:00Z' }])
+    renderSharesPage()
+    const sort = await screen.findByRole('combobox', { name: 'Sırala' })
+    expect(sort).toHaveValue('createdAt:desc')
+    fireEvent.change(sort, { target: { value: 'artifact:desc' } })
+    expect(screen.getByTestId('location-search')).toHaveTextContent('sort=artifact&dir=desc')
+    expect(screen.getAllByRole('heading', { level: 2 })[0]).toHaveTextContent('ProductionDb')
   })
 
   it('creates a share from Paylaşılan Yedekler screen via CreatePlatformShareDialog', async () => {
@@ -446,7 +502,7 @@ describe('BackupShare frontend', () => {
           pageSize: 100,
         }
       }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     renderPlatformSharesPage()
@@ -511,7 +567,7 @@ describe('BackupShare frontend', () => {
       if (options?.method === 'POST' && path.includes('/extend')) {
         return { ...testShare, expiresAtUtc: '2026-11-13T00:00:00Z' }
       }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare]
     })
 
     renderSharesPage()
@@ -550,7 +606,7 @@ describe('BackupShare frontend', () => {
     ['24 hours used', '2026-11-12T12:00:00Z', 2],
     ['1 hour used', '2026-11-11T13:00:00Z', 2],
   ])('offers only extensions that stay within 72 hours (%s)', async (_name, expiresAtUtc, optionCount) => {
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [{ ...testShare, expiresAtUtc }]))
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [{ ...testShare, expiresAtUtc }]))
     renderSharesPage()
     await screen.findByText('Audit inspection')
     if (optionCount === 0) {
@@ -562,7 +618,7 @@ describe('BackupShare frontend', () => {
   })
 
   it('explains the tab in plain Turkish and keeps download attempts in a closed section', async () => {
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]))
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare]))
     renderSharesPage()
     expect(await screen.findByText("Platform Yöneticisi'nin bir yedeği süreli indirmesine verdiğiniz izinler. Genellikle destek isterken gerekir.")).toBeInTheDocument()
     expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
@@ -573,7 +629,7 @@ describe('BackupShare frontend', () => {
       if (options?.method === 'POST' && path.includes('/revoke')) {
         return { ...testShare, status: 'Revoked', revokedAtUtc: '2026-11-11T13:00:00Z' }
       }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare]
     })
 
     renderSharesPage()
@@ -606,7 +662,7 @@ describe('BackupShare frontend', () => {
 
   it('UserAdmin cannot see extend/revoke actions on PlatformAdmin-created share, expired share, or revoked share', async () => {
     permissions.role = 'UserAdmin'
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, platformAdminShare, expiredShare, revokedShare]))
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
@@ -619,7 +675,7 @@ describe('BackupShare frontend', () => {
 
   it('PlatformAdmin can see extend/revoke actions on both PlatformAdmin-created and UserAdmin-created shares', async () => {
     permissions.role = 'PlatformAdmin'
-    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, platformAdminShare, expiredShare, revokedShare]))
+    request.mockImplementation(async (path: string) => (path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare, platformAdminShare, expiredShare, revokedShare]))
 
     renderSharesPage()
 
@@ -635,7 +691,7 @@ describe('BackupShare frontend', () => {
       if (options?.method === 'POST' && path.includes('/revoke')) {
         throw new ApiError(403, { error: 'forbidden' })
       }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare]
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : [testShare]
     })
 
     renderSharesPage()
@@ -674,7 +730,7 @@ describe('BackupShare frontend', () => {
       }
       if (path.includes('platform/backup-shares')) return [platformShare, expiredShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     renderPlatformSharesPage()
@@ -700,7 +756,7 @@ describe('BackupShare frontend', () => {
       }
       if (path.includes('platform/backup-shares')) return [platformShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     renderPlatformSharesPage()
@@ -724,7 +780,7 @@ describe('BackupShare frontend', () => {
       }
       if (path.includes('platform/backup-shares')) return [platformShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     renderPlatformSharesPage()
@@ -743,11 +799,11 @@ describe('BackupShare frontend', () => {
   it('renders tenant download attempt history in Paylaşımlarım for UserAdmin without platform retention controls', async () => {
     permissions.role = 'UserAdmin'
     request.mockImplementation(async (path: string) => {
-      if (path.includes('download-attempts')) return path.includes('cursor=next-page')
-        ? { items: [failedAttempt], nextCursor: null }
-        : { items: [completedAttempt, refusedAttempt], nextCursor: 'next-page' }
+      if (path.includes('download-attempts')) return path.includes('page=2')
+        ? attemptPage([failedAttempt], 30)
+        : attemptPage([completedAttempt, refusedAttempt], 30)
       if (path.includes('backup-shares')) return [testShare, revokedShare]
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return []
     })
 
     renderSharesPage()
@@ -757,8 +813,9 @@ describe('BackupShare frontend', () => {
     await waitFor(() => {
       expect(screen.getByRole('table', { name: 'Paylaşımlarım' })).toBeInTheDocument()
       expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
-      expect(screen.getByText('Tamamlandı')).toBeInTheDocument()
-      expect(screen.getByText('Reddedildi')).toBeInTheDocument()
+      const history = within(screen.getByRole('table', { name: 'İndirme girişimleri' }))
+      expect(history.getByText('Tamamlandı')).toBeInTheDocument()
+      expect(history.getByText('Reddedildi')).toBeInTheDocument()
       expect(screen.getByText('Paylaşım iptal edilmiş.')).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'Denetim ve paylaşım geçmişi saklama süresi' })).not.toBeInTheDocument()
     })
@@ -768,22 +825,55 @@ describe('BackupShare frontend', () => {
     const details = within(within(refusal).getByRole('region', { name: 'Teknik ayrıntılar' }))
     expect(details.getByText('share_revoked')).toBeVisible()
     expect(details.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
+    expect(attemptCalls()[0]).toBe('tenants/tenant-a/backup-shares/download-attempts?page=1&pageSize=25')
 
-    // Older attempts are fetched with the cursor of the previous page and appended; the control disappears on the last page.
+    // Pages come from the server; the pager replaces the old "show older" button.
     expect(screen.queryByText(/Dosya sağlama toplamı doğrulaması başarısız/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Daha eski girişimleri göster' }))
-    await waitFor(() => {
-      expect(screen.getByText(/Dosya sağlama toplamı doğrulaması başarısız/)).toBeInTheDocument()
-      expect(screen.getByText('Paylaşım iptal edilmiş.')).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Daha eski girişimleri göster' })).not.toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'İndirme girişimi sayfaları' })).getByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(screen.getByText(/Dosya sağlama toplamı doğrulaması başarısız/)).toBeInTheDocument())
+    expect(attemptCalls().at(-1)).toContain('page=2&pageSize=25')
+    expect(within(screen.getByRole('table', { name: 'İndirme girişimleri' })).queryByText('Tamamlandı')).not.toBeInTheDocument()
+  })
+
+  it('searches, sorts and filters the download history on the server, apart from the shares list', async () => {
+    permissions.role = 'UserAdmin'
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('download-attempts')) return attemptPage([completedAttempt])
+      return [testShare]
     })
-    expect(request).toHaveBeenCalledWith(expect.stringContaining('download-attempts?cursor=next-page'), expect.anything())
+    renderSharesPage()
+    fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
+    const history = await screen.findByRole('region', { name: 'İndirme girişimi filtreleri' })
+
+    fireEvent.change(within(history).getByRole('searchbox', { name: 'İndirme girişimi ara' }), { target: { value: 'ayşe' } })
+    await waitFor(() => expect(attemptCalls().at(-1)).toBe('tenants/tenant-a/backup-shares/download-attempts?page=1&pageSize=25&search=ay%C5%9Fe'))
+    expect(screen.getByRole('searchbox', { name: 'Paylaşım ara' })).toHaveValue('')
+    expect(screen.getByTestId('location-search')).toHaveTextContent('attempts-search=ay%C5%9Fe')
+
+    fireEvent.change(within(history).getByRole('combobox', { name: 'Sonuç' }), { target: { value: 'Refused' } })
+    await waitFor(() => expect(attemptCalls().at(-1)).toContain('search=ay%C5%9Fe&result=Refused'))
+    expect(within(history).queryByRole('textbox', { name: 'Paylaşım ID' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sonuç' }))
+    await waitFor(() => expect(attemptCalls().at(-1)).toContain('sort=result&dir=asc'))
+    fireEvent.click(screen.getByRole('button', { name: 'Sonuç' }))
+    await waitFor(() => expect(attemptCalls().at(-1)).toContain('sort=result&dir=desc'))
+  })
+
+  it('says so when nothing matches the search, and offers to clear it', async () => {
+    permissions.role = 'UserAdmin'
+    request.mockImplementation(async (path: string) => path.includes('download-attempts') ? attemptPage([]) : [testShare])
+    renderSharesPage('/tenants/tenant-a/backup-shares?attempts-search=zzz')
+    fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
+    expect(await screen.findByText('Aramanızla eşleşen indirme girişimi yok.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(await screen.findByText('Henüz indirme girişimi kaydı yok.')).toBeInTheDocument()
   })
 
   it('opens filtered platform audit history from a deep link', async () => {
     permissions.role = 'PlatformAdmin'
     request.mockImplementation(async (path: string) => {
-      if (path.includes('platform/download-attempts')) return { items: [failedAttempt], nextCursor: null }
+      if (path.includes('platform/download-attempts')) return attemptPage([failedAttempt])
       if (path.includes('audit-retention')) return { retentionDays: 365 }
       return []
     })
@@ -814,12 +904,12 @@ describe('BackupShare frontend', () => {
         }
       }
       if (path.includes('platform/download-attempts')) {
-        if (path.includes('result=Failed')) return { items: [failedAttempt], nextCursor: null }
-        return { items: [completedAttempt, refusedAttempt, failedAttempt], nextCursor: null }
+        if (path.includes('result=Failed')) return attemptPage([failedAttempt])
+        return attemptPage([completedAttempt, refusedAttempt, failedAttempt])
       }
       if (path.includes('platform/backup-shares')) return [platformShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
-      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
 
     renderPlatformSharesPage()
@@ -840,7 +930,7 @@ describe('BackupShare frontend', () => {
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith(
-        expect.stringContaining('platform/download-attempts?result=Failed'),
+        expect.stringContaining('result=Failed'),
         expect.anything()
       )
     })

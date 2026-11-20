@@ -231,7 +231,7 @@ through a temporary password. Security events on an account always create an in-
 address, an email.
 
 Download attempts are listed at `GET /api/platform/download-attempts` (PlatformAdmin) and
-`GET /api/tenants/{tenantId}/backup-shares/download-attempts` (UserAdmin). Audit and share history retention is read
+`GET /api/tenants/{tenantId}/backup-shares/download-attempts` (UserAdmin) with the shared list query above (`search` matches backup file, user, tenant and result; `sort` is one of `startedAt` (default, newest first), `endedAt`, `artifact`, `share`, `user`, `tenant`, `result`, `bytes`) and the filters `shareId`, `artifactId`, `userId` and `result` (the platform route also `tenantId`). Audit and share history retention is read
 and changed at `GET`/`PUT /api/platform/settings/audit-retention` (`{ "retentionDays": 365 }`, default 365) and pruned
 hourly; active shares and running downloads are never pruned. The security model is described in
 [SECURITY.md](../SECURITY.md).

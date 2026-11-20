@@ -35,28 +35,24 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         return (scenario, shareId);
     }
 
-    /// <summary>Walks every page of the history by following the cursor.</summary>
-    private static async Task<List<JsonElement>> AttemptsAsync(BrowserSession session, string path, int? limit = null, string? cursor = null)
+    /// <summary>Walks every page of the history.</summary>
+    private static async Task<List<JsonElement>> AttemptsAsync(BrowserSession session, string path, int pageSize = 100)
     {
         var all = new List<JsonElement>();
-        do
+        for (var page = 1; ; page++)
         {
-            var (items, next) = await PageAsync(session, path, limit, cursor);
+            var (items, total) = await PageAsync(session, path, page, pageSize);
             all.AddRange(items);
-            cursor = next;
+            if (all.Count >= total || items.Count == 0) return all;
         }
-        while (cursor is not null);
-        return all;
     }
 
-    private static async Task<(List<JsonElement> Items, string? Next)> PageAsync(BrowserSession session, string path, int? limit = null, string? cursor = null)
+    private static async Task<(List<JsonElement> Items, long Total)> PageAsync(BrowserSession session, string path, int page = 1, int pageSize = 100)
     {
-        var query = string.Join('&', new[] { limit is null ? null : $"limit={limit}", cursor is null ? null : $"cursor={cursor}" }.Where(part => part is not null));
-        using var response = await session.GetAsync(query.Length == 0 ? path : path + (path.Contains('?') ? '&' : '?') + query);
+        using var response = await session.GetAsync($"{path}{(path.Contains('?') ? '&' : '?')}page={page}&pageSize={pageSize}");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = AgentWorld.ReadJson(response);
-        var next = json.GetProperty("nextCursor");
-        return (json.GetProperty("items").EnumerateArray().ToList(), next.ValueKind == JsonValueKind.Null ? null : next.GetString());
+        return (json.GetProperty("items").EnumerateArray().ToList(), json.GetProperty("totalCount").GetInt64());
     }
 
     private static async Task<Guid> DownloadAsync(BrowserSession session, DownloadApiScenario scenario, object body, HttpStatusCode expectedContent = HttpStatusCode.OK)
@@ -135,7 +131,7 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
     }
 
     [Fact]
-    public async Task Pagination_ReachesEveryAttemptBeyond500_InStableOrder_WhileNewAttemptsArrive()
+    public async Task Pagination_ReachesEveryAttemptBeyond500_InStableOrder_WithTiedTimestamps()
     {
         var (scenario, shareId) = await CreateScenarioWithShareAsync(fixture);
         await using var _ = scenario;
@@ -149,32 +145,28 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
             await store.RecordRefusalAsync(new DownloadRefusalCommand(tenant, scenario.Accepted.ArtifactId, account.UserId.Value, shareId, "share_expired", start.AddSeconds(index / 3), true), default);
 
         var path = $"/api/platform/download-attempts?tenantId={tenant.Value}";
-        var (first, cursor) = await PageAsync(platform, path, limit: 100);
+        var (first, total) = await PageAsync(platform, path);
         Assert.Equal(100, first.Count);
-        Assert.NotNull(cursor);
+        Assert.Equal(520, total);
 
-        // Attempts made while someone is paging: a prepared download and a new refusal, both newer than the cursor.
-        var arrived = (await scenario.CreateSessionAsync()).GetProperty("sessionId").GetGuid();
-        await store.RecordRefusalAsync(new DownloadRefusalCommand(tenant, scenario.Accepted.ArtifactId, account.UserId.Value, shareId, "share_expired", scenario.Backup.Clock.GetUtcNow(), true), default);
-
-        var walked = first.Concat(await AttemptsAsync(platform, path, limit: 100, cursor: cursor)).ToList();
-        Assert.Equal(520, walked.Count);
+        var walked = await AttemptsAsync(platform, path);
         Assert.Equal(520, walked.Select(item => item.GetProperty("id").GetGuid()).Distinct().Count());
-        Assert.DoesNotContain(walked, item => item.GetProperty("id").GetGuid() == arrived);
         var times = walked.Select(item => item.GetProperty("startedAtUtc").GetDateTimeOffset()).ToList();
         Assert.Equal(times.OrderByDescending(time => time), times);
         Assert.Equal(start.AddSeconds(0), times[^1]);
 
-        // A fresh walk sees everything, on both routes and with a different page size.
-        Assert.Equal(522, (await AttemptsAsync(platform, path)).Count);
-        var tenantWalk = await AttemptsAsync(scenario.Admin, $"{scenario.Root}/backup-shares/download-attempts", limit: 200);
-        Assert.Equal(522, tenantWalk.Select(item => item.GetProperty("id").GetGuid()).Distinct().Count());
-        Assert.Equal(521, (await AttemptsAsync(platform, $"{path}&shareId={shareId}&result=Refused", limit: 200)).Count);
+        // The other page size and the tenant route walk the same rows in the same order.
+        Assert.Equal(walked.Select(item => item.GetProperty("id").GetGuid()), (await AttemptsAsync(platform, path, 37)).Select(item => item.GetProperty("id").GetGuid()));
+        var tenantWalk = await AttemptsAsync(scenario.Admin, $"{scenario.Root}/backup-shares/download-attempts");
+        Assert.Equal(walked.Select(item => item.GetProperty("id").GetGuid()), tenantWalk.Select(item => item.GetProperty("id").GetGuid()));
+        Assert.Equal(520, (await AttemptsAsync(platform, $"{path}&shareId={shareId}&result=Refused")).Count);
 
-        foreach (var bad in new[] { "limit=0", "limit=201", "cursor=nonsense" })
+        foreach (var bad in new[] { "pageSize=0", "pageSize=101", "page=0", "dir=sideways", "sort=nonsense" })
         {
             using var response = await platform.GetAsync($"{path}&{bad}");
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            using var tenantResponse = await scenario.Admin.GetAsync($"{scenario.Root}/backup-shares/download-attempts?{bad}");
+            Assert.Equal(HttpStatusCode.BadRequest, tenantResponse.StatusCode);
         }
         using var anonymous = await scenario.World.Anonymous.GetAsync(path);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
@@ -464,5 +456,151 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         Assert.Equal(kept.Id, survivor.Id);
         var signature = (string)reader.Entry(survivor).Property(BackupPlatform.Infrastructure.Persistence.AuditSigningInterceptor.SignatureProperty).CurrentValue!;
         Assert.True(BackupPlatform.Infrastructure.Persistence.AuditSigningInterceptor.Verify(survivor, signature, key.ExportSubjectPublicKeyInfoPem()));
+    }
+
+    private sealed record Seeded(string Tag, DownloadApiScenario Scenario, BrowserSession Platform);
+
+    /// <summary>
+    /// Five attempts of one tenant, labelled by their user: Alpha and Bravo (refused, same time, Bravo without share and with an unknown backup file),
+    /// charlie (refused a minute later, share ending in ...fe), delta (completed download, 1024 bytes) and echo (a prepared, unstarted one);
+    /// delta and echo are the newest and tie, and use the real share, which sorts between the refusals' shares.
+    /// </summary>
+    private async Task<Seeded> SeedAttemptsAsync()
+    {
+        var (scenario, shareId) = await CreateScenarioWithShareAsync(fixture);
+        var tag = $"tag{Guid.NewGuid():N}"[..14];
+        var tenant = scenario.Backup.Backup.Setup.Tenant.Id;
+        async Task<(Account Account, BrowserSession Session)> UserAsync(string name)
+        {
+            var account = await scenario.World.SeedUserAsync(platformAdmin: true);
+            await using var context = fixture.CreatePlatformContext();
+            await context.Database.ExecuteSqlInterpolatedAsync($"""UPDATE users SET "DisplayName" = {tag + " " + name} WHERE "Id" = {account.UserId.Value}""");
+            return (account, await scenario.World.SignInAsync(account));
+        }
+        var past = scenario.Backup.Clock.GetUtcNow().AddDays(-2);
+        var store = scenario.Store();
+        Task Refuse(Account account, Guid artifactId, Guid? share, DateTimeOffset at) =>
+            store.RecordRefusalAsync(new DownloadRefusalCommand(tenant, artifactId, account.UserId.Value, share, "share_expired", at, true), default);
+        await Refuse((await UserAsync("Alpha")).Account, scenario.Accepted.ArtifactId, Guid.Parse("00000000-0000-0000-0000-000000000001"), past);
+        await Refuse((await UserAsync("Bravo")).Account, Guid.NewGuid(), null, past);
+        await Refuse((await UserAsync("charlie")).Account, scenario.Accepted.ArtifactId, Guid.Parse("ffffffff-ffff-ffff-ffff-fffffffffffe"), past.AddMinutes(1));
+        await DownloadAsync((await UserAsync("delta")).Session, scenario, new { shareId });
+        using var prepared = await (await UserAsync("echo")).Session.SendAsync(HttpMethod.Post, $"{scenario.ArtifactPath}/downloads", new { shareId });
+        Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
+        var platform = await scenario.World.SignInAsync(await scenario.World.SeedUserAsync(platformAdmin: true));
+        return new(tag, scenario, platform);
+    }
+
+    private static string[] Labels(List<JsonElement> items, string tag) =>
+        items.Select(item => item.GetProperty("initiatingUserDisplayName").GetString()!.Replace(tag + " ", "")).ToArray();
+
+    private static string AttemptsPath(Seeded seeded, string query = "") =>
+        $"/api/platform/download-attempts?tenantId={seeded.Scenario.Backup.Backup.Setup.Tenant.Id.Value}{(query.Length == 0 ? "" : "&" + query)}";
+
+    public static TheoryData<string, string, string[][]> AttemptOrders => new()
+    {
+        { "startedAt", "desc", [["delta", "echo"], ["charlie"], ["Alpha", "Bravo"]] },
+        { "startedAt", "asc", [["Alpha", "Bravo"], ["charlie"], ["delta", "echo"]] },
+        { "endedAt", "desc", [["delta"], ["charlie"], ["Alpha", "Bravo"], ["echo"]] },
+        { "endedAt", "asc", [["Alpha", "Bravo"], ["charlie"], ["delta"], ["echo"]] },
+        { "artifact", "asc", [["Alpha", "charlie", "delta", "echo"], ["Bravo"]] },
+        { "artifact", "desc", [["Alpha", "charlie", "delta", "echo"], ["Bravo"]] },
+        { "share", "asc", [["Alpha"], ["delta", "echo"], ["charlie"], ["Bravo"]] },
+        { "share", "desc", [["charlie"], ["delta", "echo"], ["Alpha"], ["Bravo"]] },
+        { "user", "asc", [["Alpha"], ["Bravo"], ["charlie"], ["delta"], ["echo"]] },
+        { "user", "desc", [["echo"], ["delta"], ["charlie"], ["Bravo"], ["Alpha"]] },
+        { "result", "asc", [["delta"], ["echo"], ["Alpha", "Bravo", "charlie"]] },
+        { "result", "desc", [["Alpha", "Bravo", "charlie"], ["echo"], ["delta"]] },
+        { "bytes", "asc", [["Alpha", "Bravo", "charlie", "echo"], ["delta"]] },
+        { "bytes", "desc", [["delta"], ["Alpha", "Bravo", "charlie", "echo"]] }
+    };
+
+    [Theory]
+    [MemberData(nameof(AttemptOrders))]
+    public async Task Sort_OrdersEachFieldBothWays_WithNullsLast(string field, string dir, string[][] groups)
+    {
+        var seeded = await SeedAttemptsAsync();
+        await using var _ = seeded.Scenario;
+        ListAssertions.Groups(Labels(await AttemptsAsync(seeded.Platform, AttemptsPath(seeded, $"sort={field}&dir={dir}")), seeded.Tag), groups);
+    }
+
+    [Fact]
+    public async Task Default_IsNewestFirst_AndEachFieldStartsInItsNaturalDirection()
+    {
+        var seeded = await SeedAttemptsAsync();
+        await using var _ = seeded.Scenario;
+        ListAssertions.Groups(Labels(await AttemptsAsync(seeded.Platform, AttemptsPath(seeded)), seeded.Tag), [["delta", "echo"], ["charlie"], ["Alpha", "Bravo"]]);
+        ListAssertions.Groups(Labels(await AttemptsAsync(seeded.Platform, AttemptsPath(seeded, "sort=user")), seeded.Tag), [["Alpha"], ["Bravo"], ["charlie"], ["delta"], ["echo"]]);
+        ListAssertions.Groups(Labels(await AttemptsAsync(seeded.Platform, AttemptsPath(seeded, "sort=bytes")), seeded.Tag), [["Alpha", "Bravo", "charlie", "echo"], ["delta"]]);
+    }
+
+    [Fact]
+    public async Task UnknownSortOrDirection_Is400_OnBothRoutes()
+    {
+        var seeded = await SeedAttemptsAsync();
+        await using var _ = seeded.Scenario;
+        foreach (var path in new[] { AttemptsPath(seeded), $"{seeded.Scenario.Root}/backup-shares/download-attempts" })
+            foreach (var (query, field) in new[] { ("sort=failureReason", "sort"), ("sort=id", "sort"), ("dir=sideways", "dir") })
+            {
+                using var response = await (path.StartsWith("/api/platform") ? seeded.Platform : seeded.Scenario.Admin).GetAsync($"{path}{(path.Contains('?') ? '&' : '?')}{query}");
+                Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+                var body = AgentWorld.ReadJson(response);
+                Assert.Equal("invalid_request", body.GetProperty("error").GetString());
+                Assert.Equal(field, body.GetProperty("field").GetString());
+            }
+    }
+
+    [Fact]
+    public async Task Paging_WithTiedSortValues_ShowsEveryAttemptOnceInTheSameOrder()
+    {
+        var seeded = await SeedAttemptsAsync();
+        await using var _ = seeded.Scenario;
+        foreach (var sort in new[] { "startedAt", "result", "bytes", "artifact" })
+        {
+            var path = AttemptsPath(seeded, $"sort={sort}");
+            var whole = (await AttemptsAsync(seeded.Platform, path)).Select(item => item.GetProperty("id").GetGuid()).ToList();
+            Assert.Equal(5, whole.Distinct().Count());
+            foreach (var size in new[] { 1, 2 })
+            {
+                var (first, total) = await PageAsync(seeded.Platform, path, 1, size);
+                Assert.Equal(5, total);
+                Assert.Equal(size, first.Count);
+                Assert.Equal(whole, (await AttemptsAsync(seeded.Platform, path, size)).Select(item => item.GetProperty("id").GetGuid()));
+            }
+        }
+        var (past, _) = await PageAsync(seeded.Platform, AttemptsPath(seeded), 4, 2);
+        Assert.Empty(past);
+    }
+
+    [Theory]
+    [InlineData("delta", new[] { "delta" })]
+    [InlineData("ALPHA", new[] { "Alpha" })]
+    [InlineData("completed", new[] { "delta" })]
+    [InlineData("refus", new[] { "Alpha", "Bravo", "charlie" })]
+    [InlineData("master", new[] { "Alpha", "charlie", "delta", "echo" })]
+    [InlineData("%", new string[0])]
+    [InlineData("_lph_", new string[0])]
+    public async Task Search_MatchesUserArtifactAndResult_CaseInsensitively_WithLiteralWildcards(string search, string[] expected)
+    {
+        var seeded = await SeedAttemptsAsync();
+        await using var _ = seeded.Scenario;
+        var term = search == "delta" || search.Equals("alpha", StringComparison.OrdinalIgnoreCase) ? $"{seeded.Tag} {search}" : search;
+        var path = AttemptsPath(seeded, $"search={Uri.EscapeDataString(term)}");
+        var (items, total) = await PageAsync(seeded.Platform, path);
+        Assert.Equal(expected.Length, total);
+        Assert.Equal(expected.Order(), Labels(items, seeded.Tag).Order());
+    }
+
+    [Fact]
+    public async Task Search_CombinesWithFilters_AndTheTenantRouteSearchesAndSortsItsOwnHistory()
+    {
+        var seeded = await SeedAttemptsAsync();
+        await using var _ = seeded.Scenario;
+        Assert.Equal(["charlie"], Labels(await AttemptsAsync(seeded.Platform, AttemptsPath(seeded, $"search={seeded.Tag}%20c&result=Refused")), seeded.Tag));
+        Assert.Empty(await AttemptsAsync(seeded.Platform, AttemptsPath(seeded, $"search={seeded.Tag}%20delta&result=Refused")));
+
+        var tenant = $"{seeded.Scenario.Root}/backup-shares/download-attempts";
+        Assert.Equal(["delta"], Labels(await AttemptsAsync(seeded.Scenario.Admin, $"{tenant}?search={seeded.Tag}%20delta"), seeded.Tag));
+        Assert.Equal(["echo", "delta", "charlie", "Bravo", "Alpha"], Labels(await AttemptsAsync(seeded.Scenario.Admin, $"{tenant}?sort=user&dir=desc"), seeded.Tag));
     }
 }
