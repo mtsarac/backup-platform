@@ -41,6 +41,22 @@ beforeEach(() => {
   vi.mocked(getAgents).mockResolvedValue([])
 })
 
+it('keeps rapid search typing in order and does not restore a pending search after clearing', async () => {
+  mount('/?search=old')
+  await screen.findAllByRole('row')
+  const box = screen.getByRole('searchbox', { name: 'Ara' })
+  fireEvent.change(box, { target: { value: '' } })
+  fireEvent.change(box, { target: { value: 'q' } })
+  fireEvent.change(box, { target: { value: 'qa' } })
+  expect(box).toHaveValue('qa')
+  fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+  const delay = Promise.withResolvers<void>()
+  setTimeout(delay.resolve, 400)
+  await delay.promise
+  expect(box).toHaveValue('')
+  expect(location()).not.toHaveTextContent('search=')
+})
+
 describe('run history: page past the last', () => {
   it('falls back to the last page and never says there is nothing yet while there are runs', async () => {
     mount('/?page=5')

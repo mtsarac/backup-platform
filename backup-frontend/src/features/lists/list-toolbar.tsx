@@ -15,12 +15,14 @@ function SearchInput({ value, onCommit, label, placeholder }: { value: string; o
   const [draft, setDraft] = useState(value)
   const [committed, setCommitted] = useState(value)
   const [seen, setSeen] = useState(value)
+  const [resetVersion, setResetVersion] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   if (value !== seen) {
     setSeen(value)
-    if (value !== committed) { setCommitted(value); setDraft(value) }
+    if (value !== committed) { setCommitted(value); setDraft(value); setResetVersion(version => version + 1) }
   }
   const commit = (next: string) => { clearTimeout(timer.current); timer.current = undefined; if (next !== committed) { setCommitted(next); onCommit(next) } }
+  useEffect(() => { clearTimeout(timer.current) }, [resetVersion])
   useEffect(() => () => clearTimeout(timer.current), [])
   return <TextInput type="search" aria-label={label} placeholder={placeholder} value={draft}
     onChange={event => { const next = event.target.value; setDraft(next); clearTimeout(timer.current); timer.current = setTimeout(() => commit(next), SEARCH_DEBOUNCE_MS) }}
