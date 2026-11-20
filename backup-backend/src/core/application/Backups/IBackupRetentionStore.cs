@@ -1,3 +1,5 @@
+using BackupPlatform.Application.Lists;
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -8,11 +10,12 @@ namespace BackupPlatform.Application.Backups;
 public sealed record BackupArtifactRecord(BackupArtifact Artifact, Guid RunId, Guid JobId,
     string? JobName = null, string? DatabaseName = null, string? AgentName = null, Guid? AgentId = null, BackupConfiguration? Snapshot = null);
 
-/// <summary>Created-at bounds are inclusive UTC instants; pagination has no history cutoff.</summary>
-public sealed record BackupArtifactQuery(Guid? JobId = null, Guid? AgentId = null, string? State = null,
-    DateTimeOffset? From = null, DateTimeOffset? To = null, int Page = 1, int PageSize = 25, bool EncryptedOnly = false);
-
-public sealed record BackupArtifactPage<T>(IReadOnlyList<T> Items, long TotalCount, int Page, int PageSize);
+/// <summary>
+/// The artifacts a tenant can list, newest first by default. <see cref="List"/> carries paging, search (job name, database name, stored file name) and sort
+/// (<c>createdAt</c>, <c>size</c>, <c>status</c>, <c>jobName</c>, <c>databaseName</c>). Created-at bounds are inclusive UTC instants; there is no history cutoff.
+/// </summary>
+public sealed record BackupArtifactQuery(ListQuery List, Guid? JobId = null, Guid? AgentId = null, string? State = null,
+    DateTimeOffset? From = null, DateTimeOffset? To = null);
 
 /// <summary>One replica a worker now owns the delete of. The location is the PERSISTED reference, never a caller-supplied one.</summary>
 /// <param name="LeaseToken">Fences this delete: only the holder may complete or fail it.</param>
@@ -93,7 +96,7 @@ public interface IBackupRetentionStore
     /// <summary>Newest first (by acceptance), optionally of one job. Includes artifacts whose replicas are all Deleted: history is never dropped.</summary>
     Task<IReadOnlyList<BackupArtifactRecord>> ListArtifactsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken);
 
-    Task<BackupArtifactPage<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken);
 
     /// <summary>Of <paramref name="keys"/>, those some replica of ANY status references under <paramref name="storageProvider"/>, in any tenant.</summary>
     Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken);

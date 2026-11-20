@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -103,7 +104,7 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
     public Func<TenantId, Guid, DateTimeOffset, BackupArtifactCancelResult> OnCancelDelete { get; set; } = (_, _, _) => throw new NotSupportedException();
     public Func<TenantId, Guid, BackupArtifactRecord?> OnGetArtifact { get; set; } = (_, _) => throw new NotSupportedException();
     public Func<TenantId, Guid?, int, IReadOnlyList<BackupArtifactRecord>> OnListArtifacts { get; set; } = (_, _, _) => throw new NotSupportedException();
-    public Func<TenantId, BackupArtifactQuery, BackupArtifactPage<BackupArtifactRecord>> OnQueryArtifacts { get; set; } = (_, _) => throw new NotSupportedException();
+    public Func<TenantId, BackupArtifactQuery, PagedResult<BackupArtifactRecord>> OnQueryArtifacts { get; set; } = (_, _) => throw new NotSupportedException();
     public List<(TenantId Tenant, Guid ArtifactId, Guid? User, DateTimeOffset Now)> DeleteRequests { get; } = [];
     public List<(TenantId Tenant, Guid ArtifactId, Guid? User, DateTimeOffset Now)> CancelRequests { get; } = [];
     public List<(TenantId Tenant, Guid? JobId, int Limit)> ListCalls { get; } = [];
@@ -162,7 +163,7 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
         return Task.FromResult(OnListArtifacts(tenantId, jobId, limit));
     }
 
-    public Task<BackupArtifactPage<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken) =>
+    public Task<PagedResult<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken) =>
         Task.FromResult(OnQueryArtifacts(tenantId, query));
 
     public Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)

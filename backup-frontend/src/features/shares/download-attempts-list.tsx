@@ -14,29 +14,21 @@ import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { describeFailure, platformOnlyMessage } from '@/lib/api/failure-messages'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
+import { downloadAttemptsListConfig } from './download-attempts-config'
 import { useDownloadAttempts } from './hooks'
 import type { DownloadAttemptScope, DownloadAttemptView } from './types'
-
-// The page also holds the shares list, so this list keeps its own search, sort and page parameters.
-const listConfig = {
-  search: true,
-  filters: { result: ['Completed', 'Failed', 'Cancelled', 'Refused'], shareId: 'text', artifactId: 'text', userId: 'text' },
-  sort: { first: { tenant: 'asc', artifact: 'asc', share: 'asc', user: 'asc', startedAt: 'desc', endedAt: 'desc', result: 'asc', bytes: 'desc' }, default: { key: 'startedAt', dir: 'desc' } },
-  pageKey: 'attempts-page',
-  paramPrefix: 'attempts-',
-} as const
 
 /** The download history: searched, filtered, sorted and paged by the server. The platform history also filters by share, backup file and user id. */
 export function DownloadAttemptsList({ scope }: { scope: DownloadAttemptScope }) {
   useLanguage()
   const platform = scope.route === 'platform'
-  const state = useListState(listConfig)
+  const state = useListState(downloadAttemptsListConfig)
   const query = useDownloadAttempts(scope, toServerQuery(state))
 
   const columns: Column<DownloadAttemptView>[] = [
     ...(platform ? [{ key: 'tenant', header: tx('Tenant'), sortable: true, render: (attempt: DownloadAttemptView) => attempt.tenantName || attempt.tenantId }] : []),
     { key: 'artifact', header: tx('Yedek dosyası'), sortable: true, card: 'title', render: attempt => attempt.artifactName || attempt.artifactId },
-    { key: 'share', header: tx('Paylaşım'), sortable: true, render: attempt => attempt.shareId || '—' },
+    { key: 'share', header: tx('Paylaşım'), render: attempt => attempt.shareId || '—' },
     { key: 'user', header: tx('Kullanıcı'), sortable: true, render: attempt => attempt.initiatingUserDisplayName || attempt.initiatingUserId },
     { key: 'startedAt', header: tx('Başlangıç'), sortable: true, render: attempt => formatDateTime(attempt.startedAtUtc) },
     { key: 'endedAt', header: tx('Bitiş'), sortable: true, render: attempt => (attempt.endedAtUtc ? formatDateTime(attempt.endedAtUtc) : '—') },

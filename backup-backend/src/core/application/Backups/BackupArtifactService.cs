@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Backups;
 
@@ -25,7 +26,7 @@ public sealed class BackupArtifactService(IBackupRetentionStore store, IBackupSc
         return [.. records.Select(Map)];
     }
 
-    public async Task<BackupArtifactPage<BackupArtifactView>> QueryAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<BackupArtifactView>> QueryAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken)
     {
         var result = await store.QueryArtifactsAsync(tenantId, query, cancellationToken);
         return new([.. result.Items.Select(Map)], result.TotalCount, result.Page, result.PageSize);

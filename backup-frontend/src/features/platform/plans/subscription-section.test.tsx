@@ -137,7 +137,7 @@ describe('subscription history', () => {
     const superseded = makeSubscription({ subscriptionId: 'sub-0', planId: 'plan-1', planName: '1 GB', planStorageLimitBytes: 1_000_000_000, status: 'Superseded', endsAt: '2026-10-03T10:00:00Z', effectiveStorageLimit: { unlimited: false, bytes: 1_000_000_000, source: 'plan' } })
     vi.mocked(api.getTenantSubscription).mockResolvedValue({ tenantId: 'tenant-a', subscription: active })
     vi.mocked(api.getSubscriptionHistory).mockResolvedValue(paged([active, superseded], { totalCount: 22, pageSize: 10 }))
-    mount('/platform/tenants/tenant-a?subPage=2')
+    mount('/platform/tenants/tenant-a?subscription-page=2')
     const list = await screen.findByRole('list', { name: 'Abonelik geçmişi' })
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     const cards = within(list).getAllByRole('listitem')
@@ -153,7 +153,7 @@ describe('subscription history', () => {
     expect(api.getSubscriptionHistory).toHaveBeenCalledWith('tenant-a', { page: 2, pageSize: 10 }, expect.any(AbortSignal))
     expect(screen.getByText('22 kayıt · Sayfa 2 / 3')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('subPage=3'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('subscription-page=3'))
   })
 })
 
@@ -177,7 +177,7 @@ describe('subscription history list', () => {
   it('offers clearing the search when nothing matches', async () => {
     vi.mocked(api.getSubscriptionHistory).mockResolvedValue(paged([], { pageSize: 10 }))
     const user = userEvent.setup()
-    mount('/platform/tenants/tenant-a?search=zzz')
+    mount('/platform/tenants/tenant-a?subscription-search=zzz')
     await screen.findByText('Aramayla eşleşen kayıt yok.')
     await user.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
     await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 10 }))

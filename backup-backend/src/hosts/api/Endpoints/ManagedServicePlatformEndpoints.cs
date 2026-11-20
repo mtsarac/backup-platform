@@ -42,10 +42,6 @@ public sealed class AssignPlanRequest
 /// </summary>
 public static class ManagedServicePlatformEndpoints
 {
-    private const int DefaultHistoryPageSize = 25;
-    private const int DefaultPlanPageSize = 50;
-    private const int MaximumPageSize = 100;
-
     public static IEndpointRouteBuilder MapManagedServicePlatformEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -182,15 +178,6 @@ public static class ManagedServicePlatformEndpoints
         ManagedServiceOutcome.QuotaPolicyDisabled => Results.Conflict(new { error = "quota_policy_disabled" }),
         _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
     };
-
-    private static bool TryPaging(int? page, int? pageSize, int defaultSize, out int p, out int size)
-    {
-        p = page ?? 1;
-        size = pageSize ?? defaultSize;
-        return p is >= 1 and <= 1_000_000 && size is >= 1 and <= MaximumPageSize;
-    }
-
-    private static IResult InvalidPaging() => Results.BadRequest(new { error = "invalid_request", field = "page", code = "invalid_value" });
 
     private static object Page<TSource, TResult>(PagedResult<TSource> result, Func<TSource, TResult> map) => new
     {

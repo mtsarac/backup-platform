@@ -463,7 +463,7 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
     /// <summary>
     /// Five attempts of one tenant, labelled by their user: Alpha and Bravo (refused, same time, Bravo without share and with an unknown backup file),
     /// charlie (refused a minute later, share ending in ...fe), delta (completed download, 1024 bytes) and echo (a prepared, unstarted one);
-    /// delta and echo are the newest and tie, and use the real share, which sorts between the refusals' shares.
+    /// delta and echo are the newest and tie.
     /// </summary>
     private async Task<Seeded> SeedAttemptsAsync()
     {
@@ -505,8 +505,6 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         { "endedAt", "asc", [["Alpha", "Bravo"], ["charlie"], ["delta"], ["echo"]] },
         { "artifact", "asc", [["Alpha", "charlie", "delta", "echo"], ["Bravo"]] },
         { "artifact", "desc", [["Alpha", "charlie", "delta", "echo"], ["Bravo"]] },
-        { "share", "asc", [["Alpha"], ["delta", "echo"], ["charlie"], ["Bravo"]] },
-        { "share", "desc", [["charlie"], ["delta", "echo"], ["Alpha"], ["Bravo"]] },
         { "user", "asc", [["Alpha"], ["Bravo"], ["charlie"], ["delta"], ["echo"]] },
         { "user", "desc", [["echo"], ["delta"], ["charlie"], ["Bravo"], ["Alpha"]] },
         { "result", "asc", [["delta"], ["echo"], ["Alpha", "Bravo", "charlie"]] },
@@ -540,7 +538,7 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         var seeded = await SeedAttemptsAsync();
         await using var _ = seeded.Scenario;
         foreach (var path in new[] { AttemptsPath(seeded), $"{seeded.Scenario.Root}/backup-shares/download-attempts" })
-            foreach (var (query, field) in new[] { ("sort=failureReason", "sort"), ("sort=id", "sort"), ("dir=sideways", "dir") })
+            foreach (var (query, field) in new[] { ("sort=failureReason", "sort"), ("sort=share", "sort"), ("sort=id", "sort"), ("dir=sideways", "dir") })
             {
                 using var response = await (path.StartsWith("/api/platform") ? seeded.Platform : seeded.Scenario.Admin).GetAsync($"{path}{(path.Contains('?') ? '&' : '?')}{query}");
                 Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

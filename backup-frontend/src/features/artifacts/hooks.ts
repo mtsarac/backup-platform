@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cancelArtifactDeletion, deleteArtifact, getArtifact, listArtifacts, startReplicaRepair, getReplicaRepair, cancelReplicaRepair, listReplicaRepairs } from './api'
 import { storageQueryKeys, useRefreshQuotaWhenFinished } from '@/features/storage/hooks'
 import { deletionInProgress } from './format'
@@ -10,6 +10,7 @@ export function useArtifacts(tenantId: string, filters: ArtifactFilters) {
     queryKey: ['tenant', tenantId, 'backup-artifacts', 'list', filters],
     queryFn: ({ signal }) => listArtifacts(tenantId, filters, signal),
     enabled: !filters.from || !filters.to || filters.from <= filters.to,
+    placeholderData: keepPreviousData,
     refetchInterval: (query) => query.state.data?.items.some(deletionInProgress) ? 5000 : false,
   })
   // Replica bytes leave the quota when the physical deletion is verified, not when it is requested.

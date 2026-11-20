@@ -81,6 +81,21 @@ describe('platform users', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  it('pages the workspaces of the new-user dialog through the list state and starts over when it closes', async () => {
+    vi.mocked(api.getTenants).mockResolvedValue(paged(tenants, { totalCount: 40 }))
+    renderPlatform(<PlatformUsersPage />)
+    await screen.findByText('ayse@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni kullanıcı' }))
+    const pages = await screen.findByRole('navigation', { name: 'Çalışma alanı sayfaları' })
+    expect(api.getTenants).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    await userEvent.click(within(pages).getByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(api.getTenants).toHaveBeenLastCalledWith({ page: 2, pageSize: 25 }, expect.any(AbortSignal)))
+    expect(screen.getByTestId('location')).toHaveTextContent('tenants-page=2')
+    expect(api.getUsers).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Vazgeç' }))
+    await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('tenants-page'))
+  })
+
   it('creates PlatformAdmin without memberships after changing roles', async () => {
     vi.mocked(api.createUser).mockResolvedValue(admin)
     renderPlatform(<PlatformUsersPage />)
