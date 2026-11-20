@@ -1,3 +1,5 @@
+using BackupPlatform.Application.Lists;
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Domain.Backups;
@@ -182,13 +184,13 @@ public sealed class BackupShareService(
         return await store.GetPlatformAsync(shareId, now, cancellationToken);
     }
 
-    public Task<DownloadAttemptPage> ListTenantDownloadAttemptsAsync(
-        TenantId tenantId, DownloadAttemptFilter filter, DownloadAttemptCursor? after, int limit, CancellationToken cancellationToken) =>
-        store.ListDownloadAttemptsAsync(filter with { TenantId = tenantId }, tenantScoped: true, after, limit, cancellationToken);
+    public Task<PagedResult<DownloadAttemptView>> ListTenantDownloadAttemptsAsync(
+        TenantId tenantId, DownloadAttemptFilter filter, ListQuery query, CancellationToken cancellationToken) =>
+        store.ListDownloadAttemptsAsync(filter with { TenantId = tenantId }, tenantScoped: true, query, cancellationToken);
 
-    public Task<DownloadAttemptPage> ListPlatformDownloadAttemptsAsync(
-        DownloadAttemptFilter filter, DownloadAttemptCursor? after, int limit, CancellationToken cancellationToken) =>
-        store.ListDownloadAttemptsAsync(filter, tenantScoped: false, after, limit, cancellationToken);
+    public Task<PagedResult<DownloadAttemptView>> ListPlatformDownloadAttemptsAsync(
+        DownloadAttemptFilter filter, ListQuery query, CancellationToken cancellationToken) =>
+        store.ListDownloadAttemptsAsync(filter, tenantScoped: false, query, cancellationToken);
 
     public Task<AuditRetentionSettingsView> GetAuditRetentionAsync(
         CancellationToken cancellationToken)

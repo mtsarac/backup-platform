@@ -1,11 +1,14 @@
 import { apiRequest } from '@/lib/api/client'
+import { query } from '@/features/platform/api'
+import type { PagedResult } from '@/features/platform/types'
 import type {
   AuditRetentionSettings,
   BackupShareView,
   CreatePlatformShareRequest,
   CreateShareRequest,
-  DownloadAttemptFilters,
-  DownloadAttemptPage,
+  DownloadAttemptQuery,
+  DownloadAttemptScope,
+  DownloadAttemptView,
   ExtendShareRequest,
   RevokeShareRequest,
 } from './types'
@@ -75,24 +78,11 @@ export async function revokeShare(
   )
 }
 
-function buildAttemptQuery(filters?: DownloadAttemptFilters, cursor?: string): string {
-  const search = new URLSearchParams()
-  if (filters?.shareId) search.set('shareId', filters.shareId)
-  if (filters?.tenantId) search.set('tenantId', filters.tenantId)
-  if (filters?.artifactId) search.set('artifactId', filters.artifactId)
-  if (filters?.userId) search.set('userId', filters.userId)
-  if (filters?.result) search.set('result', filters.result)
-  if (cursor) search.set('cursor', cursor)
-  const qs = search.toString()
-  return qs ? `?${qs}` : ''
-}
-
-export function listTenantDownloadAttempts(tenantId: string, filters?: DownloadAttemptFilters, cursor?: string, signal?: AbortSignal) {
-  return apiRequest<DownloadAttemptPage>(`tenants/${encodeURIComponent(tenantId)}/backup-shares/download-attempts${buildAttemptQuery(filters, cursor)}`, { signal })
-}
-
-export function listPlatformDownloadAttempts(filters?: DownloadAttemptFilters, cursor?: string, signal?: AbortSignal) {
-  return apiRequest<DownloadAttemptPage>(`platform/download-attempts${buildAttemptQuery(filters, cursor)}`, { signal })
+export function listDownloadAttempts(scope: DownloadAttemptScope, list: DownloadAttemptQuery, signal?: AbortSignal) {
+  const path = scope.route === 'tenant'
+    ? `tenants/${encodeURIComponent(scope.tenantId)}/backup-shares/download-attempts${query(list)}`
+    : `platform/download-attempts${query({ ...list, tenantId: scope.tenantId })}`
+  return apiRequest<PagedResult<DownloadAttemptView>>(path, { signal })
 }
 
 export function getAuditRetention(signal?: AbortSignal): Promise<AuditRetentionSettings> {

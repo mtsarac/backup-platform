@@ -1,3 +1,5 @@
+import type { ServerListQuery } from '@/features/lists/server-list-query'
+
 export type ShareStatus = 'Active' | 'Expired' | 'Revoked'
 
 export interface BackupShareView {
@@ -58,19 +60,11 @@ export interface DownloadAttemptView {
   decrypted: boolean
 }
 
-/** One page of the history, newest first; `nextCursor` is null on the last page. */
-export interface DownloadAttemptPage {
-  items: DownloadAttemptView[]
-  nextCursor: string | null
-}
+/** The shared list query plus whatever filters the list adds; the history takes `result`, `shareId`, `artifactId` and `userId`. */
+export type DownloadAttemptQuery = ServerListQuery<Record<never, never>>
 
-export interface DownloadAttemptFilters {
-  shareId?: string
-  tenantId?: string
-  artifactId?: string
-  userId?: string
-  result?: string
-}
+/** Where the history is read: one workspace, or the whole platform (optionally one tenant). */
+export type DownloadAttemptScope = { route: 'tenant'; tenantId: string } | { route: 'platform'; tenantId?: string }
 
 export interface AuditRetentionSettings {
   retentionDays: number

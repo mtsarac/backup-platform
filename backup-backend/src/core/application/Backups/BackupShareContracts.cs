@@ -1,3 +1,5 @@
+using BackupPlatform.Application.Lists;
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -96,28 +98,6 @@ public sealed record DownloadAttemptView(
     string? FailureReason,
     bool Decrypted);
 
-/// <summary>Keyset position in the history: attempts are ordered newest first by start time, then id.</summary>
-public sealed record DownloadAttemptCursor(DateTimeOffset StartedAtUtc, Guid Id)
-{
-    public override string ToString() => $"{StartedAtUtc.UtcTicks}_{Id:N}";
-
-    public static bool TryParse(string? value, out DownloadAttemptCursor? cursor)
-    {
-        cursor = null;
-        var parts = value?.Split('_');
-        if (parts is not { Length: 2 } || !long.TryParse(parts[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var ticks)
-            || ticks > DateTimeOffset.MaxValue.UtcTicks || !Guid.TryParseExact(parts[1], "N", out var id)) return false;
-        cursor = new DownloadAttemptCursor(new DateTimeOffset(ticks, TimeSpan.Zero), id);
-        return true;
-    }
-}
-
-public sealed record DownloadAttemptPage(IReadOnlyList<DownloadAttemptView> Items, string? NextCursor)
-{
-    public const int DefaultLimit = 50;
-    public const int MaximumLimit = 200;
-}
-
 public sealed record AuditRetentionSettingsView(
     int RetentionDays,
     int DefaultRetentionDays = PlatformAuditRetentionSettings.DefaultRetentionDays,
@@ -183,11 +163,10 @@ public interface IBackupShareStore
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
-    Task<DownloadAttemptPage> ListDownloadAttemptsAsync(
+    Task<PagedResult<DownloadAttemptView>> ListDownloadAttemptsAsync(
         DownloadAttemptFilter filter,
         bool tenantScoped,
-        DownloadAttemptCursor? after,
-        int limit,
+        ListQuery query,
         CancellationToken cancellationToken);
 
     Task<AuditRetentionSettingsView> GetAuditRetentionAsync(

@@ -49,18 +49,6 @@ public sealed class PlatformUserListIntegrationTests(PostgreSqlFixture fixture) 
     private static string[] Names(JsonElement page, string tag) =>
         page.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("displayName").GetString()!.Replace(tag + " ", "")).ToArray();
 
-    // Each inner set is a group of rows whose relative order is a tie (broken by id), so it is compared as a set.
-    private static void AssertGroups(string[] actual, string[][] groups)
-    {
-        var index = 0;
-        foreach (var group in groups)
-        {
-            Assert.Equal(group.Order(), actual.Skip(index).Take(group.Length).Order());
-            index += group.Length;
-        }
-        Assert.Equal(index, actual.Length);
-    }
-
     public static TheoryData<string, string, string[][]> Orders => new()
     {
         { "displayName", "asc", [["Alpha"], ["Bravo"], ["charlie"], ["delta"]] },
@@ -94,7 +82,7 @@ public sealed class PlatformUserListIntegrationTests(PostgreSqlFixture fixture) 
 
         var page = await GetAsync(admin, $"search={tag}&sort={field}&dir={dir}");
 
-        AssertGroups(Names(page, tag), groups);
+        ListAssertions.Groups(Names(page, tag), groups);
     }
 
     [Fact]

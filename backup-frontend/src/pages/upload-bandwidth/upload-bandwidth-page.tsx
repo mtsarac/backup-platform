@@ -6,7 +6,6 @@ import type { Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
@@ -17,6 +16,7 @@ import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { compareDate, compareNumber, compareText } from '@/features/lists/compare'
 import { ListPager } from '@/features/lists/list-pager'
+import { ListEmpty } from '@/features/lists/list-empty'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { useClientList } from '@/features/lists/use-client-list'
 import { sortProps, useListState } from '@/features/lists/use-list-state'
@@ -161,7 +161,7 @@ export function UploadBandwidthPage() {
               <h2 className="text-base font-semibold text-text-heading">{tx("Bant Genişliği Profilleri")}</h2>
               {profileList.length > 0 && newProfile}
             </div>
-            {profileList.length === 0 ? <Card padding="none"><EmptyState message={tx("Henüz profil yok. Saate göre değişen bir hız sınırı için profil oluşturun.")} action={newProfile} /></Card> : (
+            {profileList.length === 0 ? <ListEmpty message={tx("Henüz profil yok. Saate göre değişen bir hız sınırı için profil oluşturun.")} action={newProfile} /> : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {profileList.map(p => (
                   <Card key={p.id} className="space-y-3">

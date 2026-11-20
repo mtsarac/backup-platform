@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField } from '@/components/ui/filters'
 import { linkClass, rowLinkClass } from '@/components/ui/form-styles'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -16,11 +15,10 @@ import { useClientList } from '@/features/lists/use-client-list'
 import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from '@/features/tenancy/tenant-context'
-import { formatBytes, formatDateTime } from '@/lib/format'
-import { describeFailure } from '@/lib/api/failure-messages'
+import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
 import { ShareActionDialogs } from './share-dialogs'
-import { canExtendShare, canManageShare, type BackupShareView, type DownloadAttemptView } from './types'
+import { canExtendShare, canManageShare, type BackupShareView } from './types'
 import { prepareDownload } from '@/features/artifacts/api'
 import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 
@@ -259,113 +257,6 @@ export function SharesTable({
         }}
         onSuccess={(msg) => setNotice(msg)}
       />
-    </div>
-  )
-}
-
-export interface DownloadAttemptsTableProps {
-  attempts: DownloadAttemptView[]
-  showTenant?: boolean
-  emptyMessage?: string
-  /** Present while older attempts remain on the server. */
-  onLoadMore?: () => void
-  onRefresh?: () => void
-  loadingMore?: boolean
-}
-
-export function DownloadAttemptsTable({
-  attempts,
-  showTenant = false,
-  emptyMessage,
-  onLoadMore,
-  onRefresh,
-  loadingMore = false,
-}: DownloadAttemptsTableProps) {
-  useLanguage()
-
-  const columns: Column<DownloadAttemptView>[] = [
-    ...(showTenant
-      ? [
-          {
-            key: 'tenant',
-            header: tx('Tenant'),
-            render: (attempt: DownloadAttemptView) => attempt.tenantName || attempt.tenantId,
-          },
-        ]
-      : []),
-    {
-      key: 'artifact',
-      header: tx('Yedek dosyası'),
-      card: 'title' as const,
-      render: (attempt: DownloadAttemptView) => attempt.artifactName || attempt.artifactId,
-    },
-    {
-      key: 'share',
-      header: tx('Paylaşım'),
-      render: (attempt: DownloadAttemptView) => attempt.shareId || '—',
-    },
-    {
-      key: 'user',
-      header: tx('Kullanıcı'),
-      render: (attempt: DownloadAttemptView) => attempt.initiatingUserDisplayName || attempt.initiatingUserId,
-    },
-    {
-      key: 'startedAt',
-      header: tx('Başlangıç'),
-      render: (attempt: DownloadAttemptView) => formatDateTime(attempt.startedAtUtc),
-    },
-    {
-      key: 'endedAt',
-      header: tx('Bitiş'),
-      render: (attempt: DownloadAttemptView) => (attempt.endedAtUtc ? formatDateTime(attempt.endedAtUtc) : '—'),
-    },
-    {
-      key: 'result',
-      header: tx('Sonuç'),
-      card: 'status' as const,
-      render: (attempt: DownloadAttemptView) => <StatusPill domain="downloadAttempt" status={attempt.result} />,
-    },
-    {
-      key: 'bytes',
-      header: tx('Aktarılan veri'),
-      render: (attempt: DownloadAttemptView) => formatBytes(attempt.bytesTransferred),
-    },
-    {
-      key: 'failureReason',
-      header: tx('Hata / Red gerekçesi'),
-      wrap: true,
-      render: (attempt: DownloadAttemptView) => {
-        if (!attempt.failureReason) return '—'
-        const failure = describeFailure(attempt.failureReason)
-        return <ErrorNotice {...failure} technical={failure.technical.length ? failure.technical : [{ label: tx('Sunucu mesajı'), value: attempt.failureReason }]} />
-      },
-    },
-  ]
-
-  if (attempts.length === 0) {
-    return (
-      <EmptyState
-        icon={Share2}
-        message={emptyMessage || tx('Henüz indirme girişimi kaydı yok.')}
-        action={onRefresh && <Button onClick={onRefresh}>{tx('Yenile')}</Button>}
-      />
-    )
-  }
-
-  return (
-    <div className="space-y-3">
-      <DataList
-        emptyMessage={tx('Henüz indirme girişimi kaydı yok.')}
-        rows={attempts}
-        columns={columns}
-        keyExtractor={(attempt) => attempt.id}
-        caption={tx('İndirme girişimleri')}
-      />
-      {onLoadMore && (
-        <Button variant="outline" size="sm" disabled={loadingMore} onClick={onLoadMore}>
-          {loadingMore ? tx('Yükleniyor…') : tx('Daha eski girişimleri göster')}
-        </Button>
-      )}
     </div>
   )
 }
