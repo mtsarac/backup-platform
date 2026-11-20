@@ -22,6 +22,16 @@ public sealed class SortMap<TEntity>
         return Add(field, SortDirection.Asc, key, lowered);
     }
 
+    /// <summary>Text key that orders digit runs by value ("5 GB" before "10 GB"), A to Z by default.</summary>
+    public SortMap<TEntity> Natural(string field, Expression<Func<TEntity, string?>> key) => Add(field, SortDirection.Asc, key, SortKeys.Natural(key));
+
+    /// <summary>
+    /// An enum-like column the user reads as a label: <paramref name="displayOrder"/> lists the values in the order of their displayed (Turkish)
+    /// labels, so ascending is the order on screen. A value not listed sorts after the listed ones, a null key last both ways.
+    /// </summary>
+    public SortMap<TEntity> Ordinal<TKey>(string field, Expression<Func<TEntity, TKey>> key, params TKey[] displayOrder) =>
+        Add(field, SortDirection.Asc, key, SortKeys.Rank(key, displayOrder));
+
     /// <summary>Numbers, booleans and enums (their stored order), smallest first by default.</summary>
     public SortMap<TEntity> Value<TKey>(string field, Expression<Func<TEntity, TKey>> key) => Add(field, SortDirection.Asc, key, key);
 
@@ -60,18 +70,30 @@ public static class ListQueryExtensions
         this IQueryable<TEntity> source, SortMap<TEntity> map, ListQuery query, string defaultField, Expression<Func<TEntity, TUnique>> tiebreaker) =>
         map.Apply(source, query.SortField ?? defaultField, query.Direction).ThenBy(tiebreaker);
 
-    /// <summary>Case-insensitive contains match of <see cref="ListQuery.Search"/> on any of the columns; the term is a bound parameter, wildcards are literal.</summary>
-    public static IQueryable<TEntity> ApplySearch<TEntity>(this IQueryable<TEntity> source, ListQuery query, params Expression<Func<TEntity, string?>>[] columns)
+    /// <summary>
+    /// Contains match of <see cref="ListQuery.Search"/> on any of the columns, case-insensitive and Turkish-letter-insensitive (<see cref="TextFold"/>: the term is
+    /// folded here, each column in SQL). The term is a bound parameter and wildcards are literal.
+    /// </summary>
+    public static IQueryable<TEntity> ApplySearch<TEntity>(this IQueryable<TEntity> source, ListQuery query, params Expression<Func<TEntity, string?>>[] columns) =>
+        source.ApplySearchOr(query, null, columns);
+
+    /// <summary><see cref="ApplySearch"/>, and a row also matches when <paramref name="alsoMatches"/> holds (for a visible label no column stores); only while a search is given.</summary>
+    public static IQueryable<TEntity> ApplySearchOr<TEntity>(
+        this IQueryable<TEntity> source, ListQuery query, Expression<Func<TEntity, bool>>? alsoMatches, params Expression<Func<TEntity, string?>>[] columns)
     {
         if (query.Search is null) return source;
         var parameter = Expression.Parameter(typeof(TEntity), "row");
         // A closure member, not a constant, so EF binds it as a parameter instead of inlining it into the SQL.
-        var term = Expression.Property(Expression.Constant(new SearchTerm(query.Search.ToLowerInvariant())), nameof(SearchTerm.Value));
+        var term = Expression.Property(Expression.Constant(new SearchTerm(TextFold.Fold(query.Search))), nameof(SearchTerm.Value));
         var match = columns
             .Select(column => (Expression)Expression.Call(
-                Expression.Call(new Rebind(column.Parameters[0], parameter).Visit(column.Body), nameof(string.ToLower), null),
+                Expression.Call(Expression.Call(
+                    typeof(TextFold).GetMethod(nameof(TextFold.Translate))!,
+                    new Rebind(column.Parameters[0], parameter).Visit(column.Body), Expression.Constant(TextFold.From), Expression.Constant(TextFold.To)),
+                    nameof(string.ToLower), null),
                 nameof(string.Contains), null, term))
             .Aggregate(Expression.OrElse);
+        if (alsoMatches is not null) match = Expression.OrElse(match, new Rebind(alsoMatches.Parameters[0], parameter).Visit(alsoMatches.Body));
         return source.Where(Expression.Lambda<Func<TEntity, bool>>(match, parameter));
     }
 

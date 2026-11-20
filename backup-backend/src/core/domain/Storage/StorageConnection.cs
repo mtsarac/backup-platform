@@ -165,7 +165,7 @@ public sealed class StorageConnection : ITenantOwned
         {
             throw new ArgumentException("Invalid storage connection name.", nameof(name));
         }
-        return (display, display.ToLowerInvariant());
+        return (display, NameKey.Of(display));
     }
 
     /// <summary>False, leaving everything untouched, when nothing changes.</summary>

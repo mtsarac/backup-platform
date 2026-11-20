@@ -101,8 +101,9 @@ public sealed class PlatformListsIntegrationTests(PostgreSqlFixture fixture) : I
         { "memberCount", "desc", [["Bravo"], ["charlie"], ["delta"]] },
         { "agentCount", "asc", [["Bravo"], ["delta"], ["charlie"]] },
         { "agentCount", "desc", [["charlie"], ["delta"], ["Bravo"]] },
-        { "enrollmentEnabled", "asc", [["charlie", "delta"], ["Bravo"]] },
-        { "enrollmentEnabled", "desc", [["Bravo"], ["charlie", "delta"]] }
+        // "Kayıt açık" before "Kayıt kapalı".
+        { "enrollmentEnabled", "asc", [["Bravo"], ["charlie", "delta"]] },
+        { "enrollmentEnabled", "desc", [["charlie", "delta"], ["Bravo"]] }
     };
 
     [Theory]
@@ -210,8 +211,9 @@ public sealed class PlatformListsIntegrationTests(PostgreSqlFixture fixture) : I
     {
         { "hostName", "asc", [["Bravo"], ["charlie"], ["delta"]] },
         { "hostName", "desc", [["delta"], ["charlie"], ["Bravo"]] },
-        { "status", "asc", [["delta"], ["charlie"], ["Bravo"]] },
-        { "status", "desc", [["Bravo"], ["charlie"], ["delta"]] },
+        // The Turkish labels: Devre dışı (charlie), Etkin (delta), İptal edildi (Bravo).
+        { "status", "asc", [["charlie"], ["delta"], ["Bravo"]] },
+        { "status", "desc", [["Bravo"], ["delta"], ["charlie"]] },
         { "enrolledAt", "asc", [["charlie"], ["Bravo"], ["delta"]] },
         { "enrolledAt", "desc", [["Bravo"], ["charlie"], ["delta"]] }
     };
@@ -272,8 +274,9 @@ public sealed class PlatformListsIntegrationTests(PostgreSqlFixture fixture) : I
         Assert.Equal(Of(first, second, third), Ids(await GetAsync(admin, path, $"{query}&sort=enrolledAt&dir=asc")));
         Assert.Equal(Of(second, first, third), Ids(await GetAsync(admin, path, $"{query}&sort=lastSeenAt")));
         Assert.Equal(Of(first, second, third), Ids(await GetAsync(admin, path, $"{query}&sort=lastSeenAt&dir=asc")));
-        Assert.Equal(Of(second, first, third), Ids(await GetAsync(admin, path, $"{query}&sort=connectivity")));
-        Assert.Equal(Of(third, first, second), Ids(await GetAsync(admin, path, $"{query}&sort=connectivity&dir=desc")));
+        // By the Turkish label shown: Bilinmiyor (third), Çevrimdışı (first), Çevrimiçi (second).
+        Assert.Equal(Of(third, first, second), Ids(await GetAsync(admin, path, $"{query}&sort=connectivity")));
+        Assert.Equal(Of(second, first, third), Ids(await GetAsync(admin, path, $"{query}&sort=connectivity&dir=desc")));
         Assert.Equal(Of(second), Ids(await GetAsync(admin, path, $"{query}&connectivity=online&sort=hostName&search=integration")));
         Assert.Equal(Of(third), Ids(await GetAsync(admin, path, $"{query}&connectivity=unknown")));
         await AssertRejectsBadListParametersAsync(admin, path);
@@ -343,5 +346,38 @@ public sealed class PlatformListsIntegrationTests(PostgreSqlFixture fixture) : I
         Assert.Equal([$"{tag} 100% x"], Strings(await GetAsync(admin, "/api/platform/plans", $"search={tag}%20100%25"), "name", ""));
         await AssertStablePagingAsync(admin, "/api/platform/plans", pagingTag, "createdAt", "planId", 5);
         await AssertRejectsBadListParametersAsync(admin, "/api/platform/plans");
+    }
+
+    [Fact]
+    public async Task Plans_NameSortsNaturally_DigitsByValue()
+    {
+        var (world, admin) = await StartAsync();
+        await using var _ = world;
+        var tag = NewTag();
+        var now = DateTimeOffset.UtcNow;
+        string[] names = ["Preview", "20 GB", "10 GB", "Legacy Unlimited", "5 GB", "1 GB"];
+        await SeedPlansAsync([.. names.Select(name => new Seed($"{tag} {name}", 1, true, now))]);
+
+        var asc = Strings(await GetAsync(admin, "/api/platform/plans", $"search={tag}&sort=name"), "name", tag);
+        var desc = Strings(await GetAsync(admin, "/api/platform/plans", $"search={tag}&sort=name&dir=desc"), "name", tag);
+
+        Assert.Equal(["1 GB", "5 GB", "10 GB", "20 GB", "Legacy Unlimited", "Preview"], asc);
+        Assert.Equal(asc.Reverse(), desc);
+    }
+
+    // Every string of a group is the same search text (TextFoldTests and the frontend foldSearch test use these groups).
+    [Theory]
+    [InlineData("İ", "i", "I", "ı")]
+    [InlineData("İNDİGO", "indigo", "INDIGO", "ındıgo")]
+    [InlineData("ŞİFRELİ", "sifreli", "SIFRELI", "şifreli")]
+    public async Task Plans_SearchFoldsCaseAndTurkishLetters(params string[] terms)
+    {
+        var (world, admin) = await StartAsync();
+        await using var _ = world;
+        var tag = NewTag();
+        await SeedPlansAsync(new Seed($"{tag} İNDİGO", 1, true, DateTimeOffset.UtcNow), new Seed($"{tag} Şifreli", 1, true, DateTimeOffset.UtcNow), new Seed($"{tag} other", 1, true, DateTimeOffset.UtcNow));
+
+        foreach (var term in terms)
+            Assert.Equal([terms[0][0] == 'Ş' ? "Şifreli" : "İNDİGO"], Strings(await GetAsync(admin, "/api/platform/plans", $"search={Uri.EscapeDataString(tag + " " + term)}"), "name", tag));
     }
 }

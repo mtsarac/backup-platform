@@ -1,5 +1,6 @@
 using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
+using System.Linq.Expressions;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -40,6 +41,11 @@ public sealed class PostgreSqlStorageConnectionStore(
         return rows.Select(ToRecord).ToList();
     }
 
+    // The descriptor's display name ("SFTP", "Managed Storage (Central)") is searchable beside the type key. The Turkish text the page shows exists only
+    // in the frontend catalog, so the provider column sorts by its type key and the Turkish label is not searched here.
+    private static readonly Expression<Func<Row, string?>> ProviderLabel = SortKeys.Label<Row>(
+        row => row.Connection.ProviderType, BuiltInStorageProviders.All.ToDictionary(descriptor => descriptor.ProviderType, descriptor => descriptor.DisplayName));
+
     private static readonly SortMap<Row> ConnectionSorts = SortMap<Row>.Create()
         .Text("name", row => row.Connection.Name)
         .Text("provider", row => row.Connection.ProviderType)
@@ -72,7 +78,7 @@ public sealed class PostgreSqlStorageConnectionStore(
             rows = rows.Where(row => (row.Connection.Enabled && !row.Connection.AdministrativelyDisabled) == enabled);
         }
         var page = await rows
-            .ApplySearch(query, row => row.Connection.Name, row => row.Connection.ProviderType, row => row.TenantName)
+            .ApplySearch(query, row => row.Connection.Name, row => row.Connection.ProviderType, ProviderLabel, row => row.TenantName)
             .ApplySort(ConnectionSorts, query, "createdAt", row => row.Connection.Id)
             .ToPagedResultAsync(query, cancellationToken);
         return new PagedResult<StorageConnectionRecord>(page.Items.Select(ToRecord).ToList(), page.TotalCount, page.Page, page.PageSize);

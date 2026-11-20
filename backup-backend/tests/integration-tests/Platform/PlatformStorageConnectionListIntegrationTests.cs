@@ -97,6 +97,19 @@ public sealed class PlatformStorageConnectionListIntegrationTests(PostgreSqlFixt
         AssertGroups(Ids(await GetAsync(admin, $"search={tag}&sort={field}&dir={dir}")), expected);
     }
 
+    [Theory]
+    [InlineData("managed storage", "c3")]
+    [InlineData("MANAGED STORAGE (CENTRAL)", "c3")]
+    [InlineData("Agent diski", "c2")]
+    [InlineData("agent dıskı", "c2")]
+    public async Task Search_AlsoMatchesTheProviderDisplayName(string term, string label)
+    {
+        var (world, admin, tag, ids, _, _) = await SeedAsync();
+        await using var _ = world;
+
+        Assert.Equal([ids[label]], Ids(await GetAsync(admin, $"search={Uri.EscapeDataString(term)}&pageSize=100")).Where(id => ids.ContainsValue(id)).ToArray());
+    }
+
     [Fact]
     public async Task WithoutSort_NewestFirst()
     {

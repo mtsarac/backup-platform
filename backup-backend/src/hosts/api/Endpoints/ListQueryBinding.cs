@@ -9,13 +9,13 @@ namespace BackupPlatform.Api.Endpoints;
 /// </summary>
 public sealed class ListParams
 {
-    public int? Page { get; init; }
+    public string? Page { get; init; }
     public int? PageSize { get; init; }
     public string? Search { get; init; }
     public string? Sort { get; init; }
     public string? Dir { get; init; }
 
-    public ListQuery ToQuery() => ListQuery.Parse(Page, PageSize, Search, Sort, Dir);
+    public ListQuery ToQuery() => ListQuery.Parse(ListQuery.ParsePage(Page), PageSize, Search, Sort, Dir);
 }
 
 public static class ListEndpointExtensions

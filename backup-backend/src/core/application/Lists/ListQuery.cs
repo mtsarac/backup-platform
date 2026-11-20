@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Numerics;
+
 namespace BackupPlatform.Application.Lists;
 
 public enum SortDirection { Asc, Desc }
@@ -16,12 +19,26 @@ public sealed record ListQuery(
 
     public int Skip => checked((Page - 1) * PageSize);
 
-    /// <summary>Builds a query from raw request values; throws <see cref="InvalidListQueryException"/> naming the bad parameter.</summary>
-    public static ListQuery Parse(int? page, int? pageSize, string? search, string? sort, string? dir)
+    /// <summary>
+    /// Reads the raw <c>page</c> value: any whole number, however large (a number beyond <see cref="long"/> saturates), so that <see cref="Parse"/> can clamp it
+    /// instead of the request binder refusing it. Throws <see cref="InvalidListQueryException"/> for text that is not a number.
+    /// </summary>
+    public static long? ParsePage(string? raw)
     {
-        var p = page ?? 1;
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (!BigInteger.TryParse(raw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var number)) throw new InvalidListQueryException("page");
+        return (long)BigInteger.Clamp(number, long.MinValue, long.MaxValue);
+    }
+
+    /// <summary>
+    /// Builds a query from raw request values; throws <see cref="InvalidListQueryException"/> naming the bad parameter. A <c>page</c> beyond
+    /// <see cref="MaxPage"/> is clamped to it (the list then answers an empty page with the true total) rather than refused.
+    /// </summary>
+    public static ListQuery Parse(long? page, int? pageSize, string? search, string? sort, string? dir)
+    {
         var size = pageSize ?? DefaultPageSize;
-        if (p is < 1 or > MaxPage) throw new InvalidListQueryException("page");
+        if ((page ?? 1) < 1) throw new InvalidListQueryException("page");
+        var p = (int)Math.Min(page ?? 1, MaxPage);
         if (size is < 1 or > MaxPageSize) throw new InvalidListQueryException("pageSize");
         SortDirection? direction = null;
         if (!string.IsNullOrEmpty(dir))

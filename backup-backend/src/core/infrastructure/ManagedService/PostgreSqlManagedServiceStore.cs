@@ -36,7 +36,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
     }
 
     private static readonly SortMap<PlanRow> PlanSorts = SortMap<PlanRow>.Create()
-        .Text("name", row => row.Plan.Name)
+        .Natural("name", row => row.Plan.Name)
         .Value("enabled", row => row.Plan.Enabled)
         .Value("storageLimitBytes", row => row.Plan.StorageLimitBytes)
         .Value("tenantCount", row => row.TenantCount)
@@ -209,12 +209,10 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         return (true, row is null ? null : (await ToRecordsAsync(context, [row], cancellationToken))[0]);
     }
 
-    /// <summary>The effective status users see (<see cref="TenantSubscription.EffectiveStatusAt"/>) as a rank: an open row past its end is Expired.</summary>
-    private static Expression<Func<Row, int>> EffectiveStatusRank(DateTimeOffset now) => row =>
-        (row.Subscription.Status == SubscriptionStatus.Active || row.Subscription.Status == SubscriptionStatus.Suspended) && row.Subscription.EndsAt != null && row.Subscription.EndsAt <= now ? 3
-        : row.Subscription.Status == SubscriptionStatus.Active ? 1
-        : row.Subscription.Status == SubscriptionStatus.Suspended ? 2
-        : row.Subscription.Status == SubscriptionStatus.Expired ? 3 : 4;
+    /// <summary>The effective status users see (<see cref="TenantSubscription.EffectiveStatusAt"/>): an open row past its end is Expired.</summary>
+    private static Expression<Func<Row, SubscriptionStatus>> EffectiveStatus(DateTimeOffset now) => row =>
+        (row.Subscription.Status == SubscriptionStatus.Active || row.Subscription.Status == SubscriptionStatus.Suspended) && row.Subscription.EndsAt != null && row.Subscription.EndsAt <= now
+            ? SubscriptionStatus.Expired : row.Subscription.Status;
 
     public async Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -226,7 +224,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         var sorts = SortMap<Row>.Create()
             .Date("startsAt", row => row.Subscription.StartsAt)
             .Text("plan", row => row.Plan.Name)
-            .Value("status", EffectiveStatusRank(now));
+            .Ordinal("status", EffectiveStatus(now), SubscriptionStatus.Suspended, SubscriptionStatus.Superseded, SubscriptionStatus.Active, SubscriptionStatus.Expired);
         var page = await Rows(context, tenantId)
             .ApplySearch(query, row => row.Plan.Name)
             .ApplySort(sorts, query, "startsAt", row => row.Subscription.Id)

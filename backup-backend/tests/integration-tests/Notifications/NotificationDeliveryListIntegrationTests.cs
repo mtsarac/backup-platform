@@ -100,7 +100,7 @@ public sealed class NotificationDeliveryListIntegrationTests(PostgreSqlFixture f
         string[][] asc = field switch
         {
             "createdAt" => [["d1"], ["d2"], ["d3"], ["d4"], ["d5"]],
-            "status" => [["d1", "d4"], ["d3"], ["d2", "d5"]],
+            "status" => [["d1", "d4"], ["d2", "d5"], ["d3"]], // Başarısız, Gönderildi, Sırada
             "kind" => [["d1", "d3"], ["d5"], ["d2", "d4"]],
             "eventType" => [["d1", "d4"], ["d2", "d5"], ["d3"]],
             "channel" => [["d2"], ["d4"], ["d5"], ["d3"], ["d1"]],

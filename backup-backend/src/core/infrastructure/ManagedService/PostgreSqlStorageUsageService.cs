@@ -70,7 +70,8 @@ public sealed class PostgreSqlStorageUsageService(
         .Text("tenant", row => row.Name)
         .Value("used", row => row.Used)
         .Value("quota", row => row.Limit)
-        .Value("state", row => row.State);
+        // The quota state sorts by its Turkish label: Kota aşıldı, Kritik, Normal, Sınırsız, Uyarı.
+        .Ordinal("state", row => row.State, QuotaState.OverQuota, QuotaState.Critical, QuotaState.Normal, QuotaState.Unlimited, QuotaState.Warning);
 
     /// <summary>
     /// The M1 and quota rules of <see cref="TenantEntitlement.Resolve"/> and <see cref="QuotaStateResolver.Resolve"/> restated as one SQL query (current subscription

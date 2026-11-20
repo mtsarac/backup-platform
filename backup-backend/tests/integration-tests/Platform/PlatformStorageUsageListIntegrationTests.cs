@@ -84,7 +84,8 @@ public sealed class PlatformStorageUsageListIntegrationTests(PostgreSqlFixture f
     private static string[] Labels(JsonElement page, string tag) =>
         page.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("tenantName").GetString()![..^(tag.Length + 1)]).ToArray();
 
-    private static readonly string[] States = ["Unlimited", "Normal", "Warning", "Critical", "OverQuota"];
+    // The states in the order of their Turkish labels: Kota aşıldı, Kritik, Normal, Sınırsız, Uyarı.
+    private static readonly string[] States = ["OverQuota", "Critical", "Normal", "Unlimited", "Warning"];
 
     [Fact]
     public async Task TheDerivedStandingIsTheOneTheResolverReports()
@@ -159,11 +160,14 @@ public sealed class PlatformStorageUsageListIntegrationTests(PostgreSqlFixture f
         var (world, admin, tag, _) = await SeedAsync();
         await using var _ = world;
 
-        var byState = Labels(await GetAsync(admin, tag, "pageSize=100&sort=state&dir=desc"), tag);
+        var byState = Labels(await GetAsync(admin, tag, "pageSize=100&sort=state&dir=asc"), tag);
+        var byStateDesc = Labels(await GetAsync(admin, tag, "pageSize=100&sort=state&dir=desc"), tag);
         var byUsed = Labels(await GetAsync(admin, tag, "pageSize=100&sort=used&dir=desc"), tag);
 
         Assert.Equal("bb", byState[0]);                       // OverQuota first
+        Assert.Equal("ee", byStateDesc[0]);                   // Warning is the last label
         Assert.Equal("dd", byState[^1]);                      // no usage record: last, in both directions
+        Assert.Equal("dd", byStateDesc[^1]);
         Assert.Equal(["ff", "ee"], byUsed[..2]);              // 9.5 GB, 8.5 GB
         Assert.Equal("dd", byUsed[^1]);
     }

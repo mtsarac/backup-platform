@@ -177,17 +177,27 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     }
 
     // The target is what the list titles the restore with: a verification is named after the backup's database, never its temporary bp_verify_ copy
-    // (one with no known source sorts last and is not found by search). Status sorts by its stored value (alphabetical).
+    // (one with no known source sorts last and is not found by search).
     // The source is the backup's database, or its job when the backup has none.
     private static readonly Expression<Func<RestoreRow, string?>> Target = row => row.Purpose == RestorePurpose.Verification ? row.SourceDatabase : row.DatabaseName;
     private static readonly Expression<Func<RestoreRow, string?>> Source = row => row.SourceDatabase != null && row.SourceDatabase != "" ? row.SourceDatabase : row.SourceJob;
 
     private static readonly SortMap<RestoreRow> RestoreSorts = SortMap<RestoreRow>.Create()
         .Date("createdAt", row => row.CreatedAt)
-        .Value("status", row => row.Status)
+        .Ordinal("status", row => row.Status, // the order of the Turkish status labels
+            RestoreStatus.AgentLost, RestoreStatus.Leased, RestoreStatus.Succeeded, RestoreStatus.Failed, RestoreStatus.Running, RestoreStatus.Cancelled, RestoreStatus.Pending)
         .Text("target", Target)
         .Text("source", Source)
         .Text("computer", row => row.Computer);
+
+    // The list titles a verification "Doğrulama denemesi: <database>", words no column stores: a search that is part of "dogrulama" or "deneme" (folded)
+    // also finds every verification restore. Nothing else is matched by label.
+    private static readonly string[] VerificationWords = ["dogrulama", "deneme"];
+
+    private static Expression<Func<RestoreRow, bool>>? VerificationWordsMatch(string? search) =>
+        search is not null && VerificationWords.Any(word => word.Contains(TextFold.Fold(search), StringComparison.Ordinal))
+            ? row => row.Purpose == RestorePurpose.Verification
+            : null;
 
     public async Task<RestorePage> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken)
     {
@@ -220,7 +230,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                          select job.Name).FirstOrDefault()
         });
         var page = await rows
-            .ApplySearch(query.List, Target, row => row.Computer, row => row.SourceDatabase, row => row.SourceJob)
+            .ApplySearchOr(query.List, VerificationWordsMatch(query.List.Search), Target, row => row.Computer, row => row.SourceDatabase, row => row.SourceJob)
             .ApplySort(RestoreSorts, query.List, "createdAt", row => row.Id)
             .ToPagedResultAsync(query.List, cancellationToken);
         var ids = page.Items.Select(row => row.Id).ToArray();

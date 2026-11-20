@@ -91,7 +91,7 @@ public sealed class SubscriptionHistoryListIntegrationTests(PostgreSqlFixture fi
         {
             "startsAt" => [["r1"], ["r2"], ["r3"], ["r4"]],
             "plan" => [["r2"], ["r4"], ["r3"], ["r1"]],
-            _ => [["r3", "r4"], ["r1", "r2"]]
+            _ => [["r1", "r2"], ["r3", "r4"]] // Değiştirildi (Superseded), Süresi doldu (Expired)
         };
 
         var page = await GetAsync(admin, path, $"sort={field}&dir={dir}");
@@ -100,7 +100,7 @@ public sealed class SubscriptionHistoryListIntegrationTests(PostgreSqlFixture fi
         if (field == "status")
         {
             var statuses = page.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("status").GetString()).ToArray();
-            Assert.Equal(dir == "asc" ? ["Expired", "Expired", "Superseded", "Superseded"] : ["Superseded", "Superseded", "Expired", "Expired"], statuses);
+            Assert.Equal(dir == "asc" ? ["Superseded", "Superseded", "Expired", "Expired"] : ["Expired", "Expired", "Superseded", "Superseded"], statuses);
         }
     }
 
