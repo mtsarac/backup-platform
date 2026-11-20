@@ -47,7 +47,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         .Text("name", row => row.Name)
         .Value("memberCount", row => row.MemberCount)
         .Value("agentCount", row => row.AgentCount)
-        .Value("enrollmentEnabled", row => row.EnrollmentEnabled);
+        .Ordinal("enrollmentEnabled", row => row.EnrollmentEnabled, true, false); // "Kayıt açık" before "Kayıt kapalı"
 
     public async Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(ListQuery query, CancellationToken cancellationToken)
     {
@@ -123,14 +123,14 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         public string? ManualDisableReason { get; init; }
     }
 
-    // Role sorts by its stored value, which is alphabetical (PlatformAdmin = 1, UserAdmin = 2).
+    // Role and status sort by the Turkish label shown: "Kullanıcı Yöneticisi" before "Platform Yöneticisi", "Devre dışı" before "Etkin".
     private static readonly SortMap<UserRow> UserSorts = SortMap<UserRow>.Create()
         .Text("displayName", row => row.DisplayName)
         .Text("username", row => row.Login)
         .Text("email", row => row.Email)
-        .Value("role", row => row.Role)
+        .Ordinal("role", row => row.Role, UserRole.UserAdmin, UserRole.PlatformAdmin)
         .Value("membershipCount", row => row.MembershipCount)
-        .Value("isDisabled", row => row.IsManuallyDisabled || row.IsSecurityDisabled || row.IsNoMembershipDisabled);
+        .Ordinal("isDisabled", row => row.IsManuallyDisabled || row.IsSecurityDisabled || row.IsNoMembershipDisabled, true, false);
 
     public async Task<PagedResult<PlatformUserItem>> ListUsersAsync(ListQuery query, CancellationToken cancellationToken)
     {

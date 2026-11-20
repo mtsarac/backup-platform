@@ -183,8 +183,11 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
 
     private static readonly SortMap<DeliveryRow> DeliverySorts = SortMap<DeliveryRow>.Create()
         .Date("createdAt", row => row.Delivery.CreatedAt)
-        .Value("status", row => row.Delivery.Status)
-        .Value("kind", row => row.Delivery.ChannelKind)
+        // Status and kind sort by the Turkish label shown: Bastırıldı, Başarısız, Gönderildi, Gönderiliyor, İptal edildi, Sırada; E-posta, SMS, Webhook.
+        .Ordinal("status", row => row.Delivery.Status,
+            NotificationDeliveryStatus.Suppressed, NotificationDeliveryStatus.Failed, NotificationDeliveryStatus.Sent, NotificationDeliveryStatus.InProgress,
+            NotificationDeliveryStatus.Cancelled, NotificationDeliveryStatus.Pending)
+        .Ordinal("kind", row => row.Delivery.ChannelKind, NotificationChannelKind.Email, NotificationChannelKind.Sms, NotificationChannelKind.Webhook)
         .Text("eventType", row => row.Event.Type)
         .Text("channel", row => row.Delivery.ChannelName)
         .Value("attempts", row => row.Delivery.AttemptCount);

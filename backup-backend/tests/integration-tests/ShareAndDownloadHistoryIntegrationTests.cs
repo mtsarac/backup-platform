@@ -507,8 +507,9 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         { "artifact", "desc", [["Alpha", "charlie", "delta", "echo"], ["Bravo"]] },
         { "user", "asc", [["Alpha"], ["Bravo"], ["charlie"], ["delta"], ["echo"]] },
         { "user", "desc", [["echo"], ["delta"], ["charlie"], ["Bravo"], ["Alpha"]] },
-        { "result", "asc", [["delta"], ["echo"], ["Alpha", "Bravo", "charlie"]] },
-        { "result", "desc", [["Alpha", "Bravo", "charlie"], ["echo"], ["delta"]] },
+        // The Turkish labels: Hazır (echo), Reddedildi (Alpha, Bravo, charlie), Tamamlandı (delta).
+        { "result", "asc", [["echo"], ["Alpha", "Bravo", "charlie"], ["delta"]] },
+        { "result", "desc", [["delta"], ["Alpha", "Bravo", "charlie"], ["echo"]] },
         { "bytes", "asc", [["Alpha", "Bravo", "charlie", "echo"], ["delta"]] },
         { "bytes", "desc", [["delta"], ["Alpha", "Bravo", "charlie", "echo"]] }
     };

@@ -80,8 +80,9 @@ public sealed class RestoreListIntegrationTests(PostgreSqlFixture fixture) : ICl
     {
         { "createdAt", "asc", [["q1"], ["q2"], ["q3"], ["q4"], ["v1"]] },
         { "createdAt", "desc", [["v1"], ["q4"], ["q3"], ["q2"], ["q1"]] },
-        { "status", "asc", [["q2"], ["q3", "q4", "v1"], ["q1"]] },
-        { "status", "desc", [["q1"], ["q3", "q4", "v1"], ["q2"]] },
+        // The Turkish status labels in order: Başarılı (q1), İptal edildi (q2), Sırada bekliyor (q3, q4, v1).
+        { "status", "asc", [["q1"], ["q2"], ["q3", "q4", "v1"]] },
+        { "status", "desc", [["q3", "q4", "v1"], ["q2"], ["q1"]] },
         // The target is what the list shows: the verification "Marketing", not its bp_verify_ database, which would sort second.
         { "target", "asc", [["q2"], ["q4"], ["q3"], ["q1"], ["v1"]] },
         { "target", "desc", [["v1"], ["q1"], ["q3"], ["q4"], ["q2"]] },
@@ -113,6 +114,52 @@ public sealed class RestoreListIntegrationTests(PostgreSqlFixture fixture) : ICl
         Assert.Empty(await data.OrderAsync("search=verify_"));
         Assert.Equal(["v1"], data.Labels(await data.GetAsync("purpose=Verification&search=MARKETING")));
         Assert.Equal(["v1"], data.Labels(await data.GetAsync("purpose=Verification&sort=target")));
+    }
+
+    [Theory]
+    [InlineData("doğrulama")]
+    [InlineData("DOĞRULAMA")]
+    [InlineData("dogrulama")]
+    [InlineData("DOGRULAMA")]
+    [InlineData("ğrul")]
+    [InlineData("deneme")]
+    [InlineData("DENEME")]
+    [InlineData("den")]
+    public async Task VerificationRestoresAreFoundByTheWordsOfTheirVisibleLabel(string term)
+    {
+        await using var scenario = await CreateAsync(fixture);
+        var data = await SeedAsync(scenario);
+
+        Assert.Equal(["v1"], await data.OrderAsync("search=" + Uri.EscapeDataString(term)));
+        Assert.Empty(data.Labels(await data.GetAsync("search=" + Uri.EscapeDataString(term))));
+    }
+
+    [Theory]
+    [InlineData("doğrulama x")]
+    [InlineData("yedek")]
+    [InlineData("denemeler")]
+    public async Task OnlyTermsInsideTheLabelWordsMatchByLabel(string term)
+    {
+        await using var scenario = await CreateAsync(fixture);
+        var data = await SeedAsync(scenario);
+
+        Assert.Empty(await data.OrderAsync("search=" + Uri.EscapeDataString(term)));
+    }
+
+    [Theory]
+    [InlineData("MARKETİNG")]
+    [InlineData("marketing")]
+    [InlineData("MARKETING")]
+    [InlineData("ALPHA-HOST")]
+    [InlineData("CHARLİE-HOST")]
+    [InlineData("charlıe")]
+    public async Task SearchFoldsCaseAndTurkishLetters(string term)
+    {
+        await using var scenario = await CreateAsync(fixture);
+        var data = await SeedAsync(scenario);
+
+        Assert.NotEmpty(await data.OrderAsync("search=" + Uri.EscapeDataString(term)));
+        Assert.Equal(await data.OrderAsync("search=" + Uri.EscapeDataString(term.ToLowerInvariant().Replace("ı", "i"))), await data.OrderAsync("search=" + Uri.EscapeDataString(term)));
     }
 
     [Fact]

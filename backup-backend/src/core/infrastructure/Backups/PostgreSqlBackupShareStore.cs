@@ -646,7 +646,8 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         .Text("artifact", r => r.ArtifactName)
         .Text("user", r => r.UserName)
         .Text("tenant", r => r.TenantName)
-        .Text("result", r => r.Result)
+        // The result is shown by its Turkish label: Başarısız, Hazır, Hazırlanıyor, İndiriliyor, İptal edildi, Reddedildi, Tamamlandı.
+        .Ordinal("result", r => r.Result, "Failed", "Ready", "Preparing", "Streaming", "Cancelled", "Refused", "Completed")
         .Value("bytes", r => r.Bytes);
 
     // The text goes through string.Format (SqlQueryRaw), so a literal brace is doubled.

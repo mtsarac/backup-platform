@@ -30,8 +30,9 @@ public sealed class PostgreSqlPlatformAgentStore(DbContextOptions<PlatformDbCont
     private static readonly SortMap<AgentRow> Sorts = SortMap<AgentRow>.Create()
         .Text("hostName", row => row.Agent.HostName)
         .Text("tenantName", row => row.TenantName)
-        .Value("status", row => row.Agent.Status)
-        .Value("connectivity", row => row.ConnectivityRank)
+        // Status and connectivity sort by the Turkish label shown: Devre dışı, Etkin, İptal edildi, Kayıt bekliyor; Bilinmiyor, Çevrimdışı, Çevrimiçi.
+        .Ordinal("status", row => row.Agent.Status, AgentStatus.Disabled, AgentStatus.Active, AgentStatus.Revoked, AgentStatus.PendingEnrollment)
+        .Ordinal("connectivity", row => row.ConnectivityRank, 2, 1, 0)
         .Date("lastSeenAt", row => row.Record == null ? (DateTimeOffset?)null : row.Record.LastSeenAt)
         .Date("enrolledAt", row => row.EnrolledAt);
 

@@ -57,12 +57,12 @@ public sealed class PlatformUserListIntegrationTests(PostgreSqlFixture fixture) 
         { "username", "desc", [["Bravo"], ["delta"], ["Alpha"], ["charlie"]] },
         { "email", "asc", [["Alpha"], ["Bravo"], ["charlie", "delta"]] },
         { "email", "desc", [["Bravo"], ["Alpha"], ["charlie", "delta"]] },
-        { "role", "asc", [["Alpha"], ["Bravo", "charlie", "delta"]] },
-        { "role", "desc", [["Bravo", "charlie", "delta"], ["Alpha"]] },
+        { "role", "asc", [["Bravo", "charlie", "delta"], ["Alpha"]] },
+        { "role", "desc", [["Alpha"], ["Bravo", "charlie", "delta"]] },
         { "membershipCount", "asc", [["Alpha"], ["charlie", "delta"], ["Bravo"]] },
         { "membershipCount", "desc", [["Bravo"], ["charlie", "delta"], ["Alpha"]] },
-        { "isDisabled", "asc", [["Alpha", "charlie", "delta"], ["Bravo"]] },
-        { "isDisabled", "desc", [["Bravo"], ["Alpha", "charlie", "delta"]] }
+        { "isDisabled", "asc", [["Bravo"], ["Alpha", "charlie", "delta"]] },
+        { "isDisabled", "desc", [["Alpha", "charlie", "delta"], ["Bravo"]] }
     };
 
     [Theory]
@@ -134,6 +134,42 @@ public sealed class PlatformUserListIntegrationTests(PostgreSqlFixture fixture) 
 
         Assert.Equal(7, ids.Distinct().Count());
         Assert.Equal(all.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("userId").GetString()), ids);
+    }
+
+    [Theory]
+    [InlineData("2147483648")]
+    [InlineData("999999999999999999999999999999")]
+    public async Task HugePage_IsClampedAndKeepsTheTrueCount(string pageNumber)
+    {
+        var (world, admin) = await StartAsync();
+        await using var _ = world;
+        var tag = NewTag();
+        await SeedAsync([new($"{tag} one")]);
+
+        var page = await GetAsync(admin, $"search={tag}&page={pageNumber}");
+
+        Assert.Equal(1, page.GetProperty("totalCount").GetInt64());
+        Assert.Empty(page.GetProperty("items").EnumerateArray());
+        Assert.Equal(1_000_000, page.GetProperty("page").GetInt32());
+    }
+
+    // Every string of a group is the same search text (TextFoldTests and the frontend foldSearch test use these groups).
+    [Theory]
+    [InlineData("ŞİFRELİ", "sifreli", "SIFRELI", "Şifreli")]
+    [InlineData("İNDİGO", "indigo", "INDIGO", "ındıgo")]
+    public async Task Search_FoldsCaseAndTurkishLettersOnNameAndLogin(params string[] terms)
+    {
+        var (world, admin) = await StartAsync();
+        await using var _ = world;
+        var tag = NewTag();
+        await SeedAsync([new($"{tag} Şifreli Kişi", $"{tag}-user", $"i@{tag}.test"), new($"{tag} İndigo", $"{tag}-indigo"), new($"{tag} other")]);
+        var expected = terms[0] == "ŞİFRELİ" ? "Şifreli Kişi" : "İndigo";
+
+        foreach (var term in terms)
+        {
+            Assert.Equal([expected], Names(await GetAsync(admin, $"search={Uri.EscapeDataString(tag + " " + term)}"), tag));
+            if (terms[0] == "İNDİGO") Assert.Equal([expected], Names(await GetAsync(admin, $"search={Uri.EscapeDataString(tag + "-" + term)}"), tag));
+        }
     }
 
     [Fact]

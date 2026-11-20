@@ -40,12 +40,41 @@ public sealed class ListQueryTests
 
     [Theory]
     [InlineData(0, null, null, "page")]
-    [InlineData(1_000_001, null, null, "page")]
+    [InlineData(-5, null, null, "page")]
     [InlineData(1, 0, null, "pageSize")]
     [InlineData(1, 101, null, "pageSize")]
     [InlineData(1, null, "up", "dir")]
-    public void Parse_RejectsBadValuesNamingTheField(int page, int? pageSize, string? dir, string field) =>
+    public void Parse_RejectsBadValuesNamingTheField(long page, int? pageSize, string? dir, string field) =>
         Assert.Equal(field, Assert.Throws<InvalidListQueryException>(() => ListQuery.Parse(page, pageSize, null, null, dir)).Field);
+
+    [Theory]
+    [InlineData(1_000_001L, ListQuery.MaxPage)]
+    [InlineData(2_147_483_648L, ListQuery.MaxPage)]
+    [InlineData(long.MaxValue, ListQuery.MaxPage)]
+    [InlineData(1_000_000L, ListQuery.MaxPage)]
+    [InlineData(7L, 7)]
+    public void Parse_ClampsAnAbsurdPageInsteadOfRefusingIt(long page, int expected)
+    {
+        var query = ListQuery.Parse(page, 100, null, null, null);
+        Assert.Equal(expected, query.Page);
+        Assert.Equal((expected - 1) * 100L, query.Skip);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("  ", null)]
+    [InlineData("3", 3L)]
+    [InlineData("+3", 3L)]
+    [InlineData("2147483648", 2_147_483_648L)]
+    [InlineData("99999999999999999999999999", long.MaxValue)]
+    [InlineData("-99999999999999999999999999", long.MinValue)]
+    public void ParsePage_ReadsAnyWholeNumber(string? raw, long? expected) => Assert.Equal(expected, ListQuery.ParsePage(raw));
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("1.5")]
+    [InlineData("1,2")]
+    public void ParsePage_RejectsText(string raw) => Assert.Equal("page", Assert.Throws<InvalidListQueryException>(() => ListQuery.ParsePage(raw)).Field);
 
     [Fact]
     public void ApplySort_UsesDefaultFieldWhenNoneRequested() => Assert.Equal([2, 3, 1, 4], Sorted(new ListQuery()));

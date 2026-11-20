@@ -37,11 +37,13 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         public long? Size { get; init; }
     }
 
-    // createdAt is the default (queued runs that have not started are the newest); the list's "Başlangıç" column sorts by startedAt. Status sorts by its stored value; the duration of a run that has not finished and the size of one without a backup file sort last.
+    // createdAt is the default (queued runs that have not started are the newest); the list's "Başlangıç" column sorts by startedAt. Status sorts by its Turkish label; the duration of a run that has not finished and the size of one without a backup file sort last.
     private static readonly SortMap<RunRow> RunSorts = SortMap<RunRow>.Create()
         .Date("createdAt", row => row.CreatedAt)
         .Date("startedAt", row => row.StartedAt)
-        .Value("status", row => row.Status)
+        .Ordinal("status", row => row.Status,
+            BackupStatus.AgentLost, BackupStatus.Leased, BackupStatus.Succeeded, BackupStatus.Failed, BackupStatus.Running, BackupStatus.Paused,
+            BackupStatus.Cancelled, BackupStatus.Pending, BackupStatus.RetryPending)
         .Text("jobName", row => row.JobName)
         .Text("computer", row => row.Computer)
         .Value("duration", row => row.Duration)

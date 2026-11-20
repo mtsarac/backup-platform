@@ -100,8 +100,9 @@ public sealed class BackupRunListIntegrationTests(PostgreSqlFixture fixture) : I
         { "createdAt", "desc", [["r5"], ["r4"], ["r3"], ["r2"], ["r1"]] },
         { "startedAt", "asc", [["r1"], ["r2"], ["r3"], ["r4"], ["r5"]] },
         { "startedAt", "desc", [["r4"], ["r3"], ["r2"], ["r1"], ["r5"]] },
-        { "status", "asc", [["r5"], ["r1", "r2", "r4"], ["r3"]] },
-        { "status", "desc", [["r3"], ["r1", "r2", "r4"], ["r5"]] },
+        // The Turkish labels: Başarılı (r1, r2, r4), Başarısız (r3), Sırada bekliyor (r5).
+        { "status", "asc", [["r1", "r2", "r4"], ["r3"], ["r5"]] },
+        { "status", "desc", [["r5"], ["r3"], ["r1", "r2", "r4"]] },
         { "jobName", "asc", [["r2", "r5"], ["r1", "r4"], ["r3"]] },
         { "jobName", "desc", [["r3"], ["r1", "r4"], ["r2", "r5"]] },
         { "computer", "asc", [["r1", "r3", "r4"], ["r2", "r5"]] },
@@ -171,6 +172,21 @@ public sealed class BackupRunListIntegrationTests(PostgreSqlFixture fixture) : I
         Assert.Equal(5, beyond.GetProperty("totalCount").GetInt32());
     }
 
+    [Theory]
+    [InlineData("2147483648")]
+    [InlineData("99999999999999999999999999")]
+    public async Task AnAbsurdPageIsClampedNotRefused(string page)
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var data = await SeedAsync(scenario);
+
+        var result = await data.GetAsync($"page={page}");
+
+        Assert.Equal(5, result.GetProperty("totalCount").GetInt32());
+        Assert.Empty(result.GetProperty("items").EnumerateArray());
+        Assert.Equal(1_000_000, result.GetProperty("page").GetInt32());
+    }
+
     [Fact]
     public async Task SearchMatchesJobComputerAndDatabaseIgnoringCaseAndCombinesWithEveryFilter()
     {
@@ -199,6 +215,21 @@ public sealed class BackupRunListIntegrationTests(PostgreSqlFixture fixture) : I
         Assert.Equal(3, combined.GetProperty("totalCount").GetInt32());
         Assert.Equal("r3", data.Labels(combined)[0]);
         Assert.Equal(["r4", "r1"], await data.OrderAsync("search=bravo&sort=startedAt", $"/backup-jobs/{data.Bravo}/runs"));
+    }
+
+    // Every string of a group is the same search text (the frontend foldSearch test and TextFoldTests use these groups).
+    [Theory]
+    [InlineData("INDIGO", "İNDİGO", "indigo", "ındıgo")]
+    [InlineData("ŞİFRELİ", "ŞİFRELI", "sifreli", "SIFRELI")]
+    [InlineData("çağrı", "ÇAĞRI", "cagri", "CAGRI")]
+    public async Task SearchFoldsCaseAndTurkishLettersOfTheJobComputerAndDatabase(params string[] terms)
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var data = await SeedAsync(scenario);
+        var jobId = await JobAsync(scenario, $"{terms[0]} job", data.Alpha);
+        var run = await scenario.StartRunAsync(jobId);
+
+        foreach (var term in terms) Assert.Equal([run], (await data.GetAsync("search=" + Uri.EscapeDataString(term + " job"))).GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray());
     }
 
     [Fact]
