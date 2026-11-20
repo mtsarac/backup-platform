@@ -87,6 +87,10 @@ A typed login is stored under a reference derived from the request, after a clai
 
 Invalid retention settings on job creation return `400` with `field: retention` and `code: invalid_value`, as on retention updates.
 
+### List endpoints: paging, search and sort
+
+A paged list endpoint accepts `page`, `pageSize` (default 25, at most 100), `search`, `sort` and `dir=asc|desc`, bound once by `ListParams` (`hosts/api/Endpoints/ListQueryBinding.cs`) into the `ListQuery` record (`Application/Lists`). `search` is a case-insensitive contains match on the endpoint's declared text columns, sent to Postgres as a bound parameter (`%` and `_` are literal). `sort` must name a field in the endpoint's `SortMap<TEntity>`; without it the endpoint keeps its own default order. `dir` defaults to the field's natural direction (dates newest first, everything else ascending). Text sorts ignore case, rows with no value sort last in both directions, and a unique tiebreaker keeps pages stable. An unknown `sort` or a bad `dir`, `page` or `pageSize` answers `400` `{ "error": "invalid_request", "field": …, "code": "invalid_value" }` once the route chains `.WithListQuery()`. A store declares its map next to its query and calls `ApplySearch`, `ApplySort` and `ToPagedResultAsync` (`Infrastructure/Lists`); `PostgreSqlPlatformAdministrationStore.ListUsersAsync` is the reference.
+
 ### Request boundary
 
 Hostile input is refused at the edge with a controlled `400`, after authentication and authorization (an anonymous or unauthorized caller still gets `401`/`403` first, whatever the id) and before any handler or database call. The body is always `{ "error": "invalid_request", "field": …, "code": "invalid_value" }`; nothing about the database or an exception is ever returned.

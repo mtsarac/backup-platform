@@ -54,7 +54,7 @@ public static class PlatformEndpoints
         platform.MapDelete("/tenants/{tenantId:guid}/memberships/{userId:guid}", RemoveMembershipAsync);
         platform.MapGet("/agents", ListAgentsAsync);
         platform.MapGet("/tenants/{tenantId:guid}/agents/{agentId:guid}", GetAgentAsync);
-        platform.MapGet("/users", ListUsersAsync);
+        platform.MapGet("/users", ListUsersAsync).WithListQuery();
         platform.MapPost("/users", CreateUserAsync);
         platform.MapPut("/users/{userId:guid}", UpdateUserAsync);
         platform.MapPost("/users/{userId:guid}/disable", DisableUserAsync);
@@ -176,15 +176,8 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListUsersAsync(
-        string? search, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
-    {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListUsersAsync(search, p, size, cancellationToken);
-        return Results.Ok(Page(result, ToResponse));
-    }
+        [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken) =>
+        Results.Ok(Page(await store.ListUsersAsync(list.ToQuery(), cancellationToken), ToResponse));
 
     private static async Task<IResult> CreateUserAsync(
         PlatformUserRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
