@@ -31,7 +31,8 @@ import { statusLabel } from '@/lib/status'
 const listConfig = {
   search: true,
   filters: { status: runStatuses, jobId: 'text', agentId: 'text', from: 'date', to: 'date' },
-  sort: { first: { createdAt: 'desc', status: 'asc', jobName: 'asc', size: 'asc', duration: 'asc' }, default: { key: 'createdAt', dir: 'desc' } },
+  // The default order is by creation (queued runs have not started yet); the Başlangıç column sorts by start time.
+  sort: { first: { createdAt: 'desc', startedAt: 'desc', status: 'asc', jobName: 'asc', size: 'asc', duration: 'asc' }, default: { key: 'createdAt', dir: 'desc' } },
 } as const
 
 export function BackupsPage() {
@@ -58,7 +59,7 @@ export function BackupsPage() {
       const deletion = artifact.state === 'DeletePending' ? tx('Silme bekliyor') : artifact.state === 'DeleteFailed' ? tx('Silme başarısız') : artifact.state === 'Deleted' ? tx('Silindi') : null
       return <div><p>{formatBytes(artifact.sizeBytes)} · {tx('{0} kopya', { '0': copies })}</p><p>{artifact.retentionExpiresAt ? tx('Saklama sonu: {0}', { '0': formatDateTime(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p>{deletion && <p>{deletion}</p>}</div>
     } },
-    { key: 'createdAt', sortable: true, header: tx('Başlangıç'), render: (run) => <RelativeTime value={run.startedAt} /> },
+    { key: 'startedAt', sortable: true, header: tx('Başlangıç'), render: (run) => <RelativeTime value={run.startedAt} /> },
     { key: 'duration', sortable: true, header: tx('Süre'), render: (run) => formatDuration(run.startedAt, run.completedAt) },
   ]
   const filterError = jobs.error ?? agents.error

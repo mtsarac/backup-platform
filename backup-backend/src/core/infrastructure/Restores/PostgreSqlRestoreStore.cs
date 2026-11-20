@@ -170,17 +170,23 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         public required DateTimeOffset CreatedAt { get; init; }
         public required RestoreStatus Status { get; init; }
         public required string DatabaseName { get; init; }
+        public required RestorePurpose Purpose { get; init; }
         public string? Computer { get; init; }
         public string? SourceDatabase { get; init; }
         public string? SourceJob { get; init; }
     }
 
-    // Status sorts by its stored value (alphabetical). The source is the backup's database, or its job when the backup has none.
+    // The target is what the list titles the restore with: a verification is named after the backup's database, never its temporary bp_verify_ copy
+    // (one with no known source sorts last and is not found by search). Status sorts by its stored value (alphabetical).
+    // The source is the backup's database, or its job when the backup has none.
+    private static readonly Expression<Func<RestoreRow, string?>> Target = row => row.Purpose == RestorePurpose.Verification ? row.SourceDatabase : row.DatabaseName;
+    private static readonly Expression<Func<RestoreRow, string?>> Source = row => row.SourceDatabase != null && row.SourceDatabase != "" ? row.SourceDatabase : row.SourceJob;
+
     private static readonly SortMap<RestoreRow> RestoreSorts = SortMap<RestoreRow>.Create()
         .Date("createdAt", row => row.CreatedAt)
         .Value("status", row => row.Status)
-        .Text("target", row => row.DatabaseName)
-        .Text("source", row => row.SourceDatabase != null && row.SourceDatabase != "" ? row.SourceDatabase : row.SourceJob)
+        .Text("target", Target)
+        .Text("source", Source)
         .Text("computer", row => row.Computer);
 
     public async Task<RestorePage> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken)
@@ -199,7 +205,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         }
         var rows = operations.Select(operation => new RestoreRow
         {
-            Id = operation.Id, CreatedAt = operation.CreatedAt, Status = operation.Status, DatabaseName = operation.DatabaseName,
+            Id = operation.Id, CreatedAt = operation.CreatedAt, Status = operation.Status, DatabaseName = operation.DatabaseName, Purpose = operation.Purpose,
             Computer = context.Agents.Where(agent => agent.TenantId == tenantId && agent.Id == operation.AgentId).Select(agent => agent.HostName).FirstOrDefault(),
             SourceDatabase = (from artifact in context.BackupArtifacts
                               join attempt in context.BackupRunAttempts on artifact.AttemptId equals attempt.Id
@@ -214,7 +220,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                          select job.Name).FirstOrDefault()
         });
         var page = await rows
-            .ApplySearch(query.List, row => row.DatabaseName, row => row.Computer, row => row.SourceDatabase, row => row.SourceJob)
+            .ApplySearch(query.List, Target, row => row.Computer, row => row.SourceDatabase, row => row.SourceJob)
             .ApplySort(RestoreSorts, query.List, "createdAt", row => row.Id)
             .ToPagedResultAsync(query.List, cancellationToken);
         var ids = page.Items.Select(row => row.Id).ToArray();

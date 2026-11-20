@@ -198,6 +198,95 @@ describe('run history URL state', () => {
   })
 })
 
+describe('run history search, sorting and paging', () => {
+  const mountAt = (url: string) => render(<MemoryRouter initialEntries={[url]}><BackupsPage /><LocationProbe /></MemoryRouter>)
+  const header = (name: string) => screen.getByRole('columnheader', { name })
+  const location = () => screen.getByTestId('location')
+  const sortHeaders = ['İş', 'Durum', 'Yedek dosyası', 'Başlangıç', 'Süre']
+
+  it('asks for the newest runs first without sending a sort, and marks no column as the sorted one', () => {
+    mountAt('/')
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+    for (const name of sortHeaders) expect(header(name)).toHaveAttribute('aria-sort', 'none')
+  })
+
+  it.each([
+    ['İş', 'jobName', 'asc'],
+    ['Durum', 'status', 'asc'],
+    ['Yedek dosyası', 'size', 'asc'],
+    ['Başlangıç', 'startedAt', 'desc'],
+    ['Süre', 'duration', 'asc'],
+  ])('the %s header sorts by %s, %s first, and the next click reverses it', (name, field, first) => {
+    mountAt('/?page=2')
+    fireEvent.click(within(header(name)).getByRole('button'))
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, sort: field, dir: first })
+    expect(header(name)).toHaveAttribute('aria-sort', first === 'asc' ? 'ascending' : 'descending')
+    expect(location()).toHaveTextContent(`/?sort=${field}&dir=${first}`)
+    fireEvent.click(within(header(name)).getByRole('button'))
+    expect(state.filters.at(-1)).toMatchObject({ sort: field, dir: first === 'asc' ? 'desc' : 'asc' })
+    expect(header(name)).toHaveAttribute('aria-sort', first === 'asc' ? 'descending' : 'ascending')
+  })
+
+  it('the Başlangıç header sorts by the start time it shows, not by the creation time', () => {
+    mountAt('/')
+    fireEvent.click(within(header('Başlangıç')).getByRole('button'))
+    expect(state.filters.at(-1)?.sort).toBe('startedAt')
+    expect(state.filters.at(-1)?.sort).not.toBe('createdAt')
+  })
+
+  it('searches the runs, keeps the filters and goes back to the first page', () => {
+    mountAt('/?status=Failed&page=2')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Ara' }), { target: { value: 'günlük' } })
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, status: 'Failed', search: 'günlük' })
+    expect(location()).toHaveTextContent(/^\/\?status=Failed&search=g%C3%BCnl%C3%BCk$/)
+  })
+
+  it('sends the search trimmed and not at all when it is blank', () => {
+    mountAt('/')
+    const box = screen.getByRole('searchbox', { name: 'Ara' })
+    fireEvent.change(box, { target: { value: '  sql  ' } })
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, search: 'sql' })
+    fireEvent.change(box, { target: { value: '   ' } })
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+  })
+
+  it('restores the search, the sort and the page from the URL', () => {
+    mountAt('/?search=sql&status=Succeeded&sort=duration&dir=asc&page=3')
+    expect(state.filters.at(-1)).toEqual({ page: 3, pageSize: 25, search: 'sql', status: 'Succeeded', sort: 'duration', dir: 'asc' })
+    expect(screen.getByRole('searchbox', { name: 'Ara' })).toHaveValue('sql')
+    expect(header('Süre')).toHaveAttribute('aria-sort', 'ascending')
+  })
+
+  it('a direction alone in the URL sorts the default field and an unknown sort is ignored', () => {
+    mountAt('/?sort=password&dir=sideways')
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+    for (const name of sortHeaders) expect(header(name)).toHaveAttribute('aria-sort', 'none')
+  })
+
+  it('a link with the creation sort keeps working', () => {
+    mountAt('/?sort=createdAt&dir=asc')
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, sort: 'createdAt', dir: 'asc' })
+  })
+
+  it('pages with the search and sort in place, and a new sort goes back to page 1', () => {
+    mountAt('/?search=sql&sort=size&dir=desc')
+    fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
+    expect(state.filters.at(-1)).toEqual({ page: 2, pageSize: 25, search: 'sql', sort: 'size', dir: 'desc' })
+    expect(location()).toHaveTextContent('search=sql&sort=size&dir=desc&page=2')
+    fireEvent.click(within(header('Süre')).getByRole('button'))
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, search: 'sql', sort: 'duration', dir: 'asc' })
+  })
+
+  it('says nothing matched the search and clears it, keeping the sort', () => {
+    state.page = { items: [], totalCount: 0, page: 1, pageSize: 25 }
+    mountAt('/?search=yok&sort=duration&dir=asc')
+    expect(screen.getByText('Bu filtrelere uygun yedekleme denemesi bulunamadı.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, sort: 'duration', dir: 'asc' })
+    expect(location()).toHaveTextContent(/^\/\?sort=duration&dir=asc$/)
+  })
+})
+
 describe('history side panel', () => {
   const mountRun = (url: string) => render(<MemoryRouter initialEntries={[url]}><Routes><Route path="/backup-runs" element={<BackupsPage />} /><Route path="/backup-runs/:id" element={<BackupsPage />} /></Routes></MemoryRouter>)
 

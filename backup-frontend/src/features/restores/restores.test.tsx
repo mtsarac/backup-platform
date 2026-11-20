@@ -15,6 +15,7 @@ import * as ArtifactApi from '@/features/artifacts/api'
 import * as BackupApi from '@/features/backups/api'
 import { makeRun } from '@/features/backups/test-data'
 import type { RestorePage, RestoreResult, RestoreTargetsResponse, RestoreView } from './types'
+import { LocationProbe } from '@/features/platform/location-probe'
 import { PrecheckResults } from './precheck-results'
 import { describeFailure } from '@/lib/api/failure-messages'
 
@@ -378,6 +379,85 @@ describe('RestoresPage', () => {
       expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
       expect(await screen.findByRole('link', { name: 'Yedek dosyalarını aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
     })
+  })
+})
+
+describe('RestoresPage search, sorting and paging', () => {
+  const lastQuery = () => vi.mocked(RestoreApi.getRestores).mock.lastCall?.[1]
+  const location = () => screen.getByTestId('location')
+  const header = (name: string) => screen.findByRole('columnheader', { name })
+  const mountAt = async (url: string) => {
+    renderWithClient(<><RestoresPage /><LocationProbe /></>, url)
+    await screen.findByText('RestoredSalesDB')
+  }
+
+  it('asks for the newest restores first without sending a sort, and marks the time column as the sorted one', async () => {
+    await mountAt('/')
+    expect(lastQuery()).toEqual({ page: 1, pageSize: 25, purpose: 'All' })
+    expect(await header('Ne zaman')).toHaveAttribute('aria-sort', 'descending')
+    for (const name of ['Hedef veritabanı', 'Durum', 'Kaynak yedek', 'Yedekleme bilgisayarı']) expect(await header(name)).toHaveAttribute('aria-sort', 'none')
+  })
+
+  it.each([
+    ['Hedef veritabanı', 'target', 'asc'],
+    ['Durum', 'status', 'asc'],
+    ['Kaynak yedek', 'source', 'asc'],
+    ['Yedekleme bilgisayarı', 'computer', 'asc'],
+  ])('the %s header sorts by %s, %s first, and the next click reverses it', async (name, field, first) => {
+    listRestores({ ...sampleRestorePage, totalCount: 75 })
+    await mountAt('/?page=2')
+    fireEvent.click(within(await header(name)).getByRole('button'))
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 25, purpose: 'All', sort: field, dir: first }))
+    expect(await header(name)).toHaveAttribute('aria-sort', 'ascending')
+    expect(location()).toHaveTextContent(`/?sort=${field}&dir=${first}`)
+    fireEvent.click(within(await header(name)).getByRole('button'))
+    await waitFor(() => expect(lastQuery()).toMatchObject({ sort: field, dir: 'desc' }))
+    expect(await header(name)).toHaveAttribute('aria-sort', 'descending')
+  })
+
+  it('returning to the default order drops the sort from the request and the URL', async () => {
+    await mountAt('/?sort=createdAt&dir=asc')
+    expect(lastQuery()).toMatchObject({ sort: 'createdAt', dir: 'asc' })
+    fireEvent.click(within(await header('Ne zaman')).getByRole('button'))
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 25, purpose: 'All' }))
+    expect(location()).toHaveTextContent(/^\/$/)
+  })
+
+  it('searches the restores, keeps the filters and goes back to the first page', async () => {
+    listRestores({ ...sampleRestorePage, totalCount: 75 })
+    await mountAt('/?status=Failed&page=2')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Ara' }), { target: { value: '  satış  ' } })
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 25, purpose: 'All', status: 'Failed', search: 'satış' }))
+    expect(location()).toHaveTextContent(/^\/\?status=Failed&search=\+\+sat%C4%B1%C5%9F\+\+$/)
+  })
+
+  it('restores the search, the sort and the page from the URL and ignores an unknown sort', async () => {
+    await mountAt('/?search=sales&sort=computer&dir=desc&page=3')
+    expect(lastQuery()).toEqual({ page: 3, pageSize: 25, purpose: 'All', search: 'sales', sort: 'computer', dir: 'desc' })
+    expect(screen.getByRole('searchbox', { name: 'Ara' })).toHaveValue('sales')
+    expect(await header('Yedekleme bilgisayarı')).toHaveAttribute('aria-sort', 'descending')
+    cleanup()
+    await mountAt('/?sort=databaseName&dir=sideways')
+    expect(lastQuery()).toEqual({ page: 1, pageSize: 25, purpose: 'All' })
+  })
+
+  it('pages with the search and sort in place, and a new sort goes back to page 1', async () => {
+    listRestores({ ...sampleRestorePage, totalCount: 75 })
+    await mountAt('/?search=sales&sort=status&dir=asc')
+    fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 2, pageSize: 25, purpose: 'All', search: 'sales', sort: 'status', dir: 'asc' }))
+    expect(location()).toHaveTextContent('search=sales&sort=status&dir=asc&page=2')
+    fireEvent.click(within(await header('Kaynak yedek')).getByRole('button'))
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 25, purpose: 'All', search: 'sales', sort: 'source', dir: 'asc' }))
+  })
+
+  it('says nothing matched the search and clears it, keeping the sort', async () => {
+    listRestores({ items: [], totalCount: 0, page: 1, pageSize: 25 })
+    renderWithClient(<><RestoresPage /><LocationProbe /></>, '/?search=yok&sort=target&dir=asc')
+    expect(await screen.findByText('Bu filtrelere uyan geri yükleme yok.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 25, purpose: 'All', sort: 'target', dir: 'asc' }))
+    expect(location()).toHaveTextContent(/^\/\?sort=target&dir=asc$/)
   })
 })
 

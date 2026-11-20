@@ -28,6 +28,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
     {
         public required Guid Id { get; init; }
         public required DateTimeOffset CreatedAt { get; init; }
+        public DateTimeOffset? StartedAt { get; init; }
         public required BackupStatus Status { get; init; }
         public string? JobName { get; init; }
         public string? Computer { get; init; }
@@ -36,9 +37,10 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         public long? Size { get; init; }
     }
 
-    // Status sorts by its stored value; the duration of a run that has not finished and the size of one without a backup file sort last.
+    // createdAt is the default (queued runs that have not started are the newest); the list's "Başlangıç" column sorts by startedAt. Status sorts by its stored value; the duration of a run that has not finished and the size of one without a backup file sort last.
     private static readonly SortMap<RunRow> RunSorts = SortMap<RunRow>.Create()
         .Date("createdAt", row => row.CreatedAt)
+        .Date("startedAt", row => row.StartedAt)
         .Value("status", row => row.Status)
         .Text("jobName", row => row.JobName)
         .Text("computer", row => row.Computer)
@@ -50,7 +52,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var rows = Filter(context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId), filter).Select(run => new RunRow
         {
-            Id = run.Id, CreatedAt = run.CreatedAt, Status = run.Status, Database = run.Configuration.Database,
+            Id = run.Id, CreatedAt = run.CreatedAt, StartedAt = run.StartedAt, Status = run.Status, Database = run.Configuration.Database,
             JobName = context.BackupJobs.Where(job => job.TenantId == tenantId && job.Id == run.JobId).Select(job => job.Name).FirstOrDefault(),
             Computer = context.Agents.Where(agent => agent.TenantId == tenantId && agent.Id == run.AgentId).Select(agent => agent.HostName).FirstOrDefault(),
             Duration = run.CompletedAt - run.StartedAt,

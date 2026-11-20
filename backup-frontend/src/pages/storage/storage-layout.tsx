@@ -14,6 +14,7 @@ import { QuotaMeter } from '@/features/storage/quota-meter'
 import { useArtifacts } from '@/features/artifacts/hooks'
 import { formatBytes } from '@/lib/format'
 
+// Paging only: the artifacts endpoint resolves job and database names after it has read the page (no search or name sort without joining runs and jobs) and the list is the short exception list of deletions that failed; a date sort would sort a column nobody sees.
 const failedListConfig = { pageKey: 'failedPage', sort: { first: { createdAt: 'desc' }, default: { key: 'createdAt', dir: 'desc' } } } as const
 
 export function StorageLayout() {
