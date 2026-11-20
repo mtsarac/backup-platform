@@ -13,9 +13,11 @@
  *     comparators: { name: (a, b) => compareText(a.name, b.name), created: (a, b) => compareDate(a.createdAt, b.createdAt) }, pageSize: state.pageSize })
  *   <ListToolbar state={state} label="..." search={{ label: '...' }}>{filter fields}</ListToolbar>
  *   <DataList rows={list.rows} sort={sortProps(state)} columns={[{ key: 'name', sortable: true, ... }]} onClearFilters={state.filtering ? state.clear : undefined} />
- *   <Pagination page={list.page} pageSize={state.pageSize} totalCount={list.total} onPageChange={state.setPage} />   // when list.total > state.pageSize
+ *   <ListPager state={state} total={list.total} label="..." />
  *
- * Server-paged list (the endpoint filters, sorts and pages): `useThings(toServerQuery(state))`, see server-list-query.ts.
+ * Server-paged list (the endpoint filters, sorts and pages): `useThings(toServerQuery(state))`, see server-list-query.ts, then
+ *   <ListPager state={state} total={query.data.totalCount} disabled={query.isFetching} label="..." />
+ * Pages never pass a page size: it is `pageSize` of the config, default `LIST_PAGE_SIZE`.
  *
  * Any change but paging goes back to page 1; unknown values in the URL are ignored; typing in the search box replaces the history entry.
  */
@@ -34,7 +36,7 @@ export interface ListConfig<K extends string = string, F extends Record<string, 
     /** The order with no `sort`/`dir` in the URL (they are left out of the URL when equal to this). */
     default: { key: K; dir: SortDirection }
   }
-  /** Rows per page, default 25. */
+  /** Rows per page; the default is `LIST_PAGE_SIZE` (25), the one place that decides it. */
   pageSize?: number
   /** The page URL parameter, for a page with two lists. */
   pageKey?: string

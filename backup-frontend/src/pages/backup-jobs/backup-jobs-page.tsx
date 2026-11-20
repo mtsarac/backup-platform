@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { DatabaseBackup } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
-import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
@@ -14,6 +13,7 @@ import { Select } from '@/components/ui/text-input'
 import { jobStatusLabel, jobStatusLevel, type JobStatus } from '@/features/backup-jobs/job-status'
 import { compareDate, compareText } from '@/features/lists/compare'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { useClientList } from '@/features/lists/use-client-list'
 import { sortProps, useListState } from '@/features/lists/use-list-state'
@@ -106,7 +106,7 @@ export function BackupJobsPage() {
         </ListToolbar>
         <DataList rows={list.rows} columns={columns} keyExtractor={row => row.job.id} caption={tx('Yedekleme işleri')} sort={sortProps(state)}
           emptyMessage={state.filtering ? tx('Aramanızla eşleşen iş yok.') : tx('Tüm işler iptal edilmiş bilgisayarlara ait.')} onClearFilters={state.filtering ? state.clear : undefined} />
-        {list.total > state.pageSize && <Pagination label={tx('Yedekleme işi sayfaları')} page={list.page} pageSize={state.pageSize} totalCount={list.total} onPageChange={state.setPage} />}
+        <ListPager state={state} total={list.total} label={tx('Yedekleme işi sayfaları')} />
       </div>}
   </QueryState>
 }
