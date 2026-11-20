@@ -20,12 +20,13 @@ export interface Column<T> {
   readonly wrap?: boolean
   /** `title` heads the card, `status` sits beside it, `actions` fills the footer, `hidden` is table-only (technical detail). */
   readonly card?: CardRole
-  /** Makes the header a sort button (the table) and an option of the sort menu (cards). The value is the direction the first click sorts in. The header must be a string. */
-  readonly sortable?: SortDirection
+  /** Makes the header a sort button (the table) and an option of the sort menu (cards); needs `sort` on the list. The header must be a string. */
+  readonly sortable?: boolean
 }
 
 export type SortDirection = 'asc' | 'desc'
-export interface SortState { key: string; direction: SortDirection; onChange: (key: string, direction: SortDirection) => void }
+/** Build it with `sortProps(listState)`. `first` is the direction each key sorts in when chosen first. */
+export interface SortState { key: string; direction: SortDirection; first: Record<string, SortDirection>; onChange: (key: string, direction: SortDirection) => void }
 
 interface DataListProps<T> {
   rows: readonly T[]
@@ -100,7 +101,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
 function SortButton<T>({ column, sort }: { column: Column<T>; sort: SortState }) {
   const active = sort.key === column.key
   const Icon = !active ? ChevronsUpDown : sort.direction === 'asc' ? ArrowUp : ArrowDown
-  const next = active ? (sort.direction === 'asc' ? 'desc' : 'asc') : column.sortable!
+  const next = active ? (sort.direction === 'asc' ? 'desc' : 'asc') : sort.first[column.key]
   return <button type="button" className="inline-flex items-center gap-1 rounded-sm font-medium hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => sort.onChange(column.key, next)}>
     {column.header}<Icon aria-hidden="true" className={cn('size-3.5', !active && 'opacity-50')} />
   </button>

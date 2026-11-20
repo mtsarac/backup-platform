@@ -1,126 +1,112 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { DatabaseBackup } from 'lucide-react'
-import { DataList, type Column, type SortDirection } from '@/components/data/data-list'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Card } from '@/components/ui/card'
 import { CheckField } from '@/components/ui/check-field'
-import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters } from '@/components/ui/filters'
+import { FilterField } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
-import { Select, TextInput } from '@/components/ui/text-input'
+import { Select } from '@/components/ui/text-input'
 import { jobStatusLabel, jobStatusLevel, type JobStatus } from '@/features/backup-jobs/job-status'
-import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
+import { compareDate, compareText } from '@/features/lists/compare'
+import { ListEmpty } from '@/features/lists/list-empty'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { useClientList } from '@/features/lists/use-client-list'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import type { ProtectionRow } from '@/features/dashboard/protection'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useJobRows } from '@/pages/dashboard/use-protection'
 
-const sortKeys = ['name', 'agent', 'last', 'next', 'created'] as const
-type SortKey = typeof sortKeys[number]
-/** The direction a column sorts in when it is chosen first: names and the next backup upwards, the newest dates on top. */
-const firstDirection: Record<SortKey, SortDirection> = { name: 'asc', agent: 'asc', last: 'desc', next: 'asc', created: 'desc' }
-
 const statusFilters = { current: ['current'], attention: ['attention'], first: ['first'], running: ['running'], manual: ['manual'], inactive: ['paused'] } as const
-type StatusFilter = keyof typeof statusFilters
-const statusFilterKeys = Object.keys(statusFilters) as StatusFilter[]
+const statusFilterKeys = Object.keys(statusFilters) as (keyof typeof statusFilters)[]
+/** Columns start in the direction that fits them: names and the next backup upwards, the newest dates on top. */
+const listConfig = {
+  search: true,
+  filters: { status: statusFilterKeys, agent: 'text', engine: 'text', revoked: ['true'] },
+  sort: { first: { name: 'asc', agent: 'asc', last: 'desc', next: 'asc', created: 'desc' }, default: { key: 'created', dir: 'desc' } },
+} as const
 
-const time = (value?: string | null) => value ? Date.parse(value) : null
 /** Only an active schedule has a next backup. */
 const nextAt = ({ job }: ProtectionRow) => job.enabled && !job.agentRevoked && job.schedule?.enabled !== false ? job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt : null
-const sortValue: Record<SortKey, (row: ProtectionRow) => string | number | null> = {
-  name: row => row.job.name,
-  agent: row => row.job.agentName ?? null,
-  last: row => time(row.lastSuccessAt),
-  next: row => time(nextAt(row)),
-  created: row => time(row.job.createdAt),
-}
-
-/** A row without a value goes last in either direction. */
-function compare(a: ProtectionRow, b: ProtectionRow, key: SortKey, direction: SortDirection) {
-  const x = sortValue[key](a), y = sortValue[key](b)
-  const byName = a.job.name.localeCompare(b.job.name, currentLocale()) || a.job.id.localeCompare(b.job.id)
-  if (x === null || y === null) return x === y ? byName : x === null ? 1 : -1
-  const order = typeof x === 'string' ? x.localeCompare(String(y), currentLocale()) : x - (y as number)
-  return (direction === 'asc' ? order : -order) || byName
+/** Jobs of revoked computers stay at the end in either direction. */
+const order = (by: (a: ProtectionRow, b: ProtectionRow) => number) => (a: ProtectionRow, b: ProtectionRow) =>
+  a.job.agentRevoked !== b.job.agentRevoked ? (a.job.agentRevoked ? Infinity : -Infinity)
+    : by(a, b)
+const comparators = {
+  name: order((a, b) => compareText(a.job.name, b.job.name)),
+  agent: order((a, b) => compareText(a.job.agentName, b.job.agentName)),
+  last: order((a, b) => compareDate(a.lastSuccessAt, b.lastSuccessAt)),
+  next: order((a, b) => compareDate(nextAt(a), nextAt(b))),
+  created: order((a, b) => compareDate(a.job.createdAt, b.job.createdAt)),
 }
 
 export function BackupJobsPage() {
   useLanguage()
   const { tenantId } = useTenant()
   const { search: urlSearch } = useLocation()
-  const { page, get, update } = useListParams()
+  const state = useListState(listConfig)
   const data = useJobRows(tenantId)
   const base = `/tenants/${tenantId}`
-  const search = get('search')
-  const showRevoked = get('revoked') === 'true'
-  const status = oneOf(get('status'), statusFilterKeys)
-  const sortKey = oneOf(get('sort'), sortKeys) ?? 'created'
-  const direction = oneOf(get('dir'), ['asc', 'desc'] as const) ?? firstDirection[sortKey]
+  const { status, revoked } = state.filters
 
   const all = data.rows
   const hasRevoked = all.some(row => row.job.agentRevoked)
-  const scope = showRevoked ? all : all.filter(row => !row.job.agentRevoked)
+  const scope = revoked ? all : all.filter(row => !row.job.agentRevoked)
   const computers = [...new Map(scope.map(row => [row.job.agentId, row.job.agentName ?? tx('Adsız bilgisayar')])).entries()].toSorted((a, b) => a[1].localeCompare(b[1], currentLocale()))
   const engines = [...new Set(scope.map(row => row.job.configuration.engine))]
   // A value the list no longer offers (a computer that is gone, a hand-edited address) filters nothing.
-  const agentId = computers.find(([id]) => id === get('agent') && computers.length > 1)?.[0]
-  const engine = engines.find(item => item === get('engine'))
-  const needle = search.trim().toLocaleLowerCase(currentLocale())
-  const filtering = Boolean(needle || status || agentId || engine)
-  const matching = scope.filter(row => (!status || (statusFilters[status] as readonly JobStatus[]).includes(row.status))
-    && (!agentId || row.job.agentId === agentId) && (!engine || row.job.configuration.engine === engine)
-    && `${row.job.name} ${row.job.agentName ?? ''} ${row.job.configuration.database}`.toLocaleLowerCase(currentLocale()).includes(needle))
-  const byOrder = (a: ProtectionRow, b: ProtectionRow) => compare(a, b, sortKey, direction)
-  const sorted = [...matching.filter(row => !row.job.agentRevoked).toSorted(byOrder), ...matching.filter(row => row.job.agentRevoked).toSorted(byOrder)]
-  const lastPage = Math.max(1, Math.ceil(sorted.length / LIST_PAGE_SIZE))
-  const current = Math.min(page, lastPage)
-  const visible = sorted.slice((current - 1) * LIST_PAGE_SIZE, current * LIST_PAGE_SIZE)
-  const clear = () => update({ search: '', status: '', agent: '', engine: '' })
+  const agentId = computers.find(([id]) => id === state.filters.agent && computers.length > 1)?.[0]
+  const engine = engines.find(item => item === state.filters.engine)
+  const list = useClientList(scope, state, {
+    searchText: row => `${row.job.name} ${row.job.agentName ?? ''} ${row.job.configuration.database}`,
+    filters: {
+      status: row => (statusFilters[status as keyof typeof statusFilters] as readonly JobStatus[]).includes(row.status),
+      agent: row => !agentId || row.job.agentId === agentId,
+      engine: row => !engine || row.job.configuration.engine === engine,
+    },
+    comparators, tieBreak: (a, b) => compareText(a.job.name, b.job.name) || compareText(a.job.id, b.job.id), pageSize: state.pageSize,
+  })
 
   const muted = (row: ProtectionRow, node: ReactNode) => row.job.agentRevoked ? <span className="text-text-muted">{node}</span> : node
   const columns: Column<ProtectionRow>[] = [
-    { key: 'name', header: tx('Ad'), sortable: firstDirection.name, card: 'title', wrap: true, render: row => <Link className={`font-medium ${linkClass}`} state={{ listSearch: urlSearch }} to={`${base}/backup-jobs/${encodeURIComponent(row.job.id)}`}>{row.job.name}</Link> },
+    { key: 'name', header: tx('Ad'), sortable: true, card: 'title', wrap: true, render: row => <Link className={`font-medium ${linkClass}`} state={{ listSearch: urlSearch }} to={`${base}/backup-jobs/${encodeURIComponent(row.job.id)}`}>{row.job.name}</Link> },
     { key: 'status', header: tx('Durum'), card: 'status', render: row => <StatusPill level={jobStatusLevel[row.status]}>{jobStatusLabel(row.status, row.percent)}</StatusPill> },
-    { key: 'agent', header: tx('Bilgisayar'), sortable: firstDirection.agent, render: row => muted(row, row.job.agentName ?? tx('Adsız bilgisayar')) },
+    { key: 'agent', header: tx('Bilgisayar'), sortable: true, render: row => muted(row, row.job.agentName ?? tx('Adsız bilgisayar')) },
     { key: 'database', header: tx('Veritabanı'), render: row => muted(row, row.job.configuration.database || '—') },
-    { key: 'last', header: tx('Son yedek'), sortable: firstDirection.last, render: row => muted(row, <RelativeTime value={row.lastSuccessAt} />) },
-    { key: 'next', header: tx('Sonraki yedek'), sortable: firstDirection.next, render: row => muted(row, <RelativeTime value={nextAt(row)} />) },
-    { key: 'created', header: tx('Oluşturulma'), sortable: firstDirection.created, render: row => muted(row, <RelativeTime value={row.job.createdAt} />) },
+    { key: 'last', header: tx('Son yedek'), sortable: true, render: row => muted(row, <RelativeTime value={row.lastSuccessAt} />) },
+    { key: 'next', header: tx('Sonraki yedek'), sortable: true, render: row => muted(row, <RelativeTime value={nextAt(row)} />) },
+    { key: 'created', header: tx('Oluşturulma'), sortable: true, render: row => muted(row, <RelativeTime value={row.job.createdAt} />) },
   ]
   const create = <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}>{tx('Yedekleme işi oluştur')}</Link>
   return <QueryState isPending={data.isPending} error={data.error}>
-    {all.length === 0 ? <Card padding="none"><EmptyState icon={DatabaseBackup} message={tx('Henüz yedekleme işi oluşturulmadı.')} action={create} /></Card>
+    {all.length === 0 ? <ListEmpty icon={DatabaseBackup} message={tx('Henüz yedekleme işi oluşturulmadı.')} action={create} />
       : <div className="space-y-4">
-        <Filters label={tx('İş filtreleri')} onClear={filtering && sorted.length > 0 ? clear : undefined}
-          footer={hasRevoked && <CheckField className="w-fit" label={tx('İptal edilmiş bilgisayarların işlerini göster')} checked={showRevoked} onChange={event => update({ revoked: event.target.checked ? 'true' : '' })} />}>
-          <FilterField label={tx('Ara')}>
-            <TextInput type="search" aria-label={tx('İş, yedekleme bilgisayarı veya veritabanı ara')} placeholder={tx('İş, bilgisayar veya veritabanı')} value={search} onChange={event => update({ search: event.target.value }, { replace: true })} />
-          </FilterField>
+        <ListToolbar state={state} label={tx('İş filtreleri')} total={list.total} search={{ label: tx('İş, yedekleme bilgisayarı veya veritabanı ara'), placeholder: tx('İş, bilgisayar veya veritabanı') }}
+          footer={hasRevoked && <CheckField className="w-fit" label={tx('İptal edilmiş bilgisayarların işlerini göster')} checked={Boolean(revoked)} onChange={event => state.setFilter('revoked', event.target.checked ? 'true' : '')} />}>
           <FilterField label={tx('Durum')}>
-            <Select aria-label={tx('Durum')} value={status ?? ''} onChange={event => update({ status: event.target.value })}>
+            <Select aria-label={tx('Durum')} value={status} onChange={event => state.setFilter('status', event.target.value)}>
               <option value="">{tx('Tümü')}</option>{statusFilterKeys.map(key => <option key={key} value={key}>{key === 'inactive' ? tx('Pasif') : jobStatusLabel(statusFilters[key][0])}</option>)}
             </Select>
           </FilterField>
           {computers.length > 1 && <FilterField label={tx('Bilgisayar')}>
-            <Select aria-label={tx('Bilgisayar')} value={agentId ?? ''} onChange={event => update({ agent: event.target.value })}>
+            <Select aria-label={tx('Bilgisayar')} value={agentId ?? ''} onChange={event => state.setFilter('agent', event.target.value)}>
               <option value="">{tx('Tümü')}</option>{computers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </Select>
           </FilterField>}
           {engines.length > 1 && <FilterField label={tx('Veritabanı türü')}>
-            <Select aria-label={tx('Veritabanı türü')} value={engine ?? ''} onChange={event => update({ engine: event.target.value })}>
+            <Select aria-label={tx('Veritabanı türü')} value={engine ?? ''} onChange={event => state.setFilter('engine', event.target.value)}>
               <option value="">{tx('Tümü')}</option>{engines.map(item => <option key={item} value={item}>{item === 'mssql' ? tx('SQL Server') : item === 'file-system' ? tx('Dosya / Klasör') : 'PostgreSQL'}</option>)}
             </Select>
           </FilterField>}
-        </Filters>
-        <DataList rows={visible} columns={columns} keyExtractor={row => row.job.id} caption={tx('Yedekleme işleri')}
-          sort={{ key: sortKey, direction, onChange: (key, dir) => update(key === 'created' && dir === 'desc' ? { sort: '', dir: '' } : { sort: key, dir }) }}
-          emptyMessage={filtering ? tx('Aramanızla eşleşen iş yok.') : tx('Tüm işler iptal edilmiş bilgisayarlara ait.')} onClearFilters={filtering ? clear : undefined} />
-        {sorted.length > LIST_PAGE_SIZE && <Pagination label={tx('Yedekleme işi sayfaları')} page={current} pageSize={LIST_PAGE_SIZE} totalCount={sorted.length} onPageChange={next => update({ page: next })} />}
+        </ListToolbar>
+        <DataList rows={list.rows} columns={columns} keyExtractor={row => row.job.id} caption={tx('Yedekleme işleri')} sort={sortProps(state)}
+          emptyMessage={state.filtering ? tx('Aramanızla eşleşen iş yok.') : tx('Tüm işler iptal edilmiş bilgisayarlara ait.')} onClearFilters={state.filtering ? state.clear : undefined} />
+        {list.total > state.pageSize && <Pagination label={tx('Yedekleme işi sayfaları')} page={list.page} pageSize={state.pageSize} totalCount={list.total} onPageChange={state.setPage} />}
       </div>}
   </QueryState>
 }
