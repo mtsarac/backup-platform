@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Disclosure } from '@/components/ui/disclosure'
-import { Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { SecretField } from '@/components/ui/secret-field'
 import { useSecretValue } from '@/components/ui/secret-value'
@@ -16,11 +15,14 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { useAssignTemporaryPassword, useCreateUser, useDisableUser, usePlatformTenants, usePlatformUsers, useUpdateUser } from '@/features/platform/hooks'
 import { enableUser } from '@/features/platform/api'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { toServerQuery } from '@/features/lists/server-list-query'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { SearchForm } from '@/features/platform/search-form'
 import { Select, TextInput } from '@/components/ui/text-input'
 import type { AccountRole, PlatformUser } from '@/features/platform/types'
-import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
@@ -79,11 +81,18 @@ function TenantSelection({ page, setPage, selected, setSelected, invalid }: { pa
   </fieldset>
 }
 
+const userListConfig = {
+  search: true,
+  sort: {
+    first: { displayName: 'asc', username: 'asc', email: 'asc', role: 'asc', membershipCount: 'asc', isDisabled: 'asc' },
+    default: { key: 'displayName', dir: 'asc' },
+  },
+} as const
+
 export function PlatformUsersPage() {
   useLanguage()
-  const { page, get, update } = useListParams()
-  const search = get('search')
-  const query = usePlatformUsers({ search, page, pageSize: LIST_PAGE_SIZE })
+  const state = useListState(userListConfig)
+  const query = usePlatformUsers(toServerQuery(state))
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<PlatformUser | null>(null)
   const [disablingUser, setDisablingUser] = useState<PlatformUser | null>(null)
@@ -95,11 +104,12 @@ export function PlatformUsersPage() {
   const disableMutation = useDisableUser(disablingUser?.userId ?? '')
   const data = query.data
   const columns: Column<PlatformUser>[] = [
-    { key: 'displayName', card: 'title', header: tx('Ad'), wrap: true, render: (user) => <span className="font-medium">{user.displayName}</span> },
-    { key: 'platform', card: 'status', header: tx('Platform rolü'), render: (user) => <div className="flex items-center gap-2"><Badge tone={user.role === 'PlatformAdmin' ? 'warning' : 'neutral'}>{tx(user.role)}</Badge>{user.isDisabled && <Badge tone="error">{tx('Devre dışı')}</Badge>}</div> },
-    { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (user) => user.username },
-    { key: 'memberships', header: tx('Çalışma alanı üyelikleri'), render: (user) => user.membershipCount },
-    { key: 'email', header: tx('E-posta'), wrap: true, render: (user) => user.email },
+    { key: 'displayName', sortable: true, card: 'title', header: tx('Ad'), wrap: true, render: (user) => <span className="font-medium">{user.displayName}</span> },
+    { key: 'role', sortable: true, header: tx('Platform rolü'), render: (user) => <Badge tone={user.role === 'PlatformAdmin' ? 'warning' : 'neutral'}>{tx(user.role)}</Badge> },
+    { key: 'isDisabled', sortable: true, card: 'status', header: tx('Durum'), render: (user) => <Badge tone={user.isDisabled ? 'error' : 'neutral'}>{user.isDisabled ? tx('Devre dışı') : tx('Etkin')}</Badge> },
+    { key: 'username', sortable: true, header: tx('Kullanıcı adı'), wrap: true, render: (user) => user.username },
+    { key: 'membershipCount', sortable: true, header: tx('Çalışma alanı üyelikleri'), render: (user) => user.membershipCount },
+    { key: 'email', sortable: true, header: tx('E-posta'), wrap: true, render: (user) => user.email },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="min-w-28 space-y-1">
       <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını düzenle', { '0': user.displayName })} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
       <Disclosure key={menuEpoch} title={<>{tx('İşlemler')} <span className="sr-only">{user.displayName} ({user.username})</span></>}>
@@ -125,11 +135,11 @@ export function PlatformUsersPage() {
     <PageHeader crumbs={[platformCrumb]} title={tx('Kullanıcılar')} description={tx('Platform Yöneticisi yetkisi çalışma alanı rolü değildir; üyelikler çalışma alanı sayfasından yönetilir.')} actions={<Button onClick={() => { setSaved(null); setCreating(true) }}><Plus aria-hidden="true" />{tx('Yeni kullanıcı')}</Button>} />
     {saved && <Notice tone="success">{saved.action === 'temp' ? tx('“{0}” kullanıcısına geçici şifre atandı.', { '0': saved.name }) : saved.action === 'enabled' ? tx('“{0}” kullanıcısı etkinleştirildi.', { '0': saved.name }) : saved.action === 'disabled' ? tx('“{0}” kullanıcısı devre dışı bırakıldı.', { '0': saved.name }) : saved.created ? tx('“{0}” kullanıcısı oluşturuldu.', { '0': saved.name }) : tx('“{0}” kullanıcısı kaydedildi.', { '0': saved.name })}</Notice>}
     {Boolean(actionError) && <Notice tone="warning">{actionError instanceof ApiError && actionError.code === 'last_platform_admin' ? tx('Son Platform Yöneticisi devre dışı bırakılamaz.') : tx('İşlem başarısız oldu.')}</Notice>}
-    <Filters label={tx('Kullanıcı filtreleri')} onClear={search ? () => update({ search: '' }) : undefined}><SearchForm className="sm:col-span-2" label={tx('Kullanıcı ara')} value={search} onSearch={(value) => update({ search: value })} placeholder={tx('Ad veya kullanıcı adı')} /></Filters>
+    <ListToolbar state={state} label={tx('Kullanıcı filtreleri')} total={data?.totalCount} search={{ label: tx('Kullanıcı ara'), placeholder: tx('Ad veya kullanıcı adı') }} />
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {data.totalCount === 0 && !search ? <ListEmpty icon={Users} message={tx('Henüz kullanıcı yok.')} /> : <DataList className="[&_td]:!min-w-0" caption={tx('Kullanıcılar')} rows={data.items} columns={columns} keyExtractor={(user) => user.userId} emptyMessage={tx('Aramaya uygun kullanıcı bulunamadı.')} />}
-        {data.totalCount > 0 && <Pagination label={tx('Kullanıcı sayfaları')} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
+        {data.totalCount === 0 ? <ListEmpty icon={Users} message={tx('Henüz kullanıcı yok.')} filtering={state.filtering} filteredMessage={tx('Aramaya uygun kullanıcı bulunamadı.')} onClear={state.clear} /> : <DataList className="[&_td]:!min-w-0" caption={tx('Kullanıcılar')} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(user) => user.userId} emptyMessage={tx('Aramaya uygun kullanıcı bulunamadı.')} onClearFilters={state.filtering ? state.clear : undefined} />}
+        <ListPager state={state} total={data.totalCount} label={tx('Kullanıcı sayfaları')} disabled={query.isFetching} />
       </div>}
     </QueryState>
     {(creating || editing) && <UserDialog user={editing ?? undefined} onClose={() => { setCreating(false); setEditing(null) }} onSaved={(name) => setSaved({ name, created: creating })} />}

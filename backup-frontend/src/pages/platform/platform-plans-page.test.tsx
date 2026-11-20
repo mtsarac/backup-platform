@@ -91,7 +91,7 @@ describe('platform plans list', () => {
     expect(within(legacyRow).getByText(/(?:Sınırsız|Limitsiz)/)).toBeInTheDocument()
     expect(within(legacyRow).queryByRole('button', { name: /düzenle|etkinleştir|devre dışı bırak/i })).not.toBeInTheDocument()
     expect(within(legacyRow).getByText('Sistem planı; salt okunur.')).toBeInTheDocument()
-    expect(api.getPlans).toHaveBeenCalledWith({ enabled: undefined, search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    expect(api.getPlans).toHaveBeenCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
   })
 
   it('filters by enabled state and searches from page one through the URL', async () => {
@@ -100,10 +100,16 @@ describe('platform plans list', () => {
     await screen.findByText('60 kayıt · Sayfa 2 / 3')
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'true' } })
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/plans?enabled=true'))
-    expect(api.getPlans).toHaveBeenLastCalledWith({ enabled: 'true', search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    expect(api.getPlans).toHaveBeenLastCalledWith({ enabled: 'true', page: 1, pageSize: 25 }, expect.any(AbortSignal))
     await userEvent.type(screen.getByRole('searchbox', { name: 'Plan ara' }), '5')
-    await userEvent.click(screen.getByRole('button', { name: 'Ara' }))
     await waitFor(() => expect(api.getPlans).toHaveBeenLastCalledWith({ enabled: 'true', search: '5', page: 1, pageSize: 25 }, expect.any(AbortSignal)))
+  })
+
+  it('sends a sortable column to the server', async () => {
+    mount()
+    await screen.findByText('Legacy Unlimited')
+    await userEvent.click(screen.getByRole('button', { name: /Depolama sınırı/ }))
+    await waitFor(() => expect(api.getPlans).toHaveBeenLastCalledWith({ page: 1, pageSize: 25, sort: 'storageLimitBytes', dir: 'asc' }, expect.any(AbortSignal)))
   })
 
   it.each([false, true])('clears every filter from the filter section with rows present: %s', async (hasRows) => {
@@ -112,12 +118,12 @@ describe('platform plans list', () => {
     if (hasRows) await screen.findByText('5 GB', { selector: 'span.font-medium' })
     else await screen.findByText('Filtreye uygun plan bulunamadı.')
     const clear = screen.getByRole('button', { name: 'Filtreleri temizle' })
-    expect(within(screen.getByRole('region', { name: 'Plan filtreleri' })).getByRole('button', { name: 'Filtreleri temizle' })).toBe(clear)
+    if (hasRows) expect(within(screen.getByRole('region', { name: 'Plan filtreleri' })).getByRole('button', { name: 'Filtreleri temizle' })).toBe(clear)
     await userEvent.click(clear)
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/platform/plans'))
     expect(screen.getByRole('searchbox', { name: 'Plan ara' })).toHaveValue('')
     expect(screen.getByRole('combobox', { name: 'Durum' })).toHaveValue('')
-    expect(api.getPlans).toHaveBeenLastCalledWith({ enabled: undefined, search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    expect(api.getPlans).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
     expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
   })
 })

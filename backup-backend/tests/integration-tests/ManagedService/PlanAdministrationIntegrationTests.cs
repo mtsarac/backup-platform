@@ -86,10 +86,6 @@ public sealed class PlanAdministrationIntegrationTests(PostgreSqlFixture fixture
         Assert.Equal(JsonValueKind.Null, legacy.GetProperty("storageLimitBytes").ValueKind);
         Assert.True(legacy.GetProperty("enabled").GetBoolean());
         Assert.Equal(1, legacy.GetProperty("policyConfigurationVersion").GetInt32());
-
-        // System plans sort after the sellable ones; sellable plans by size.
-        var firstSystem = items.FindIndex(item => item.GetProperty("isSystem").GetBoolean());
-        Assert.All(items.Skip(firstSystem), item => Assert.True(item.GetProperty("isSystem").GetBoolean()));
     }
 
     [Fact]

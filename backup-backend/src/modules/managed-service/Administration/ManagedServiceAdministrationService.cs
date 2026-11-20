@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.ManagedService.Plans;
@@ -12,8 +13,8 @@ namespace BackupPlatform.ManagedService.Administration;
 /// </summary>
 public sealed class ManagedServiceAdministrationService(IManagedServiceStore store, TimeProvider timeProvider)
 {
-    public Task<PagedResult<PlanView>> ListPlansAsync(bool? enabled, string? search, int page, int pageSize, CancellationToken cancellationToken) =>
-        store.ListPlansAsync(new PlanFilter(enabled, string.IsNullOrWhiteSpace(search) ? null : search.Trim()), page, pageSize, cancellationToken);
+    public Task<PagedResult<PlanView>> ListPlansAsync(bool? enabled, ListQuery query, CancellationToken cancellationToken) =>
+        store.ListPlansAsync(enabled, query, cancellationToken);
 
     public Task<ManagedServiceChange<PlanView>> CreatePlanAsync(
         string? name, long? storageLimitBytes, bool? unlimited, string? quotaPolicyReference, bool? enabled, UserId actor, CancellationToken cancellationToken)

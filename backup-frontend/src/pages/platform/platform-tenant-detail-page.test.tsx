@@ -45,6 +45,15 @@ beforeEach(() => {
 })
 
 describe('platform tenant detail', () => {
+  it('searches and sorts members with the member page key', async () => {
+    renderPlatform(<PlatformTenantDetailPage />, { path: '/platform/tenants/tenant-a?tab=people&memberPage=2', route: '/platform/tenants/:tenantId' })
+    await screen.findByText('Ayşe Yılmaz')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Üye ara' }), 'ayse')
+    await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse' }, expect.any(AbortSignal)))
+    await userEvent.click(screen.getByRole('button', { name: /Kullanıcı adı/ }))
+    await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse', sort: 'username', dir: 'asc' }, expect.any(AbortSignal)))
+  })
+
   it('offers one action to add the first member', async () => {
     vi.mocked(api.getMemberships).mockResolvedValue(paged([]))
     mount('people')

@@ -45,14 +45,14 @@ public static class PlatformEndpoints
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("/summary", GetSummaryAsync);
-        platform.MapGet("/tenants", ListTenantsAsync);
+        platform.MapGet("/tenants", ListTenantsAsync).WithListQuery();
         platform.MapPost("/tenants", CreateTenantAsync);
         platform.MapGet("/tenants/{tenantId:guid}", GetTenantAsync);
         platform.MapPut("/tenants/{tenantId:guid}", RenameTenantAsync);
-        platform.MapGet("/tenants/{tenantId:guid}/memberships", ListMembershipsAsync);
+        platform.MapGet("/tenants/{tenantId:guid}/memberships", ListMembershipsAsync).WithListQuery();
         platform.MapPost("/tenants/{tenantId:guid}/memberships", AddMembershipAsync);
         platform.MapDelete("/tenants/{tenantId:guid}/memberships/{userId:guid}", RemoveMembershipAsync);
-        platform.MapGet("/agents", ListAgentsAsync);
+        platform.MapGet("/agents", ListAgentsAsync).WithListQuery();
         platform.MapGet("/tenants/{tenantId:guid}/agents/{agentId:guid}", GetAgentAsync);
         platform.MapGet("/users", ListUsersAsync).WithListQuery();
         platform.MapPost("/users", CreateUserAsync);
@@ -80,15 +80,8 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListTenantsAsync(
-        string? search, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
-    {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListTenantsAsync(search, p, size, cancellationToken);
-        return Results.Ok(Page(result, ToResponse));
-    }
+        [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken) =>
+        Results.Ok(Page(await store.ListTenantsAsync(list.ToQuery(), cancellationToken), ToResponse));
 
     private static async Task<IResult> CreateTenantAsync(
         PlatformTenantRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
@@ -140,13 +133,9 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListMembershipsAsync(
-        Guid tenantId, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
+        Guid tenantId, [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListMembershipsAsync(new TenantId(tenantId), p, size, cancellationToken);
+        var result = await store.ListMembershipsAsync(new TenantId(tenantId), list.ToQuery(), cancellationToken);
         return result is null ? TenantNotFound() : Results.Ok(Page(result, ToResponse));
     }
 
@@ -267,13 +256,9 @@ public static class PlatformEndpoints
     };
 
     private static async Task<IResult> ListAgentsAsync(
-        Guid? tenantId, string? connectivity, string? status, string? search, int? page, int? pageSize,
+        Guid? tenantId, string? connectivity, string? status, [AsParameters] ListParams list,
         PlatformAgentQueryService agents, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
         var connectivityFilter = AgentConnectivityFilter.All;
         if (!string.IsNullOrEmpty(connectivity)
             && !(Enum.TryParse(connectivity, ignoreCase: true, out connectivityFilter) && connectivityFilter != AgentConnectivityFilter.All && Enum.IsDefined(connectivityFilter)))
@@ -289,8 +274,8 @@ public static class PlatformEndpoints
             }
             statusFilter = parsed;
         }
-        var filter = new PlatformAgentFilter(tenantId is null ? null : new TenantId(tenantId.Value), connectivityFilter, statusFilter, search);
-        var result = await agents.ListAsync(filter, p, size, cancellationToken);
+        var filter = new PlatformAgentFilter(tenantId is null ? null : new TenantId(tenantId.Value), connectivityFilter, statusFilter);
+        var result = await agents.ListAsync(filter, list.ToQuery(), cancellationToken);
         return Results.Ok(Page(result, view => ToResponse(view.Agent.Agent.TenantId.Value, view.TenantName, view.Agent, view.CapabilityCount, view.CapabilityRevision, view.CapabilitiesReportedAt)));
     }
 
