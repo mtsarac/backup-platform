@@ -1,30 +1,35 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { History } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { ArrowLeft, History } from 'lucide-react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
-import { PageHeader } from '@/components/ui/page-header'
+import { linkClass } from '@/components/ui/form-styles'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
 import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
+import { TrustJobCertificate } from '@/features/backups/trust-job-certificate'
 import { canCancelRun, canRetryRun, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
 import { SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupAttempt, BackupRun } from '@/features/backups/types'
-import { linkClass } from '@/components/ui/form-styles'
 import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { describeFailure } from '@/lib/api/failure-messages'
-import { formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
+import { formatBytes, formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
+import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
+import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
+import { artifactState } from '@/features/artifacts/format'
+
 
 type Tab = 'summary' | 'attempts' | 'replication'
 
@@ -81,7 +86,9 @@ export function BackupDetailPage() {
 
 function BackupDetail({ id }: { id: string }) {
   useLanguage()
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
+  const navigate = useNavigate()
+  const { search } = useLocation()
   const query = useBackup(id)
   const actions = useBackupActions(id)
   const [notice, setNotice] = useState('')
@@ -111,24 +118,40 @@ function BackupDetail({ id }: { id: string }) {
     ...(run?.replication ? [{ value: 'replication' as const, label: tx('Replikasyon') }] : []),
   ]
   const latest = run?.attempts.at(-1)
+  const artifact = run?.attempts.flatMap(attempt => attempt.artifacts).at(-1)
+
   const failureCode = run && (run.reasonCode ?? run.retry.lastFailureCode ?? (run.status === 'AgentLost' ? 'AgentLost' : null))
+  const failure = describeFailure(failureCode)
+  const failureNotice = (run: BackupRun) => ({
+    title: tx("Yedekleme denemesi başarısız oldu"), ...failure,
+    onAction: failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
+      if (failure.actionKind === 'checkComputer') navigate(`/tenants/${tenantId}/agents/${run.agentId}`)
+      else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}`)
+      else if (failure.actionKind === 'manageStorage') navigate(`/tenants/${tenantId}/storage`)
+      else if (failure.actionKind === 'backupNow' && canRetryRun(run.status)) void perform('retry')
+    } : undefined,
+    onRetry: canRetryRun(run.status) ? () => void perform('retry') : undefined,
+  })
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        crumbs={[{ label: tx('Yedekleme denemeleri'), to: `/tenants/${tenantId}/backup-runs` }, { label: run?.jobName ?? tx('Yedekleme denemesi') }]}
-        title={run?.jobName ?? tx('Yedekleme denemesi')}
-        meta={run && <><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</>}
-        actions={run && canOperate && <>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0 space-y-1">
+          <Link className={`inline-flex items-center gap-1 text-sm md:hidden ${linkClass}`} to={`/tenants/${tenantId}/backup-runs${search}`}><ArrowLeft aria-hidden="true" className="size-4" />{tx('Geçmişe dön')}</Link>
+          <h2 className="break-words text-lg font-semibold text-text-heading">{run?.jobName ?? tx('Yedekleme denemesi')}</h2>
+          {run && <div className="flex flex-wrap items-center gap-2"><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</div>}
+        </div>
+        {run && <div className="flex flex-wrap items-center gap-2">
+          {run.status === 'Succeeded' && artifact && artifactState(artifact) !== 'DeleteFailed' && !restoreIneligibility(artifact) && <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs/${run.id}/restore`}>{tx('Geri yükle')}</Link>}
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
           {run.status === 'Paused' && <Button disabled={busy} onClick={() => void perform('resume')}>{actions.resume.isPending ? tx('Sıraya alınıyor…') : tx('Devam Et')}</Button>}
           {canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => { actions.cancel.reset(); setConfirmCancel(true) }}>{actions.cancel.isPending ? tx('İletiliyor…') : tx('İptal et')}</Button>}
-        </>}
-      />
-      <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run}>
+        </div>}
+      </div>
+      <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run} emptyState={<EmptyState icon={History} message={tx("Bu yedekleme denemesi bulunamadı. Yedekleme denemeleri listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx("Yedekleme denemeleri")}</Link>} />}>
         {run && <>
-          <ConfirmDialog open={confirmCancel && canOperate && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
+          <ConfirmDialog open={confirmCancel && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
             consequence={{
               what: tx("Yedekleme bilgisayarına iptal isteği iletilir. İşlem durana kadar deneme iptal edilmiş sayılmaz; yarım kalan yedek kullanılamaz."),
               who: tx("Yalnızca bu yedekleme denemesi etkilenir; önceki yedekleriniz korunur."),
@@ -146,12 +169,14 @@ function BackupDetail({ id }: { id: string }) {
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
               <SizeAnomalyComparison run={run} />
-              {(run.status === 'Failed' || run.status === 'AgentLost') && <ErrorNotice title={tx("Yedekleme denemesi başarısız oldu")} {...describeFailure(failureCode)}
-                action={canOperate ? tx("Sorunu giderdikten sonra “Yeniden dene” ile yeni bir deneme başlatın.") : tx("Yöneticinize danışın.")} />}
+              {(run.status === 'Failed' || run.status === 'AgentLost') && (failure.certificateUntrusted
+                ? <TrustJobCertificate jobId={run.jobId}>{trust => <ErrorNotice {...failureNotice(run)} trust={trust} />}</TrustJobCertificate>
+                : <ErrorNotice {...failureNotice(run)} />)}
               {run.status === 'RetryPending' && <Notice tone="warning">{tx("Otomatik yeniden deneme bekleniyor. Sonraki deneme:")}{' '}{formatDateTime(run.retry.nextAttemptAt)}. {describeFailure(run.retry.lastFailureCode).what}</Notice>}
               {run.status === 'CancellationRequested' && <Notice tone="warning">{tx("İptal istendi; yedekleme denemesi henüz iptal edilmiş değildir. Yedekleme bilgisayarı sonucu bildirdiğinde durum güncellenir.")}</Notice>}
               {run.status === 'Paused' && <Notice tone="warning">{run.pauseReason === 'PausedByNetworkError' ? tx('Ağ kesintisi nedeniyle aktarım duraklatıldı. Bağlantıyı kontrol edip Devam Et ile sürdürün.') : tx('Aktarım duraklatıldı. Hazırlanmış yedek korunur; Devam Et ile aynı baytlardan sürdürülür.')}</Notice>}
               {isActiveRun(run.status) && latest && <Section title={tx("Güncel deneme")} description={tx("{0}. deneme · {1}", { "0": latest.number, "1": progressStageLabel(latest.progressStage) })}><AttemptProgress attempt={latest} /></Section>}
+              {run.status === 'Succeeded' && artifact && <ArtifactDetail id={artifact.id} />}
               <Section title={tx("Yedekleme denemesi özeti")}>
                 <Facts columns={2}>
                   <Fact label={tx("Veritabanı")}>{run.configuration.database}</Fact>
@@ -163,7 +188,7 @@ function BackupDetail({ id }: { id: string }) {
               <div role="region" aria-label={tx("Yedekleme denemesi ayrıntıları")}><TechnicalDetails items={runTechnicalItems(run)} /></div>
             </>}
             {tab === 'attempts' && (run.attempts.length === 0
-              ? <Card padding="none"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} /></Card>
+              ? <Card padding="none"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} action={<Button variant="outline" onClick={() => setTab('summary')}>{tx('Özet')}</Button>} /></Card>
               : run.attempts.map((attempt) => <Section key={attempt.id} title={tx("{0}. deneme · {1}", { "0": attempt.number, "1": triggerLabel(attempt.trigger) })} actions={<><StatusPill status={attempt.status} /><ReplicationBadge replication={attempt.replication} /></>}>
                 <div className="space-y-4">
                   <Facts columns={3}>
@@ -176,7 +201,7 @@ function BackupDetail({ id }: { id: string }) {
                   <TechnicalDetails items={attemptTechnicalItems(attempt)} />
                   <section aria-label={tx("{0}. deneme çıktıları", { "0": attempt.number })} className="space-y-3 border-t border-border pt-4">
                     <h3 className="text-sm font-medium text-text-heading">{tx("Yedek dosyaları")}</h3>
-                    {attempt.artifacts.length === 0 ? <p className="text-sm text-text-muted">{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p> : attempt.artifacts.map((artifact) => <div key={artifact.id}><Link className={`text-sm ${linkClass}`} to={`/tenants/${tenantId}/artifacts/${artifact.id}`}>{tx("Yedek dosyasını aç")}</Link></div>)}
+                    {attempt.artifacts.length === 0 ? <p className="text-sm text-text-muted">{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p> : attempt.artifacts.map((artifact) => <p key={artifact.id} className="text-sm">{formatBytes(artifact.sizeBytes)}</p>)}
                   </section>
                 </div>
               </Section>))}

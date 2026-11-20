@@ -249,6 +249,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (!await LockAgentAsync(context, tenantId, owner, cancellationToken)) return new BackupRetryResult(BackupRetryOutcome.NotFound, null);
         var run = await Runs(context).SingleOrDefaultAsync(run => run.TenantId == tenantId && run.Id == runId && run.AgentId == owner, cancellationToken);
         if (run is null) return new BackupRetryResult(BackupRetryOutcome.NotFound, null);
+        if (!await LockUnarchivedJobAsync(context, tenantId, run.JobId, cancellationToken))
+            return new BackupRetryResult(BackupRetryOutcome.JobArchived, run);
         var reopens = run.IsTerminal && run.OverlapPolicy == BackupOverlapPolicy.Skip
             && await ActiveRunIdAsync(context, tenantId, run.JobId, run.Id, cancellationToken) is not null;
         var decision = run.RequestManualRetry(Guid.NewGuid(), now);
@@ -316,7 +318,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }
         var candidateIds = await (from attempt in context.BackupRunAttempts
                                   join run in context.BackupRuns on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
-                                  where attempt.TenantId == tenantId && attempt.AgentId == agentId && attempt.Status == BackupStatus.Pending && run.Status == BackupStatus.Pending
+                                  join job in context.BackupJobs on new { run.JobId, run.TenantId } equals new { JobId = job.Id, job.TenantId }
+                                  where attempt.TenantId == tenantId && attempt.AgentId == agentId && attempt.Status == BackupStatus.Pending && run.Status == BackupStatus.Pending && job.ArchivedAt == null
                                      // A scheduled run's first attempt that missed its grace period never starts; the unclaimed-run sweep ends it.
                                      && (run.ClaimDeadline == null || run.ClaimDeadline >= now || attempt.Number > 1 || attempt.LeasedAt != null)
                                   orderby attempt.EligibleAt, run.CreatedAt, run.Id
@@ -329,6 +332,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         foreach (var candidateId in candidateIds)
         {
             var candidate = await Runs(context).SingleAsync(run => run.TenantId == tenantId && run.Id == candidateId, cancellationToken);
+            if (!await LockUnarchivedJobAsync(context, tenantId, candidate.JobId, cancellationToken)) continue;
             if (candidate.Configuration.Engine is DatabaseEngines.PostgreSql or DatabaseEngines.FileSystem && !await context.AgentCapabilities.AsNoTracking().AnyAsync(
                 capability => capability.TenantId == tenantId && capability.AgentId == agentId &&
                     capability.Identifier == candidate.Configuration.Engine + ".backup.full" && capability.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken)) continue;
@@ -504,10 +508,15 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }
         return expired;
     }
+    private static async Task<bool> LockUnarchivedJobAsync(PlatformDbContext context, TenantId tenantId, Guid jobId, CancellationToken cancellationToken) =>
+        (await context.Database.SqlQuery<Guid>($"SELECT \"Id\" AS \"Value\" FROM backup_jobs WHERE \"TenantId\" = {tenantId.Value} AND \"Id\" = {jobId} AND \"ArchivedAt\" IS NULL FOR UPDATE")
+            .ToListAsync(cancellationToken)).Count != 0;
+
     public async Task<IReadOnlyList<BackupRetryStarted>> StartDueRetriesAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken)
     {
         await using var scan = PlatformDbContext.CreateForPlatformOperations(options);
-        var due = await scan.BackupRuns.AsNoTracking().Where(run => run.Status == BackupStatus.RetryPending && run.NextAttemptAt <= now)
+        var due = await scan.BackupRuns.AsNoTracking().Where(run => run.Status == BackupStatus.RetryPending && run.NextAttemptAt <= now
+            && scan.BackupJobs.Any(job => job.TenantId == run.TenantId && job.Id == run.JobId && job.ArchivedAt == null))
             .OrderBy(run => run.NextAttemptAt).ThenBy(run => run.Id).Take(Math.Clamp(limit, 1, 500))
             .Select(run => new { run.TenantId, run.AgentId, run.Id }).ToListAsync(cancellationToken);
         var started = new List<BackupRetryStarted>();
@@ -518,7 +527,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             if (!await LockAgentAsync(context, candidate.TenantId, candidate.AgentId, cancellationToken)) continue;
             // Re-read under the lock: a concurrent worker, a manual retry or a cancellation may already have moved the run on.
             var run = await Runs(context).SingleOrDefaultAsync(run => run.TenantId == candidate.TenantId && run.Id == candidate.Id && run.AgentId == candidate.AgentId, cancellationToken);
-            if (run is null || !run.StartScheduledRetry(Guid.NewGuid(), now)) continue;
+            if (run is null || !await LockUnarchivedJobAsync(context, run.TenantId, run.JobId, cancellationToken) || !run.StartScheduledRetry(Guid.NewGuid(), now)) continue;
             context.AuditEvents.Add(AuditEvent.Record(
                 now, UserId.System, AuditActorKind.System, AuditActions.BackupRunRetryRequested, run.TenantId,
                 "backup_run", run.Id.ToString("D"),
@@ -578,6 +587,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
+        // The attempt ended (failed, lost) after its job was archived: the run it would have retried or resumed is cancelled instead.
+        if (!run.IsTerminal && run.Status is BackupStatus.RetryPending or BackupStatus.Paused
+            && await context.BackupJobs.AsNoTracking().AnyAsync(job => job.TenantId == run.TenantId && job.Id == run.JobId && job.ArchivedAt != null, cancellationToken))
+            BackupAudit.CancelRunOfArchivedJob(context, run, null, command.Now);
         BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
         // No flags (a store built by hand) means no gate; the API always registers them.
         if (!wasTerminal && run.Status == BackupStatus.Succeeded && (flags?.IsEnabled(Features.SizeAnomaly) ?? true)) await EvaluateSizeAnomalyAsync(context, transaction, run, command.Now, cancellationToken);

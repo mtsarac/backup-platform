@@ -1,7 +1,7 @@
 // UI-02: 1440 / 768 / 375 px; horizontal overflow by script on every tenant + platform page, table->card conversion, nav reachable, screenshots of key pages.
 const L = require('./lib.cjs'); const P = require('./pages.cjs');
 const WIDTHS = [[1440, 900], [768, 1024], [375, 812]];
-const KEY = new Set(['dashboard', 'jobs', 'job-wizard', 'run-detail', 'artifacts', 'restore-wizard', 'storage', 'agents', 'artifact-detail']);
+const KEY = new Set(['dashboard', 'jobs', 'job-wizard', 'run-detail', 'restore-wizard', 'storage', 'agents']);
 const probe = () => {
   const vw = document.documentElement.clientWidth, doc = document.documentElement;
   const scrollable = e => { for (let n = e.parentElement; n && n !== document.body; n = n.parentElement) { const o = getComputedStyle(n).overflowX; if (o === 'auto' || o === 'scroll' || o === 'hidden') return true; } return false; };

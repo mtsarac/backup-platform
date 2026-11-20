@@ -6,7 +6,7 @@ import { EditConnectionDialog, SecretDialog } from './connection-dialogs'
 import { useGoogleDriveDisconnect, type ConnectionOps } from './hooks'
 import { GoogleOAuthNotice } from './google-oauth-flow'
 import { useGoogleOAuth } from './use-google-oauth'
-import { disableEffects, enableEffect } from './labels'
+import { connectionDisplayName, disableEffects, enableEffect } from './labels'
 import type { ConnectionView, ProviderDescriptor, SecretField } from './types'
 import { errorMessage } from '@/lib/api/failure-messages'
 
@@ -20,7 +20,7 @@ function secretFieldsOf(connection: ConnectionView, descriptor?: ProviderDescrip
 
 /**
  * Every button follows `connection.permissions` and nothing else: the API computed them for this caller on this route, so the same component
- * serves a tenant Admin, a PlatformAdmin and a read-only Viewer (who simply gets no buttons).
+ * serves a tenant user and a PlatformAdmin.
  */
 export function ConnectionActions({ connection, descriptor, ops, show = ['edit', 'test', 'credentials', 'toggle', 'delete'] }: { connection: ConnectionView; descriptor?: ProviderDescriptor; ops: ConnectionOps; show?: readonly ActionGroup[] }) {
   useLanguage()
@@ -30,7 +30,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
   const testing = ops.test.isPending && ops.test.variables?.id === connection.id
   const testError = ops.test.error && ops.test.variables?.id === connection.id ? errorMessage(ops.test.error, 'storageConnection') : undefined
   const close = () => setDialog(null)
-  const label = (text: string) => tx("{0} bağlantısı: {1}", { "0": connection.name, "1": text })
+  const label = (text: string) => tx("{0} bağlantısı: {1}", { "0": connectionDisplayName(connection), "1": text })
   // The platform controls only the lock; tenants control only their own preference.
   const toggledOn = ops.scope === 'platform' ? !connection.administrativelyDisabled : connection.enabled
   const toggleLabel = ops.scope === 'platform' ? (toggledOn ? tx('Platform kilidi koy') : tx('Platform kilidini kaldır')) : (toggledOn ? tx('Devre dışı bırak') : tx('Etkinleştir'))
@@ -69,7 +69,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
 
     {dialog === 'edit' && <EditConnectionDialog connection={connection} configFields={descriptor?.configFields ?? []} ops={ops} onClose={close} />}
     {dialog === 'secret' && <SecretDialog connection={connection} fields={secretFields} ops={ops} onClose={close} />}
-    <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={tx("“{0}” kimlik bilgisi temizlensin mi?", { "0": connection.name })} confirmLabel={tx("Kimlik bilgisini temizle")}
+    <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={tx("“{0}” kimlik bilgisi temizlensin mi?", { "0": connectionDisplayName(connection) })} confirmLabel={tx("Kimlik bilgisini temizle")}
       consequence={{
         what: tx("Kayıtlı kimlik bilgisi silinir. Yeniden ayarlanana kadar bu depolamaya erişim gerektiren işlemler başarısız olabilir."),
         who: tx("Bu depolamayı kullanan yedekleme işleri ve geri yüklemeler etkilenir."),
@@ -77,7 +77,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
       }}
       pending={ops.clearSecret.isPending} error={ops.clearSecret.error} errorScope="storageConnection"
       onConfirm={() => ops.clearSecret.mutate(connection, { onSuccess: close })} />
-    <ConfirmDialog open={dialog === 'toggle'} onClose={close} title={ops.scope === 'platform' ? `“${connection.name}”: ${toggleLabel.toLocaleLowerCase(currentLocale())}?` : connection.enabled ? tx("“{0}” devre dışı bırakılsın mı?", { "0": connection.name }) : tx("“{0}” etkinleştirilsin mi?", { "0": connection.name })}
+    <ConfirmDialog open={dialog === 'toggle'} onClose={close} title={ops.scope === 'platform' ? `“${connectionDisplayName(connection)}”: ${toggleLabel.toLocaleLowerCase(currentLocale())}?` : connection.enabled ? tx("“{0}” devre dışı bırakılsın mı?", { "0": connectionDisplayName(connection) }) : tx("“{0}” etkinleştirilsin mi?", { "0": connectionDisplayName(connection) })}
       confirmLabel={toggleLabel}
       consequence={{
         what: <>
@@ -91,7 +91,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
       }}
       pending={ops.setEnabled.isPending} error={ops.setEnabled.error} errorScope="storageConnection"
       onConfirm={() => { if (!cannotEnable) ops.setEnabled.mutate({ connection, enabled: !toggledOn }, { onSuccess: close }) }} />
-    <ConfirmDialog name={connection.name} open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": connection.name })} confirmLabel={tx("Bağlantıyı sil")}
+    <ConfirmDialog name={connection.name} open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": connectionDisplayName(connection) })} confirmLabel={tx("Bağlantıyı sil")}
       consequence={{
         what: tx("Bağlantı kalıcı olarak silinir. Bir yedek kopyası veya yedekleme işi hâlâ bu bağlantıyı kullanıyorsa silinemez; önce bunların başka bir depolamaya taşınması gerekir."),
         who: tx("Bu bağlantıyı kullanan yedekleme işleri ve kopyalar etkilenir."),
@@ -99,7 +99,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
       }}
       pending={ops.remove.isPending} error={ops.remove.error} errorScope="storageConnection"
       onConfirm={() => ops.remove.mutate(connection, { onSuccess: close })} />
-    <ConfirmDialog open={dialog === 'disconnectGoogle'} onClose={close} title={tx("“{0}” Google bağlantısı kesilsin mi?", { "0": connection.name })} confirmLabel={tx("Bağlantıyı kes")}
+    <ConfirmDialog open={dialog === 'disconnectGoogle'} onClose={close} title={tx("“{0}” Google bağlantısı kesilsin mi?", { "0": connectionDisplayName(connection) })} confirmLabel={tx("Bağlantıyı kes")}
       consequence={{
         what: tx("Kayıtlı Google erişim izni iptal edilir. Yeniden yetkilendirilene kadar bu depolamaya erişim gerektiren işlemler başarısız olabilir."),
         who: tx("Aynı Google hesabını ve uygulamayı kullanan diğer bağlantıların da erişimi iptal olabilir; bunların yeniden yetkilendirilmesi gerekir."),

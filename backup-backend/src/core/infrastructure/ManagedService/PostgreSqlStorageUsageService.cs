@@ -1,11 +1,15 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Tenancy;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.ManagedService.Administration;
 using BackupPlatform.ManagedService.Entitlement;
 using BackupPlatform.ManagedService.Quota;
+using BackupPlatform.ManagedService.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -47,34 +51,75 @@ public sealed class PostgreSqlStorageUsageService(
         };
     }
 
+    /// <summary>
+    /// One tenant's derived standing as plain columns, so the database can filter, sort and page on it. <see cref="Used"/> and <see cref="State"/> are null
+    /// without a usage record (sorted last); <see cref="Limit"/> is null when unlimited or without a subscription. Only used to choose and order the rows;
+    /// the values shown come from the one resolver in <see cref="ResolveStandingsAsync"/>, and a test holds the two in agreement.
+    /// </summary>
+    private sealed class Standing
+    {
+        public required TenantId TenantId { get; init; }
+        public required string Name { get; init; }
+        public long? Used { get; init; }
+        public long? Limit { get; init; }
+        public QuotaState? State { get; init; }
+        public EntitlementStatus Status { get; init; }
+    }
+
+    private static readonly SortMap<Standing> StandingSorts = SortMap<Standing>.Create()
+        .Text("tenant", row => row.Name)
+        .Value("used", row => row.Used)
+        .Value("quota", row => row.Limit)
+        // The quota state sorts by its Turkish label: Kota aşıldı, Kritik, Normal, Sınırsız, Uyarı.
+        .Ordinal("state", row => row.State, QuotaState.OverQuota, QuotaState.Critical, QuotaState.Normal, QuotaState.Unlimited, QuotaState.Warning);
+
+    /// <summary>
+    /// The M1 and quota rules of <see cref="TenantEntitlement.Resolve"/> and <see cref="QuotaStateResolver.Resolve"/> restated as one SQL query (current subscription
+    /// by <see cref="PostgreSqlTenantEntitlementReader.OpenFirst"/>, override over plan limit, policy by the plan's reference else the default, thresholds in integers).
+    /// </summary>
+    private static IQueryable<Standing> Standings(PlatformDbContext context, IQueryable<Tenant> tenants, DateTimeOffset now) =>
+        from tenant in tenants
+        let sub = context.TenantSubscriptions.Where(row => row.TenantId == tenant.Id)
+            .OrderBy(PostgreSqlTenantEntitlementReader.OpenFirst).ThenByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id).FirstOrDefault()
+        let plan = context.Plans.Where(row => sub != null && row.Id == sub.PlanId).FirstOrDefault()
+        let usage = context.TenantStorageUsages.Where(row => row.TenantId == tenant.Id).FirstOrDefault()
+        let policy = context.QuotaPolicies.Where(row => row.Enabled && (row.IsDefault || (plan != null && row.Key == plan.QuotaPolicyReference)))
+            .OrderBy(row => plan != null && row.Key == plan.QuotaPolicyReference ? 0 : 1).First()
+        let limit = sub == null ? null
+            : sub.StorageLimitOverrideKind == StorageLimitOverrideKind.Limited ? sub.StorageLimitOverrideBytes
+            : sub.StorageLimitOverrideKind == StorageLimitOverrideKind.Unlimited ? null
+            : plan!.StorageLimitBytes
+        let committed = usage == null ? 0L : usage.UsedBytes + usage.ReservedBytes
+        select new Standing
+        {
+            TenantId = tenant.Id,
+            Name = tenant.Name,
+            Used = usage == null ? null : committed,
+            Limit = limit,
+            State = usage == null ? null
+                : limit == null || policy.EnforcementMode == QuotaEnforcementMode.None ? QuotaState.Unlimited
+                : limit <= 0 || committed >= limit ? QuotaState.OverQuota
+                : committed * 100 >= limit * policy.CriticalThresholdPercent ? QuotaState.Critical
+                : committed * 100 >= limit * policy.WarningThresholdPercent ? QuotaState.Warning
+                : QuotaState.Normal,
+            Status = sub == null ? EntitlementStatus.NoSubscription
+                : sub.Status == SubscriptionStatus.Active ? (sub.EndsAt != null && sub.EndsAt <= now ? EntitlementStatus.Expired : EntitlementStatus.Active)
+                : sub.Status == SubscriptionStatus.Suspended ? (sub.EndsAt != null && sub.EndsAt <= now ? EntitlementStatus.Expired : EntitlementStatus.Suspended)
+                : EntitlementStatus.Expired
+        };
+
     public async Task<PagedResult<TenantStorageUsageListItem>> ListStorageUsageAsync(
-        StorageUsageFilter filter, int page, int pageSize, DateTimeOffset now, CancellationToken cancellationToken)
+        StorageUsageFilter filter, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filter);
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var tenants = context.Tenants.AsNoTracking().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            var term = filter.Search.Trim().ToLowerInvariant();
-            tenants = tenants.Where(tenant => tenant.Name.ToLower().Contains(term));
-        }
-        var ordered = tenants.OrderBy(tenant => tenant.Name).ThenBy(tenant => tenant.Id).Select(tenant => new TenantName(tenant.Id, tenant.Name));
+        var rows = Standings(context, context.Tenants.AsNoTracking().ApplySearch(query, tenant => tenant.Name), now);
+        if (filter.SubscriptionStatus is { } status) rows = rows.Where(row => row.Status == status);
+        if (filter.State is { } state) rows = rows.Where(row => row.State == state);
+        var slice = await rows.ApplySort(StandingSorts, query, "tenant", row => row.TenantId).ToPagedResultAsync(query, cancellationToken);
         var policies = await context.QuotaPolicies.AsNoTracking().Where(policy => policy.Enabled).ToListAsync(cancellationToken);
-        if (filter.State is null && filter.SubscriptionStatus is null)
-        {
-            // Nothing derived is filtered on, so the database pages and only that page is resolved.
-            var total = await tenants.LongCountAsync(cancellationToken);
-            var slice = await ordered.Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-            return new PagedResult<TenantStorageUsageListItem>(await ResolveStandingsAsync(context, slice, policies, now, cancellationToken), total, page, pageSize);
-        }
-        // State and subscription status are derived (by the one resolver each), never stored, so they cannot be filtered in SQL without
-        // restating those rules there. The rows involved are narrow: one tenant, its current subscription, its plan and its projection.
-        var all = await ResolveStandingsAsync(context, await ordered.ToListAsync(cancellationToken), policies, now, cancellationToken);
-        var matching = all.Where(item =>
-            (filter.SubscriptionStatus is null || item.Quota.EntitlementStatus == filter.SubscriptionStatus)
-            && (filter.State is null || (item.HasUsage && item.Quota.State == filter.State))).ToList();
-        var pageItems = matching.Skip(checked((page - 1) * pageSize)).Take(pageSize).ToList();
-        return new PagedResult<TenantStorageUsageListItem>(pageItems, matching.Count, page, pageSize);
+        var standings = await ResolveStandingsAsync(context, [.. slice.Items.Select(row => new TenantName(row.TenantId, row.Name))], policies, now, cancellationToken);
+        return new PagedResult<TenantStorageUsageListItem>(standings, slice.TotalCount, query.Page, query.PageSize);
     }
 
     private sealed record TenantName(TenantId Id, string Name);

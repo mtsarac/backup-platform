@@ -1,5 +1,6 @@
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Contracts.Storage;
 using BackupPlatform.Domain.Identity;
@@ -94,7 +95,7 @@ public sealed class StorageCapacityProbeServiceTests
         public Task<StorageConnectionRecord?> FindAsync(Guid id, TenantId? tenantScope, CancellationToken cancellationToken) =>
             Task.FromResult<StorageConnectionRecord?>(id == connection.Id ? new StorageConnectionRecord(connection, null, 0, 0) : null);
         public Task<IReadOnlyList<StorageConnectionRecord>?> ListAsync(TenantId tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, int page, int pageSize, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StorageConnectionResult> CreateAsync(StorageConnection connection, int? maxPerTenant, StorageActor actor, IReadOnlyDictionary<string, object?> auditDetails, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StorageConnectionResult> MutateAsync(Guid id, TenantId? tenantScope, StorageMutation mutation, StorageActor actor, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StorageConnectionResult> DeleteAsync(Guid id, TenantId? tenantScope, StorageActor actor, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();

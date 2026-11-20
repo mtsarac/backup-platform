@@ -1,8 +1,10 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { restorePath } from '@/lib/routes'
+import { Loader2 } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Stepper } from '@/components/ui/stepper'
+import { Section } from '@/components/ui/section'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { useRestore, useStartRestore, useStartRestoreDiscovery, useStartRestorePrecheck } from './hooks'
 import type { RestoreMode, RestoreOptions, RestoreTarget, RestoreTargetsResponse, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables } from './types'
@@ -11,7 +13,8 @@ import { RestoreSourceSummary } from './restore-source-summary'
 import { RestoreSourceStep } from './restore-source-step'
 import { RestoreTargetStep } from './restore-target-step'
 import { RestoreModeStep } from './restore-mode-step'
-import { RestoreCheckStep } from './restore-check-step'
+import { PrecheckResults } from './precheck-results'
+import { isActiveRestore } from './presentation'
 import { RestoreConfirmStep } from './restore-confirm-step'
 
 export interface RestoreWizardProps {
@@ -31,33 +34,40 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   const instancePrefix = useId()
   const isPg = targets.engine === 'postgres'
   const engineName = isPg ? 'PostgreSQL' : 'SQL Server'
-  const defaultTarget = targets.targets[0]
-  const defaultAgent = targets.agents.find((a) => a.canRestore && a.sourceEligible) ?? targets.agents[0]
+  const eligibleAgents = targets.agents.filter((a) => a.canRestore && a.sourceEligible)
+  const skipSource = eligibleAgents.length === 1
+  const defaultAgent = eligibleAgents[0] ?? targets.agents[0]
+  const ownTarget = targets.targets.find((t) => t.jobId === artifact.jobId)?.target
 
-  const [step, setStep] = useState<number>(1)
+  const [step, setStep] = useState<'source' | 'target'>(skipSource ? 'target' : 'source')
+  const [confirming, setConfirming] = useState(false)
   const [loginPending, setLoginPending] = useState(false)
   const [selectedAgentId, setSelectedAgentId] = useState<string>(defaultAgent?.agentId ?? '')
-  const [targetType, setTargetType] = useState<'configured' | 'custom'>(defaultTarget ? 'configured' : 'custom')
-  const [selectedTargetIndex, setSelectedTargetIndex] = useState<number>(0)
-  const [customTarget, setCustomTarget] = useState<RestoreTarget>({
-    host: defaultTarget?.target.host ?? '',
-    port: defaultTarget?.target.port ?? (isPg ? 5432 : null),
-    integratedSecurity: defaultTarget?.target.integratedSecurity ?? !isPg,
-    databaseCredentialReference: defaultTarget?.target.databaseCredentialReference ?? null,
-    encrypt: defaultTarget?.target.encrypt ?? true,
-    trustServerCertificate: defaultTarget?.target.trustServerCertificate ?? false,
+  const [targetType, setTargetType] = useState<'own' | 'other'>(ownTarget ? 'own' : 'other')
+  // The job's fixed connection values; only the address and, when needed, the login are asked.
+  const [otherTarget, setOtherTarget] = useState<RestoreTarget>({
+    host: '',
+    port: isPg ? 5432 : null,
+    integratedSecurity: !isPg,
+    databaseCredentialReference: null,
+    encrypt: true,
+    trustServerCertificate: false,
   })
 
+  // Set from the error panel when the server's certificate cannot be verified; it holds for this restore only and drops as soon as the computer or server changes.
+  const [trustCertificate, setTrustCertificate] = useState(false)
+
   const [mode, setMode] = useState<RestoreMode>('NewDatabase')
-  const [targetDatabaseName, setTargetDatabaseName] = useState<string>(() => {
+  const newDatabaseName = (() => {
     const name = artifact.databaseName ? `${artifact.databaseName}_restored` : 'RestoredDB'
     return isPg && new TextEncoder().encode(name).length > 63 ? 'restored_db' : name
-  })
-  const [options, setOptions] = useState<RestoreOptions>({
-    terminateActiveConnections: false,
+  })()
+  const [targetDatabaseName, setTargetDatabaseName] = useState<string>(newDatabaseName)
+  const options = useMemo<RestoreOptions>(() => ({
+    terminateActiveConnections: mode === 'ReplaceExistingDatabase',
     verifyChecksum: true,
     verifyBackup: true,
-  })
+  }), [mode])
 
   const [discoveryOperation, setDiscoveryOperation] = useState<{ fingerprint: string; id: string } | null>(null)
   const discoveryOperationId = discoveryOperation?.id ?? ''
@@ -89,19 +99,17 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   }, [])
 
   const activeAgent = targets.agents.find((a) => a.agentId === selectedAgentId)
-  const effectiveTarget = useMemo<RestoreTarget>(() => {
-    if (targetType === 'configured' && targets.targets[selectedTargetIndex]) {
-      return targets.targets[selectedTargetIndex].target
-    }
-    return customTarget
-  }, [targetType, targets.targets, selectedTargetIndex, customTarget])
+  const baseTarget = targetType === 'own' && ownTarget ? ownTarget : otherTarget
+  const targetWithTrust = (trust: boolean): RestoreTarget => ({ ...baseTarget, trustServerCertificate: baseTarget.trustServerCertificate || trust })
+  const effectiveTarget = targetWithTrust(trustCertificate)
 
   const eligibleForRestore = artifact.state === 'Available' && activeAgent?.canRestore && activeAgent?.sourceEligible
   const targetValid = Boolean(effectiveTarget.host) && (!isPg || (!effectiveTarget.integratedSecurity && Boolean(effectiveTarget.databaseCredentialReference)))
   const databaseNameValid = Boolean(targetDatabaseName.trim()) && (!isPg || new TextEncoder().encode(targetDatabaseName.trim()).length <= 63)
 
+  const precheckFingerprintFor = (target: RestoreTarget) => JSON.stringify([JSON.stringify([selectedAgentId, target]), targetDatabaseName.trim(), mode, options])
   const discoveryFingerprint = JSON.stringify([selectedAgentId, effectiveTarget])
-  const precheckFingerprint = JSON.stringify([discoveryFingerprint, targetDatabaseName.trim(), mode, options])
+  const precheckFingerprint = precheckFingerprintFor(effectiveTarget)
   const currentDiscovery = discoveryOperation?.fingerprint === discoveryFingerprint
   const currentPrecheck = precheckOperation?.fingerprint === precheckFingerprint
   const discoveryRetryable = isUncertainError(discoveryError)
@@ -112,8 +120,8 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     ? (precheckQuery.data?.id === precheckOperationId ? precheckQuery.data : precheckDataState) ?? undefined
     : undefined
   const precheckItems = precheckData?.result?.preCheck ?? []
-  const precheckFailed = precheckData?.status === 'Failed' || precheckItems.some((item) => item.status === 'Failed')
-  const precheckPassed = precheckData?.status === 'Succeeded' && !precheckFailed
+  const precheckPassed = precheckData?.status === 'Succeeded' && !precheckItems.some((item) => item.status === 'Failed')
+  const precheckFailed = Boolean(precheckData) && !isActiveRestore(precheckData!.status) && !precheckPassed
 
   function invalidateExecution() {
     restoreAttemptRef.current = null
@@ -127,6 +135,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     setPrecheckOperation(null)
     setPrecheckDataState(null)
     setPrecheckError(null)
+    setConfirming(false)
     invalidateExecution()
   }
 
@@ -143,14 +152,10 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     setTargetDatabaseName(value)
   }
 
-  function changeOptions(value: RestoreOptions) {
-    invalidatePrecheck()
-    setOptions(value)
-  }
-
-  function changeCustomTarget(value: RestoreTarget) {
+  function changeOtherTarget(value: RestoreTarget) {
     invalidateDiscovery()
-    setCustomTarget(value)
+    setTrustCertificate(false)
+    setOtherTarget(value)
   }
 
   async function triggerDiscovery() {
@@ -179,18 +184,20 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     }
   }
 
-  async function triggerPrecheck(fresh = false) {
+  // `trust` lets the trust confirmation check again before the state it sets has rendered.
+  async function triggerPrecheck(fresh = false, trust = trustCertificate) {
     if (!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || pendingRef.current.precheck || pendingRef.current.execution) return
     if (fresh) precheckKey.reset()
+    const target = targetWithTrust(trust)
     const request = {
       agentId: selectedAgentId,
-      target: { ...effectiveTarget },
+      target,
       databaseName: targetDatabaseName.trim(),
       mode,
       options: { ...options },
     }
     const attempt: RequestAttempt<StartRestorePrecheckVariables> = {
-      fingerprint: precheckFingerprint,
+      fingerprint: precheckFingerprintFor(target),
       variables: { artifactId: artifact.id, idempotencyKey: precheckKey.keyFor(request), request },
     }
     invalidateExecution()
@@ -205,7 +212,6 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
       if (precheckAttemptRef.current !== attempt) return
       setPrecheckDataState(result)
       setPrecheckOperation({ fingerprint: attempt.fingerprint, id: result.id })
-      setStep(3)
     } catch (error) {
       precheckKey.settle(error)
       if (precheckAttemptRef.current !== attempt) return
@@ -252,6 +258,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     if (mode === 'NewDatabase') return
     invalidateDiscovery()
     setMode('NewDatabase')
+    setTargetDatabaseName(newDatabaseName)
   }
 
   function selectReplaceExisting() {
@@ -259,19 +266,32 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     if (mode !== 'ReplaceExistingDatabase') {
       invalidateDiscovery()
       setMode('ReplaceExistingDatabase')
+      setTargetDatabaseName(artifact.databaseName ?? '')
     }
     void triggerDiscovery()
   }
 
+  function continueToConfirm() {
+    setConfirming(true)
+    if (!(currentPrecheck && precheckPassed)) void triggerPrecheck()
+  }
+
   // Only a passed check that matches the current settings opens the confirmation step.
-  const shownStep = step === 4 && !precheckPassed ? 3 : step
+  const shown = confirming && precheckPassed ? 'confirm' : step
+  const checking = confirming && !precheckPassed && precheckError == null
+  const checkPanel = checking && (precheckFailed && precheckData
+    ? <Section title={tx("Ön kontrol")}><PrecheckResults data={precheckData} failed passed={false} onRecheck={() => void triggerPrecheck(true)} recheckDisabled={startPrecheck.isPending || startRestore.isPending}
+      trust={{ note: tx("Bu güven yalnızca bu geri yükleme için geçerlidir; sertifika kaydedilmez."), pending: startPrecheck.isPending, onConfirm: () => { setTrustCertificate(true); void triggerPrecheck(true, true) } }} /></Section>
+    : <p role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Ön kontrol çalışıyor…")}</p>)
+  const stepLabels = skipSource ? [tx('Nereye ve nasıl'), tx('Onay')] : [tx('Kaynak'), tx('Nereye ve nasıl'), tx('Onay')]
+  const current = (shown === 'source' ? 0 : shown === 'target' ? 1 : 2) - (skipSource ? 1 : 0)
 
   return (
     <div className="space-y-6">
-      <Stepper steps={[tx('Kaynak'), tx('Hedef'), tx('Ön kontrol'), tx('Onay')]} current={shownStep - 1} />
+      <Stepper steps={stepLabels} current={current} />
       <RestoreSourceSummary artifact={artifact} isPg={isPg} />
 
-      {shownStep === 1 && (
+      {shown === 'source' && (
         <RestoreSourceStep
           instancePrefix={instancePrefix}
           engineName={engineName}
@@ -280,27 +300,25 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           selectedAgentId={selectedAgentId}
           eligibleForRestore={Boolean(eligibleForRestore)}
           invalidateDiscovery={invalidateDiscovery}
-          setSelectedAgentId={setSelectedAgentId}
-          onContinue={() => setStep(2)}
+          setSelectedAgentId={(id) => { setTrustCertificate(false); setSelectedAgentId(id) }}
+          onContinue={() => setStep('target')}
         />
       )}
 
-      {shownStep === 2 && (
+      {shown === 'target' && (
         <div className="space-y-5">
         <RestoreTargetStep
           tenantId={tenantId}
           instancePrefix={instancePrefix}
           isPg={isPg}
           engineName={engineName}
-          targets={targets}
+          ownTarget={ownTarget}
           selectedAgentId={selectedAgentId}
           targetType={targetType}
-          selectedTargetIndex={selectedTargetIndex}
-          customTarget={customTarget}
+          otherTarget={otherTarget}
           invalidateDiscovery={invalidateDiscovery}
-          setTargetType={setTargetType}
-          setSelectedTargetIndex={setSelectedTargetIndex}
-          changeCustomTarget={changeCustomTarget}
+          setTargetType={(type) => { setTrustCertificate(false); setTargetType(type) }}
+          changeOtherTarget={changeOtherTarget}
           onLoginPendingChange={setLoginPending}
         />
         <RestoreModeStep
@@ -309,7 +327,6 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           mode={mode}
           targetDatabaseName={targetDatabaseName}
           databaseNameValid={databaseNameValid}
-          options={options}
           discoveryData={discoveryData}
           discoveryError={discoveryError}
           discoveryQueryError={discoveryQuery.error}
@@ -324,36 +341,18 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           eligibleForRestore={Boolean(eligibleForRestore)}
           targetValid={targetValid}
           loginPending={loginPending}
+          checkPanel={checkPanel}
           onSelectNewDatabase={selectNewDatabase}
           onSelectReplaceExisting={selectReplaceExisting}
           onRefreshDiscovery={() => void triggerDiscovery()}
           changeDatabaseName={changeDatabaseName}
-          changeOptions={changeOptions}
-          onBack={() => setStep(1)}
-          onRunPrecheck={() => void triggerPrecheck()}
+          onBack={skipSource ? undefined : () => { setConfirming(false); setStep('source') }}
+          onContinue={continueToConfirm}
         />
         </div>
       )}
 
-      {shownStep === 3 && (
-        <RestoreCheckStep
-          engineName={engineName}
-          precheckData={precheckData}
-          precheckLoading={startPrecheck.isPending || (!!precheckOperationId && precheckQuery.isPending)}
-          precheckDisplayError={precheckError || (currentPrecheck && precheckQuery.error)}
-          precheckError={precheckError}
-          precheckRetryable={precheckRetryable}
-          precheckFailed={precheckFailed}
-          precheckPassed={precheckPassed}
-          precheckStarting={startPrecheck.isPending}
-          restoreStarting={startRestore.isPending}
-          onRunPrecheck={(fresh) => void triggerPrecheck(fresh)}
-          onBack={() => setStep(2)}
-          onContinue={() => setStep(4)}
-        />
-      )}
-
-      {shownStep === 4 && (
+      {shown === 'confirm' && (
         <RestoreConfirmStep
           isPg={isPg}
           mode={mode}
@@ -361,13 +360,15 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           activeAgent={activeAgent}
           selectedAgentId={selectedAgentId}
           effectiveTarget={effectiveTarget}
+          precheckData={precheckData}
           precheckPassed={precheckPassed}
           precheckStarting={startPrecheck.isPending}
           restoreStarting={startRestore.isPending}
           executionError={executionError}
           executionRetryable={executionRetryable}
           eligibleForRestore={Boolean(eligibleForRestore)}
-          onBack={() => setStep(3)}
+          onRecheck={() => void triggerPrecheck(true)}
+          onBack={() => setConfirming(false)}
           onStart={() => void triggerExecution()}
         />
       )}

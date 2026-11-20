@@ -2,6 +2,7 @@
 Agent__CredentialStoreDirectory=/var/lib/backup-platform-agent/identity
 Agent__Backup__Staging__AgentDirectory=/var/lib/backup-platform-agent/staging
 Agent__Backup__Staging__Mapping=SameHost
+Agent__Backup__LocalStorage__RootDirectory=/var/lib/backup-platform-agent/backups
 # Optional PostgreSQL physical backup: Logical (default), Physical (WAL fetch), Streaming.
 Agent__Backup__PostgreSql__BackupMode=Logical
 # PostgreSQL tools must be installed separately and match the server major for physical backups.

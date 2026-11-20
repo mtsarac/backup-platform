@@ -3,6 +3,7 @@ using BackupPlatform.Domain.Backups;
 using System.Linq.Expressions;
 using System.Text.Json.Nodes;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Agents;
@@ -12,6 +13,7 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Backups;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.EntityFrameworkCore;
@@ -161,10 +163,49 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         return await Operations(context).AsNoTracking().SingleOrDefaultAsync(operation => operation.TenantId == tenantId && operation.Id == restoreId, cancellationToken);
     }
 
+    /// <summary>One restore as the list sorts and searches it: the columns it shows, none of the restore itself.</summary>
+    private sealed class RestoreRow
+    {
+        public required Guid Id { get; init; }
+        public required DateTimeOffset CreatedAt { get; init; }
+        public required RestoreStatus Status { get; init; }
+        public required string DatabaseName { get; init; }
+        public required RestorePurpose Purpose { get; init; }
+        public string? Computer { get; init; }
+        public string? SourceDatabase { get; init; }
+        public string? SourceJob { get; init; }
+    }
+
+    // The target is what the list titles the restore with: a verification is named after the backup's database, never its temporary bp_verify_ copy
+    // (one with no known source sorts last and is not found by search).
+    // The source is the backup's database, or its job when the backup has none.
+    private static readonly Expression<Func<RestoreRow, string?>> Target = row => row.Purpose == RestorePurpose.Verification ? row.SourceDatabase : row.DatabaseName;
+    private static readonly Expression<Func<RestoreRow, string?>> Source = row => row.SourceDatabase != null && row.SourceDatabase != "" ? row.SourceDatabase : row.SourceJob;
+
+    private static readonly SortMap<RestoreRow> RestoreSorts = SortMap<RestoreRow>.Create()
+        .Date("createdAt", row => row.CreatedAt)
+        .Ordinal("status", row => row.Status, // the order of the Turkish status labels
+            RestoreStatus.AgentLost, RestoreStatus.Leased, RestoreStatus.Succeeded, RestoreStatus.Failed, RestoreStatus.Running, RestoreStatus.Cancelled, RestoreStatus.Pending)
+        .Text("target", Target)
+        .Text("source", Source)
+        .Text("computer", row => row.Computer);
+
+    // The list titles a verification "Doğrulama denemesi: <database>", words no column stores: a search that is part of "dogrulama" or "deneme" (folded)
+    // also finds every verification restore. Nothing else is matched by label.
+    private static readonly string[] VerificationWords = ["dogrulama", "deneme"];
+
+    private static Expression<Func<RestoreRow, bool>>? VerificationWordsMatch(string? search) =>
+        search is not null && VerificationWords.Any(word => word.Contains(TextFold.Fold(search), StringComparison.Ordinal))
+            ? row => row.Purpose == RestorePurpose.Verification
+            : null;
+
     public async Task<RestorePage> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var operations = context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId && operation.Purpose == query.Purpose);
+        var operations = context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId);
+        operations = query.Purpose is { } purpose
+            ? operations.Where(operation => operation.Purpose == purpose)
+            : operations.Where(operation => operation.Purpose == RestorePurpose.Execution || operation.Purpose == RestorePurpose.Verification);
         if (query.Status is { } status) operations = operations.Where(operation => operation.Status == status);
         if (query.ArtifactId is { } artifactId) operations = operations.Where(operation => operation.ArtifactId == artifactId);
         if (query.AgentId is { } agentGuid)
@@ -172,13 +213,29 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             var agentId = new AgentId(agentGuid);
             operations = operations.Where(operation => operation.AgentId == agentId);
         }
-        var totalCount = await operations.LongCountAsync(cancellationToken);
-        var offset = (long)(query.Page - 1) * query.PageSize;
-        if (offset >= totalCount) return new RestorePage([], totalCount, query.Page, query.PageSize);
-        var rows = await operations.Include(operation => operation.Attempts).Include(operation => operation.Pin)
-            .OrderByDescending(operation => operation.CreatedAt).ThenBy(operation => operation.Id)
-            .Skip(checked((int)offset)).Take(query.PageSize).AsSplitQuery().ToListAsync(cancellationToken);
-        return new RestorePage(rows, totalCount, query.Page, query.PageSize);
+        var rows = operations.Select(operation => new RestoreRow
+        {
+            Id = operation.Id, CreatedAt = operation.CreatedAt, Status = operation.Status, DatabaseName = operation.DatabaseName, Purpose = operation.Purpose,
+            Computer = context.Agents.Where(agent => agent.TenantId == tenantId && agent.Id == operation.AgentId).Select(agent => agent.HostName).FirstOrDefault(),
+            SourceDatabase = (from artifact in context.BackupArtifacts
+                              join attempt in context.BackupRunAttempts on artifact.AttemptId equals attempt.Id
+                              join run in context.BackupRuns on attempt.RunId equals run.Id
+                              where artifact.TenantId == tenantId && artifact.Id == operation.ArtifactId
+                              select run.Configuration.Database).FirstOrDefault(),
+            SourceJob = (from artifact in context.BackupArtifacts
+                         join attempt in context.BackupRunAttempts on artifact.AttemptId equals attempt.Id
+                         join run in context.BackupRuns on attempt.RunId equals run.Id
+                         join job in context.BackupJobs on run.JobId equals job.Id
+                         where artifact.TenantId == tenantId && artifact.Id == operation.ArtifactId
+                         select job.Name).FirstOrDefault()
+        });
+        var page = await rows
+            .ApplySearchOr(query.List, VerificationWordsMatch(query.List.Search), Target, row => row.Computer, row => row.SourceDatabase, row => row.SourceJob)
+            .ApplySort(RestoreSorts, query.List, "createdAt", row => row.Id)
+            .ToPagedResultAsync(query.List, cancellationToken);
+        var ids = page.Items.Select(row => row.Id).ToArray();
+        var loaded = (await Operations(context).AsNoTracking().Where(operation => ids.Contains(operation.Id)).ToListAsync(cancellationToken)).ToDictionary(operation => operation.Id);
+        return new RestorePage([.. ids.Select(id => loaded[id])], page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null)

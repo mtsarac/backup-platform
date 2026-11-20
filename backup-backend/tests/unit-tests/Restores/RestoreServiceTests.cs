@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Restores;
@@ -389,35 +390,19 @@ public sealed class RestoreServiceTests
 
     // ---- listing ----
 
-    [Theory]
-    [InlineData(0, 0, 1, 1)]
-    [InlineData(-3, -5, 1, 1)]
-    [InlineData(1, 25, 1, 25)]
-    [InlineData(2, 100, 2, 100)]
-    [InlineData(3, 101, 3, 100)]
-    [InlineData(5, int.MaxValue, 5, 100)]
-    [InlineData(int.MinValue, int.MinValue, 1, 1)]
-    public async Task ListingClampsThePageAndThePageSize(int page, int pageSize, int expectedPage, int expectedPageSize)
-    {
-        var h = new Harness();
-        await h.Service.ListAsync(Tenant, new RestoreQuery(Page: page, PageSize: pageSize), default);
-
-        var (tenant, query) = Assert.Single(h.Store.Lists);
-        Assert.Equal(Tenant, tenant);
-        Assert.Equal(expectedPage, query.Page);
-        Assert.Equal(expectedPageSize, query.PageSize);
-    }
-
     [Fact]
     public async Task ListingPassesTheFiltersThroughUnchanged()
     {
         var h = new Harness();
-        await h.Service.ListAsync(Tenant, new RestoreQuery(RestoreStatus.Running, ArtifactId, AgentGuid, 2, 10), default);
+        var list = new ListQuery(Page: 2, PageSize: 10, Search: "sales", SortField: "target", Direction: SortDirection.Desc);
+        await h.Service.ListAsync(Tenant, new RestoreQuery(list, RestoreStatus.Running, ArtifactId, AgentGuid, Purpose: null), default);
 
         var (_, query) = Assert.Single(h.Store.Lists);
         Assert.Equal(RestoreStatus.Running, query.Status);
         Assert.Equal(ArtifactId, query.ArtifactId);
         Assert.Equal(AgentGuid, query.AgentId);
+        Assert.Equal(list, query.List);
+        Assert.Null(query.Purpose);
     }
 
     [Fact]
@@ -428,7 +413,7 @@ public sealed class RestoreServiceTests
         var pending = Queued();
         h.Store.OnList = (_, _) => new RestorePage([finished, pending], 42, 2, 25);
 
-        var page = await h.Service.ListAsync(Tenant, new RestoreQuery(Page: 2, PageSize: 25), default);
+        var page = await h.Service.ListAsync(Tenant, new RestoreQuery(new ListQuery(Page: 2, PageSize: 25)), default);
 
         Assert.Equal(42, page.TotalCount);
         Assert.Equal(2, page.Page);
@@ -443,7 +428,7 @@ public sealed class RestoreServiceTests
     public async Task AnEmptyPageIsAnEmptyView()
     {
         var h = new Harness();
-        var page = await h.Service.ListAsync(Tenant, new RestoreQuery(), default);
+        var page = await h.Service.ListAsync(Tenant, new RestoreQuery(new ListQuery()), default);
         Assert.Empty(page.Items);
         Assert.Equal(0, page.TotalCount);
     }

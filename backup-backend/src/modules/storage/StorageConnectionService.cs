@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
@@ -59,9 +60,9 @@ public sealed class StorageConnectionService(
         return records?.Select(record => ToView(scope, record)).ToList();
     }
 
-    public async Task<PagedResult<StorageConnectionView>> SearchAsync(StorageConnectionFilter filter, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<PagedResult<StorageConnectionView>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken)
     {
-        var result = await store.SearchAsync(filter, page, pageSize, cancellationToken);
+        var result = await store.SearchAsync(filter, query, cancellationToken);
         return new PagedResult<StorageConnectionView>([.. result.Items.Select(record => ToView(StorageScope.Platform, record))], result.TotalCount, result.Page, result.PageSize);
     }
 

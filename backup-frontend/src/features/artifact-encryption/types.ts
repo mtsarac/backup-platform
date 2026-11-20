@@ -1,5 +1,4 @@
-export const encryptionPolicies = ['Off', 'Optional', 'Required'] as const
-export type EncryptionPolicy = (typeof encryptionPolicies)[number]
+export type EncryptionPolicy = 'Off' | 'Optional' | 'Required'
 
 export type ArtifactFormat = 'v1-plain' | 'v2-bpe'
 export type RecipientType = 'tenant-wrap' | 'platform-recovery' | 'tenant-recovery'

@@ -1,11 +1,20 @@
 import { tx } from '@/lib/i18n'
 import type { AgentCapability } from '@/features/agents/types'
+import { ApiError } from '@/lib/api/client'
 import type { DiscoveryAgentStatus, DiscoveryDatabase, DiscoveryInstanceSummary } from './types'
 
 export const DISCOVERY_CAPABILITY = 'discovery.database-inventory'
 export const SCAN_POLL_MS = 3000
 export const sourceLabels: Record<string, string> = { get Service() { return tx("Servis") }, get Listener() { return tx("Dinleyici (port)") }, Docker: 'Docker' }
-export const engineLabels: Record<string, string> = { mssql: 'MSSQL', postgres: 'PostgreSQL' }
+/** Reason code: "encrypt" is on but the PostgreSQL server offers no (verifiable) TLS. */
+export const TLS_UNAVAILABLE = 'server_tls_unavailable'
+/** The 429 of a second rescan right after the first: nothing is wrong, the scan is already queued. */
+export const isRescanThrottled = (error: unknown) => error instanceof ApiError && (error.reason ?? error.code) === 'rescan_too_soon'
+/** Without a working login the stored database list is from an earlier scan: shown muted as "last known", with no availability verdict. */
+export const isStaleList = (instance: Pick<DiscoveryInstanceSummary, 'access'>) => instance.access !== 'Authenticated'
+export const staleListTitle = () => tx("Son bilinen liste")
+export const staleListNote = () => tx("Veritabanları listelenemiyor; son başarılı aramadan kalan liste gösteriliyor.")
+export const engineLabels: Record<string, string> = { mssql: 'SQL Server', postgres: 'PostgreSQL', get 'file-system'() { return tx("Dosya / Klasör") } }
 
 // Reason codes are agent-produced fixed codes; unknown ones are shown as the bare code, never as free text.
 const reasonLabels: Record<string, string> = {
@@ -35,6 +44,7 @@ const reasonLabels: Record<string, string> = {
   get authentication_failed() { return tx("Kimlik doğrulaması başarısız.") },
   get unreachable() { return tx("Sunucuya bağlanılamadı.") },
   get connection_failed() { return tx("Sunucu yanıt veriyor ancak oturum açılamadı (şifreleme ayarını kontrol edin).") },
+  get server_certificate_untrusted() { return tx("Sunucunun sertifikası doğrulanamadı.") },
   get unexpected() { return tx("Beklenmeyen hata.") },
   get credentials_required() { return tx("Kimlik bilgisi gerekli.") },
   get not_supported() { return tx("Desteklenmiyor.") },

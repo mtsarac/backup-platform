@@ -36,7 +36,6 @@ public sealed record RestoreStartResult(RestoreStartOutcome Outcome, RestoreView
 public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions options, TimeProvider time)
 {
     public const string StagingReference = "default";
-    private const int MaxListPageSize = 100;
 
     /// <summary>
     /// Validates the request, then asks the store to create the restore. The caller maps <see cref="RestoreStartResult.Outcome"/> to a response.
@@ -93,10 +92,10 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         return operation is null ? null : ToView(operation, includeResult: true, options.RollbackRetention, time.GetUtcNow());
     }
 
-    /// <summary>Newest first. The result of each restore is left out of the list: it can be large, and the detail view has it.</summary>
+    /// <summary>The result of each restore is left out of the list: it can be large, and the detail view has it.</summary>
     public async Task<RestorePageView> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken)
     {
-        var page = await store.ListAsync(tenantId, query with { Page = Math.Max(1, query.Page), PageSize = Math.Clamp(query.PageSize, 1, MaxListPageSize) }, cancellationToken);
+        var page = await store.ListAsync(tenantId, query, cancellationToken);
         return new RestorePageView([.. page.Items.Select(operation => ToView(operation, includeResult: false, options.RollbackRetention, time.GetUtcNow()))], page.TotalCount, page.Page, page.PageSize);
     }
 
@@ -311,10 +310,12 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.OperationTimedOut => "A restore operation timed out.",
         RestoreFailureCodes.AuthenticationFailed => "The database credentials were rejected.",
         RestoreFailureCodes.PermissionDenied => "A required permission is missing.",
+        RestoreFailureCodes.ServerCertificateUntrusted => "The database server's certificate could not be verified.",
         RestoreFailureCodes.VerificationFailed => "The backup restored, but the restored database did not pass its integrity or data-read checks.",
         RestoreFailureCodes.InvalidConfiguration => "The restore configuration is invalid.",
         RestoreFailureCodes.UnsupportedCapability => "The agent or the database does not support a requested restore capability.",
         RestoreFailureCodes.StagingInvalid => "The staging directory is not usable.",
+        RestoreFailureCodes.AgentNotConfigured => "The agent is not set up to run this restore: its staging folder, local backup folder or database client tools are missing.",
         RestoreFailureCodes.Cancelled => "The restore was cancelled.",
         RestoreFailureCodes.AgentLost => "The agent lease expired before the restore completed.",
         RestoreFailureCodes.NotClaimed => "No agent picked up the restore in time, so it was withdrawn without touching the target.",

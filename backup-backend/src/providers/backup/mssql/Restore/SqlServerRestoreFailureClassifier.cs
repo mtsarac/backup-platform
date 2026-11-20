@@ -32,6 +32,7 @@ public static class SqlServerRestoreReasons
     public const string PermissionDenied = SqlServerBackupReasons.PermissionDenied;
     public const string ConnectionLost = SqlServerBackupReasons.ConnectionLost;
     public const string ServerUnavailable = SqlServerBackupReasons.ServerUnavailable;
+    public const string ServerCertificateUntrusted = SqlServerBackupReasons.ServerCertificateUntrusted;
     public const string AuthenticationFailed = SqlServerBackupReasons.AuthenticationFailed;
     public const string ConnectionTimeout = SqlServerPreCheckReasons.ConnectionTimeout;
     public const string ConnectionSettingsInvalid = SqlServerPreCheckReasons.ConnectionSettingsInvalid;
@@ -143,6 +144,12 @@ internal static class SqlServerRestoreFailureClassifier
     {
         ArgumentNullException.ThrowIfNull(exception);
 
+        // The inner SqlException of a failed handshake carries a number no statement table knows, so the kind decides.
+        if (exception.Kind == DatabaseFailureKind.ServerCertificateUntrusted)
+        {
+            return FromConnection(exception);
+        }
+
         if (exception.InnerException is SqlException sql)
         {
             return Classify(statement, ErrorNumbers(sql));
@@ -169,6 +176,7 @@ internal static class SqlServerRestoreFailureClassifier
             DatabaseFailureKind.Timeout => new(RestoreFailureKind.PreCheckFailed, SqlServerRestoreReasons.ConnectionTimeout, exception.Message, BackupFailureCause.Timeout),
             DatabaseFailureKind.InvalidConfiguration => new(RestoreFailureKind.PreCheckFailed, SqlServerRestoreReasons.ConnectionSettingsInvalid, exception.Message, BackupFailureCause.InvalidConfiguration),
             DatabaseFailureKind.Unreachable => new(RestoreFailureKind.PreCheckFailed, SqlServerRestoreReasons.ServerUnavailable, exception.Message, BackupFailureCause.DatabaseUnavailable),
+            DatabaseFailureKind.ServerCertificateUntrusted => new(RestoreFailureKind.PreCheckFailed, SqlServerRestoreReasons.ServerCertificateUntrusted, exception.Message, BackupFailureCause.ServerCertificateUntrusted),
             _ => new(RestoreFailureKind.PreCheckFailed, SqlServerRestoreReasons.UnexpectedError, exception.Message, BackupFailureCause.Unclassified)
         };
     }

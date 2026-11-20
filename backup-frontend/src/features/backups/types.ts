@@ -88,7 +88,7 @@ export interface BackupRun {
 }
 
 export interface BackupRunFilters {
-  status?: BackupRunStatus | ''
+  status?: string
   jobId?: string
   agentId?: string
   from?: string
@@ -96,6 +96,9 @@ export interface BackupRunFilters {
   trigger?: BackupTrigger | ''
   page?: number
   pageSize?: number
+  search?: string
+  sort?: string
+  dir?: 'asc' | 'desc'
 }
 
 export interface BackupRunPage {

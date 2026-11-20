@@ -21,13 +21,15 @@ interface ConfirmProps {
   onConfirm: () => void
   confirmLabel: string
   confirmDisabled?: boolean
+  /** The action cannot be undone: the confirm button is red like the button that opened the dialog. */
+  destructive?: boolean
   /** Inputs the action needs (for example a value to set), shown under the consequences. */
   children?: ReactNode
   /** When set, the action stays blocked until the user types this name exactly; for deletions and other hard-to-undo actions. */
   name?: string
 }
 
-const isDescribed = (error: unknown): error is ErrorDescription => typeof error === 'object' && error !== null && 'dataImpact' in error
+const isDescribed = (error: unknown): error is ErrorDescription => typeof error === 'object' && error !== null && 'what' in error
 
 function Consequences({ consequence }: { consequence: Consequence }) {
   return <dl className="space-y-2 text-sm">
@@ -39,13 +41,13 @@ function Consequences({ consequence }: { consequence: Consequence }) {
 }
 
 /** The typed name lives inside the popup, so it is forgotten whenever the dialog closes. */
-function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, children, name }: Omit<ConfirmProps, 'open' | 'onClose'>) {
+function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, destructive, children, name }: Omit<ConfirmProps, 'open' | 'onClose'>) {
   const cancelRef = useRef<HTMLButtonElement>(null)
   const inputId = useId()
   const [typed, setTyped] = useState('')
   const blocked = pending || confirmDisabled || (name !== undefined && typed !== name)
   function submit(event: FormEvent) { event.preventDefault(); event.stopPropagation(); if (!blocked) onConfirm() }
-  return <Dialog.Popup initialFocus={name === undefined ? cancelRef : undefined} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-overlay">
+  return <Dialog.Popup initialFocus={name === undefined ? cancelRef : undefined} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
     <Dialog.Title className="text-lg font-semibold text-text-heading">{title}</Dialog.Title>
     <Dialog.Description render={<div />} className="text-sm"><Consequences consequence={consequence} /></Dialog.Description>
     <form onSubmit={submit} className="space-y-4">
@@ -57,7 +59,7 @@ function Body({ title, consequence, pending, error, errorScope, onConfirm, confi
       {error ? isDescribed(error) ? <ErrorNotice {...error} /> : <ErrorNotice error={error} scope={errorScope} /> : null}
       <div className="flex flex-wrap justify-end gap-2">
         <Dialog.Close render={<Button ref={cancelRef} type="button" variant="outline" disabled={pending} />}>{tx("Vazgeç")}</Dialog.Close>
-        <Button type="submit" disabled={blocked}>{pending ? tx('İşleniyor…') : confirmLabel}</Button>
+        <Button type="submit" variant={destructive ? 'destructive' : undefined} disabled={blocked}>{pending ? tx('İşleniyor…') : confirmLabel}</Button>
       </div>
     </form>
   </Dialog.Popup>
@@ -68,7 +70,7 @@ export function ConfirmDialog({ open, onClose, pending, ...body }: ConfirmProps)
   useLanguage()
   return <Dialog.Root open={open} onOpenChange={next => { if (!next && !pending) onClose() }} disablePointerDismissal={pending}>
     <Dialog.Portal>
-      <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/50" />
+      <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
       <Body pending={pending} {...body} />
     </Dialog.Portal>
   </Dialog.Root>

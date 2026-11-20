@@ -127,7 +127,7 @@ export interface RestoreView {
   sourceAgentName?: string | null
   artifactCreatedAt?: string | null
 }
-export interface RestoreFilters { page?: number; pageSize?: number; status?: RestoreStatus | ''; artifactId?: string; agentId?: string; purpose?: 'Verification' }
+export interface RestoreFilters { page?: number; pageSize?: number; status?: string; artifactId?: string; agentId?: string; purpose?: 'Verification' | 'All'; search?: string; sort?: string; dir?: 'asc' | 'desc' }
 export interface RestorePage { items: RestoreView[]; totalCount: number; page: number; pageSize: number }
 export interface StartRestoreVariables { artifactId: string; request: StartRestoreRequest; idempotencyKey: string }
 export interface StartRestorePrecheckVariables { artifactId: string; request: StartRestorePrecheckRequest; idempotencyKey: string }

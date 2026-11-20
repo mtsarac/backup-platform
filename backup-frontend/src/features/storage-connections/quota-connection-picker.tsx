@@ -1,38 +1,34 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { TextInput } from '@/components/ui/text-input'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { toServerQuery } from '@/features/lists/server-list-query'
+import { useListState } from '@/features/lists/use-list-state'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { usePlatformConnections, usePlatformProviders } from './hooks'
 import { connectionOptions } from './job-connection-picker-utils'
 import { CheckField } from '@/components/ui/check-field'
 
+const listConfig = { search: true, sort: { first: { createdAt: 'desc' }, default: { key: 'createdAt', dir: 'desc' } }, pageSize: 20, pageKey: 'connections-page', paramPrefix: 'connections-' } as const
+
 /** Quotas account for existing replicas, including disabled connections. Catalog refreshes never remove selected IDs. */
 export function QuotaConnectionPicker({ values, onChange, invalid }: { values: readonly string[]; onChange: (values: string[]) => void; invalid?: boolean }) {
   useLanguage()
-  const [draft, setDraft] = useState('')
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const state = useListState(listConfig)
   const [selectedLabels, setSelectedLabels] = useState<Record<string, string>>({})
-  const connections = usePlatformConnections({ search, page, pageSize: 20 })
+  const connections = usePlatformConnections(toServerQuery(state))
   const providers = usePlatformProviders()
   const options = connectionOptions(connections.data?.items ?? [], providers.data?.items ?? [], true)
   const error = connections.error || providers.error
 
-  function searchConnections() { setSearch(draft.trim()); setPage(1) }
   function toggle(id: string, label: string) {
     setSelectedLabels((current) => ({ ...current, [id]: label }))
     onChange(values.includes(id) ? values.filter((value) => value !== id) : [...values, id])
   }
 
   return <div className="space-y-2">
-    <div className="flex items-end gap-2">
-      <label className="min-w-0 flex-1 text-xs text-text-muted">{tx("Tenant veya bağlantı adı ara")}<TextInput className="mt-1" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
-          if (event.key === 'Enter') { event.preventDefault(); searchConnections() }
-        }} />
-      </label>
-      <Button type="button" variant="outline" onClick={searchConnections}>{tx("Ara")}</Button>
-    </div>
+    <ListToolbar state={state} label={tx("Depolama bağlantıları filtreleri")} search={{ label: tx("Tenant veya bağlantı adı ara") }} />
     <fieldset className="space-y-2" aria-invalid={invalid}>
       <legend className="text-xs text-text-muted">{tx("Depolama bağlantıları listesi")}</legend>
       {values.map((id, index) => {
@@ -44,11 +40,7 @@ export function QuotaConnectionPicker({ values, onChange, invalid }: { values: r
     {connections.isFetching && <p role="status" className="text-xs text-text-muted">{tx("Bağlantılar yükleniyor…")}</p>}
     {error ? <p role="status" className="text-xs text-error">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={() => { void connections.refetch(); void providers.refetch() }}>{tx("Yeniden yükle")}</Button></p>
       : !connections.isPending && options.length === 0 && <p className="text-xs text-text-muted">{tx("Eşleşen bağlantı yok.")}</p>}
-    <div className="flex items-center gap-2">
-      <Button type="button" variant="outline" size="sm" disabled={page === 1 || connections.isFetching} onClick={() => setPage(page - 1)}>{tx("Önceki")}</Button>
-      <span className="text-xs text-text-muted">{tx("Sayfa")}{' '}{page}</span>
-      <Button type="button" variant="outline" size="sm" disabled={connections.isFetching || !connections.data || page * 20 >= connections.data.totalCount} onClick={() => setPage(page + 1)}>{tx("Sonraki")}</Button>
-    </div>
+    {connections.data && <ListPager state={state} total={connections.data.totalCount} disabled={connections.isFetching} label={tx("Depolama bağlantıları sayfaları")} />}
     <p className="text-xs text-text-muted">{tx("Yalnızca seçilen bağlantılara ait kopyalar kotaya dahildir. Devre dışı hedefler de mevcut kopyalar için seçilebilir. Arama ve yenileme mevcut seçimleri değiştirmez.")}</p>
   </div>
 }

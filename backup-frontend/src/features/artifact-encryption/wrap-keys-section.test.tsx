@@ -16,6 +16,21 @@ beforeEach(() => {
 const mount = () => renderPlatform(<WrapKeysSection tenantId="tenant-a" tenantName="Acme" />)
 
 describe('tenant wrap key lifecycle', () => {
+  it('sorts newest keys first and reverses the order from the creation header', async () => {
+    vi.mocked(api.getWrapKeys).mockResolvedValue({ items: [
+      makeWrapKey({ version: 1, state: 'DecryptOnly', artifactCount: 1, createdAt: '2026-01-01T00:00:00Z' }),
+      makeWrapKey({ version: 2, state: 'Active', artifactCount: 2, createdAt: '2026-02-01T00:00:00Z' }),
+    ] })
+    mount()
+    const rows = await screen.findAllByRole('row')
+    expect(within(rows[1]).getByText('2')).toBeInTheDocument()
+    const header = screen.getByRole('columnheader', { name: 'Oluşturulma' })
+    expect(header).toHaveAttribute('aria-sort', 'descending')
+    fireEvent.click(within(header).getByRole('button'))
+    expect(within(screen.getAllByRole('row')[1]).getByText('1')).toBeInTheDocument()
+    expect(header).toHaveAttribute('aria-sort', 'ascending')
+  })
+
   it('lists versions with state, artifact impact and no key material', async () => {
     mount()
     const rows = await screen.findAllByRole('row')
@@ -23,9 +38,9 @@ describe('tenant wrap key lifecycle', () => {
     expect(within(rows[2]).getByText('7')).toBeInTheDocument()
     expect(within(rows[2]).queryByText('c'.repeat(32))).toBeNull()
     await userEvent.click(within(rows[2]).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const dialog = within(await screen.findByRole('dialog'))
+    const dialog = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
     expect(dialog.getByText('c'.repeat(32))).toBeVisible()
-    expect(dialog.getByRole('button', { name: 'Kopyala: Anahtar kimliği' })).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('cannot retire the active key and offers nothing for a retired one', async () => {

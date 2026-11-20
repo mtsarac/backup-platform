@@ -2,11 +2,14 @@ using System.Text.Json;
 using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Downloads;
+using BackupPlatform.Application.Lists;
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Downloads;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
@@ -579,124 +582,109 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
     private const string RetentionLock = "SELECT pg_advisory_xact_lock(hashtext('audit_retention'))";
 
     /// <summary>
-    /// One page of download attempts, newest first. An attempt is a download session, or a refusal that happened before any session existed.
+    /// One page of download attempts, newest first by default. An attempt is a download session, or a refusal that happened before any session existed.
     /// A refusal of a prepared session carries that session's id and is shown as the session's outcome, never matched by time, user or artifact.
-    /// Both sources are filtered and keyset-limited in the database, so every attempt is reachable by following the cursor.
+    /// Both sources are one SQL union, so search, sort and paging see every attempt.
     /// </summary>
-    public async Task<DownloadAttemptPage> ListDownloadAttemptsAsync(
+    public async Task<PagedResult<DownloadAttemptView>> ListDownloadAttemptsAsync(
         DownloadAttemptFilter filter,
         bool tenantScoped,
-        DownloadAttemptCursor? after,
-        int limit,
+        ListQuery query,
         CancellationToken cancellationToken)
     {
-        var empty = new DownloadAttemptPage([], null);
-        if (tenantScoped && filter.TenantId is null) return empty;
+        if (tenantScoped && filter.TenantId is null) return new PagedResult<DownloadAttemptView>([], 0, query.Page, query.PageSize);
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
 
-        var result = string.IsNullOrWhiteSpace(filter.Result) ? null : filter.Result.Trim();
-        var refusedOnly = string.Equals(result, "Refused", StringComparison.OrdinalIgnoreCase);
-        DownloadState? state = result is null || refusedOnly ? null : Enum.Parse<DownloadState>(result, ignoreCase: true);
-        var refusals = context.AuditEvents.AsNoTracking().Where(e => e.Action == RefusedAction && e.TargetType == "download");
-
-        var sessionQuery = context.DownloadSessions.AsNoTracking().AsQueryable();
-        var refusalQuery = refusals.Where(e => !EF.Functions.JsonExists(e.DetailsJson, "sessionId"));
-        // Only a refusal the platform recorded against a session counts for it: the target id of a sessionless refusal is caller-chosen.
-        var sessionBound = refusals.Where(e => EF.Functions.JsonExists(e.DetailsJson, "sessionId"));
-        if (filter.TenantId is { } tenantId)
+        var rows = context.Database.SqlQueryRaw<AttemptRow>(AttemptsSql).AsNoTracking();
+        if (filter.TenantId is { } tenantId) rows = rows.Where(r => r.TenantId == tenantId.Value);
+        if (filter.ShareId is { } shareId) rows = rows.Where(r => r.ShareId == shareId);
+        if (filter.ArtifactId is { } artifactId) rows = rows.Where(r => r.ArtifactId == artifactId);
+        if (filter.InitiatingUserId is { } userId) rows = rows.Where(r => r.UserId == userId);
+        if (!string.IsNullOrWhiteSpace(filter.Result))
         {
-            sessionQuery = sessionQuery.Where(s => s.TenantId == tenantId);
-            refusalQuery = refusalQuery.Where(e => e.TenantId == tenantId);
-        }
-        if (filter.ShareId is { } shareId)
-        {
-            sessionQuery = sessionQuery.Where(s => s.ShareId == shareId);
-            refusalQuery = refusalQuery.Where(e => EF.Functions.JsonContains(e.DetailsJson, JsonSerializer.Serialize(new { shareId })));
-        }
-        if (filter.ArtifactId is { } artifactId)
-        {
-            sessionQuery = sessionQuery.Where(s => s.ArtifactId == artifactId);
-            refusalQuery = refusalQuery.Where(e => EF.Functions.JsonContains(e.DetailsJson, JsonSerializer.Serialize(new { artifactId })));
-        }
-        if (filter.InitiatingUserId is { } initiatingUserId)
-        {
-            var actor = new UserId(initiatingUserId);
-            sessionQuery = sessionQuery.Where(s => s.UserId == initiatingUserId);
-            refusalQuery = refusalQuery.Where(e => e.ActorUserId == actor);
-        }
-        if (after is not null)
-        {
-            sessionQuery = sessionQuery.Where(s => s.CreatedAt < after.StartedAtUtc || (s.CreatedAt == after.StartedAtUtc && s.Id.CompareTo(after.Id) < 0));
-            refusalQuery = refusalQuery.Where(e => e.At < after.StartedAtUtc || (e.At == after.StartedAtUtc && e.Id.CompareTo(after.Id) < 0));
+            var result = filter.Result.Trim();
+            var wanted = string.Equals(result, "Refused", StringComparison.OrdinalIgnoreCase) ? "Refused" : Enum.Parse<DownloadState>(result, ignoreCase: true).ToString();
+            rows = rows.Where(r => r.Result == wanted);
         }
 
-        // A prepared session that was refused when its stream started is reported as Refused while it is still unstarted.
-        var candidates = sessionQuery.Select(s => new
-        {
-            Session = s,
-            Refused = s.State == DownloadState.Ready && sessionBound.Any(e => e.TenantId == s.TenantId && e.TargetId == s.Id.ToString())
-        });
-        if (refusedOnly) candidates = candidates.Where(row => row.Refused);
-        else if (state is not null) candidates = candidates.Where(row => row.Session.State == state && !row.Refused);
+        var page = await rows
+            .ApplySearch(query, r => r.ArtifactName, r => r.UserName, r => r.TenantName, r => r.Result)
+            .ApplySort(AttemptSorts, query, "startedAt", r => r.Id)
+            .ToPagedResultAsync(query, cancellationToken);
 
-        var sessions = await candidates.OrderByDescending(row => row.Session.CreatedAt).ThenByDescending(row => row.Session.Id)
-            .Take(limit + 1).ToListAsync(cancellationToken);
-        var sessionless = result is null || refusedOnly
-            ? await refusalQuery.OrderByDescending(e => e.At).ThenByDescending(e => e.Id).Take(limit + 1).ToListAsync(cancellationToken)
-            : [];
-
-        var refusedSessionIds = sessions.Where(row => row.Refused).Select(row => row.Session.Id.ToString("D")).ToArray();
-        var sessionRefusals = refusedSessionIds.Length == 0 ? [] : (await sessionBound.Where(e => refusedSessionIds.Contains(e.TargetId)).ToListAsync(cancellationToken))
-            .GroupBy(e => e.TargetId).ToDictionary(group => group.Key, group => group.MaxBy(e => e.At)!);
-
-        var merged = sessions.Select(row =>
-            {
-                var s = row.Session;
-                var refusal = row.Refused ? sessionRefusals.GetValueOrDefault(s.Id.ToString("D")) : null;
-                return new Attempt(s.Id, s.ShareId, s.TenantId, s.ArtifactId, s.UserId, s.CreatedAt, refusal?.At ?? s.ReleasedAt,
-                    refusal is null ? s.State.ToString() : "Refused", s.TransferredBytes, refusal is null ? s.FailureCode : RefusalReason(refusal), s.Decrypted);
-            })
-            .Concat(sessionless.Select(ToAttempt).OfType<Attempt>())
-            // PostgreSQL orders uuid bytewise, which is the ordinal order of its hex form; the in-memory merge must agree with the keyset predicate.
-            .OrderByDescending(attempt => attempt.StartedAtUtc).ThenByDescending(attempt => attempt.Id.ToString("N"), StringComparer.Ordinal)
-            .ToList();
-        var page = merged.Take(limit).ToList();
-        if (page.Count == 0) return empty;
-
-        HashSet<Guid>? tenantShareIds = tenantScoped
+        // A tenant never learns the id of a share that is not its own, even when someone used it against its artifact.
+        HashSet<Guid>? tenantShareIds = tenantScoped && page.Items.Any(r => r.ShareId is not null)
             ? [.. await context.BackupShares.AsNoTracking().Where(s => s.TenantId == filter.TenantId).Select(s => s.Id).ToListAsync(cancellationToken)]
             : null;
-        var userNames = await ResolveUserNamesAsync(context, page.Select(a => new UserId(a.UserId)).Distinct().ToArray(), cancellationToken);
-        var tenantNames = await ResolveTenantNamesAsync(context, page.Select(a => a.TenantId).Distinct().ToArray(), cancellationToken);
-        var artifactNames = await ResolveArtifactNamesAsync(context, page.Select(a => a.ArtifactId).Where(id => id != Guid.Empty).Distinct().ToArray(), cancellationToken, filter.TenantId);
-
-        var items = page.Select(a => new DownloadAttemptView(
-            a.Id,
-            // A tenant never learns the id of a share that is not its own, even when someone used it against its artifact.
-            a.ShareId is { } id && tenantShareIds is not null && !tenantShareIds.Contains(id) ? null : a.ShareId,
-            a.TenantId.Value, tenantNames.GetValueOrDefault(a.TenantId), a.ArtifactId, artifactNames.GetValueOrDefault(a.ArtifactId),
-            a.UserId, userNames.GetValueOrDefault(new UserId(a.UserId)), a.StartedAtUtc, a.EndedAtUtc, a.Result, a.Bytes, a.FailureReason, a.Decrypted)).ToList();
-        var last = page[^1];
-        return new DownloadAttemptPage(items, merged.Count > limit ? new DownloadAttemptCursor(last.StartedAtUtc, last.Id).ToString() : null);
+        var items = page.Items.Select(r => new DownloadAttemptView(
+            r.Id, r.ShareId is { } id && tenantShareIds is not null && !tenantShareIds.Contains(id) ? null : r.ShareId,
+            r.TenantId, r.TenantName, r.ArtifactId, r.ArtifactName, r.UserId, r.UserName, r.StartedAtUtc, r.EndedAtUtc, r.Result, r.Bytes, r.FailureReason, r.Decrypted)).ToList();
+        return new PagedResult<DownloadAttemptView>(items, page.TotalCount, page.Page, page.PageSize);
     }
 
-    private sealed record Attempt(Guid Id, Guid? ShareId, TenantId TenantId, Guid ArtifactId, Guid UserId, DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc,
-        string Result, long Bytes, string? FailureReason, bool Decrypted);
-
-    private static string RefusalReason(AuditEvent audit)
+    private sealed class AttemptRow
     {
-        using var details = JsonDocument.Parse(audit.DetailsJson);
-        return TryGetString(details.RootElement, "failureReason") ?? "refused";
+        public Guid Id { get; set; }
+        public Guid? ShareId { get; set; }
+        public Guid TenantId { get; set; }
+        public string? TenantName { get; set; }
+        public Guid ArtifactId { get; set; }
+        public string? ArtifactName { get; set; }
+        public Guid UserId { get; set; }
+        public string? UserName { get; set; }
+        public DateTimeOffset StartedAtUtc { get; set; }
+        public DateTimeOffset? EndedAtUtc { get; set; }
+        public string Result { get; set; } = "";
+        public long Bytes { get; set; }
+        public string? FailureReason { get; set; }
+        public bool Decrypted { get; set; }
     }
 
-    private static Attempt? ToAttempt(AuditEvent audit)
-    {
-        if (audit.TenantId is not { } tenantId) return null;
-        using var details = JsonDocument.Parse(audit.DetailsJson);
-        var root = details.RootElement;
-        return new Attempt(audit.Id, TryGetGuid(root, "shareId"), tenantId, TryGetGuid(root, "artifactId") ?? Guid.Empty, audit.ActorUserId.Value,
-            audit.At, audit.At, "Refused", 0, TryGetString(root, "failureReason") ?? "refused", false);
-    }
+    private static readonly SortMap<AttemptRow> AttemptSorts = SortMap<AttemptRow>.Create()
+        .Date("startedAt", r => r.StartedAtUtc)
+        .Date("endedAt", r => r.EndedAtUtc)
+        .Text("artifact", r => r.ArtifactName)
+        .Text("user", r => r.UserName)
+        .Text("tenant", r => r.TenantName)
+        // The result is shown by its Turkish label: Başarısız, Hazır, Hazırlanıyor, İndiriliyor, İptal edildi, Reddedildi, Tamamlandı.
+        .Ordinal("result", r => r.Result, "Failed", "Ready", "Preparing", "Streaming", "Cancelled", "Refused", "Completed")
+        .Value("bytes", r => r.Bytes);
+
+    // The text goes through string.Format (SqlQueryRaw), so a literal brace is doubled.
+    // Sessions, with a refusal of a prepared (Ready) session shown as their outcome, united with the refusals that have no session.
+    // Only a refusal the platform recorded against a session counts for it: the target id of a sessionless refusal is caller-chosen.
+    private const string AttemptsSql = """
+        SELECT u.*, tenant."Name" AS "TenantName", usr."DisplayName" AS "UserName", artifact."Name" AS "ArtifactName"
+        FROM (
+            SELECT s."Id", s."ShareId", s."TenantId", s."ArtifactId", s."UserId", s."CreatedAt" AS "StartedAtUtc",
+                   CASE WHEN refusal."Id" IS NULL THEN s."ReleasedAt" ELSE refusal."At" END AS "EndedAtUtc",
+                   CASE WHEN refusal."Id" IS NULL THEN s."State" ELSE 'Refused' END AS "Result",
+                   s."TransferredBytes" AS "Bytes",
+                   CASE WHEN refusal."Id" IS NULL THEN s."FailureCode" ELSE COALESCE(refusal."DetailsJson" ->> 'failureReason', 'refused') END AS "FailureReason",
+                   s."Decrypted"
+            FROM download_sessions s
+            LEFT JOIN LATERAL (
+                SELECT e."Id", e."At", e."DetailsJson" FROM audit_events e
+                WHERE s."State" = 'Ready' AND e."Action" = 'download.refused' AND e."TargetType" = 'download' AND e."TenantId" = s."TenantId"
+                  AND e."TargetId" = s."Id"::text AND jsonb_exists(e."DetailsJson", 'sessionId')
+                ORDER BY e."At" DESC LIMIT 1) refusal ON TRUE
+            UNION ALL
+            SELECT e."Id", CASE WHEN e."DetailsJson" ->> 'shareId' ~* '^[0-9a-f-]{{36}}$' THEN (e."DetailsJson" ->> 'shareId')::uuid END, e."TenantId",
+                   CASE WHEN e."DetailsJson" ->> 'artifactId' ~* '^[0-9a-f-]{{36}}$' THEN (e."DetailsJson" ->> 'artifactId')::uuid ELSE '00000000-0000-0000-0000-000000000000'::uuid END,
+                   e."ActorUserId", e."At", e."At", 'Refused', 0::bigint, COALESCE(e."DetailsJson" ->> 'failureReason', 'refused'), FALSE
+            FROM audit_events e
+            WHERE e."Action" = 'download.refused' AND e."TargetType" = 'download' AND e."TenantId" IS NOT NULL AND NOT jsonb_exists(e."DetailsJson", 'sessionId')
+        ) u
+        LEFT JOIN tenants tenant ON tenant."Id" = u."TenantId"
+        LEFT JOIN users usr ON usr."Id" = u."UserId"
+        LEFT JOIN LATERAL (
+            SELECT COALESCE(NULLIF(BTRIM(run."Configuration" ->> 'Database'), ''), job."Name") AS "Name"
+            FROM backup_artifacts art
+            JOIN backup_run_attempts attempt ON attempt."Id" = art."AttemptId" AND attempt."TenantId" = art."TenantId"
+            JOIN backup_runs run ON run."Id" = attempt."RunId" AND run."TenantId" = attempt."TenantId"
+            JOIN backup_jobs job ON job."Id" = run."JobId" AND job."TenantId" = run."TenantId"
+            WHERE art."Id" = u."ArtifactId" AND art."TenantId" = u."TenantId" LIMIT 1) artifact ON TRUE
+        """;
 
     public async Task<AuditRetentionSettingsView> GetAuditRetentionAsync(CancellationToken cancellationToken)
     {
@@ -811,24 +799,6 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         await transaction.CommitAsync(cancellationToken);
 
         return new AuditHistoryPruneResult(auditEventsRemoved, downloadSessionsRemoved, sharesRemoved);
-    }
-
-    private static Guid? TryGetGuid(JsonElement root, string property)
-    {
-        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.String && Guid.TryParse(elem.GetString(), out var g))
-        {
-            return g;
-        }
-        return null;
-    }
-
-    private static string? TryGetString(JsonElement root, string property)
-    {
-        if (root.TryGetProperty(property, out var elem) && elem.ValueKind == JsonValueKind.String)
-        {
-            return elem.GetString();
-        }
-        return null;
     }
 
     private static BackupShareView ToView(

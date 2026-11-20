@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVisibleTab } from '@/hooks/use-visible-tab'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { cancelRestore, getRestore, getRestores, getRestoreTargets, removeRollbackCopy, retryRestoreCleanup, startRestore, startRestoreDiscovery, startRestorePrecheck, startRestoreVerification } from './api'
@@ -17,6 +17,7 @@ export function useRestores(filters: RestoreFilters = {}) {
   return useQuery({
     queryKey: restoreQueryKeys.list(tenantId, filters),
     queryFn: ({ signal }) => getRestores(tenantId, filters, signal),
+    placeholderData: keepPreviousData,
     refetchInterval: (query) => visible && !query.state.error && query.state.data?.items.some((restore) => isActiveRestore(restore.status)) ? 5000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,

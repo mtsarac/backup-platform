@@ -39,9 +39,6 @@ public sealed class StorageSecretRequest
 /// </summary>
 public static class StorageConnectionEndpoints
 {
-    private const int DefaultPageSize = 25;
-    private const int MaximumPageSize = 100;
-
     public static IEndpointRouteBuilder MapStorageConnectionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
@@ -90,7 +87,7 @@ public static class StorageConnectionEndpoints
             return await next(context);
         });
         platform.MapGet("/storage-providers", ListProviders);
-        platform.MapGet("/storage-connections", SearchAsync);
+        platform.MapGet("/storage-connections", SearchAsync).WithListQuery();
         platform.MapGet("/tenants/{tenantId:guid}/storage-connections", ListForPlatformAsync);
         platform.MapPost("/tenants/{tenantId:guid}/storage-connections", CreateForPlatformAsync);
         platform.MapGet("/storage-connections/{id:guid}", GetForPlatformAsync);
@@ -202,14 +199,8 @@ public static class StorageConnectionEndpoints
     // ---- platform -----------------------------------------------------------------------------------------------------------------------------
 
     private static async Task<IResult> SearchAsync(
-        string? ownership, string? providerType, Guid? tenantId, bool? enabled, string? search, int? page, int? pageSize, StorageConnectionService service, FeatureFlags flags, CancellationToken cancellationToken)
+        string? ownership, string? providerType, Guid? tenantId, bool? enabled, [AsParameters] ListParams list, StorageConnectionService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
-        var p = page ?? 1;
-        var size = pageSize ?? DefaultPageSize;
-        if (p is < 1 or > 1_000_000 || size is < 1 or > MaximumPageSize)
-        {
-            return Results.BadRequest(new { error = "invalid_request", field = "page", code = "invalid_value" });
-        }
         StorageOwnership? parsedOwnership = null;
         if (ownership is not null)
         {
@@ -219,8 +210,8 @@ public static class StorageConnectionEndpoints
             }
             parsedOwnership = value;
         }
-        var filter = new StorageConnectionFilter(parsedOwnership, providerType, tenantId is { } id ? new TenantId(id) : null, enabled, search, !flags.IsEnabled(Features.Smb));
-        var result = await service.SearchAsync(filter, p, size, cancellationToken);
+        var filter = new StorageConnectionFilter(parsedOwnership, providerType, tenantId is { } id ? new TenantId(id) : null, enabled, !flags.IsEnabled(Features.Smb));
+        var result = await service.SearchAsync(filter, list.ToQuery(), cancellationToken);
         return Results.Ok(new { items = result.Items.Select(ToResponse).ToList(), totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize });
     }
 

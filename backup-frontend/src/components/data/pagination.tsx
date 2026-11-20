@@ -17,6 +17,7 @@ function pageCount(totalCount: number, pageSize: number) {
 export function Pagination({ page, pageSize, totalCount, onPageChange, disabled = false, label = tx('Sayfalama') }: PaginationProps) {
   useLanguage()
   const lastPage = pageCount(totalCount, pageSize)
+  if (lastPage === 1) return <nav aria-label={label} className="text-sm text-text-muted">{totalCount}{' '}{tx("kayıt")}</nav>
   return <nav aria-label={label} className="flex flex-wrap items-center justify-between gap-3 text-sm">
     <span className="text-text-muted">{totalCount}{' '}{tx("kayıt · Sayfa")}{' '}{page} / {lastPage}</span>
     <div className="flex gap-2">

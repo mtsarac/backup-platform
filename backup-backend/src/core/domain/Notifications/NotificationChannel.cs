@@ -79,7 +79,7 @@ public sealed class NotificationChannel : ITenantOwned
         var display = name?.Trim();
         if (string.IsNullOrEmpty(display) || display.Length > MaximumNameLength || display.Any(char.IsControl))
             throw new ArgumentException("Invalid notification channel name.", nameof(name));
-        return (display, display.ToLowerInvariant());
+        return (display, NameKey.Of(display));
     }
 
     private static (string Target, string Normalized) Targets(NotificationChannelKind kind, string? target)

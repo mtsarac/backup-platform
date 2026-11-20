@@ -45,6 +45,44 @@ beforeEach(() => {
 })
 
 describe('platform tenant detail', () => {
+  it('searches and sorts members with the member page key', async () => {
+    renderPlatform(<PlatformTenantDetailPage />, { path: '/platform/tenants/tenant-a?tab=people&members-page=2', route: '/platform/tenants/:tenantId' })
+    await screen.findByText('Ayşe Yılmaz')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Üye ara' }), 'ayse')
+    await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse' }, expect.any(AbortSignal)))
+    await userEvent.click(screen.getByRole('button', { name: /Kullanıcı adı/ }))
+    await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse', sort: 'username', dir: 'asc' }, expect.any(AbortSignal)))
+  })
+
+  it('keeps each tab\'s own search, sort and page in the URL when the tab changes', async () => {
+    vi.mocked(encryptionApi.getWrapKeys).mockResolvedValue({ items: [{ version: 1, keyId: 'wrap-1', state: 'Active', artifactCount: 1, createdAt: '2026-10-20T10:00:00Z' }] })
+    renderPlatform(<PlatformTenantDetailPage />, { path: '/platform/tenants/tenant-a?tab=people&members-search=ayse&members-sort=username&members-dir=desc', route: '/platform/tenants/:tenantId' })
+    await screen.findByText('Ayşe Yılmaz')
+    expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse', sort: 'username', dir: 'desc' }, expect.any(AbortSignal))
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Güvenlik' }))
+    await screen.findByRole('button', { name: 'Oluşturulma' })
+    expect(screen.getByTestId('location')).toHaveTextContent('tab=security')
+    expect(screen.getByTestId('location')).toHaveTextContent('members-search=ayse&members-sort=username&members-dir=desc')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oluşturulma' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('keys-sort=created')
+    expect(screen.getByTestId('location')).not.toHaveTextContent(/[?&]sort=/)
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
+    await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse', sort: 'username', dir: 'desc' }, expect.any(AbortSignal)))
+    expect(screen.getByRole('searchbox', { name: 'Üye ara' })).toHaveValue('ayse')
+  })
+
+  it('offers one action to add the first member', async () => {
+    vi.mocked(api.getMemberships).mockResolvedValue(paged([]))
+    mount('people')
+    expect(await screen.findByText("Bu çalışma alanının henüz üyesi yok.")).toBeInTheDocument()
+    expect(screen.queryByText('Kayıt bulunamadı.')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'İlk üyeyi ekle' }))
+    expect(screen.getByRole('searchbox', { name: 'Kullanıcı ara' })).toHaveFocus()
+  })
+
   it('keeps active keys non-retirable and recovery removal name-confirmed in security', async () => {
     vi.mocked(encryptionApi.getTenantEncryption).mockResolvedValue(makeTenantEncryption({
       tenantRecovery: { keyId: 'tenant-recovery-id', keyVersion: 2, createdAt: '2026-10-19T10:00:00Z' },
@@ -54,7 +92,7 @@ describe('platform tenant detail', () => {
     ] })
     vi.mocked(encryptionApi.removeTenantRecoveryKey).mockResolvedValue(undefined)
     mount('security')
-    await userEvent.click(await screen.findByText('Genel anahtarı yükle veya değiştir'))
+    await userEvent.click(await screen.findByText('Kendi anahtarınızı ekleyin veya değiştirin'))
     const field = await screen.findByRole('textbox', { name: 'Genel anahtar (PEM)' })
     expect(screen.getByRole('button', { name: 'Emekli et' })).toBeDisabled()
     expect(api.getMemberships).not.toHaveBeenCalled()
@@ -113,7 +151,7 @@ describe('platform tenant detail', () => {
     await waitFor(() => expect(encryptionApi.getTenantEncryption).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal)))
     expect(encryptionApi.getWrapKeys).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
     expect(await screen.findByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
-    expect(screen.getByText(/yalnızca bu çalışma alanının Owner veya Admin üyeleri/)).toBeInTheDocument()
+    expect(screen.getByText(/yalnızca bu çalışma alanının üyeleri/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Anahtarı kaydet' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Özet' }))
@@ -155,10 +193,9 @@ describe('platform tenant detail', () => {
     expect(screen.getByRole('link', { name: "Tüm denetim kayıtları" })).toHaveAttribute('href', '/platform/audit?tenantId=tenant-a')
     expect(await screen.findByText('Üyelik rolü değiştirildi')).toBeInTheDocument()
     expect(screen.queryByText('Evet')).not.toBeInTheDocument()
-    await userEvent.click(within(screen.getByText('Üyelik rolü değiştirildi').closest('tr') as HTMLElement).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('Evet')).toBeInTheDocument()
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const auditRow = (screen.getByText('Üyelik rolü değiştirildi').closest('tr') as HTMLElement)
+    await userEvent.click(within(auditRow).getByRole('button', { name: 'Teknik ayrıntılar' }))
+    expect(within(within(auditRow).getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('Evet')).toBeInTheDocument()
     expect(api.getAudit).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 3 }, expect.any(AbortSignal))
     expect(api.getMemberships).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
@@ -257,14 +294,14 @@ describe('platform tenant detail', () => {
   it('shows a not-found message for an unknown tenant', async () => {
     vi.mocked(api.getTenant).mockRejectedValue(new ApiError(404, { error: 'tenant_not_found' }))
     mount()
-    expect(await screen.findByText("Çalışma alanı bulunamadı.")).toBeInTheDocument()
+    expect(await screen.findByText(/Çalışma alanı bulunamadı\./)).toBeInTheDocument()
   })
 
-  it('paginates memberships through the memberPage URL parameter', async () => {
+  it('paginates memberships through the members-page URL parameter', async () => {
     vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse], { totalCount: 40 }))
     mount('people')
     await userEvent.click(await screen.findByRole('button', { name: 'Sonraki' }))
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?tab=people&memberPage=2'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?tab=people&members-page=2'))
     expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal))
   })
 
@@ -278,13 +315,13 @@ describe('platform tenant detail', () => {
     mount('storage-computers')
     expect(await screen.findByRole('heading', { name: 'Depolama bağlantıları' })).toBeInTheDocument()
     expect(connectionApi.getPlatformTenantConnections).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
-    const managedHeading = (await screen.findAllByText('Managed Storage')).find(el => el.tagName === 'SPAN')!
+    const managedHeading = (await screen.findAllByText('Merkezi depolama')).find(el => el.tagName === 'SPAN')!
     const managed = within(managedHeading.closest('tr') as HTMLElement)
     expect(managed.getAllByRole('button').map((button) => button.textContent).filter((label) => label !== 'Kopyala' && label !== 'Teknik ayrıntılar')).toEqual(['Düzenle', 'Platform kilidi koy', 'Test et', 'Sil'])
-    const localHeading = screen.getByText('Local')
+    const localHeading = screen.getByText('Yerel disk')
     const local = within(localHeading.closest('tr') as HTMLElement)
     expect(local.getAllByRole('button').map((button) => button.textContent).filter((label) => label !== 'Kopyala' && label !== 'Teknik ayrıntılar')).toEqual(['Düzenle', 'Platform kilidi koy'])
-    expect(screen.queryByRole('columnheader', { name: "Çalışma Alanı" })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: "Çalışma alanı" })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: "Yönetilen hedef ekle" }))
     const dialog = await screen.findByRole('dialog')

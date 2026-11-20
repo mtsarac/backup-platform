@@ -23,14 +23,15 @@ describe('StatusPill', () => {
     render(<><StatusPill status="Succeeded" /><StatusPill status="Failed" /><StatusPill status="Running" /><StatusPill status="Pending" /></>)
     expect(screen.getByText('Başarılı').closest('span')).toHaveClass('text-success')
     expect(screen.getByText('Başarısız').closest('span')).toHaveClass('text-error')
-    expect(screen.getByText('Çalışıyor').closest('span')).toHaveClass('text-info')
+    expect(screen.getByText('Çalışıyor').closest('span')).toHaveClass('text-primary')
     expect(screen.getByText('Sırada bekliyor').closest('span')).toHaveClass('text-text-muted')
   })
 
 
-  it('shows an unknown status as neutral text, never hiding it', () => {
+  it('shows an unknown status as unknown', () => {
     render(<StatusPill status="SomethingNew" />)
-    expect(screen.getByText('SomethingNew').closest('span')).toHaveClass('text-text-muted')
+    expect(screen.getByText('Bilinmiyor')).toBeInTheDocument()
+    expect(screen.queryByText('SomethingNew')).not.toBeInTheDocument()
   })
 
   it('uses a custom label for a computed state', () => {

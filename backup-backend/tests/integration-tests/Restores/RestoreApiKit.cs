@@ -73,18 +73,18 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
     /// A backup accepted through the API: in central storage (any agent can read it), or on <paramref name="owner"/>'s own disk when <paramref name="agentLocal"/>.
     /// <paramref name="backendLocal"/> reports the replica as a backend-held file of the local provider, which no agent can reach.
     /// </summary>
-    public async Task<AcceptedBackup> AcceptBackupAsync(bool agentLocal = false, bool backendLocal = false, EnrolledAgent? owner = null, string engine = "mssql")
+    public async Task<AcceptedBackup> AcceptBackupAsync(bool agentLocal = false, bool backendLocal = false, EnrolledAgent? owner = null, string engine = "mssql", string jobName = "Nightly full backup", string database = "master")
     {
         owner ??= Agent;
         var provider = agentLocal || backendLocal ? "local" : "central";
         var location = agentLocal ? "Agent" : "Backend";
         var body = new
         {
-            name = "Nightly full backup",
+            name = jobName,
             agentId = owner.AgentId,
             configuration = new BackupExecutionConfiguration
             {
-                Engine = engine, Database = "master", Host = "sql-server", IntegratedSecurity = engine == "mssql",
+                Engine = engine, Database = database, Host = "sql-server", IntegratedSecurity = engine == "mssql",
                 DatabaseLogin = engine == "mssql" ? null : new("test-user", "test-password"),
                 CopyOnly = engine == "mssql", Destinations = [agentLocal || backendLocal ? BackupTestDestinations.Local(location: location) : BackupTestDestinations.Central()]
             }
@@ -96,7 +96,7 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
         var claim = await Backup.ClaimAsync(owner);
         Assert.Equal(runId, claim.RunId);
         await Backup.StartAttemptAsync(claim);
-        var request = Backup.SuccessRequest(claim);
+        var request = Backup.SuccessRequest(claim, database: database);
         var replica = request.Artifact!.Replicas[0] with { StorageProvider = provider, StorageTarget = agentLocal || backendLocal ? "local" : "central", Key = $"{claim.AttemptId:N}/backup.bak" };
         request = request with { Artifact = request.Artifact with { Replicas = [replica] } };
         if (engine == "postgres")

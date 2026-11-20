@@ -42,19 +42,15 @@ public sealed class AssignPlanRequest
 /// </summary>
 public static class ManagedServicePlatformEndpoints
 {
-    private const int DefaultPlanPageSize = 50;
-    private const int DefaultHistoryPageSize = 25;
-    private const int MaximumPageSize = 100;
-
     public static IEndpointRouteBuilder MapManagedServicePlatformEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
-        platform.MapGet("/plans", ListPlansAsync);
+        platform.MapGet("/plans", ListPlansAsync).WithListQuery();
         platform.MapPost("/plans", CreatePlanAsync);
         platform.MapPut("/plans/{planId:guid}", UpdatePlanAsync);
         platform.MapPut("/plans/{planId:guid}/enabled", SetPlanEnabledAsync);
         platform.MapGet("/tenants/{tenantId:guid}/subscription", GetSubscriptionAsync);
-        platform.MapGet("/tenants/{tenantId:guid}/subscriptions", ListSubscriptionsAsync);
+        platform.MapGet("/tenants/{tenantId:guid}/subscriptions", ListSubscriptionsAsync).WithListQuery();
         platform.MapPut("/tenants/{tenantId:guid}/subscription", AssignPlanAsync);
         platform.MapPost("/tenants/{tenantId:guid}/subscription/suspend", SuspendAsync);
         platform.MapPost("/tenants/{tenantId:guid}/subscription/resume", ResumeAsync);
@@ -63,15 +59,8 @@ public static class ManagedServicePlatformEndpoints
     }
 
     private static async Task<IResult> ListPlansAsync(
-        bool? enabled, string? search, int? page, int? pageSize, ManagedServiceAdministrationService service, CancellationToken cancellationToken)
-    {
-        if (!TryPaging(page, pageSize, DefaultPlanPageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await service.ListPlansAsync(enabled, search, p, size, cancellationToken);
-        return Results.Ok(Page(result, ToResponse));
-    }
+        bool? enabled, [AsParameters] ListParams list, ManagedServiceAdministrationService service, CancellationToken cancellationToken) =>
+        Results.Ok(Page(await service.ListPlansAsync(enabled, list.ToQuery(), cancellationToken), ToResponse));
 
     private static Task<IResult> CreatePlanAsync(
         PlanRequest? request, ICurrentUser currentUser, ManagedServiceAdministrationService service, CancellationToken cancellationToken) =>
@@ -110,13 +99,9 @@ public static class ManagedServicePlatformEndpoints
     }
 
     private static async Task<IResult> ListSubscriptionsAsync(
-        Guid tenantId, int? page, int? pageSize, ManagedServiceAdministrationService service, CancellationToken cancellationToken)
+        Guid tenantId, [AsParameters] ListParams list, ManagedServiceAdministrationService service, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, DefaultHistoryPageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await service.ListSubscriptionsAsync(new TenantId(tenantId), p, size, cancellationToken);
+        var result = await service.ListSubscriptionsAsync(new TenantId(tenantId), list.ToQuery(), cancellationToken);
         return result is null ? Failure(ManagedServiceOutcome.TenantNotFound, null) : Results.Ok(Page(result, ToResponse));
     }
 
@@ -193,15 +178,6 @@ public static class ManagedServicePlatformEndpoints
         ManagedServiceOutcome.QuotaPolicyDisabled => Results.Conflict(new { error = "quota_policy_disabled" }),
         _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
     };
-
-    private static bool TryPaging(int? page, int? pageSize, int defaultSize, out int p, out int size)
-    {
-        p = page ?? 1;
-        size = pageSize ?? defaultSize;
-        return p is >= 1 and <= 1_000_000 && size is >= 1 and <= MaximumPageSize;
-    }
-
-    private static IResult InvalidPaging() => Results.BadRequest(new { error = "invalid_request", field = "page", code = "invalid_value" });
 
     private static object Page<TSource, TResult>(PagedResult<TSource> result, Func<TSource, TResult> map) => new
     {

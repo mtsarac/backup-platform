@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using System.Text.Json;
 using BackupPlatform.Api.Backups;
@@ -144,7 +145,7 @@ public sealed class SftpStorageResolverAndFactoryTests
         public Task<IReadOnlyList<StorageConnectionRecord>?> ListAsync(TenantId tenantId, CancellationToken cancellationToken) =>
             throw new NotImplementedException();
 
-        public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, int page, int pageSize, CancellationToken cancellationToken) =>
+        public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken) =>
             throw new NotImplementedException();
 
         public Task<StorageConnectionResult> CreateAsync(StorageConnection connection, int? maxPerTenant, StorageActor actor, IReadOnlyDictionary<string, object?> auditDetails, DateTimeOffset now, CancellationToken cancellationToken) =>

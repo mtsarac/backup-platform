@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using BackupPlatform.Domain;
 using BackupPlatform.ManagedService.Plans;
 
 namespace BackupPlatform.ManagedService;
@@ -42,7 +43,7 @@ public static partial class ManagedServiceValidation
             throw new InvalidManagedServiceRequestException(field, "too_long");
         }
         var display = builder.ToString();
-        return (display, display.ToLowerInvariant());
+        return (display, NameKey.Of(display));
     }
 
     /// <summary>Policy names follow the plan-name rules (trimmed display form, case-insensitive key).</summary>

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { LogOut } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ErrorNotice } from '@/components/ui/notice'
@@ -20,7 +19,6 @@ export function AccountPage() {
     <PageHeader title={tx('Hesap')} description={tx('Oturum açtığınız hesabın bilgileri.')} />
     <Card padding="lg"><dl className="grid gap-4 sm:grid-cols-[10rem_1fr]">
       <dt className="text-sm text-text-muted">{tx('Görünen ad')}</dt><dd className="min-w-0 break-words font-medium text-text-heading">{user?.displayName}</dd>
-      <dt className="text-sm text-text-muted">{tx('Rol')}</dt><dd><Badge tone={user?.role === 'PlatformAdmin' ? 'warning' : 'info'}>{user?.role === 'PlatformAdmin' ? tx('Platform Yöneticisi') : tx('UserAdmin')}</Badge></dd>
     </dl></Card>
     <div><Button variant="outline" disabled={busy} onClick={() => { void signOut() }}><LogOut aria-hidden="true" className="size-4" />{tx('Çıkış')}</Button></div>
     {error && <ErrorNotice {...error} />}

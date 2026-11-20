@@ -13,12 +13,16 @@ function AuthProbe() {
 }
 let authenticated = false
 let secondFactorRequired = false
+let passwordChangeRequired = false
+let halfSession = false
 const passkeyOptions = { challenge: 'AQID', rpId: 'example.com', allowCredentials: [{ id: 'BAU', type: 'public-key' }], userVerification: 'required' }
 let requests: Request[] = []
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 beforeEach(() => {
   authenticated = false
   secondFactorRequired = false
+  passwordChangeRequired = false
+  halfSession = false
   requests = []
   resetAntiforgery()
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -29,6 +33,7 @@ beforeEach(() => {
     if (path === '/api/auth/login') {
       if (secondFactorRequired) return json({ secondFactorRequired: true })
       authenticated = true
+      if (passwordChangeRequired) return json({ passwordChangeRequired: true })
       return new Response(null, { status: 204 })
     }
     if (path === '/api/auth/passkeys/login/options' || path === '/api/auth/passkeys/second-factor/options') return json({ options: passkeyOptions, challengeId: 'challenge-123' })
@@ -36,7 +41,8 @@ beforeEach(() => {
       authenticated = true
       return new Response(null, { status: 204 })
     }
-    if (path === '/api/auth/logout') { authenticated = false; return new Response(null, { status: 204 }) }
+    if (path === '/api/auth/logout') { authenticated = false; halfSession = false; return new Response(null, { status: 204 }) }
+    if (halfSession) return json({}, 403)
     if (!authenticated) return json({}, 401)
     if (path === '/api/me/tenants') return json([{ tenantId: 'tenant-a', name: 'Tenant A' }])
     return json({ userId: 'owner', displayName: 'Real Owner', role: 'UserAdmin', isPlatformAdmin: false })
@@ -116,6 +122,30 @@ describe('cookie session UI', () => {
     expect(cache.getQueryData(['platform', 'summary'])).toBeUndefined()
     expect(requests.find(request => request.url.endsWith('/auth/logout'))?.headers.get('X-CSRF-TOKEN')).toBe('signed-in-token')
     expect(localStorage.getItem('token')).toBeNull()
+    cache.clear()
+  })
+  it('uses a fresh CSRF token for the forced first-login password change', async () => {
+    passwordChangeRequired = true
+    let auth: ReturnType<typeof useAuth> | undefined
+    const Capture = () => { auth = useAuth(); return null }
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={cache}><AuthProvider><Capture /></AuthProvider></QueryClientProvider>)
+    await waitFor(() => expect(auth?.isLoading).toBe(false))
+    await act(async () => { await auth?.login('owner', 'typed-password', false) })
+    await apiRequest('auth/change-password', { method: 'POST', json: { currentPassword: 'typed-password', newPassword: 'another-password' } })
+    expect(requests.find(request => request.url.endsWith('/auth/change-password'))?.headers.get('X-CSRF-TOKEN')).toBe('signed-in-token')
+    cache.clear()
+  })
+  it('treats a half-finished sign-in (password change pending, /me answers 403) as signed out, not as a load error', async () => {
+    halfSession = true
+    let auth: ReturnType<typeof useAuth> | undefined
+    const Capture = () => { auth = useAuth(); return null }
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={cache}><AuthProvider><Capture /></AuthProvider></QueryClientProvider>)
+    await waitFor(() => expect(auth?.isLoading).toBe(false))
+    expect(auth?.error).toBeNull()
+    expect(auth?.isAuthenticated).toBe(false)
+    expect(requests.some(request => request.url.endsWith('/auth/logout'))).toBe(true)
     cache.clear()
   })
   it('restores existing cookie session and expires it on resource401, not403', async () => {

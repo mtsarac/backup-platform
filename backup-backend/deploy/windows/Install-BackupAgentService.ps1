@@ -21,7 +21,8 @@ param(
     [string] $AgentName,
     [string] $StoreDirectory = (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent'),
     [hashtable] $TrustedUpdateKeys = @{},
-    [switch] $EnableVss
+    [switch] $EnableVss,
+    [string] $DataDirectory = (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgentData')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,10 +67,27 @@ function Assert-OutsideBinaries([string] $Path) {
         throw 'Mutable identity/update staging paths must be separate from the protected binary tree.'
     }
 }
+# Local SQL Server services; LocalSystem is skipped because SYSTEM already has access to every agent directory.
+function Get-SqlServerServiceSid {
+    foreach ($service in @(Get-CimInstance Win32_Service | Where-Object { $_.PathName -match 'sqlservr\.exe' -and $_.StartName })) {
+        try { (New-Object Security.Principal.NTAccount $service.StartName).Translate([Security.Principal.SecurityIdentifier]).Value } catch { }
+    }
+}
+# The newest PostgreSQL client tools installed in the default location (pg_dump and pg_restore side by side); empty when there are none.
+function Find-PostgreSqlTools {
+    $bins = @(Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL\*\bin') -Directory -ErrorAction SilentlyContinue |
+        Where-Object { (Test-Path -LiteralPath (Join-Path $_.FullName 'pg_dump.exe')) -and (Test-Path -LiteralPath (Join-Path $_.FullName 'pg_restore.exe')) } |
+        Sort-Object { (Split-Path (Split-Path $_.FullName) -Leaf) -as [int] } -Descending)
+    if ($bins.Count -gt 0) { return $bins[0].FullName }
+}
 
 $binary = Assert-SafePath ([IO.Path]::GetFullPath($BinaryDirectory))
 $store = Assert-SafePath $StoreDirectory
 Assert-OutsideBinaries $store
+$data = Assert-SafePath $DataDirectory
+Assert-OutsideBinaries $data
+$stagingDirectory = Join-Path $data 'staging'
+$backupsDirectory = Join-Path $data 'backups'
 $executable = Join-Path $binary 'BackupPlatform.Agent.Host.exe'
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'BackupPlatform.Agent.Host.exe was not found in BinaryDirectory.' }
 $null = Assert-SafePath $executable
@@ -159,6 +177,20 @@ if ($EnableVss) {
     $updateStage = Assert-SafePath "$store.updates"
     Assert-OutsideBinaries $updateStage
     New-ProtectedDirectory $updateStage $serviceSid
+    # Backup working folders. Created once and never deleted by uninstall: the backups folder holds the backups stored on this machine.
+    foreach ($directory in @($data, $stagingDirectory, $backupsDirectory)) {
+        $null = Assert-SafePath $directory
+        if (-not (Test-Path -LiteralPath $directory)) { New-ProtectedDirectory $directory $serviceSid }
+    }
+    # A local SQL Server writes its backup files into the staging folder, so its service account needs to reach and write there (and only there).
+    $sqlAccounts = @(Get-SqlServerServiceSid)
+    foreach ($sid in $sqlAccounts) {
+        & icacls.exe $data /grant "*${sid}:(RX)" /Q | Out-Null
+        & icacls.exe $stagingDirectory /grant "*${sid}:(OI)(CI)M" /Q | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'The SQL Server service account could not be granted access to the staging folder.' }
+    }
+    if ($sqlAccounts.Count -gt 0) { Write-Host "SQL Server service account(s) granted write access to $stagingDirectory only." }
+    $postgreSqlTools = Find-PostgreSqlTools
     $control = Join-Path $binary 'update-control'
     $releases = Join-Path $binary 'releases'
     $null = Assert-SafePath $control
@@ -194,7 +226,9 @@ if ($EnableVss) {
     finally { [Array]::Clear($plain, 0, $plain.Length); $request = $null; $EnrollmentToken = $null }
     $requestPath = Join-Path $stage 'request.bin'
     [IO.File]::WriteAllBytes($requestPath, $encrypted)
-    $environment = @("Agent__CredentialStoreDirectory=$store", "Agent__Updates__SettingsFile=$settingsPath")
+    $environment = @("Agent__CredentialStoreDirectory=$store", "Agent__Updates__SettingsFile=$settingsPath",
+        'Agent__Backup__Staging__Mapping=SameHost', "Agent__Backup__Staging__AgentDirectory=$stagingDirectory", "Agent__Backup__LocalStorage__RootDirectory=$backupsDirectory")
+    if ($postgreSqlTools) { $environment += "Agent__Backup__PostgreSql__ClientToolsDirectory=$postgreSqlTools" }
     if ($BackendUri -and -not $hasIdentity) { $environment += "Agent__Backend__BaseUri=$BackendUri" }
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -Type MultiString -Value $environment
     Set-ServiceExecutable "`"$executable`" --service-enroll `"$requestPath`" `"$store`""

@@ -1,10 +1,11 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
 import { StatusPill } from '@/components/data/status-pill'
 import { PageHeader } from '@/components/ui/page-header'
-import { usePlatformSummary } from '@/features/platform/hooks'
+import { Notice } from '@/components/ui/notice'
+import { usePlatformEncryptionStatus, usePlatformSummary } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
 import { DashboardStorage } from '@/features/platform/storage/dashboard-storage'
 import type { PlatformSummary } from '@/features/platform/types'
@@ -27,10 +28,12 @@ export function PlatformDashboardPage() {
   useLanguage()
   const query = usePlatformSummary()
   const data = query.data
+  const encryption = usePlatformEncryptionStatus().data
   return <div className="space-y-6">
     <PageHeader title={tx("Platform özeti")} description={tx("Tüm çalışma alanlarının genel durumu.")} />
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <>
+        {encryption?.platformRecovery.configured === false && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
         <DashboardAttention data={data} />
         <div className="grid gap-x-6 gap-y-4 grid-cols-2 xl:grid-cols-4">
           <Link to={platformPaths.tenants} className="block rounded-lg"><KpiCard label={tx("Çalışma alanları")} value={data.tenants} className="h-full hover:bg-surface-2" /></Link>
@@ -54,8 +57,8 @@ function DashboardAttention({ data }: { data: PlatformSummary }) {
     </div>
     {items.length > 0 && <ul aria-label={tx("Dikkat gerektirenler")} className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
       {items.map((item) => <li key={item.key}>
-        <Link className="flex min-h-9 pointer-coarse:min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-3" to={item.to}>
-          <span className="min-w-0 break-words">{item.text}</span>
+        <Link className="flex min-h-control items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-2" to={item.to}>
+          <span className="flex min-w-0 items-center gap-2"><AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-warning" /><span className="min-w-0 break-words">{item.text}</span></span>
           <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
         </Link>
       </li>)}

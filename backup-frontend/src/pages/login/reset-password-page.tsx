@@ -22,7 +22,7 @@ export function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
 
-  const fail = (what: string, action: string) => setError({ what, dataImpact: tx('Şifre güncellenmedi.'), action, technical: [] })
+  const fail = (what: string, action: string) => setError({ what, action, technical: [] })
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -48,7 +48,7 @@ export function ResetPasswordPage() {
       <main className="flex min-h-svh items-center justify-center px-4 py-10">
         <div className="w-full max-w-sm space-y-6">
           <BrandMark size="sm" />
-          <h1 className="text-2xl font-semibold text-text-heading">{tx('Şifre sıfırlama')}</h1>
+          <h1 className="text-xl font-semibold text-text-heading">{tx('Şifre sıfırlama')}</h1>
           {done ? (
             <Notice tone="success">{tx('Şifreniz güncellendi. Tüm oturumlarınız sonlandırıldı; yeni şifrenizle giriş yapın.')}</Notice>
           ) : !token ? (

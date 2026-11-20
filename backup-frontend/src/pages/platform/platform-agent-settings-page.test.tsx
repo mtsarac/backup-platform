@@ -80,6 +80,6 @@ describe('PlatformAgentSettingsPage', () => {
   it('forbids access for non-platform users', async () => {
     vi.mocked(api.getAgentSettings).mockRejectedValue(new ApiError(403))
     renderPlatform(<PlatformAgentSettingsPage />, { user: tenantOwner })
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Platform Yöneticisi/)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bu alan yalnızca platform yöneticileri içindir.')
   })
 })

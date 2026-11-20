@@ -1,5 +1,6 @@
 import { discoveredConfiguration } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
+import type { JobStep } from '@/features/backup-jobs/job-wizard-model'
 import type { BackupConfiguration, BackupJob, FileBackupPolicy, RetentionPolicy, RetryPolicy, Schedule } from '@/features/backup-jobs/types'
 
 /** Everything the job form edits, in the shape the wizard and the edit page share. */
@@ -11,25 +12,38 @@ export interface JobValues {
   /** How the source of a new job is chosen: from the discovery inventory (primary) or typed by hand. Existing jobs are always edited by hand. */
   sourceMode: 'discovery' | 'manual'
 }
+/** A half-filled create wizard, carried through route state while the storage wizard is open. */
+export interface JobDraft { values: JobValues; discovered: DiscoveryInstanceDetail | null; step: JobStep }
 export interface JobPrefill { instance: DiscoveryInstanceDetail; databases: string[] }
 
 export type Engine = BackupConfiguration['engine']
 export const defaultFiles: FileBackupPolicy = { paths: ['.'], includes: ['**'], excludes: [], symlinkPolicy: 'Skip' }
 
 const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' }
-const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 3600, overlapPolicy: 'Skip' }
-const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 }
-const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 }
+const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, missedRunGraceSeconds: 1800, overlapPolicy: 'Skip' }
+const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 600, backoff: 'Exponential', jitter: 0.2 }
+const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 2592000, deleteGracePeriodSeconds: 86400 }
 
 export function initialValues(job?: BackupJob, prefill?: JobPrefill): JobValues {
-  // The PostgreSQL dump has no COPY_ONLY switch, so the saved flag is not resubmitted.
-  const saved = job && (job.configuration.engine === 'postgres' ? { ...job.configuration, copyOnly: false } : job.configuration)
+  const saved = job?.configuration
   return {
     name: job?.name ?? '', agentId: job?.agentId ?? prefill?.instance.agentId ?? '', enabled: job?.enabled ?? true,
     configuration: saved ?? (prefill?.databases.length ? discoveredConfiguration(initialConfiguration, prefill.instance, prefill.databases) : initialConfiguration),
-    scheduled: Boolean(job?.schedule), schedule: job?.schedule ?? initialSchedule, overlap: job?.overlapPolicy ?? 'Skip',
+    scheduled: job ? Boolean(job.schedule) : true, schedule: job?.schedule ?? initialSchedule, overlap: job?.overlapPolicy ?? 'Skip',
     retry: job?.retryPolicy ?? initialRetry, retention: job?.retention ?? initialRetention, selected: prefill?.databases ?? [], sourceMode: job ? 'manual' : 'discovery',
   }
+}
+
+/** Whether a saved job carries values the form never shows (retry, tolerance, copy-only, checksum, file filters…) that differ from what a new job gets; the edit form keeps them and says so. */
+export function hasNonStandardSettings(job: BackupJob) {
+  const { configuration: c, schedule, retention } = job
+  const standard = { ...initialConfiguration, ...engineDefaults[c.engine] }
+  const hidden = ['stagingReference', 'storagePrefix', 'compressionPolicy', 'checksumPolicy', 'copyOnly'] as const
+  const files = c.files && (c.files.includes.join() !== defaultFiles.includes.join() || c.files.excludes.length > 0 || c.files.symlinkPolicy !== defaultFiles.symlinkPolicy)
+  return hidden.some(key => c[key] !== standard[key]) || Boolean(c.sourceSite) || Boolean(c.enforceThreeTwoOne) || Boolean(files)
+    || Object.entries(initialRetry).some(([key, value]) => job.retryPolicy[key as keyof RetryPolicy] !== value) || job.overlapPolicy !== 'Skip'
+    || (schedule != null && schedule.missedRunGraceSeconds !== initialSchedule.missedRunGraceSeconds)
+    || (retention != null && retention.deleteGracePeriodSeconds !== initialRetention.deleteGracePeriodSeconds)
 }
 
 const sourceKeys = ['database', 'host', 'port', 'integratedSecurity', 'databaseCredentialReference', 'databaseLogin', 'files', 'copyOnly', 'checksumPolicy'] as const

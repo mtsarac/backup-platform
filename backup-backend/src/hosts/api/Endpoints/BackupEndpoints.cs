@@ -7,6 +7,7 @@ using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
 using Microsoft.AspNetCore.Authorization;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Tenancy;
 
 namespace BackupPlatform.Api.Endpoints;
 
@@ -17,18 +18,20 @@ public static class BackupEndpoints
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
         tenant.MapPost("/backup-jobs", CreateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-jobs", ListJobsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapPut("/backup-jobs/{jobId:guid}", UpdateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-jobs/health-timeline", GetHealthTimelineAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/backup-jobs/{jobId:guid}", UpdateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
+        tenant.MapDelete("/backup-jobs/{jobId:guid}", ArchiveJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
         tenant.MapGet("/dashboard", GetDashboardAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-jobs/{jobId:guid}", GetJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapPut("/backup-jobs/{jobId:guid}/schedule", ChangeScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapDelete("/backup-jobs/{jobId:guid}/schedule", RemoveScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/backup-jobs/{jobId:guid}/schedule", ChangeScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
+        tenant.MapDelete("/backup-jobs/{jobId:guid}/schedule", RemoveScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
         tenant.MapGet("/backup-jobs/{jobId:guid}/schedule/occurrences", ListOccurrencesAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapPut("/backup-jobs/{jobId:guid}/retention", ChangeRetentionAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapPost("/backup-jobs/{jobId:guid}/enable", EnableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapPut("/backup-jobs/{jobId:guid}/retention", ChangeRetentionAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
+        tenant.MapPost("/backup-jobs/{jobId:guid}/enable", EnableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
+        tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).AddEndpointFilter(ArchivedJobConflictAsync);
         tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
-        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithListQuery();
+        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithListQuery();
         tenant.MapGet("/backup-runs/{runId:guid}", GetRunAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-runs/{runId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-runs/{runId:guid}/retry", RetryAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -110,8 +113,40 @@ public static class BackupEndpoints
         return job is null ? Results.NotFound() : Results.Ok(job);
     }
 
-    private static async Task<IResult> ListJobsAsync(ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken) =>
-        Results.Ok(await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), cancellationToken));
+    private static async Task<IResult> ListJobsAsync(bool? includeArchived, bool? enabled, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken)
+    {
+        var jobs = await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), includeArchived ?? false, cancellationToken);
+        return Results.Ok(enabled is null ? jobs : jobs.Where(job => (job.Enabled && !job.AgentRevoked) == enabled.Value));
+    }
+
+    /// <summary>The home page strip. The client always names its zone: a missing or unknown one is refused rather than guessed as UTC, which would hide the mistake.</summary>
+    private static async Task<IResult> GetHealthTimelineAsync(string? timeZone, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(timeZone) || !TimeZoneInfo.TryConvertIanaIdToWindowsId(timeZone, out _))
+            return Results.BadRequest(new { error = "invalid_request", field = "timeZone", code = "invalid_value" });
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZone ?? ""); }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
+        {
+            return Results.BadRequest(new { error = "invalid_request", field = "timeZone", code = "invalid_value" });
+        }
+        return Results.Ok(await store.GetHealthTimelineAsync(tenant.TenantId!, zone, time.GetUtcNow(), cancellationToken));
+    }
+
+    /// <summary>An archived job never changes again, so every route that would change one answers the same 409.</summary>
+    private static async ValueTask<object?> ArchivedJobConflictAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        try { return await next(context); }
+        catch (BackupJobArchivedException) { return Results.Conflict(new { error = "job_archived", message = "The backup job is archived and cannot be changed." }); }
+    }
+
+    /// <summary>Archiving retires a job ("Korunan veriyi kaldır"): tenant administrators only, never undone. The job's history, backup files and shares stay.</summary>
+    private static async Task<IResult> ArchiveJobAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, IUserAccessStore users, ICurrentUser currentUser, CancellationToken cancellationToken)
+    {
+        if (await users.GetUserAsync(currentUser.UserId!, cancellationToken) is not { Role: UserRole.UserAdmin })
+            return Results.Json(new { error = "forbidden", message = "Only a user administrator of the tenant can archive a backup job." }, statusCode: StatusCodes.Status403Forbidden);
+        return await schedules.ArchiveAsync(tenant.TenantId!, jobId, cancellationToken, currentUser.UserId!) ? Results.NoContent() : Results.NotFound();
+    }
 
     private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, HttpContext context, ITenantContext tenant,
         BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, ICurrentUser currentUser, CancellationToken cancellationToken)
@@ -224,25 +259,25 @@ public static class BackupEndpoints
     };
 
     private static async Task<IResult> ListRunsAsync(Guid? jobId, Guid? agentId, string? status, string? trigger,
-        DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,
+        DateTimeOffset? from, DateTimeOffset? to, [AsParameters] ListParams list,
         ITenantContext tenant, IBackupUiStore views, CancellationToken cancellationToken)
     {
-        if (page is < 1 or > 1_000_000 || pageSize is < 1 or > 100) return Invalid("Invalid history page.");
+        var query = list.ToQuery();
         if (from > to) return Results.BadRequest(new { error = "invalid_request", field = "from", code = "invalid_date_range" });
         if (status is not null && status != "CancellationRequested" && !Enum.GetNames<BackupStatus>().Contains(status, StringComparer.OrdinalIgnoreCase))
             return Results.BadRequest(new { error = "invalid_request", field = "status", code = "invalid_value" });
         if (trigger is not null && trigger is not ("Manual" or "Scheduled" or "Retry"))
             return Results.BadRequest(new { error = "invalid_request", field = "trigger", code = "invalid_value" });
-        return Results.Ok(await views.ListRunsAsync(tenant.TenantId!, new(page ?? 1, pageSize ?? 25, jobId, agentId, status, from?.ToUniversalTime(), to?.ToUniversalTime(), trigger), cancellationToken));
+        return Results.Ok(await views.ListRunsAsync(tenant.TenantId!, new(query, jobId, agentId, status, from?.ToUniversalTime(), to?.ToUniversalTime(), trigger), cancellationToken));
     }
 
     /// <summary>The runs of one job; a job that is not this tenant's is a 404, not an empty list.</summary>
     private static async Task<IResult> ListJobRunsAsync(Guid jobId, Guid? agentId, string? status, string? trigger,
-        DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,
+        DateTimeOffset? from, DateTimeOffset? to, [AsParameters] ListParams list,
         ITenantContext tenant, IBackupUiStore views, TimeProvider time, CancellationToken cancellationToken) =>
         await views.GetJobAsync(tenant.TenantId!, jobId, time.GetUtcNow(), cancellationToken) is null
             ? Results.NotFound()
-            : await ListRunsAsync(jobId, agentId, status, trigger, from, to, page, pageSize, tenant, views, cancellationToken);
+            : await ListRunsAsync(jobId, agentId, status, trigger, from, to, list, tenant, views, cancellationToken);
 
     private static async Task<IResult> GetRunAsync(Guid runId, ITenantContext tenant, IBackupUiStore store, CancellationToken cancellationToken)
     {
@@ -299,6 +334,8 @@ public static class BackupEndpoints
         {
             case BackupRetryOutcome.NotFound:
                 return Results.NotFound();
+            case BackupRetryOutcome.JobArchived:
+                return Results.Conflict(new { error = "retry_not_allowed", reason = "job_archived", message = "The backup job is archived." });
             case BackupRetryOutcome.Started:
                 await HintAsync(push, result.Run!.AgentId, "WorkAvailable", logger);
                 return Results.Ok(BackupOrchestrator.ToView(result.Run));

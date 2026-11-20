@@ -11,16 +11,16 @@ import type { AgentDetail, CreatedEnrollmentToken, EnrollmentTokenStatus } from 
 import { ApiError } from '@/lib/api/client'
 import * as api from './api'
 
-const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
+const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 vi.mock('./api', () => ({ getAgentDistribution: vi.fn(), getAgents: vi.fn(), getAgent: vi.fn(), createEnrollmentToken: vi.fn(), getEnrollmentTokenStatus: vi.fn(), revokeEnrollmentToken: vi.fn() }))
 const detail: AgentDetail = { agentId: 'agent-a', hostName: 'Backup host', platform: 'Windows', osDescription: 'Windows Server', agentVersion: '1.2', protocolVersion: '1', runtimeVersion: '.NET', status: 'Active', connectivity: 'offline', operationalStatus: 'Offline', lastSeenAt: null, lastHeartbeatAt: null, lastConnectedAt: null, capabilityRevision: null, capabilities: [], enrolledAt: null }
 let expiresAt: string
 beforeEach(() => {
   vi.resetAllMocks(); vi.useFakeTimers()
-  Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
+  Object.assign(tenancy, { tenantId: 'tenant-a' })
   expiresAt = new Date(Date.now() + 60_000).toISOString()
-  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true } })
+  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
   vi.mocked(api.getAgents).mockResolvedValue([])
   vi.mocked(api.createEnrollmentToken).mockResolvedValue({ tokenId: 'token-a', token: 'transient-secret', expiresAt })
   vi.mocked(api.getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-a', expiresAt, state: 'Active', agentId: null })
@@ -35,26 +35,22 @@ function mount() {
   return { client, close, ...view }
 }
 /** Walks the plain steps: which computer, then the key and command. Automatic mode is the one-command variant. */
-async function issue(mode: 'guided' | 'automatic' = 'automatic') {
+async function issue() {
   await act(async () => {})
   const name = screen.getByRole('textbox', { name: 'Bilgisayarın adı' }) as HTMLInputElement
   if (!name.value) fireEvent.change(name, { target: { value: 'Backup agent' } })
   fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
-  if (mode === 'automatic') fireEvent.click(screen.getByRole('tab', { name: 'Tek komutla kurulum' }))
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" })) })
 }
 
 describe('Enrollment commands', () => {
   it('uses HTTPS one-line installers and shell-escapes names and keys for both platforms', () => {
+    expect(enrollmentCommands('Windows', 'https://backend.example', 'token', 'Office')).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\\install.ps1"')
     expect(enrollmentCommands('Windows', 'https://backend.example', "token'$()", "O'Brien")).toContain("-Token 'token''$()' -AgentName 'O''Brien' -NonInteractive -Language tr")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', "O'Brien")).toContain("--name 'O'\\''Brien' --non-interactive --language tr")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', "O'Brien")).toContain("curl --proto '=https'")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', '')).toBe('')
-    for (const platform of ['Windows', 'Linux'] as const) {
-      const guided = enrollmentCommands(platform, 'https://backend.example', 'never-in-command', '', 'interactive', 'en')
-      expect(guided).not.toContain('never-in-command')
-      expect(guided).toContain(platform === 'Windows' ? '-Interactive -Language en' : '--interactive --language en')
-    }
+    expect(enrollmentCommands('Windows', 'https://backend.example', 'token', '  ')).toBe('')
   })
   it('derives only secure origins and never generates an insecure command', () => {
     for (const value of ['http://backend.example', 'https://user:pass@backend.example', 'https://backend.example/api', 'https://backend.example?token=x']) expect(httpsServerOrigin(value)).toBe('')
@@ -63,9 +59,19 @@ describe('Enrollment commands', () => {
 })
 
 describe('Adding a backup computer', () => {
+  it('requires a name and defaults to Windows without an installation mode switch', async () => {
+    mount()
+    await act(async () => {})
+    expect(screen.getByRole('combobox', { name: 'İşletim sistemi' })).toHaveValue('Windows')
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
+    fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(screen.queryByRole('tab', { name: /kurulum/i })).not.toBeInTheDocument()
+  })
   it('asks which computer first, creates no key until the user asks for one, and can step back', async () => {
     mount()
     await act(async () => {})
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     expect(screen.getByRole('heading', { name: 'Yedekleme bilgisayarı ekle' })).toBeInTheDocument()
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Bilgisayar')
     expect(screen.getByText(/Neden soruluyor/)).toBeInTheDocument()
@@ -77,11 +83,22 @@ describe('Adding a backup computer', () => {
     expect(screen.getByRole('textbox', { name: 'Bilgisayarın adı' })).toBeInTheDocument()
   })
   it('warns on the first step and disables continue when no server address is configured', async () => {
-    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: null, packages: { 'win-x64': true, 'linux-x64': true } })
+    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: null, packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
     mount()
     await act(async () => {})
-    expect(screen.getByText(/Platform yöneticisi, Yedekleme bilgisayarı ayarları sayfasında sunucu HTTPS adresini belirlemeden kurulum komutu oluşturulamaz/)).toBeVisible()
+    expect(screen.getByText('Sunucu HTTPS adresi ayarlanmamış. Platform yöneticinizden sunucu HTTPS adresini ayarlamasını isteyin.')).toBeVisible()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+  })
+  it('explains instead of offering a command when no installation package is published for the system', async () => {
+    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': false, 'linux-x64': true, 'win-x64-setup': true } })
+    mount()
+    await act(async () => {})
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
+    expect(screen.getByText('Bu işletim sistemi için kurulum paketi yayımlanmamış. Platform yöneticinizden kurulum paketini yayımlamasını isteyin.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    fireEvent.change(screen.getByRole('combobox', { name: 'İşletim sistemi' }), { target: { value: 'Linux' } })
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeEnabled()
   })
   it('creates an enrollment token without sending lifetime', async () => {
     mount()
@@ -94,7 +111,9 @@ describe('Adding a backup computer', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Bağlantı')
     expect(screen.getByText('Backup host')).toBeVisible()
-    for (const value of ['agent-a', 'Windows Server', '1.2']) expect(screen.getByText(value)).not.toBeVisible()
+    for (const value of ['agent-a', 'Windows Server', '1.2']) expect(screen.queryByText(value)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
+    for (const value of ['agent-a', 'Windows Server', '1.2']) expect(screen.getByText(value)).toBeVisible()
   })
   it('waits, clears consumed plaintext, observes connecting, completes only on heartbeat online and stops', async () => {
     const { client } = mount()
@@ -109,6 +128,7 @@ describe('Adding a backup computer', () => {
     expect(document.body.textContent).not.toContain('transient-secret')
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
     expect(screen.getByRole('status')).toHaveTextContent('bağlanıyor')
+    fireEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
     expect(screen.getByText('agent-a')).toBeInTheDocument()
     expect(screen.getByText('Windows Server')).toBeInTheDocument()
     vi.mocked(api.getAgent).mockResolvedValue({ ...detail, connectivity: 'online' })
@@ -269,13 +289,6 @@ describe('Adding a backup computer', () => {
     expect(signal.aborted).toBe(true)
     await act(async () => { resolve({ tokenId: 'late', token: 'late-secret', expiresAt }) })
     expect(screen.queryByDisplayValue(/late-secret/)).not.toBeInTheDocument()
-  })
-  it('cannot add a backup computer without admin', async () => {
-    tenancy.canAdmin = false
-    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><ClientsPage /></MemoryRouter></QueryClientProvider>)
-    await act(async () => {})
-    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
-    expect(api.createEnrollmentToken).not.toHaveBeenCalled()
   })
   it('tenant Admin sees the add button, and tenant changes unmount plaintext', async () => {
     const client = new QueryClient()

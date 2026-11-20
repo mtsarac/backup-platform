@@ -24,6 +24,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
   const [pem, setPem] = useState('')
   const [saved, setSaved] = useState(false)
   const [removing, setRemoving] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [pemError, setPemError] = useState('')
   const { platformRecovery, tenantRecovery, wrapKey } = encryption
 
@@ -38,14 +39,18 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
   return <>
     <Section title={tx("Yedeklerinizin şifreleme koruması")} description={tx("Bu durum şifreli yedeklerin anahtar korumasını gösterir; tüm yedeklerin şifreli olduğu anlamına gelmez.")}>
       <div className="space-y-4">
-        <Notice tone={wrapKey?.state === 'Retired' ? 'warning' : wrapKey ? 'success' : 'info'}>
-          {wrapKey?.state === 'Retired' ? tx('Şifreli yedekler için anahtar desteği gerekiyor') : wrapKey ? tx('Şifreli yedekleriniz korunuyor') : tx('Henüz şifreli yedek oluşturulmadı')}
-        </Notice>
-        <Facts>
-          <Fact label={tx("Kendi kurtarma anahtarınız")}>{tenantRecovery ? tx('Kurtarma anahtarınız eklenmiş') : tx('Kurtarma anahtarınız eklenmemiş')}</Fact>
-          {platformRecovery.configured && <Fact label={tx("Platform kurtarma anahtarı")}>{tx('Platform kurtarma anahtarı hazır')}</Fact>}
-        </Facts>
-        {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa kendi kurtarma anahtarınızla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
+        {platformView ? <>
+          <Notice tone={wrapKey?.state === 'Retired' ? 'warning' : wrapKey ? 'success' : 'info'}>
+            {wrapKey?.state === 'Retired' ? tx('Şifreli yedekler için anahtar desteği gerekiyor') : wrapKey ? tx('Şifreli yedekleriniz korunuyor') : tx('Henüz şifreli yedek oluşturulmadı')}
+          </Notice>
+          <Facts>
+            <Fact label={tx("Kendi kurtarma anahtarınız")}>{tenantRecovery ? tx('Kurtarma anahtarınız eklenmiş') : tx('Kurtarma anahtarınız eklenmemiş')}</Fact>
+            {platformRecovery.configured && <Fact label={tx("Platform kurtarma anahtarı")}>{tx('Platform kurtarma anahtarı hazır')}</Fact>}
+          </Facts>
+          {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa kendi kurtarma anahtarınızla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
+        </> : tenantRecovery
+          ? <Notice tone="success">{tx('Kurtarma anahtarınız eklenmiş.')}</Notice>
+          : <Notice tone="warning" action={<Button type="button" size="sm" onClick={() => setAdding(true)}>{tx('Kurtarma anahtarı ekle')}</Button>}>{tx('Kendi kurtarma anahtarınız yok.')}</Notice>}
         <TechnicalDetails items={[
           ...(wrapKey && !platformView ? [
             { label: tx('Yedekleme anahtarı kimliği'), value: wrapKey.keyId },
@@ -67,8 +72,8 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
 
     <Section title={tx("Kendi kurtarma anahtarınız")} description={tx("İsteğe bağlıdır. Genel anahtarınız yalnızca bundan sonra oluşturulan şifreli yedeklere eklenir; eski dosyalar değişmez. Özel anahtarı güvenle saklayın: platform bu anahtarı görmez ve kaybederseniz sizin için geri getiremez.")}
       actions={tenantRecovery && <Button variant="outline" onClick={() => { remove.reset(); setRemoving(true) }}>{tx("Anahtarı kaldır")}</Button>}>
-      <details>
-        <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('Genel anahtarı yükle veya değiştir')}</summary>
+      <details open={adding}>
+        <summary onClick={event => { event.preventDefault(); setAdding(open => !open) }} className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('Kendi anahtarınızı ekleyin veya değiştirin')}</summary>
       <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (!set.isPending && pem.trim()) submit() }}>
         <Field label={tx('Genel anahtar dosyası')} hint={tx('Yalnızca genel anahtar dosyasını seçin; özel anahtarınızı yüklemeyin.')}>
           {control => <TextInput {...control} type="file" accept=".pem,.pub,text/plain"  disabled={set.isPending} onChange={event => {

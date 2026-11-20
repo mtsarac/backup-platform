@@ -16,6 +16,7 @@ using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Backups;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.ManagedService.Plans;
 using BackupPlatform.ManagedService.Quota;
@@ -143,6 +144,7 @@ public sealed class PlatformDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlatformDbContext).Assembly);
+        TextFold.RegisterWith(modelBuilder);
         modelBuilder.Entity<Tenant>().HasQueryFilter(tenant =>
             IsPlatformOperations || (CurrentTenantId != null && tenant.Id == CurrentTenantId));
         modelBuilder.Entity<AuditEvent>().HasQueryFilter(audit =>

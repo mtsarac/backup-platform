@@ -1,27 +1,26 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { render } from '@/test/render'
-import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, createRoutesFromElements, MemoryRouter, Route, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
-import { BackupJobEditPage } from './backup-job-edit-page'
 import { BackupJobsPage } from './backup-jobs-page'
-import { getBackupJob, getBackupJobHealth, getBackupJobs, getOccurrences, saveBackupJob } from '@/features/backup-jobs/api'
+import { getBackupJobs, saveBackupJob } from '@/features/backup-jobs/api'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
 import { catalog, makeConnection, makeManaged } from '@/features/storage-connections/test-fixtures'
-import { healthyJobHealth } from '@/features/backup-jobs/test-fixtures'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
-vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
+vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJobs: vi.fn(), startJobRun: vi.fn(), getHealthTimeline: vi.fn().mockResolvedValue({ jobs: [] }) }))
+vi.mock('@/features/backups/api', () => ({ getBackups: vi.fn().mockResolvedValue({ items: [], totalCount: 1, page: 1, pageSize: 1 }), getBackup: vi.fn() }))
+vi.mock('@/features/dashboard/api', () => ({ getHealthSummary: vi.fn().mockResolvedValue({ totalJobs: 0, state: null, jobs: [] }) }))
 
 const job: BackupJob = {
-  id: 'job-a', backupType: 'Full', createdAt: '2026-10-01T08:00:00Z', name: 'ERP backup', agentId: 'agent-a', agentName: 'SQL Agent', enabled: true, overlapPolicy: 'Skip', schedule: null, nextOccurrenceAt: null, lastRun: null,
+  id: 'job-a', backupType: 'Full', createdAt: '2026-10-01T08:00:00Z', name: 'ERP backup', agentId: 'agent-a', agentName: 'SQL Agent', enabled: true, overlapPolicy: 'Skip', schedule: null, nextOccurrenceAt: null, lastRun: null, agentRevoked: false,
   configuration: { engine: 'mssql', database: 'ERP', host: 'sql', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' },
   retryPolicy: { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 },
   retention: { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 },
@@ -32,18 +31,14 @@ function renderWizard(route = '/tenants/tenant-a/backup-jobs/new') {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const router = createMemoryRouter(createRoutesFromElements(<>
     <Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} />
-    <Route path="/tenants/:tenantId/backup-jobs/:id/edit" element={<BackupJobEditPage />} />
   </>), { initialEntries: [route] })
   return render(<QueryClientProvider client={cache}><RouterProvider router={router} /></QueryClientProvider>)
 }
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
-  vi.mocked(getOccurrences).mockResolvedValue([])
-  vi.mocked(getBackupJobHealth).mockResolvedValue(healthyJobHealth)
   vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
 })
 /** Fill the required fields and stop on the "Koruma" step. */
@@ -55,14 +50,15 @@ async function reachOptionsStep() {
   fireEvent.change(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu'), { target: { value: 'sql' } })
   fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'ERP' } })
   next(2)
-  await screen.findByLabelText('Yedek şifreleme politikası')
+  await screen.findByRole('switch', { name: /^Şifreleme:/ })
 }
 
-describe('encryption policy in the job wizard', () => {
-  it('defaults to Off and sends it with the configuration', async () => {
+describe('encryption switch in the job wizard', () => {
+  it('starts off ("Kapalı") and sends Off with the configuration', async () => {
     renderWizard()
     await reachOptionsStep()
-    expect(screen.getByLabelText('Yedek şifreleme politikası')).toHaveValue('Off')
+    expect(screen.getByRole('switch', { name: 'Şifreleme: Kapalı' })).not.toBeChecked()
+    expect(screen.queryByRole('combobox', { name: 'Yedek şifreleme politikası' })).not.toBeInTheDocument()
     next()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
@@ -70,56 +66,28 @@ describe('encryption policy in the job wizard', () => {
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.encryptionPolicy).toBe('Off')
   })
 
-  it('offers Off / Optional / Required, explains the choice and carries Required into the summary and the request', async () => {
+  it('turning it on sends Required, offers the recovery key link and shows "Açık" in the summary', async () => {
     renderWizard()
     await reachOptionsStep()
-    const select = screen.getByLabelText('Yedek şifreleme politikası')
-    expect([...(select as HTMLSelectElement).options].map(option => option.value)).toEqual(['Off', 'Optional', 'Required'])
-    fireEvent.change(select, { target: { value: 'Required' } })
-    expect(screen.getByText(/Yedek yalnızca şifreli \(v2-bpe\) gelirse kabul edilir/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Kurtarma anahtarı' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('switch', { name: 'Şifreleme: Kapalı' }))
+    expect(screen.getByRole('switch', { name: 'Şifreleme: Açık' })).toBeChecked()
+    expect(screen.getByRole('link', { name: 'Kurtarma anahtarı' })).toHaveAttribute('href', '/tenants/tenant-a/settings/recovery-key')
     next()
-    expect(screen.getByText('Zorunlu · şifrelenemezse başarısız')).toBeInTheDocument()
+    expect(screen.getByText('Açık')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.encryptionPolicy).toBe('Required')
   })
-
-  it('keeps the saved policy when editing and shows a server field error next to it', async () => {
-    vi.mocked(getBackupJob).mockResolvedValue(withPolicy('Optional'))
-    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'configuration.encryptionPolicy', code: 'invalid_value' }))
-    renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
-    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Updated job' } })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
-    fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
-    await waitFor(() => expect(document.getElementById('configuration.encryptionPolicy-error')).toHaveTextContent(/.+/))
-    expect(screen.getByLabelText('Yedek şifreleme politikası')).toHaveValue('Optional')
-  })
 })
 
-describe('encryption policy on the job page and the job list', () => {
-  it('shows the policy in the edit form, not repeated in the job details', async () => {
-    vi.mocked(getBackupJob).mockResolvedValue(withPolicy('Required'))
-    renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
-    expect(await screen.findByLabelText('Yedek şifreleme politikası')).toHaveValue('Required')
-    expect(within(screen.getByRole('region', { name: 'İş ayrıntıları' })).queryByText('Zorunlu · şifrelenemezse başarısız')).toBeNull()
-  })
-
-  it('shows the policy under the job page technical details to a read-only user', async () => {
-    access.canOperate = false
-    vi.mocked(getBackupJob).mockResolvedValue(withPolicy('Required'))
-    renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
-    const details = await screen.findByRole('region', { name: 'İş ayrıntıları' })
-    expect(within(details).queryByText('Zorunlu · şifrelenemezse başarısız')).toBeNull()
-    await userEvent.click(within(details).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('Zorunlu · şifrelenemezse başarısız')).toBeInTheDocument()
-  })
-
+describe('encryption policy on the job list', () => {
   it('leaves the policy off the list', async () => {
     vi.mocked(getBackupJobs).mockResolvedValue([job, { ...withPolicy('Required'), id: 'job-b', name: 'Billing backup' }])
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
     expect(await screen.findByText('Billing backup')).toBeInTheDocument()
-    expect(screen.queryByText(/Zorunlu/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Gerekli/)).not.toBeInTheDocument()
   })
 })

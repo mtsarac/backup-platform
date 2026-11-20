@@ -62,8 +62,8 @@ describe('browser API contract', () => {
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
   })
   it('maps unknown stable failure codes but never backend exceptions', () => {
-    expect(failureMessage('FutureFailure')).toBe('İşlem başarısız oldu (FutureFailure).')
-    expect(failureMessage('System.Exception: password=secret')).toBe('İşlem başarısız oldu.')
+    expect(failureMessage('FutureFailure')).toContain('Beklenmeyen bir sorun oluştu.')
+    expect(failureMessage('System.Exception: password=secret')).toContain('Beklenmeyen bir sorun oluştu.')
     expect(failureMessage('attempts_exhausted')).toContain('deneme')
     expect(failureMessage('storage_not_configured')).toContain('Depolama')
   })

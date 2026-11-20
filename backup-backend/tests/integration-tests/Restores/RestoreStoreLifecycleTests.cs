@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Domain.Restores;
 using static BackupPlatform.IntegrationTests.RestoreWorld;
@@ -97,9 +98,9 @@ public sealed class RestoreStoreLifecycleTests(PostgreSqlFixture fixture) : ICla
 
             var winner = Assert.Single(claims, claim => claim is not null)!;
             Assert.Equal(4, claims.Count(claim => claim is null));
-            var page = await store.ListAsync(seed.TenantId, new RestoreQuery(Status: RestoreStatus.Leased), default);
+            var page = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(), Status: RestoreStatus.Leased), default);
             Assert.Equal(winner.Operation.Id, Assert.Single(page.Items).Id);
-            Assert.Equal(2, (await store.ListAsync(seed.TenantId, new RestoreQuery(Status: RestoreStatus.Pending), default)).TotalCount);
+            Assert.Equal(2, (await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(), Status: RestoreStatus.Pending), default)).TotalCount);
         }
     }
 

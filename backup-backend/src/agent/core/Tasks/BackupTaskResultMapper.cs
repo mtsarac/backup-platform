@@ -28,7 +28,9 @@ public enum BackupTaskFailureCode
     QuotaExceeded,
     SnapshotFailed,
     StorageAuthenticationFailed,
-    StorageHostKeyMismatch
+    StorageHostKeyMismatch,
+    ServerCertificateUntrusted,
+    AgentNotConfigured
 }
 
 internal static class BackupTaskResultMapper
@@ -106,6 +108,8 @@ internal static class BackupTaskResultMapper
             BackupFailureCause.SnapshotFailed => BackupTaskFailureCode.SnapshotFailed,
             BackupFailureCause.StorageAuthenticationFailed => BackupTaskFailureCode.StorageAuthenticationFailed,
             BackupFailureCause.StorageHostKeyMismatch => BackupTaskFailureCode.StorageHostKeyMismatch,
+            BackupFailureCause.ServerCertificateUntrusted => BackupTaskFailureCode.ServerCertificateUntrusted,
+            BackupFailureCause.AgentNotConfigured => BackupTaskFailureCode.AgentNotConfigured,
             _ => MapKind(failure?.Kind)
         };
 

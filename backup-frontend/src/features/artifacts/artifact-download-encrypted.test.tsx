@@ -11,9 +11,9 @@ const availability: DownloadAvailability = { available: true, reason: null, chec
   { replicaId: 'central', storageProvider: 'Central', storageTarget: 'Managed storage', available: true, reason: null },
 ] }
 const url = '/api/tenants/tenant-a/backup-artifacts/artifact-a/downloads/session-a/content'
-function mount(canAdmin = true) {
+function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<QueryClientProvider client={client}><ArtifactDownload tenantId="tenant-a" artifactId="artifact-a" canAdmin={canAdmin} eligible /></QueryClientProvider>)
+  return render(<QueryClientProvider client={client}><ArtifactDownload tenantId="tenant-a" artifactId="artifact-a" eligible /></QueryClientProvider>)
 }
 beforeEach(() => {
   vi.mocked(getDownloadAvailability).mockResolvedValue(availability)
@@ -27,7 +27,7 @@ describe('download of an encrypted Backup', () => {
     vi.mocked(prepareDownload).mockResolvedValue({ sessionId: 'session-a', downloadUrl: url, filename: 'backup-1.bak.bpe', checksum: 'cipher-sha256', sizeBytes: 4096, decrypted: false })
     mount()
     expect(await screen.findByRole('radio', { name: /Şifreli dosya \(\.bpe\)/ })).toBeChecked()
-    expect(screen.getByText('Şifreli dosyanın SHA256 checksum değeri')).toBeInTheDocument()
+    expect(screen.getByText('Şifreli dosyanın SHA256 sağlama toplamı')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Yedeklemeyi İndir' }))
     await waitFor(() => expect(click).toHaveBeenCalledOnce())
     expect(prepareDownload).toHaveBeenCalledWith('tenant-a', 'artifact-a', undefined)
@@ -60,12 +60,5 @@ describe('download of an encrypted Backup', () => {
     fireEvent.click(await screen.findByRole('radio', { name: /Çözülmüş dosya/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Çözülmüş dosyayı indir' }))
     expect(await screen.findByText(/Şifreleme anahtarı kullanılamıyor/)).toBeInTheDocument()
-  })
-
-  it('keeps the whole download Owner / Admin only', async () => {
-    mount(false)
-    expect(screen.getByRole('status')).toBeInTheDocument()
-    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
-    expect(getDownloadAvailability).not.toHaveBeenCalled()
   })
 })

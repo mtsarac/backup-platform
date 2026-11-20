@@ -1,5 +1,5 @@
 import { apiRequest, tenantPath } from '@/lib/api/client'
-import type { DiscoveryAgentStatus, DiscoveryCredentialInput, DiscoveryInstanceDetail, DiscoveryInstanceFilters, DiscoveryInstanceSummary, DiscoverySettingsInput } from './types'
+import type { DiscoveryAgentStatus, DiscoveryCredentialInput, DiscoveryInstanceDetail, DiscoveryInstanceFilters, DiscoveryInstanceSummary } from './types'
 
 const path = (tenantId: string, resource: string) => tenantPath(tenantId, `discovery/${resource}`)
 const segment = encodeURIComponent
@@ -17,4 +17,3 @@ export const getDiscoveryInstance = (tenantId: string, id: string, signal?: Abor
 export const rescanDiscoveryAgent = (tenantId: string, agentId: string) => apiRequest<DiscoveryAgentStatus>(path(tenantId, `agents/${segment(agentId)}/rescan`), { method: 'POST' })
 export const verifyDiscoveryInstance = (tenantId: string, id: string) => apiRequest<DiscoveryAgentStatus>(path(tenantId, `instances/${segment(id)}/verify`), { method: 'POST' })
 export const saveDiscoveryCredential = (tenantId: string, id: string, input: DiscoveryCredentialInput) => apiRequest<DiscoveryInstanceSummary>(path(tenantId, `instances/${segment(id)}/credential`), { method: 'PUT', json: input })
-export const saveDiscoverySettings = (tenantId: string, agentId: string, input: DiscoverySettingsInput) => apiRequest<DiscoveryAgentStatus>(path(tenantId, `agents/${segment(agentId)}/settings`), { method: 'PUT', json: input })

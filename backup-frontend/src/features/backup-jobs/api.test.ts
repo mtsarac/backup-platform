@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiRequest } from '@/lib/api/client'
-import { saveBackupJob } from './api'
+import { getHealthTimeline, saveBackupJob } from './api'
 import type { BackupJobInput } from './types'
 
 vi.mock('@/lib/api/client', async importOriginal => ({ ...(await importOriginal()), apiRequest: vi.fn().mockResolvedValue({ id: 'job-a' }) }))
@@ -29,11 +29,6 @@ describe('saveBackupJob', () => {
     expect(options).toMatchObject({ method: 'PUT', json: { ...input, schedule } })
     expect(sentJson()).not.toHaveProperty('removeSchedule')
   })
-  it('Operator için retention göndermez', async () => {
-    await saveBackupJob('tenant-a', { ...input, retention: undefined }, 'job-a')
-    expect(apiRequest).toHaveBeenCalledTimes(1)
-    expect(sentJson().retention).toBeUndefined()
-  })
   it('zamanlama kapalıyken removeSchedule: true gönderir', async () => {
     await saveBackupJob('tenant-a', { ...input, schedule: null }, 'job-a')
     expect(apiRequest).toHaveBeenCalledTimes(1)
@@ -47,4 +42,10 @@ describe('saveBackupJob', () => {
     expect(path).toMatch(/backup-jobs$/)
     expect(options).toMatchObject({ method: 'POST', json: { enabled: false, schedule, retention: input.retention } })
   })
+})
+
+it('asks the day summary for the browser\'s IANA time zone', async () => {
+  vi.mocked(apiRequest).mockClear()
+  await getHealthTimeline('tenant-a')
+  expect(vi.mocked(apiRequest).mock.calls[0][0]).toBe(`tenants/tenant-a/backup-jobs/health-timeline?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
 })

@@ -18,7 +18,7 @@ export interface Plan {
 export type EnabledFilter = 'true' | 'false'
 
 export interface PlanFilters extends PageParams {
-  enabled?: EnabledFilter
+  enabled?: string
   search?: string
 }
 

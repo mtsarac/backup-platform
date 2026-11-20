@@ -38,29 +38,26 @@ public sealed class PlatformMembershipRequest
 /// </summary>
 public static class PlatformEndpoints
 {
-    private const int DefaultPageSize = 25;
-    private const int MaximumPageSize = 100;
-
     public static IEndpointRouteBuilder MapPlatformEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("/summary", GetSummaryAsync);
-        platform.MapGet("/tenants", ListTenantsAsync);
+        platform.MapGet("/tenants", ListTenantsAsync).WithListQuery();
         platform.MapPost("/tenants", CreateTenantAsync);
         platform.MapGet("/tenants/{tenantId:guid}", GetTenantAsync);
         platform.MapPut("/tenants/{tenantId:guid}", RenameTenantAsync);
-        platform.MapGet("/tenants/{tenantId:guid}/memberships", ListMembershipsAsync);
+        platform.MapGet("/tenants/{tenantId:guid}/memberships", ListMembershipsAsync).WithListQuery();
         platform.MapPost("/tenants/{tenantId:guid}/memberships", AddMembershipAsync);
         platform.MapDelete("/tenants/{tenantId:guid}/memberships/{userId:guid}", RemoveMembershipAsync);
-        platform.MapGet("/agents", ListAgentsAsync);
+        platform.MapGet("/agents", ListAgentsAsync).WithListQuery();
         platform.MapGet("/tenants/{tenantId:guid}/agents/{agentId:guid}", GetAgentAsync);
-        platform.MapGet("/users", ListUsersAsync);
+        platform.MapGet("/users", ListUsersAsync).WithListQuery();
         platform.MapPost("/users", CreateUserAsync);
         platform.MapPut("/users/{userId:guid}", UpdateUserAsync);
         platform.MapPost("/users/{userId:guid}/disable", DisableUserAsync);
         platform.MapPost("/users/{userId:guid}/enable", EnableUserAsync);
         platform.MapPost("/users/{userId:guid}/temporary-password", AssignTemporaryPasswordAsync);
-        platform.MapGet("/audit", ListAuditAsync);
+        platform.MapGet("/audit", ListAuditAsync).WithListQuery();
         return endpoints;
     }
 
@@ -80,15 +77,8 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListTenantsAsync(
-        string? search, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
-    {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListTenantsAsync(search, p, size, cancellationToken);
-        return Results.Ok(Page(result, ToResponse));
-    }
+        [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken) =>
+        Results.Ok(Page(await store.ListTenantsAsync(list.ToQuery(), cancellationToken), ToResponse));
 
     private static async Task<IResult> CreateTenantAsync(
         PlatformTenantRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
@@ -140,13 +130,9 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListMembershipsAsync(
-        Guid tenantId, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
+        Guid tenantId, [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListMembershipsAsync(new TenantId(tenantId), p, size, cancellationToken);
+        var result = await store.ListMembershipsAsync(new TenantId(tenantId), list.ToQuery(), cancellationToken);
         return result is null ? TenantNotFound() : Results.Ok(Page(result, ToResponse));
     }
 
@@ -176,15 +162,8 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListUsersAsync(
-        string? search, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
-    {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListUsersAsync(search, p, size, cancellationToken);
-        return Results.Ok(Page(result, ToResponse));
-    }
+        [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken) =>
+        Results.Ok(Page(await store.ListUsersAsync(list.ToQuery(), cancellationToken), ToResponse));
 
     private static async Task<IResult> CreateUserAsync(
         PlatformUserRequest? request, ICurrentUser currentUser, PlatformAdministrationService service, CancellationToken cancellationToken)
@@ -274,13 +253,9 @@ public static class PlatformEndpoints
     };
 
     private static async Task<IResult> ListAgentsAsync(
-        Guid? tenantId, string? connectivity, string? status, string? search, int? page, int? pageSize,
+        Guid? tenantId, string? connectivity, string? status, [AsParameters] ListParams list,
         PlatformAgentQueryService agents, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
         var connectivityFilter = AgentConnectivityFilter.All;
         if (!string.IsNullOrEmpty(connectivity)
             && !(Enum.TryParse(connectivity, ignoreCase: true, out connectivityFilter) && connectivityFilter != AgentConnectivityFilter.All && Enum.IsDefined(connectivityFilter)))
@@ -296,8 +271,8 @@ public static class PlatformEndpoints
             }
             statusFilter = parsed;
         }
-        var filter = new PlatformAgentFilter(tenantId is null ? null : new TenantId(tenantId.Value), connectivityFilter, statusFilter, search);
-        var result = await agents.ListAsync(filter, p, size, cancellationToken);
+        var filter = new PlatformAgentFilter(tenantId is null ? null : new TenantId(tenantId.Value), connectivityFilter, statusFilter);
+        var result = await agents.ListAsync(filter, list.ToQuery(), cancellationToken);
         return Results.Ok(Page(result, view => ToResponse(view.Agent.Agent.TenantId.Value, view.TenantName, view.Agent, view.CapabilityCount, view.CapabilityRevision, view.CapabilitiesReportedAt)));
     }
 
@@ -343,13 +318,9 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListAuditAsync(
-        Guid? tenantId, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
+        Guid? tenantId, [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListAuditAsync(tenantId is null ? null : new TenantId(tenantId.Value), p, size, cancellationToken);
+        var result = await store.ListAuditAsync(tenantId is null ? null : new TenantId(tenantId.Value), list.ToQuery(), cancellationToken);
         return Results.Ok(Page(result, item => new
         {
             id = item.Id,
@@ -365,14 +336,6 @@ public static class PlatformEndpoints
             details = JsonSerializer.Deserialize<JsonElement>(item.DetailsJson)
         }));
     }
-
-    private static bool TryPaging(int? page, int? pageSize, out int p, out int size)
-    {
-        p = page ?? 1;
-        size = pageSize ?? DefaultPageSize;
-        return p is >= 1 and <= 1_000_000 && size is >= 1 and <= MaximumPageSize;
-    }
-
 
     private static object Page<TSource, TResult>(PagedResult<TSource> result, Func<TSource, TResult> map) => new
     {
@@ -447,8 +410,6 @@ public static class PlatformEndpoints
     private static IResult TenantNotFound() => Results.NotFound(new { error = "tenant_not_found" });
 
     private static IResult MembershipNotFound() => Results.NotFound(new { error = "membership_not_found" });
-
-    private static IResult InvalidPaging() => Results.BadRequest(new { error = "invalid_request", field = "page", code = "invalid_value" });
 
     private static IResult Invalid(InvalidPlatformRequestException exception) =>
         Results.BadRequest(new { error = "invalid_request", field = exception.Field, code = exception.Code });

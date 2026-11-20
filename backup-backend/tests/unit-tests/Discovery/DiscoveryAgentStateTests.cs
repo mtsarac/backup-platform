@@ -95,9 +95,9 @@ public sealed class DiscoveryAgentStateTests
         state.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
         state.Complete(state.ScanId!.Value, T0.AddSeconds(10), "Completed", null, "[]");
 
-        Assert.False(state.CanRequestManual(T0.AddSeconds(20)));
-        Assert.Equal(TimeSpan.FromSeconds(10), state.ManualRetryAfter(T0.AddSeconds(20)));
-        Assert.True(state.CanRequestManual(T0.AddSeconds(31)));
+        Assert.False(state.CanRequestManual(T0.AddSeconds(2)));
+        Assert.Equal(TimeSpan.FromSeconds(3), state.ManualRetryAfter(T0.AddSeconds(2)));
+        Assert.True(state.CanRequestManual(T0.AddSeconds(6)));
 
         state.RequestScan("manual", null, T0.AddMinutes(1));
         state.ChangeSettings(false, 60, true, T0.AddMinutes(2));

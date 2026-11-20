@@ -17,9 +17,9 @@ describe('restore presentation', () => {
     expect(precheckLabel('unknown.check')).toBe('Diğer kontrol')
   })
 
-  it('shows engine warnings in Turkish by reason code and falls back to the engine message', () => {
+  it('shows known warnings in Turkish and keeps unknown engine messages out of the summary', () => {
     const roles = precheckWarningText({ reasonCode: 'role-definitions-not-in-archive', message: 'Cluster role definitions are not included.' })
     expect(roles).toContain('Rol tanımları yedeğe dahil değildir')
-    expect(precheckWarningText({ reasonCode: 'brand-new-code', message: 'Engine text' })).toBe('Engine text')
+    expect(precheckWarningText({ reasonCode: 'brand-new-code', message: 'Engine text' })).toBe('Bu kontrol bir uyarı bildirdi; teknik ayrıntıları inceleyin.')
   })
 })

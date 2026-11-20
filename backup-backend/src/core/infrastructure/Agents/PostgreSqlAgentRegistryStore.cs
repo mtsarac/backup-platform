@@ -2,6 +2,7 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
+using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Persistence;
@@ -126,10 +127,17 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
             credential.Revoke(AgentCredentialRevocationReason.AgentRevoked, now);
         }
         state.Agent.Revoke();
+        // Schedules stop with the computer; runs already queued are left as they are (disabling never cancelled runs).
+        var jobs = await context.BackupJobs.Where(job => job.TenantId == tenantId && job.AgentId == agentId && job.Enabled).ToListAsync(cancellationToken);
+        foreach (var job in jobs)
+        {
+            job.Disable();
+            BackupAudit.AddJobEvent(context, job, actor, now, AuditActions.BackupJobDisabled);
+        }
         context.AuditEvents.Add(AuditEvent.Record(
             now, actor ?? UserId.System, actor is null ? AuditActorKind.System : AuditActorKind.UserAdmin,
             AuditActions.AgentRevoked, tenantId, "agent", agentId.ToString(),
-            new Dictionary<string, object?> { ["credentialsRevoked"] = state.Credentials.Count, ["result"] = "revoked" }));
+            new Dictionary<string, object?> { ["credentialsRevoked"] = state.Credentials.Count, ["jobsDisabled"] = jobs.Count, ["result"] = "revoked" }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new AgentRevocationCommit(true, state.Credentials.Count);

@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { BackupCenterLayout } from '@/pages/backup-center/backup-center-layout'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,69 +9,60 @@ import { tenantRoutes } from '@/route-tables'
 import { AppShell } from './app-shell'
 import { Sidebar } from './sidebar'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, isPlatformAdmin: false }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', isPlatformAdmin: false }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ ...access, tenant: { tenantId: 'tenant-a', name: 'Acme' }, switchTenant: vi.fn() }) }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: access.isPlatformAdmin ? 'PlatformAdmin' : 'UserAdmin', displayName: 'Ada' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' }], logout: vi.fn() }) }))
 
+vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/hooks/use-theme', () => ({ useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }))
 
-beforeEach(() => { access.canAdmin = true; access.isPlatformAdmin = false })
+beforeEach(() => { access.isPlatformAdmin = false })
 
 const base = '/tenants/tenant-a'
 const nav = () => screen.getAllByRole('navigation')[0]
-const group = (name: string) => within(nav()).getByRole('group', { name })
-const links = (name: string) => within(group(name)).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])
 
 describe('Tenant sidebar', () => {
-  it('groups every existing page under four groups with unchanged URLs', () => {
+  it('shows exactly five headingless items with their URLs', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
-    expect(within(nav()).getByRole('link', { name: 'Genel Bakış' })).toHaveAttribute('href', base)
-    expect(within(nav()).getByRole('link', { name: 'Yedeklemeler' })).toHaveAttribute('href', `${base}/backup-jobs`)
-    expect(within(nav()).getByRole('link', { name: 'Paylaşımlarım' })).toHaveAttribute('href', `${base}/shares`)
-    expect(within(nav()).queryByRole('link', { name: 'Yedekleme işleri' })).not.toBeInTheDocument()
-    expect(links('Altyapı')).toEqual([
-      ['Yedekleme bilgisayarları', `${base}/agents`],
-      ['Veritabanı bulma', `${base}/discovery`],
+    expect(within(nav()).queryAllByRole('group')).toHaveLength(0)
+    expect(within(nav()).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['Ana sayfa', base],
+      ['Yedeklemeler', `${base}/backup-jobs`],
+      ['Bilgisayarlar', `${base}/agents`],
       ['Depolama', `${base}/storage`],
+      ['Ayarlar', `${base}/settings`],
     ])
-    expect(links('Ayarlar')).toEqual([
-      ['Bildirimler', `${base}/notifications`],
-      ['Şifreleme', `${base}/encryption`],
-      ['Yükleme bant genişliği', `${base}/upload-bandwidth`],
-    ])
-    expect(within(nav()).queryByRole('link', { name: 'Platform Yönetimi' })).not.toBeInTheDocument()
+    expect(within(nav().closest('aside')!).queryByRole('link', { name: 'Platform Yönetimi' })).not.toBeInTheDocument()
   })
 
-  it('keeps only upload bandwidth in Ayarlar for non-administrators', () => {
-    access.canAdmin = false
-    render(<MemoryRouter><Sidebar /></MemoryRouter>)
-    expect(links('Ayarlar')).toEqual([['Yükleme bant genişliği', `${base}/upload-bandwidth`]])
-    expect(links('Altyapı')).toHaveLength(3)
-  })
-
-  it('links to Platform Yönetimi only for platform administrators', () => {
+  it('pins Platform Yönetimi below the menu, only for platform administrators', () => {
     access.isPlatformAdmin = true
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
-    expect(within(nav()).getByRole('link', { name: 'Platform Yönetimi' })).toHaveAttribute('href', '/platform')
+    expect(within(nav()).getAllByRole('link')).toHaveLength(5)
+    expect(within(nav().closest('aside')!).getByRole('link', { name: 'Platform Yönetimi' })).toHaveAttribute('href', '/platform')
   })
 
   it('never links to a page that has no route', () => {
-    access.isPlatformAdmin = true
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(tenantRoutes)
-    const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith(base))
-    expect(targets).toHaveLength(9)
-    for (const href of targets) expect(matchRoutes(routes, href.slice(base.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
+    for (const link of within(nav()).getAllByRole('link')) {
+      const href = link.getAttribute('href')!
+      expect(matchRoutes(routes, href.slice(base.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
+    }
+  })
+
+  it.each(['shares', 'discovery', 'notifications', 'encryption', 'upload-bandwidth', 'artifacts', 'artifacts/a1', 'artifacts/a1/restore', 'backup-jobs/j1/edit'])('no longer resolves %s', (path) => {
+    expect(matchRoutes(createRoutesFromChildren(tenantRoutes), `/${path}`)?.at(-1)?.route.path).toBe('*')
+  })
+
+  it.each(['backup-shares', 'agents/databases', 'settings', 'settings/recovery-key', 'settings/bandwidth', 'discovery/instances/i1', 'backup-jobs/j1', 'backup-runs/r1/restore'])('resolves the new location %s', (path) => {
+    expect(matchRoutes(createRoutesFromChildren(tenantRoutes), `/${path}`)?.at(-1)?.route.path).not.toBe('*')
   })
 
   it('shows the same menu in English without leftover Turkish labels', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     act(() => changeLanguage('en'))
-    expect(within(nav()).getByRole('link', { name: 'Backups' })).toBeInTheDocument()
-    expect(within(nav()).getByRole('link', { name: 'My shares' })).toBeInTheDocument()
-    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Database discovery', 'Storage'])
-    expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Upload bandwidth'])
-    expect(within(nav()).getByRole('link', { name: 'Overview' })).toBeInTheDocument()
+    expect(within(nav()).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Backups', 'Computers', 'Storage', 'Settings'])
   })
 
   it('opens the same menu in a drawer from the top bar on phones', () => {
@@ -86,21 +78,24 @@ describe('Tenant sidebar', () => {
   })
 
   it.each([
-    'backup-jobs', 'backup-jobs/new', 'backup-jobs/j1/edit', 'backup-runs', 'backup-runs/r1', 'artifacts', 'artifacts/a1', 'artifacts/a1/restore', 'restores', 'restores/x1',
+    'backup-jobs', 'backup-jobs/new', 'backup-jobs/j1', 'backup-runs', 'backup-runs/r1', 'backup-runs/r1/restore', 'restores', 'restores/x1', 'backup-shares',
   ])('marks the single Yedeklemeler entry current on %s', (path) => {
     render(<MemoryRouter initialEntries={[`${base}/${path}`]}><Sidebar /></MemoryRouter>)
     expect(within(nav()).getAllByRole('link', { current: 'page' }).map((link) => link.textContent)).toEqual(['Yedeklemeler'])
   })
 
-  it('leaves Yedeklemeler inactive on Paylaşımlarım and the dashboard', () => {
-    render(<MemoryRouter initialEntries={[`${base}/shares`]}><Sidebar /></MemoryRouter>)
-    expect(within(nav()).getAllByRole('link', { current: 'page' }).map((link) => link.textContent)).toEqual(['Paylaşımlarım'])
+  it.each([
+    ['Ana sayfa', ''], ['Bilgisayarlar', '/agents'], ['Bilgisayarlar', '/agents/databases'], ['Bilgisayarlar', '/agents/a1'], ['Bilgisayarlar', '/enrollment'], ['Bilgisayarlar', '/discovery/instances/i1'],
+    ['Depolama', '/storage'], ['Depolama', '/storage/connections/c1'], ['Ayarlar', '/settings'], ['Ayarlar', '/settings/recovery-key'], ['Ayarlar', '/settings/bandwidth'],
+  ])('marks only %s current on %s', (label, path) => {
+    render(<MemoryRouter initialEntries={[`${base}${path}`]}><Sidebar /></MemoryRouter>)
+    expect(within(nav()).getAllByRole('link', { current: 'page' }).map((link) => link.textContent)).toEqual([label])
   })
 
   it('does not repeat any backup center tab name as a sidebar entry', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     const names = within(nav()).getAllByRole('link').map((link) => link.textContent)
-    render(<MemoryRouter initialEntries={[`${base}/backup-jobs`]}><Routes><Route path="/tenants/:tenantId" element={<BackupCenterLayout />}><Route path="backup-jobs" element={null} /></Route></Routes></MemoryRouter>)
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[`${base}/backup-jobs`]}><Routes><Route path="/tenants/:tenantId" element={<BackupCenterLayout />}><Route path="backup-jobs" element={null} /></Route></Routes></MemoryRouter></QueryClientProvider>)
     const tabs = within(screen.getByRole('navigation', { name: 'Yedekleme bölümleri' })).getAllByRole('link').map((link) => link.textContent)
     expect(tabs).toHaveLength(4)
     for (const tab of tabs) expect(names).not.toContain(tab)

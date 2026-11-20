@@ -14,6 +14,7 @@ import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
 import { createCredential, getAssertion } from '@/features/auth/webauthn'
 import { Key, Plus, Trash2 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export type PasskeyItem = {
   id: string
@@ -233,6 +234,7 @@ export function PasskeysPage() {
         isPending={passkeys.isPending}
         error={passkeys.error}
         empty={passkeys.data?.length === 0}
+        emptyState={<EmptyState icon={Key} message={tx("Henüz geçiş anahtarı eklenmedi.")} />}
         onRetry={() => {
           void passkeys.refetch()
         }}

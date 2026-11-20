@@ -81,6 +81,39 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         Assert.Empty(await head.Content.ReadAsByteArrayAsync());
     }
 
+    [Fact]
+    public async Task Setup_wizard_is_served_with_the_server_address_stamped_after_the_file_and_status_reports_it()
+    {
+        using var absent = JsonDocument.Parse(await _client.GetStringAsync("/api/agent-dist/status"));
+        Assert.False(absent.RootElement.GetProperty("packages").GetProperty("win-x64-setup").GetBoolean());
+        using var missing = await _client.GetAsync("/api/agent-dist/packages/win-x64-setup");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        byte[] bytes = [1, 2, 3, 4];
+        await File.WriteAllBytesAsync(Path.Combine(_directory, "backup-agent-win-x64-setup.exe"), bytes);
+        _settingsStore.State = new PlatformAgentSettingsState("https://stored.example", 1440, DateTimeOffset.UtcNow);
+
+        using var response = await _client.GetAsync("/api/agent-dist/packages/win-x64-setup");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("backup-agent-win-x64-setup.exe", response.Content.Headers.ContentDisposition!.ToString());
+        var body = await response.Content.ReadAsByteArrayAsync();
+        Assert.Equal(bytes, body[..bytes.Length]);
+        Assert.Equal("\nBackupPlatformServer=https://stored.example\n", System.Text.Encoding.UTF8.GetString(body[bytes.Length..]));
+        using var head = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/api/agent-dist/packages/win-x64-setup"));
+        Assert.Equal(body.Length, head.Content.Headers.ContentLength);
+        using var status = JsonDocument.Parse(await _client.GetStringAsync("/api/agent-dist/status"));
+        Assert.True(status.RootElement.GetProperty("packages").GetProperty("win-x64-setup").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Setup_wizard_is_refused_while_no_server_address_can_be_embedded()
+    {
+        await File.WriteAllBytesAsync(Path.Combine(_directory, "backup-agent-win-x64-setup.exe"), [1]);
+        _app.Configuration["AgentDistribution:PublicBaseUrl"] = null;
+        using var response = await _client.GetAsync("/api/agent-dist/packages/win-x64-setup");
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("windows")]
     [InlineData("linux")]
@@ -145,22 +178,73 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
             return Task.CompletedTask;
         }
     }
-    // The refusal over an existing install is the same sentence on both platforms (documented in the root README). The Windows script cannot run here,
-    // so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
-    private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again.";
-    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hiçbir şey değiştirilmedi. Önce mevcut ajanı kaldırın, ardından bu kurulumu yeniden çalıştırın.";
+    // The refusal sentence is the same on both platforms (documented in the root README) and is followed by a hint naming the consent switch.
+    // The Windows script cannot run here, so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
+    private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again. Alternatively run it in a terminal to be asked, or add ";
+    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin ";
 
     [Theory]
-    [InlineData("install.sh", "refuse_existing() { fail ")]
-    [InlineData("install.ps1", "Fail ")]
-    public async Task Linux_and_Windows_installers_refuse_an_existing_install_with_the_same_documented_message(string script, string call)
+    [InlineData("install.sh", "refuse_existing() { fail ", "--replace-existing")]
+    [InlineData("install.ps1", "function Refuse-Existing { Fail ", "-ReplaceExisting")]
+    public async Task Installers_refuse_an_existing_install_without_consent_with_the_same_message_and_name_the_switch(string script, string call, string option)
     {
         var text = await _client.GetStringAsync($"/api/agent-dist/{script}");
 
-        Assert.Contains($"{call}'{ExistingInstallEnglish}' '{ExistingInstallTurkish}'", text, StringComparison.Ordinal);
+        Assert.Contains($"{call}'{ExistingInstallEnglish}{option} to remove", text, StringComparison.Ordinal);
+        Assert.Contains($"' '{ExistingInstallTurkish}{option} ekleyin.'", text, StringComparison.Ordinal);
         Assert.DoesNotContain("service is already registered", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("will not be reused", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Existing agent binaries", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("install.sh", "--replace-existing", "Invalid archive root", "\n    remove_existing\n", "[[ \"$confirm\" =~ $accepted ]] || refuse_existing")]
+    [InlineData("install.ps1", "-ReplaceExisting", "Invalid release layout", "\n        Remove-ExistingAgent $installPath $storePath\n", "if ($answer -notmatch $accepted) { Refuse-Existing }")]
+    public async Task Installers_ask_before_replacing_default_to_no_and_remove_only_after_the_package_is_validated(string script, string option, string packageCheck, string removeCall, string declined)
+    {
+        var text = await _client.GetStringAsync($"/api/agent-dist/{script}");
+
+        Assert.Contains("Remove it and reinstall? (y/n)", text, StringComparison.Ordinal);
+        Assert.Contains("Mevcut ajan kurulumu bulundu. Kaldirilip yeniden kurulsun mu? (e/h)", text, StringComparison.Ordinal);
+        Assert.Contains("Backups already stored in backup storage locations are not deleted.", text, StringComparison.Ordinal);
+        Assert.Contains(option, text, StringComparison.Ordinal);
+        // Only an explicit y/e answer proceeds; everything else (including Enter) refuses.
+        Assert.Contains(declined, text, StringComparison.Ordinal);
+        Assert.Contains("'^[eE]$'", text, StringComparison.Ordinal);
+        Assert.Contains("'^[yY]$'", text, StringComparison.Ordinal);
+        var validated = text.IndexOf(packageCheck, StringComparison.Ordinal);
+        var removed = text.IndexOf(removeCall, StringComparison.Ordinal);
+        Assert.True(validated >= 0 && removed > validated, "the old installation must be removed only after the new package was downloaded and validated");
+        Assert.True(text.IndexOf(declined, StringComparison.Ordinal) < removed, "the consent question must precede the removal");
+        Assert.DoesNotMatch(@"[^\x00-\x7F]", text.TrimStart('\uFEFF'));
+    }
+
+    [Fact]
+    public async Task Linux_installer_configures_staging_and_the_backup_folder_outside_the_state_folder_that_replacing_deletes()
+    {
+        var text = await _client.GetStringAsync("/api/agent-dist/install.sh");
+
+        Assert.Contains("DATA_DIR=/var/lib/backup-agent-data", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("STATE_DIR=/var/lib/backup-agent-data", text, StringComparison.Ordinal);
+        foreach (var line in new[]
+        {
+            "Environment=\"Agent__Backup__Staging__Mapping=SameHost\"",
+            "Environment=\"Agent__Backup__Staging__AgentDirectory=$DATA_DIR/staging\"",
+            "Environment=\"Agent__Backup__LocalStorage__RootDirectory=$DATA_DIR/backups\""
+        })
+            Assert.Contains(line, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("rm -rf -- \"$INSTALL_DIR\" \"$STATE_DIR\" \"$DATA_DIR\"", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Windows_replace_removes_the_update_staging_directory_next_to_the_store_after_checking_it_like_the_store()
+    {
+        var install = await _client.GetStringAsync("/api/agent-dist/install.ps1");
+        var removal = install[install.IndexOf("function Remove-ExistingAgent", StringComparison.Ordinal)..];
+
+        Assert.Contains("\"$store.updates\"", removal, StringComparison.Ordinal);
+        var preflight = removal.IndexOf("Assert-PurgeUpdateStage", StringComparison.Ordinal);
+        var deletion = removal.IndexOf("Remove-Item -LiteralPath $stage", StringComparison.Ordinal);
+        Assert.True(preflight >= 0 && deletion > preflight, "the update staging directory must be validated before anything is deleted");
     }
 
     [Theory]
@@ -170,7 +254,7 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
     [InlineData("--interactive --non-interactive", "Choose only one interaction mode")]
     [InlineData("--insecure", "Unknown installer option")]
     [InlineData("--server https://one.example --server https://two.example", "Duplicate installer option")]
-    [InlineData("--non-interactive --language tr", "Sunucu ve kayıt anahtarı zorunludur")]
+    [InlineData("--non-interactive --language tr", "Sunucu ve kayit anahtari zorunludur")]
     [InlineData("--non-interactive --server http://backup.example --token 11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Invalid HTTPS server address")]
     public async Task Linux_installer_rejects_invalid_automatic_arguments_without_terminal_reads(string arguments, string expectedError)
     {

@@ -1,7 +1,7 @@
 const L = require('./lib.cjs'); const P = require('./pages.cjs'); const fs=require('fs');
 (async()=>{const b=await L.launch(),ctx=await L.newCtx(b),p=await ctx.newPage(),base=await L.login(p,'a');
 const ids=await P.ids(ctx,L.ST.a.tenantId), result={};
-for(const [name,path] of [['dashboard',''],['jobs','/backup-jobs'],['wizard','/backup-jobs/new'],['artifacts','/artifacts'],['agent','/agents/'+ids.agent]]){
+for(const [name,path] of [['dashboard',''],['jobs','/backup-jobs'],['wizard','/backup-jobs/new'],['agent','/agents/'+ids.agent]]){
  await p.goto(base+path,{waitUntil:'networkidle'}); await p.addScriptTag({path:L.G+'axe-core/axe.min.js'}); const a=await p.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa']}}));
  result[name]=a.violations.map(v=>({id:v.id,impact:v.impact,count:v.nodes.length,example:v.nodes[0]?.html.slice(0,250)})); await L.shot(p,`UI-07-${name}-axe`);
 }

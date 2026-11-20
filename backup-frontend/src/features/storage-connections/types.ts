@@ -1,3 +1,4 @@
+import type { ListQueryParams } from '@/features/platform/types'
 /** Wire types of the storage-connections API (M7a). Every value is the backend's; `permissions` is computed for the caller and only read. */
 export type ProviderAvailability = 'Available' | 'Planned'
 export type ProviderTopology = 'AgentDirect' | 'BackendRelayed'
@@ -118,14 +119,11 @@ export interface PlatformUpdateConnectionInput extends TenantUpdateConnectionInp
   quotaScope?: string
 }
 
-export interface PlatformConnectionFilters {
+export interface PlatformConnectionFilters extends ListQueryParams {
   ownership?: ConnectionOwnership
   providerType?: string
   tenantId?: string
   enabled?: boolean
-  search?: string
-  page?: number
-  pageSize?: number
 }
 
 export type StorageCapacityStatus = 'Available' | 'Warning' | 'Critical' | 'CapacityUnavailable' | 'NotMeasurable' | 'Pending'

@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Notifications;
@@ -91,7 +92,7 @@ public sealed class NotificationDeliverySmokeIntegrationTests : IAsyncLifetime
         Assert.Equal(2, smtp.Messages.Count);
         Assert.Contains("Agent back online", smtp.Messages[1]);
         Assert.Equal("recovered", System.Text.Json.JsonDocument.Parse(hook.Requests[^1].Body).RootElement.GetProperty("phase").GetString());
-        var history = await _world.Admin().ListDeliveriesAsync(agent.TenantId, null, null, null, 1, 25, default);
+        var history = await _world.Admin().ListDeliveriesAsync(agent.TenantId, null, null, null, new ListQuery(), default);
         Assert.Equal(4, history.TotalCount);
         Assert.All(history.Items, item => Assert.Equal("sent", item.Status));
     }

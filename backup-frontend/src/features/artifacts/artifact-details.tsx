@@ -20,7 +20,7 @@ export interface ArtifactPresentation extends Omit<BackupArtifact, 'attemptId' |
 export function ArtifactDeletedNotice({ artifact }: { artifact: ArtifactPresentation }) {
   useLanguage()
   if (artifact.state !== 'Deleted') return null
-  return <Notice tone="info">{tx("Fiziksel dosyalar silindi. Bu kayıt yalnızca yedekleme geçmişidir; kullanılabilir bir Backup değildir.")}</Notice>
+  return <Notice tone="info">{tx("Fiziksel dosyalar silindi. Bu yedek geri yüklenemez; kayıt yalnızca yedekleme geçmişidir.")}</Notice>
 }
 
 /** What this Backup is: the facts a reader needs first. */
@@ -98,7 +98,7 @@ export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation 
       <Fact label={tx("Doğrulama başladı")}>{formatDateTime(meta.verification?.startedAt)}</Fact>
       <Fact label={tx("Doğrulama tamamlandı")}>{formatDateTime(meta.verification?.finishedAt)}</Fact>
       {!isPg && !isFiles && <Fact label={tx("COPY_ONLY")}>{meta.appliedOptions?.copyOnly == null ? tx('Bildirilmedi') : meta.appliedOptions.copyOnly ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>}
-      {([[isFiles ? 'SHA-256' : isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], [tx('Compression'), meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
+      {([[isFiles ? tx('Bütünlük') : isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], [tx('Compression'), meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
     </Facts> : <p className="text-sm text-text-muted">{tx("Bu history kaydında Database backup metadata bulunmuyor.")}</p>}
   </Section>
 }
@@ -117,7 +117,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
         </div>
         {replica.waitingForAgent && <Notice tone="warning">{tx("Fiziksel silme için Agent bekleniyor. Agent yeniden bağlandığında silme işlemi devam edecek.")}</Notice>}
         {replica.status === 'Deleted' && <p className="text-sm text-text-muted">{tx("Fiziksel dosya kaldırıldı. Silinme:")}{' '}{formatDateTime(replica.deletedAt)}</p>}
-        {replica.deleteFailureCode && !replica.waitingForAgent && <ErrorNotice title={tx("Silme tamamlanamadı")} {...describeFailure(replica.deleteFailureCode)} dataImpact={tx("Bu kopya depolamada duruyor; diğer kopyalar etkilenmedi.")} action={tx("Depolama bağlantısını kontrol edip silmeyi yeniden deneyin.")} />}
+        {replica.deleteFailureCode && !replica.waitingForAgent && <ErrorNotice title={tx("Silme tamamlanamadı")} {...describeFailure(replica.deleteFailureCode, 'delete')} dataImpact={tx("Bu kopya depolamada duruyor; diğer kopyalar etkilenmedi.")} action={tx("Depolama bağlantısını kontrol edip silmeyi yeniden deneyin.")} />}
         <Facts columns={3}>
           {replica.storageTarget !== undefined && <Fact label={tx("Depolama hedefi")}>{replica.storageTarget}</Fact>}
           <Fact label={tx("Oluşturulma")}>{formatDateTime(replica.createdAt)}</Fact>

@@ -15,7 +15,7 @@ beforeEach(() => {
     if (new URL(request.url).pathname.endsWith('/agent-enrollment-tokens')) {
       return json({ tokenId: 'tok-1', token: 'secret-token', expiresAt: '2026-10-28T00:00:00Z' })
     }
-    return json({ serverUrl: 'https://backup.example.com', packages: { 'win-x64': true, 'linux-x64': true } })
+    return json({ serverUrl: 'https://backup.example.com', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
   }))
 })
 afterEach(() => vi.unstubAllGlobals())

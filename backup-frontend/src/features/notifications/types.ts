@@ -1,5 +1,5 @@
 import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
-import type { PagedResult } from '@/features/platform/types'
+import type { ListQueryParams, PagedResult } from '@/features/platform/types'
 
 export const eventTypes = ['backup_failed', 'backup_stale', 'agent_offline', 'quota_critical', 'replica_degraded', 'storage_capacity_critical', 'backup_size_anomaly'] as const
 export const severities = ['info', 'warning', 'critical'] as const
@@ -81,5 +81,5 @@ export interface NotificationDelivery {
   createdAt: string
 }
 
-export interface DeliveryFilters { page: number; pageSize: number; status?: DeliveryStatus; kind?: ChannelKind; eventType?: EventType | 'test' }
+export interface DeliveryFilters extends ListQueryParams { status?: DeliveryStatus; kind?: ChannelKind; eventType?: EventType | 'test' }
 export type DeliveryPage = PagedResult<NotificationDelivery>

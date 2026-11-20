@@ -25,6 +25,25 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
     }
 
     [Fact]
+    public async Task PlatformListsRejectUnknownSortFields()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var tenant = await world.AddTenantAsync();
+        var admin = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
+        foreach (var path in new[]
+        {
+            "/api/platform/audit", "/api/platform/storage-usage", "/api/platform/storage-connections",
+            "/api/platform/notifications/deliveries/failed", $"/api/platform/tenants/{tenant.Id.Value}/subscriptions"
+        })
+        {
+            var reply = await CallAsync(admin, HttpMethod.Get, $"{path}?sort=unknown");
+            Assert.Equal(HttpStatusCode.BadRequest, reply.Status);
+            Assert.Equal("invalid_request", reply.Json.GetProperty("error").GetString());
+            Assert.Equal("sort", reply.Json.GetProperty("field").GetString());
+        }
+    }
+
+    [Fact]
     public async Task UserAdminsCannotReachAnyPlatformRoute()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);

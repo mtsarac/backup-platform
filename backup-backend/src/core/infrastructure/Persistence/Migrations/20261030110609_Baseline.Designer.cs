@@ -765,6 +765,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AgentId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("BackupType")
                         .IsRequired()
                         .HasColumnType("text");

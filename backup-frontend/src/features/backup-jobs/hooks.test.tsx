@@ -5,20 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useRunBackupJob, useSaveBackupJob } from './hooks'
 import { saveBackupJob, startJobRun } from './api'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: false }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('./api', () => ({ startJobRun: vi.fn(), getBackupJob: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), saveBackupJob: vi.fn(), setJobEnabled: vi.fn() }))
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>
 }
-beforeEach(() => { vi.clearAllMocks(); access.canOperate = true })
+beforeEach(() => { vi.clearAllMocks() })
 describe('manuel çalıştırma', () => {
-  it('Viewer için API isteği göndermez', async () => {
-    access.canOperate = false
-    const { result } = renderHook(useRunBackupJob, { wrapper })
-    await expect(result.current.run('job-a')).rejects.toThrow('yetkiniz yok')
-    expect(startJobRun).not.toHaveBeenCalled()
-  })
   it('eşzamanlı ikinci tıklamayı engeller', async () => {
     let resolve!: (value: { id: string }) => void
     vi.mocked(startJobRun).mockImplementation(() => new Promise(done => { resolve = done }))

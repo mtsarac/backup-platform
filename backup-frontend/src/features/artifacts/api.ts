@@ -1,13 +1,11 @@
 import { apiRequest, tenantPath } from '@/lib/api/client'
+import { query } from '@/features/platform/api'
 import type { ArtifactFormat } from '@/features/artifact-encryption/types'
 import type { ArtifactFilters, ArtifactList, BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest } from './types'
 
-export function listArtifacts(tenantId: string, filters: ArtifactFilters, signal: AbortSignal) {
-  const search = new URLSearchParams({ page: String(filters.page), pageSize: String(filters.pageSize) })
-  if (filters.state) search.set('state', filters.state)
-  if (filters.from) search.set('from', new Date(`${filters.from}T00:00:00`).toISOString())
-  if (filters.to) search.set('to', new Date(`${filters.to}T23:59:59.999`).toISOString())
-  return apiRequest<ArtifactList>(`${tenantPath(tenantId, 'backup-artifacts')}?${search}`, { signal })
+export function listArtifacts(tenantId: string, { from, to, ...filters }: ArtifactFilters, signal: AbortSignal) {
+  const bounds = { from: from && new Date(`${from}T00:00:00`).toISOString(), to: to && new Date(`${to}T23:59:59.999`).toISOString() }
+  return apiRequest<ArtifactList>(`${tenantPath(tenantId, 'backup-artifacts')}${query({ ...filters, ...bounds })}`, { signal })
 }
 
 export function getArtifact(tenantId: string, id: string, signal: AbortSignal) {

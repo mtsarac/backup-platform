@@ -94,7 +94,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               { label: tx("Kapsam"), value: scopeLabels(quota.includedStorageScopes).join('; ') },
             ]} />
 
-            {!quota.newBackupsAllowed && <ErrorNotice what={tx("Yeni yedekleme başlatma engellendi.")} dataImpact={tx("Mevcut yedekler silinmedi ve geri yüklenebilir.")} action={tx("Kota ve abonelik durumunu gözden geçirin.")} technical={[{ label: tx("Red kodu"), value: quota.denialCode ?? tx("bilinmiyor") }]} />}
+            {!quota.newBackupsAllowed && <ErrorNotice what={tx("Yeni yedekleme başlatma engellendi.")} action={tx("Kota ve abonelik durumunu gözden geçirin.")} technical={[{ label: tx("Red kodu"), value: quota.denialCode ?? tx("bilinmiyor") }]} />}
 
           </div>
         )}

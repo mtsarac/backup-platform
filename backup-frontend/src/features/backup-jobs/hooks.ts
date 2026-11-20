@@ -1,19 +1,21 @@
-import { tx } from '@/lib/i18n'
 import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
 import { useIdempotencyKey } from '@/lib/idempotency-key'
 import { getBackupJob, getBackupJobs, getOccurrences, saveBackupJob, setJobEnabled, startJobRun } from './api'
-import type { BackupJobInput } from './types'
+import { isActiveRun } from '@/features/backups/presentation'
+import type { BackupJob, BackupJobInput } from './types'
 
 export const backupJobQueryKeys = {
   all: (tenantId: string) => ['tenant', tenantId, 'backup-jobs'] as const,
   detail: (tenantId: string, id: string) => ['tenant', tenantId, 'backup-jobs', id] as const,
 }
-export function useBackupJobs() {
+export function useBackupJobs({ includeArchived = false }: { includeArchived?: boolean } = {}) {
   const { tenantId } = useTenant()
-  return useQuery({ queryKey: backupJobQueryKeys.all(tenantId), queryFn: ({ signal }) => getBackupJobs(tenantId, signal) })
+  // While a run is active the list is re-read, so a finished run shows its result without a reload.
+  const whileRunning = (query: { state: { data?: BackupJob[] } }) => query.state.data?.some(job => job.lastRun && isActiveRun(job.lastRun.status)) ? 5000 : false
+  return useQuery({ queryKey: includeArchived ? [...backupJobQueryKeys.all(tenantId), 'with-archived'] : backupJobQueryKeys.all(tenantId), queryFn: ({ signal }) => getBackupJobs(tenantId, signal, includeArchived), refetchInterval: whileRunning })
 }
 export function useBackupJob(id: string) {
   const { tenantId } = useTenant()
@@ -29,31 +31,37 @@ function useInvalidateJobs() {
   return () => Promise.all(['backup-jobs', 'backup-runs', 'dashboard'].map(resource => client.invalidateQueries({ queryKey: ['tenant', tenantId, resource] })))
 }
 export function useSaveBackupJob(id?: string) {
-  const { tenantId, canOperate, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const invalidate = useInvalidateJobs()
   // A creation whose outcome is unknown (network error, 5xx) is retried with the same key, so the server never creates the job twice.
   const idempotency = useIdempotencyKey()
   return useMutation({ mutationFn: (input: BackupJobInput) => {
-    if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
-    const body = { ...input, retention: canAdmin ? input.retention : undefined }
-    return id ? saveBackupJob(tenantId, body, id) : saveBackupJob(tenantId, body, undefined, idempotency.keyFor(body))
+    return id ? saveBackupJob(tenantId, input, id) : saveBackupJob(tenantId, input, undefined, idempotency.keyFor(input))
   }, onSuccess: invalidate, onError: invalidate, onSettled: (_data, error) => idempotency.settle(error ?? undefined) })
 }
+/** Saves the job's own configuration with the server certificate trusted, then runs it again: the trust stays on the job. */
+export function useTrustJobCertificate() {
+  const { tenantId } = useTenant()
+  const invalidate = useInvalidateJobs()
+  return useMutation({ mutationFn: async (id: string) => {
+    const { name, agentId, configuration, retryPolicy, overlapPolicy, schedule, retention } = await getBackupJob(tenantId, id)
+    await saveBackupJob(tenantId, { name, agentId, configuration: { ...configuration, trustServerCertificate: true }, retryPolicy, overlapPolicy, schedule, retention }, id)
+    return startJobRun(tenantId, id, crypto.randomUUID())
+  }, retry: false, onSettled: invalidate })
+}
 export function useToggleBackupJob() {
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const invalidate = useInvalidateJobs()
   return useMutation({ mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => {
-    if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
     return setJobEnabled(tenantId, id, enabled)
   }, onSuccess: invalidate })
 }
 export function useRunBackupJob() {
-  const { tenantId, canOperate } = useTenant()
+  const { tenantId } = useTenant()
   const invalidate = useInvalidateJobs()
   const actions = useRef(new Map<string, { key: string; pending: boolean }>())
   const mutation = useMutation({ mutationFn: ({ id, key }: { id: string; key: string }) => startJobRun(tenantId, id, key), retry: false, onSuccess: invalidate })
   const run = async (id: string) => {
-    if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
     const actionId = `${tenantId}/${id}`
     const previous = actions.current.get(actionId)
     if (previous?.pending) return undefined

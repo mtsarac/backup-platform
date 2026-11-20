@@ -50,3 +50,15 @@ export interface SmsTransport {
 }
 
 export interface NotificationTransports { email: EmailTransport; sms: SmsTransport }
+
+export interface FailedDelivery {
+  id: string
+  tenantId: string
+  eventType: string
+  subjectName: string
+  channelName: string
+  targetDisplay: string
+  attempts: number
+  errorCode: string | null
+  createdAt: string
+}

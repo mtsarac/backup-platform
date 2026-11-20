@@ -10,18 +10,17 @@ import { StatusPill } from '@/components/data/status-pill'
 import { formatDateTime } from '@/lib/format'
 import { useAuth } from '@/features/auth/use-auth'
 import { useCreateShare, useShares } from '@/features/shares/hooks'
-import { canManageShare, type BackupShareView } from '@/features/shares/types'
+import { canExtendShare, canManageShare, SHARE_DURATION_HOURS, type BackupShareView } from '@/features/shares/types'
+import { ShareDurationSelect } from '@/features/shares/share-duration-select'
 import { ShareActionDialogs } from '@/features/shares/share-dialogs'
 import type { BackupArtifact } from './types'
 
 export function ArtifactSharesSection({
   tenantId,
   artifact,
-  canAdmin,
 }: {
   tenantId: string
   artifact: BackupArtifact
-  canAdmin: boolean
 }) {
   useLanguage()
   const { data: rawShares, isPending } = useShares(tenantId, artifact.id)
@@ -30,7 +29,6 @@ export function ArtifactSharesSection({
   const [dialogOpen, setDialogOpen] = useState(false)
   const [durationHours, setDurationHours] = useState(24)
   const [reason, setReason] = useState('')
-  const [localError, setLocalError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const { user } = useAuth()
   const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
@@ -39,15 +37,9 @@ export function ArtifactSharesSection({
   const hasDownloadableReplica = artifact.replicas.some(
     (r) => r.verificationState === 'Verified' && r.status === 'Available'
   )
-  const canCreate = canAdmin && hasDownloadableReplica
+  const canCreate = hasDownloadableReplica
 
   function handleSubmit() {
-    setLocalError(null)
-    if (durationHours < 1 || durationHours > 72) {
-      setLocalError(tx('Süre 1 ile 72 saat arasında olmalıdır.'))
-      return
-    }
-
     createMutation.mutate(
       { durationHours, reason: reason.trim() || undefined },
       {
@@ -64,19 +56,16 @@ export function ArtifactSharesSection({
     <Section
       title={tx('Paylaşımlar')}
       actions={
-        canAdmin && (
-          <Button
-            size="sm"
-            disabled={!canCreate}
-            onClick={() => {
-              setLocalError(null)
-              createMutation.reset()
-              setDialogOpen(true)
-            }}
-          >
-            {tx('Paylaşım oluştur')}
-          </Button>
-        )
+        <Button
+          size="sm"
+          disabled={!canCreate}
+          onClick={() => {
+            createMutation.reset()
+            setDialogOpen(true)
+          }}
+        >
+          {tx('Paylaşım oluştur')}
+        </Button>
       }
     >
       <div className="space-y-4">
@@ -121,15 +110,17 @@ export function ArtifactSharesSection({
                     </td>
                     <td className="py-2 pr-4 text-text-muted">{share.reason || '—'}</td>
                     <td className="py-2 text-right">
-                      {canManageShare(share, user?.role, canAdmin) ? (
+                      {canManageShare(share, user?.role) ? (
                         <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setExtendTarget(share)}
-                          >
-                            {tx('Süreyi uzat')}
-                          </Button>
+                          {canExtendShare(share, user?.role) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setExtendTarget(share)}
+                            >
+                              {tx('Süreyi uzat')}
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -160,23 +151,7 @@ export function ArtifactSharesSection({
           onSubmit={handleSubmit}
           onClose={() => setDialogOpen(false)}
         >
-          <Field
-            label={tx('Süre (saat)')}
-            hint={tx('1 ile 72 saat arasında bir süre seçin (varsayılan: 24 saat).')}
-            error={localError}
-          >
-            {(fieldProps) => (
-              <TextInput
-                {...fieldProps}
-                type="number"
-                min={1}
-                max={72}
-                value={durationHours}
-                onChange={(e) => setDurationHours(Number(e.target.value))}
-                required
-              />
-            )}
-          </Field>
+          <ShareDurationSelect label={tx('Süre')} hint={tx('Varsayılan: 24 saat.')} hours={SHARE_DURATION_HOURS} value={durationHours} onChange={setDurationHours} />
           <Field label={tx('Gerekçe (isteğe bağlı)')}>
             {(fieldProps) => (
               <TextInput

@@ -28,6 +28,15 @@ async function createForm() {
 }
 
 describe('platform users', () => {
+  it('sends searches and sort changes to the server and resets the page', async () => {
+    renderPlatform(<PlatformUsersPage />, { path: '/platform/users?page=2' })
+    await screen.findByText('Ayşe Yılmaz')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'ayse')
+    await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ search: 'ayse', page: 1, pageSize: 25 }, expect.any(AbortSignal)))
+    await userEvent.click(screen.getByRole('button', { name: /E-posta/ }))
+    await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ search: 'ayse', page: 1, pageSize: 25, sort: 'email', dir: 'asc' }, expect.any(AbortSignal)))
+  })
+
   it('keeps sensitive actions behind the selected account while retaining their warnings', async () => {
     renderPlatform(<PlatformUsersPage />)
     await screen.findByText('Ayşe Yılmaz')
@@ -35,6 +44,19 @@ describe('platform users', () => {
     await userEvent.click(screen.getAllByText('İşlemler', { selector: 'summary' }).find((summary) => summary.textContent?.includes('Ayşe Yılmaz (ayse)'))!)
     await userEvent.click(screen.getByRole('button', { name: 'Ayşe Yılmaz kullanıcısına geçici şifre ata' }))
     expect(screen.getByText(/tüm açık oturumları sonlandırılır/)).toBeInTheDocument()
+  })
+
+  it('closes the actions menu after a temporary password is assigned', async () => {
+    vi.mocked(api.assignTemporaryPassword).mockResolvedValue(undefined as never)
+    renderPlatform(<PlatformUsersPage />)
+    await screen.findByText('Ayşe Yılmaz')
+    const summary = screen.getAllByText('İşlemler', { selector: 'summary' }).find((item) => item.textContent?.includes('Ayşe Yılmaz (ayse)'))!
+    await userEvent.click(summary)
+    await userEvent.click(screen.getByRole('button', { name: 'Ayşe Yılmaz kullanıcısına geçici şifre ata' }))
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText(/^Geçici şifre/), 'temporary-password')
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Geçici şifre ata' }))
+    await screen.findByText(/geçici şifre atandı/)
+    expect(screen.getAllByText('İşlemler', { selector: 'summary' }).find((item) => item.textContent?.includes('Ayşe Yılmaz (ayse)'))!.closest('details')).not.toHaveAttribute('open')
   })
 
   it('lists account details and opens the create action with an empty list', async () => {
@@ -57,6 +79,21 @@ describe('platform users', () => {
     await userEvent.click(submit)
     expect(api.createUser).toHaveBeenCalledWith({ username: 'deniz', email: 'deniz@example.com', displayName: 'Deniz Kaya', password: 'secret-password', role: 'UserAdmin', tenantIds: ['t1', 't2'] })
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('pages the workspaces of the new-user dialog through the list state and starts over when it closes', async () => {
+    vi.mocked(api.getTenants).mockResolvedValue(paged(tenants, { totalCount: 40 }))
+    renderPlatform(<PlatformUsersPage />)
+    await screen.findByText('ayse@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni kullanıcı' }))
+    const pages = await screen.findByRole('navigation', { name: 'Çalışma alanı sayfaları' })
+    expect(api.getTenants).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    await userEvent.click(within(pages).getByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(api.getTenants).toHaveBeenLastCalledWith({ page: 2, pageSize: 25 }, expect.any(AbortSignal)))
+    expect(screen.getByTestId('location')).toHaveTextContent('tenants-page=2')
+    expect(api.getUsers).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Vazgeç' }))
+    await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('tenants-page'))
   })
 
   it('creates PlatformAdmin without memberships after changing roles', async () => {
