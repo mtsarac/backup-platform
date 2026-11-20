@@ -33,19 +33,30 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             await context.BackupRuns.LongCountAsync(run => run.CompletedAt >= since && (run.Status == BackupStatus.Failed || run.Status == BackupStatus.AgentLost), cancellationToken));
     }
 
-    public async Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
+    private sealed class TenantRow
+    {
+        public required TenantId Id { get; init; }
+        public required string Name { get; init; }
+        public required int MemberCount { get; init; }
+        public required int AgentCount { get; init; }
+        public required bool EnrollmentEnabled { get; init; }
+    }
+
+    // Tenants carry no creation date, so the list opens A to Z.
+    private static readonly SortMap<TenantRow> TenantSorts = SortMap<TenantRow>.Create()
+        .Text("name", row => row.Name)
+        .Value("memberCount", row => row.MemberCount)
+        .Value("agentCount", row => row.AgentCount)
+        .Value("enrollmentEnabled", row => row.EnrollmentEnabled);
+
+    public async Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(ListQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var tenants = context.Tenants.AsNoTracking().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim().ToLowerInvariant();
-            tenants = tenants.Where(tenant => tenant.Name.ToLower().Contains(term));
-        }
-        var total = await tenants.LongCountAsync(cancellationToken);
-        var items = await TenantItems(context, tenants.OrderBy(tenant => tenant.Name).ThenBy(tenant => tenant.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize)).ToListAsync(cancellationToken);
-        return new PagedResult<PlatformTenantItem>(items, total, page, pageSize);
+        var page = await TenantRows(context, context.Tenants.AsNoTracking())
+            .ApplySearch(query, row => row.Name)
+            .ApplySort(TenantSorts, query, "name", row => row.Id)
+            .ToPagedResultAsync(query, cancellationToken);
+        return new PagedResult<PlatformTenantItem>(page.Items.Select(ToItem).ToList(), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<PlatformTenantDetail?> GetTenantAsync(TenantId tenantId, CancellationToken cancellationToken)
@@ -94,8 +105,8 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             await context.SaveChangesAsync(cancellationToken);
             outcome = PlatformChangeOutcome.Changed;
         }
-        var item = await TenantItems(context, context.Tenants.AsNoTracking().Where(row => row.Id == tenantId)).SingleAsync(cancellationToken);
-        return new(outcome, item);
+        var row = await TenantRows(context, context.Tenants.AsNoTracking().Where(row => row.Id == tenantId)).SingleAsync(cancellationToken);
+        return new(outcome, ToItem(row));
     }
 
     private sealed class UserRow
@@ -288,19 +299,23 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         return new(PlatformChangeOutcome.Changed, new PlatformUserItem(targetUserId, user.DisplayName, credential.LoginIdentifier, credential.Email, user.Role, count, user.IsDisabled, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason));
     }
 
-    public async Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(
-        TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken)
+    // Memberships carry no join date, so the list opens A to Z.
+    private static readonly SortMap<MembershipRow> MembershipSorts = SortMap<MembershipRow>.Create()
+        .Text("displayName", row => row.DisplayName)
+        .Text("username", row => row.Login);
+
+    public async Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, ListQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
         }
-        var query = MembershipItems(context, tenantId);
-        var total = await query.LongCountAsync(cancellationToken);
-        var rows = await query.OrderBy(row => row.DisplayName).ThenBy(row => row.UserId)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-        return new PagedResult<PlatformMembershipItem>(rows.Select(ToItem).ToList(), total, page, pageSize);
+        var page = await MembershipItems(context, tenantId)
+            .ApplySearch(query, row => row.DisplayName, row => row.Login)
+            .ApplySort(MembershipSorts, query, "displayName", row => row.UserId)
+            .ToPagedResultAsync(query, cancellationToken);
+        return new PagedResult<PlatformMembershipItem>(page.Items.Select(ToItem).ToList(), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(
@@ -414,12 +429,16 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
 
     private static string Id(UserId id) => id.Value.ToString("D");
 
-    private static IQueryable<PlatformTenantItem> TenantItems(PlatformDbContext context, IQueryable<Tenant> tenants) =>
-        tenants.Select(tenant => new PlatformTenantItem(
-            tenant.Id, tenant.Name,
-            context.TenantMemberships.Count(membership => membership.TenantId == tenant.Id),
-            context.Agents.Count(agent => agent.TenantId == tenant.Id),
-            context.TenantAgentEnrollmentPolicies.Any(policy => policy.TenantId == tenant.Id && policy.IsEnabled)));
+    private static IQueryable<TenantRow> TenantRows(PlatformDbContext context, IQueryable<Tenant> tenants) =>
+        tenants.Select(tenant => new TenantRow
+        {
+            Id = tenant.Id, Name = tenant.Name,
+            MemberCount = context.TenantMemberships.Count(membership => membership.TenantId == tenant.Id),
+            AgentCount = context.Agents.Count(agent => agent.TenantId == tenant.Id),
+            EnrollmentEnabled = context.TenantAgentEnrollmentPolicies.Any(policy => policy.TenantId == tenant.Id && policy.IsEnabled)
+        });
+
+    private static PlatformTenantItem ToItem(TenantRow row) => new(row.Id, row.Name, row.MemberCount, row.AgentCount, row.EnrollmentEnabled);
 
     private sealed class MembershipRow
     {

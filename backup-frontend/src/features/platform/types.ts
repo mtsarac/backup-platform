@@ -4,6 +4,9 @@ import type { AgentCapability } from '@/features/agents/types'
 export interface PageParams {
   page?: number
   pageSize?: number
+  sort?: string
+  dir?: 'asc' | 'desc'
+  search?: string
 }
 
 export interface PagedResult<T> {
@@ -118,9 +121,8 @@ export interface PlatformAgentDetail extends PlatformAgent {
 
 export interface PlatformAgentFilters extends PageParams {
   tenantId?: string
-  connectivity?: AgentConnectivity
-  status?: AgentLifecycle
-  search?: string
+  connectivity?: string
+  status?: string
 }
 
 export interface SearchParams extends PageParams {

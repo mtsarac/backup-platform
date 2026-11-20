@@ -28,6 +28,15 @@ async function createForm() {
 }
 
 describe('platform users', () => {
+  it('sends searches and sort changes to the server and resets the page', async () => {
+    renderPlatform(<PlatformUsersPage />, { path: '/platform/users?page=2' })
+    await screen.findByText('Ayşe Yılmaz')
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'ayse')
+    await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ search: 'ayse', page: 1, pageSize: 25 }, expect.any(AbortSignal)))
+    await userEvent.click(screen.getByRole('button', { name: /E-posta/ }))
+    await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ search: 'ayse', page: 1, pageSize: 25, sort: 'email', dir: 'asc' }, expect.any(AbortSignal)))
+  })
+
   it('keeps sensitive actions behind the selected account while retaining their warnings', async () => {
     renderPlatform(<PlatformUsersPage />)
     await screen.findByText('Ayşe Yılmaz')

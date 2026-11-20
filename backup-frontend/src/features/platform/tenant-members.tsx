@@ -2,19 +2,20 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { Users } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
-import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { errorMessage, platformOnlyMessage } from '@/lib/api/failure-messages'
 import { useAddMembership, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
-import { bareListClass } from '@/features/lists/list-empty'
+import { bareListClass, ListEmpty } from '@/features/lists/list-empty'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { toServerQuery } from '@/features/lists/server-list-query'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { SearchForm } from './search-form'
 import type { PlatformMembership } from './types'
-import { LIST_PAGE_SIZE, useListParams } from './use-list-params'
 import { QueryState } from '@/components/data/query-state'
 import { Select } from '@/components/ui/text-input'
 
@@ -50,29 +51,36 @@ function AddMemberForm({ tenantId, formRef }: { tenantId: string; formRef: RefOb
   </Section>
 }
 
+const memberListConfig = {
+  search: true,
+  pageKey: 'memberPage',
+  sort: { first: { displayName: 'asc', username: 'asc' }, default: { key: 'displayName', dir: 'asc' } },
+} as const
+
 export function MembershipsSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()
-  const { page, update } = useListParams('memberPage')
-  const query = usePlatformMemberships(tenantId, { page, pageSize: LIST_PAGE_SIZE })
+  const state = useListState(memberListConfig)
+  const query = usePlatformMemberships(tenantId, toServerQuery(state))
   const remove = useRemoveMembership(tenantId)
   const [selected, setSelected] = useState<PlatformMembership | null>(null)
   const formRef = useRef<HTMLDivElement>(null)
   const data = query.data
   const columns: Column<PlatformMembership>[] = [
-    { key: 'name', header: tx('Ad'), wrap: true, render: (member) => <span className="font-medium">{member.displayName}</span> },
-    { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (member) => member.loginIdentifier ?? '—' },
+    { key: 'displayName', sortable: true, header: tx('Ad'), wrap: true, render: (member) => <span className="font-medium">{member.displayName}</span> },
+    { key: 'username', sortable: true, header: tx('Kullanıcı adı'), wrap: true, render: (member) => member.loginIdentifier ?? '—' },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={tx("{0} üyeliğini kaldır", { "0": member.displayName })} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
   ]
   return <div className="space-y-6">
     <AddMemberForm tenantId={tenantId} formRef={formRef} />
+    <ListToolbar state={state} label={tx('Üyelikler')} total={data?.totalCount} search={{ label: tx('Üye ara'), placeholder: tx('Ad veya kullanıcı adı') }} />
     <Section title={tx("Üyelikler")} description={tx("Üyeliği kaldırmak kullanıcı hesabını silmez.")} flush className="overflow-hidden">
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (data.totalCount === 0
-          ? <EmptyState icon={Users} message={tx("Bu tenant'ın henüz üyesi yok.")} action={<Button onClick={() => formRef.current?.querySelector('input')?.focus()}>{tx("İlk üyeyi ekle")}</Button>} />
-          : <DataList className={bareListClass} rows={data.items} columns={columns} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} />)}
+          ? <ListEmpty icon={Users} message={tx("Bu tenant'ın henüz üyesi yok.")} action={<Button onClick={() => formRef.current?.querySelector('input')?.focus()}>{tx("İlk üyeyi ekle")}</Button>} filtering={state.filtering} onClear={state.clear} />
+          : <DataList className={bareListClass} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} onClearFilters={state.filtering ? state.clear : undefined} />)}
       </QueryState>
     </Section>
-    {data && data.totalCount > 0 && <Pagination label={tx("Üyelik sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ memberPage: next })} />}
+    {data && <ListPager state={state} total={data.totalCount} label={tx('Üyelik sayfaları')} disabled={query.isFetching} />}
     <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Üyelik kaldırılsın mı?")} confirmLabel={tx("Üyeliği kaldır")}
       consequence={{
         what: selected && tx("{0} kullanıcısı “{1}” çalışma alanından çıkarılır.", { "0": selected.displayName, "1": tenantName }),

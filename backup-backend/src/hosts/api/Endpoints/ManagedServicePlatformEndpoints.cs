@@ -42,14 +42,13 @@ public sealed class AssignPlanRequest
 /// </summary>
 public static class ManagedServicePlatformEndpoints
 {
-    private const int DefaultPlanPageSize = 50;
     private const int DefaultHistoryPageSize = 25;
     private const int MaximumPageSize = 100;
 
     public static IEndpointRouteBuilder MapManagedServicePlatformEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
-        platform.MapGet("/plans", ListPlansAsync);
+        platform.MapGet("/plans", ListPlansAsync).WithListQuery();
         platform.MapPost("/plans", CreatePlanAsync);
         platform.MapPut("/plans/{planId:guid}", UpdatePlanAsync);
         platform.MapPut("/plans/{planId:guid}/enabled", SetPlanEnabledAsync);
@@ -63,15 +62,8 @@ public static class ManagedServicePlatformEndpoints
     }
 
     private static async Task<IResult> ListPlansAsync(
-        bool? enabled, string? search, int? page, int? pageSize, ManagedServiceAdministrationService service, CancellationToken cancellationToken)
-    {
-        if (!TryPaging(page, pageSize, DefaultPlanPageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await service.ListPlansAsync(enabled, search, p, size, cancellationToken);
-        return Results.Ok(Page(result, ToResponse));
-    }
+        bool? enabled, [AsParameters] ListParams list, ManagedServiceAdministrationService service, CancellationToken cancellationToken) =>
+        Results.Ok(Page(await service.ListPlansAsync(enabled, list.ToQuery(), cancellationToken), ToResponse));
 
     private static Task<IResult> CreatePlanAsync(
         PlanRequest? request, ICurrentUser currentUser, ManagedServiceAdministrationService service, CancellationToken cancellationToken) =>

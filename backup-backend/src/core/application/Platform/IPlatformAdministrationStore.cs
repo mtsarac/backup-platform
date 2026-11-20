@@ -49,7 +49,7 @@ public interface IPlatformAdministrationStore
 {
     Task<PlatformCounts> GetCountsAsync(DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(string? search, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(ListQuery query, CancellationToken cancellationToken);
     Task<PlatformTenantDetail?> GetTenantAsync(TenantId tenantId, CancellationToken cancellationToken);
     Task<PlatformTenantItem> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformTenantItem>> RenameTenantAsync(TenantId tenantId, string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
@@ -66,7 +66,7 @@ public interface IPlatformAdministrationStore
     Task<PlatformChange<PlatformUserItem>> AssignTemporaryPasswordAsync(
         UserId targetUserId, string passwordHash, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     /// <summary>Null when the tenant does not exist.</summary>
-    Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, ListQuery query, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> RemoveMembershipAsync(

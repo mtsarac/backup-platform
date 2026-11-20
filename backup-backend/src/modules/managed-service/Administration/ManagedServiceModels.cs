@@ -51,5 +51,3 @@ public enum ManagedServiceOutcome
 }
 
 public sealed record ManagedServiceChange<T>(ManagedServiceOutcome Outcome, T? Value = default, string? Code = null) where T : class;
-
-public sealed record PlanFilter(bool? Enabled, string? Search);

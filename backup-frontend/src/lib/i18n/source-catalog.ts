@@ -922,6 +922,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Üye ekle": {"tr":"Üye ekle","en":"Add member"},
 
   "Kullanıcı ara": {"tr":"Kullanıcı ara","en":"Search users"},
+  "Üye ara": {"tr":"Üye ara","en":"Search members"},
   "Ad veya kullanıcı adı": {"tr":"Ad veya kullanıcı adı","en":"Name or username"},
   "Kullanıcılar yükleniyor…": {"tr":"Kullanıcılar yükleniyor…","en":"Loading users…"},
   "Kullanıcılar alınamadı": {"tr":"Kullanıcılar alınamadı","en":"Could not retrieve users"},
@@ -2757,7 +2758,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Hedef adı": {"tr":"Hedef adı","en":"Target name"},
   "Bu hedefin hangi kota grubuna sayılacağını belirler. Boş bırakırsanız platform varsayılanı kullanılır.": {"tr":"Bu hedefin hangi kota grubuna sayılacağını belirler. Boş bırakırsanız platform varsayılanı kullanılır.","en":"Decides which quota group this target counts toward. If left empty, the platform default is used."},
   "Tüm çalışma alanlarındaki yedekleme bilgisayarları ve çevrimiçi olup olmadıkları. Bu görünüm salt okunurdur.": {"tr":"Tüm çalışma alanlarındaki yedekleme bilgisayarları ve çevrimiçi olup olmadıkları. Bu görünüm salt okunurdur.","en":"Backup computers in every workspace and whether they are online. This view is read-only."},
-  "Bilgisayar adı, platform veya sürüm": {"tr":"Bilgisayar adı, platform veya sürüm","en":"Computer name, platform or version"},
+  "Bilgisayar veya çalışma alanı adı": {"tr":"Bilgisayar veya çalışma alanı adı","en":"Computer or workspace name"},
   "Kayıt durumu": {"tr":"Kayıt durumu","en":"Registration status"},
   "Henüz hiçbir çalışma alanına yedekleme bilgisayarı eklenmedi.": {"tr":"Henüz hiçbir çalışma alanına yedekleme bilgisayarı eklenmedi.","en":"No backup computer has been added to any workspace yet."},
   "Bilgisayar sayfaları": {"tr":"Bilgisayar sayfaları","en":"Computer pages"},

@@ -1,47 +1,48 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { DataList, type Column } from '@/components/data/data-list'
-import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters } from '@/components/ui/filters'
+import { FilterField } from '@/components/ui/filters'
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { toServerQuery } from '@/features/lists/server-list-query'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { SearchForm } from '@/features/platform/search-form'
-import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { usePlans, useSetPlanEnabled } from '@/features/platform/plans/hooks'
 import { CreatePlanDialog, EditPlanDialog } from '@/features/platform/plans/plan-form-dialog'
 import { formatGb } from '@/features/platform/plans/storage'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import type { EnabledFilter, Plan } from '@/features/platform/plans/types'
+import type { Plan } from '@/features/platform/plans/types'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
 import { Select } from '@/components/ui/text-input'
 
-function enabledFilter(value: string): EnabledFilter | undefined {
-  return value === 'true' || value === 'false' ? value : undefined
-}
+const planListConfig = {
+  search: true,
+  filters: { enabled: ['true', 'false'] },
+  sort: { first: { name: 'asc', enabled: 'asc', storageLimitBytes: 'asc', tenantCount: 'asc', createdAt: 'desc' }, default: { key: 'createdAt', dir: 'desc' } },
+} as const
 
 export function PlatformPlansPage() {
   useLanguage()
-  const { page, get, update } = useListParams()
-  const search = get('search')
-  const enabled = enabledFilter(get('enabled'))
-  const query = usePlans({ enabled, search, page, pageSize: LIST_PAGE_SIZE })
+  const state = useListState(planListConfig)
+  const query = usePlans(toServerQuery(state))
   const setEnabled = useSetPlanEnabled()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Plan | null>(null)
   const [toggling, setToggling] = useState<Plan | null>(null)
   const data = query.data
-  const filtered = Boolean(search || enabled)
   const columns: Column<Plan>[] = [
-    { key: 'name', header: tx('Plan'), wrap: true, render: (plan) => <span className="font-medium">{plan.name}</span> },
-    { key: 'enabled', card: 'status', header: tx('Durum'), render: (plan) => <StatusPill level={plan.enabled ? 'safe' : 'neutral'}>{plan.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
-    { key: 'limit', header: tx('Depolama limiti'), render: (plan) => formatGb(plan.storageLimitBytes) },
-    { key: 'tenants', header: tx('Çalışma alanı sayısı'), render: (plan) => plan.tenantCount },
+    { key: 'name', sortable: true, header: tx('Plan'), wrap: true, render: (plan) => <span className="font-medium">{plan.name}</span> },
+    { key: 'enabled', sortable: true, card: 'status', header: tx('Durum'), render: (plan) => <StatusPill level={plan.enabled ? 'safe' : 'neutral'}>{plan.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
+    { key: 'storageLimitBytes', sortable: true, header: tx('Depolama limiti'), render: (plan) => formatGb(plan.storageLimitBytes) },
+    { key: 'tenantCount', sortable: true, header: tx('Çalışma alanı sayısı'), render: (plan) => plan.tenantCount },
+    { key: 'createdAt', sortable: true, header: tx('Oluşturulma'), render: (plan) => formatDateTime(plan.createdAt) },
     { key: 'technical', header: tx('Teknik ayrıntılar'), wrap: true, render: (plan) => <TechnicalDetails items={[
       { label: tx("Plan kimliği"), value: plan.planId },
       { label: tx("Limit (bayt)"), value: plan.storageLimitBytes === null ? '—' : String(plan.storageLimitBytes) },
@@ -60,17 +61,16 @@ export function PlatformPlansPage() {
   ]
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Plans")} description={tx("Depolama planlarını yönetin. 1 GB = 1.000.000.000 bayt (ondalık).")} actions={<Button onClick={() => setCreating(true)}>{tx("Yeni plan")}</Button>} />
-    <Filters label={tx("Plan filtreleri")} onClear={filtered ? () => update({ search: '', enabled: '' }) : undefined}>
-      <SearchForm className="sm:col-span-2" label={tx("Plan ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Plan adı")} />
-      <FilterField label={tx("Durum")}><Select className="text-sm" value={enabled ?? ''} onChange={(event) => update({ enabled: event.target.value })}>
+    <ListToolbar state={state} label={tx('Plan filtreleri')} total={data?.totalCount} search={{ label: tx('Plan ara'), placeholder: tx('Plan adı') }}>
+      <FilterField label={tx("Durum")}><Select className="text-sm" value={state.filters.enabled} onChange={(event) => state.setFilter('enabled', event.target.value)}>
         <option value="">{tx("Tümü")}</option><option value="true">{tx("Etkin")}</option><option value="false">{tx("Devre dışı")}</option>
       </Select></FilterField>
-    </Filters>
+    </ListToolbar>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {data.items.length === 0 ? <ListEmpty message={filtered ? tx('Filtreye uygun plan bulunamadı.') : tx("Henüz plan yok.")} />
-          : <DataList rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={tx("Henüz plan yok.")} />}
-        {data.totalCount > 0 && <Pagination label={tx("Plan sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
+        {data.items.length === 0 ? <ListEmpty message={tx('Henüz plan yok.')} filtering={state.filtering} filteredMessage={tx('Filtreye uygun plan bulunamadı.')} onClear={state.clear} />
+          : <DataList rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(plan) => plan.planId} emptyMessage={tx('Henüz plan yok.')} onClearFilters={state.filtering ? state.clear : undefined} />}
+        <ListPager state={state} total={data.totalCount} label={tx('Plan sayfaları')} disabled={query.isFetching} />
       </div>}
     </QueryState>
     {creating && <CreatePlanDialog onClose={() => setCreating(false)} />}

@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.ManagedService.Plans;
@@ -12,7 +13,7 @@ namespace BackupPlatform.ManagedService.Administration;
 /// </summary>
 public interface IManagedServiceStore
 {
-    Task<PagedResult<PlanView>> ListPlansAsync(PlanFilter filter, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlanView>> ListPlansAsync(bool? enabled, ListQuery query, CancellationToken cancellationToken);
 
     Task<ManagedServiceChange<PlanView>> CreatePlanAsync(Plan plan, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
