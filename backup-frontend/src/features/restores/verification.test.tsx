@@ -236,9 +236,10 @@ describe('rollback copy removal', () => {
 
 describe('restores list', () => {
   it('shows one list with trial restores badged "Deneme" and no list-type selector', async () => {
-    vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => page(filters?.purpose === 'Verification'
-      ? [{ ...base, id: 'trial-1', purpose: 'Verification', databaseName: 'bp_verify_1', sourceDatabaseName: 'SalesDB', cleanup: cleanupOf({}) }]
-      : [{ ...base, id: 'real-1', purpose: 'Execution', databaseName: 'RestoredDb' }]))
+    vi.mocked(RestoreApi.getRestores).mockResolvedValue(page([
+      { ...base, id: 'trial-1', purpose: 'Verification', databaseName: 'bp_verify_1', sourceDatabaseName: 'SalesDB', cleanup: cleanupOf({}) },
+      { ...base, id: 'real-1', purpose: 'Execution', databaseName: 'RestoredDb' },
+    ]))
     renderAt(<RestoresPage />)
     expect(await screen.findByRole('link', { name: 'RestoredDb' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Doğrulama denemesi: SalesDB' })).toBeInTheDocument()

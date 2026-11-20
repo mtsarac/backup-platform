@@ -1,8 +1,9 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Identity;
 
 namespace BackupPlatform.Application.Backups;
 
-public sealed record BackupRunQuery(int Page = 1, int PageSize = 25, Guid? JobId = null, Guid? AgentId = null, string? Status = null, DateTimeOffset? From = null, DateTimeOffset? To = null, string? Trigger = null);
+public sealed record BackupRunQuery(ListQuery List, Guid? JobId = null, Guid? AgentId = null, string? Status = null, DateTimeOffset? From = null, DateTimeOffset? To = null, string? Trigger = null);
 public sealed record BackupRunPage(IReadOnlyList<BackupRunView> Items, long TotalCount, int Page, int PageSize);
 public sealed record DashboardJobCounts(int Total, int Enabled, int Scheduled);
 public sealed record DashboardRunCounts(int Active, int FailedLast24Hours, int SucceededLast24Hours, int Running, int RetryPending, int CancellationRequested, int StorageFailedLast24Hours, int ReplicationInsufficientLast24Hours = 0);

@@ -7,6 +7,9 @@ export function getRestores(tenantId: string, filters: RestoreFilters = {}, sign
   if (filters.status) search.set('status', filters.status)
   if (filters.artifactId) search.set('artifactId', filters.artifactId)
   if (filters.agentId) search.set('agentId', filters.agentId)
+  if (filters.search) search.set('search', filters.search)
+  if (filters.sort) search.set('sort', filters.sort)
+  if (filters.dir) search.set('dir', filters.dir)
   return apiRequest<RestorePage>(`${tenantPath(tenantId, 'restores')}?${search}`, { signal })
 }
 export function getRestore(tenantId: string, id: string, signal?: AbortSignal) {

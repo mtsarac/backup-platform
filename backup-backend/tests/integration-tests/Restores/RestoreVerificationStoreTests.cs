@@ -1,5 +1,6 @@
 using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Domain.Audit;
@@ -236,11 +237,11 @@ public sealed class RestoreVerificationStoreTests(PostgreSqlFixture fixture) : I
         var restore = await _world.CreateAsync(seed, store, At(1));
         await CreateVerificationAsync(other, store, At(2));
 
-        var restores = await store.ListAsync(seed.TenantId, new RestoreQuery(), default);
+        var restores = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery()), default);
         Assert.Equal([restore.Id], restores.Items.Select(item => item.Id));
-        var verifications = await store.ListAsync(seed.TenantId, new RestoreQuery(ArtifactId: seed.ArtifactId, Purpose: RestorePurpose.Verification), default);
+        var verifications = await store.ListAsync(seed.TenantId, new RestoreQuery(new ListQuery(), ArtifactId: seed.ArtifactId, Purpose: RestorePurpose.Verification), default);
         Assert.Equal([verification.Id], verifications.Items.Select(item => item.Id));
-        Assert.Empty((await store.ListAsync(other.TenantId, new RestoreQuery(ArtifactId: seed.ArtifactId, Purpose: RestorePurpose.Verification), default)).Items);
+        Assert.Empty((await store.ListAsync(other.TenantId, new RestoreQuery(new ListQuery(), ArtifactId: seed.ArtifactId, Purpose: RestorePurpose.Verification), default)).Items);
     }
 
     // ---- the rollback copy -------------------------------------------------------------------------------------------------

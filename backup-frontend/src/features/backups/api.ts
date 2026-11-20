@@ -3,7 +3,7 @@ import type { BackupRun, BackupRunFilters, BackupRunPage } from './types'
 
 export function backupRunSearch(filters: BackupRunFilters): string {
   const params = new URLSearchParams()
-  for (const key of ['status', 'jobId', 'agentId', 'from', 'to', 'trigger'] as const) {
+  for (const key of ['status', 'jobId', 'agentId', 'from', 'to', 'trigger', 'search', 'sort', 'dir'] as const) {
     const value = filters[key]
     if (value) params.set(key, value)
   }

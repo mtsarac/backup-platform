@@ -568,6 +568,41 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
         Assert.Equal([three], Ids(await Page($"?agentId={sibling.AgentId}")));
         Assert.Equal([one], Ids(await Page("?page=2&pageSize=2")));
         Assert.Empty(Ids(await Page("?page=9&pageSize=2")));
+        Assert.Equal([one, three, two], Ids(await Page("?sort=target&dir=asc")));
+        Assert.Equal([two, three, one], Ids(await Page("?sort=target&dir=desc")));
+        Assert.Equal([three], Ids(await Page($"?search=THREE&status=Pending&agentId={sibling.AgentId}")));
+        Assert.Equal([three, one], Ids(await Page($"?search=master&artifactId={first.ArtifactId}")));
+    }
+
+    [Fact]
+    public async Task ListCanReachRestoresBeyondTheFirstHundred()
+    {
+        await using var scenario = await CreateAsync(fixture);
+        var backup = await scenario.AcceptBackupAsync();
+        for (var index = 0; index < 101; index++)
+        {
+            scenario.Clock.Advance(TimeSpan.FromSeconds(1));
+            await scenario.StartAsync(backup.ArtifactId, scenario.Body($"Target{index}"));
+        }
+
+        async Task<JsonElement> Page(string query)
+        {
+            using var response = await scenario.GetRawAsync("/restores?purpose=All&pageSize=100&" + query);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return AgentWorld.ReadJson(response);
+        }
+        static string[] Targets(JsonElement page) => page.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("databaseName").GetString()!).ToArray();
+
+        var newest = await Page("page=1");
+        var oldest = await Page("page=2");
+        Assert.Equal(101, newest.GetProperty("totalCount").GetInt32());
+        Assert.Equal(100, Targets(newest).Length);
+        Assert.Equal("Target100", Targets(newest)[0]);
+        Assert.Equal(["Target0"], Targets(oldest));
+        // The same restore is reachable from the other end and by search, wherever the sort puts it.
+        Assert.Equal("Target0", Targets(await Page("page=1&sort=createdAt&dir=asc"))[0]);
+        Assert.Equal(["Target0"], Targets(await Page("page=2&sort=target&dir=desc")));
+        Assert.Equal(["Target0"], Targets(await Page("search=Target0")));
     }
 
     [Fact]
@@ -593,6 +628,7 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
     [InlineData("?page=0")]
     [InlineData("?pageSize=101")]
     [InlineData("?pageSize=0")]
+    [InlineData("?sort=unknown")]
     public async Task AnInvalidListQueryIsABadRequest(string query)
     {
         await using var scenario = await CreateAsync(fixture);
