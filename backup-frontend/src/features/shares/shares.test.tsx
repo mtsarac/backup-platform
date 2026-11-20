@@ -797,6 +797,33 @@ describe('BackupShare frontend', () => {
     })
   })
 
+  it('refreshes an open download history after a refused download', async () => {
+    permissions.role = 'PlatformAdmin'
+    let attempted = false
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/downloads')) {
+        attempted = true
+        throw new ApiError(409, { error: 'replica_unavailable' })
+      }
+      if (path.includes('platform/backup-shares')) return [platformShare]
+      if (path.includes('platform/download-attempts')) return attemptPage(attempted ? [refusedAttempt] : [])
+      if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
+      return []
+    })
+    renderPlatformSharesPage()
+    fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
+    await screen.findByText('Henüz indirme girişimi kaydı yok.')
+    fireEvent.click(await screen.findByRole('button', { name: 'İndir' }))
+    expect(await screen.findByText('Reddedildi')).toBeInTheDocument()
+  })
+
+  it('opens tenant download history when its sort is in the URL', async () => {
+    request.mockImplementation(async (path: string) => path.includes('download-attempts') ? attemptPage([completedAttempt]) : [testShare])
+    renderSharesPage('/tenants/tenant-a/backup-shares?attempts-sort=result')
+    expect(await screen.findByRole('table', { name: 'İndirme girişimleri' })).toBeVisible()
+    expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).toHaveAttribute('open')
+  })
+
   it('renders tenant download attempt history in Paylaşımlarım for UserAdmin without platform retention controls', async () => {
     permissions.role = 'UserAdmin'
     request.mockImplementation(async (path: string) => {
