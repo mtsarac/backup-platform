@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
@@ -6,6 +7,7 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -96,29 +98,50 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         return new(outcome, item);
     }
 
-    public async Task<PagedResult<PlatformUserItem>> ListUsersAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
+    private sealed class UserRow
+    {
+        public required UserId Id { get; init; }
+        public required string DisplayName { get; init; }
+        public string? Login { get; init; }
+        public string? Email { get; init; }
+        public required UserRole Role { get; init; }
+        public required int MembershipCount { get; init; }
+        public required bool IsManuallyDisabled { get; init; }
+        public required bool IsSecurityDisabled { get; init; }
+        public required bool IsNoMembershipDisabled { get; init; }
+        public string? ManualDisableReason { get; init; }
+    }
+
+    // Role sorts by its stored value, which is alphabetical (PlatformAdmin = 1, UserAdmin = 2).
+    private static readonly SortMap<UserRow> UserSorts = SortMap<UserRow>.Create()
+        .Text("displayName", row => row.DisplayName)
+        .Text("username", row => row.Login)
+        .Text("email", row => row.Email)
+        .Value("role", row => row.Role)
+        .Value("membershipCount", row => row.MembershipCount)
+        .Value("isDisabled", row => row.IsManuallyDisabled || row.IsSecurityDisabled || row.IsNoMembershipDisabled);
+
+    public async Task<PagedResult<PlatformUserItem>> ListUsersAsync(ListQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var users = from user in context.Users.AsNoTracking()
                     join credential in context.PasswordCredentials.AsNoTracking() on user.Id equals credential.UserId into joined
                     from credential in joined.DefaultIfEmpty()
-                    select new { user.Id, user.DisplayName, user.Role, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason, Login = credential == null ? null : credential.LoginIdentifier, Email = credential == null ? null : credential.Email };
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim().ToLowerInvariant();
-            users = users.Where(row => row.DisplayName.ToLower().Contains(term) || (row.Login != null && row.Login.ToLower().Contains(term)) || (row.Email != null && row.Email.ToLower().Contains(term)));
-        }
-        var total = await users.LongCountAsync(cancellationToken);
-        var rows = await users.OrderBy(row => row.DisplayName).ThenBy(row => row.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize)
-            .Select(row => new
-            {
-                row.Id, row.DisplayName, row.Login, row.Email, row.Role, row.IsManuallyDisabled, row.IsSecurityDisabled, row.IsNoMembershipDisabled, row.ManualDisableReason,
-                MembershipCount = context.TenantMemberships.Count(membership => membership.UserId == row.Id)
-            }).ToListAsync(cancellationToken);
+                    select new UserRow
+                    {
+                        Id = user.Id, DisplayName = user.DisplayName, Role = user.Role,
+                        IsManuallyDisabled = user.IsManuallyDisabled, IsSecurityDisabled = user.IsSecurityDisabled, IsNoMembershipDisabled = user.IsNoMembershipDisabled,
+                        ManualDisableReason = user.ManualDisableReason,
+                        Login = credential == null ? null : credential.LoginIdentifier, Email = credential == null ? null : credential.Email,
+                        MembershipCount = context.TenantMemberships.Count(membership => membership.UserId == user.Id)
+                    };
+        var page = await users
+            .ApplySearch(query, row => row.DisplayName, row => row.Login, row => row.Email)
+            .ApplySort(UserSorts, query, "displayName", row => row.Id)
+            .ToPagedResultAsync(query, cancellationToken);
         return new PagedResult<PlatformUserItem>(
-            rows.Select(row => new PlatformUserItem(row.Id, row.DisplayName, row.Login, row.Email, row.Role, row.MembershipCount, row.IsManuallyDisabled || row.IsSecurityDisabled || row.IsNoMembershipDisabled, row.IsManuallyDisabled, row.IsSecurityDisabled, row.IsNoMembershipDisabled, row.ManualDisableReason)).ToList(),
-            total, page, pageSize);
+            page.Items.Select(row => new PlatformUserItem(row.Id, row.DisplayName, row.Login, row.Email, row.Role, row.MembershipCount, row.IsManuallyDisabled || row.IsSecurityDisabled || row.IsNoMembershipDisabled, row.IsManuallyDisabled, row.IsSecurityDisabled, row.IsNoMembershipDisabled, row.ManualDisableReason)).ToList(),
+            page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<PlatformChange<PlatformUserItem>> CreateUserAsync(

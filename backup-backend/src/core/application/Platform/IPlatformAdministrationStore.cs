@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
@@ -53,7 +54,7 @@ public interface IPlatformAdministrationStore
     Task<PlatformTenantItem> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformTenantItem>> RenameTenantAsync(TenantId tenantId, string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<PagedResult<PlatformUserItem>> ListUsersAsync(string? search, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformUserItem>> ListUsersAsync(ListQuery query, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformUserItem>> CreateUserAsync(
         UserId userId, string displayName, string username, string email, string passwordHash, UserRole role, IReadOnlyList<TenantId> tenantIds, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformUserItem>> UpdateUserAsync(
