@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.ManagedService.Entitlement;
@@ -28,7 +29,7 @@ public sealed record UsageReconciliation(
     long UsedBytes, long ReservedBytes, QuotaPolicyId PolicyId, int PolicyVersion, int ReservationsReleased);
 
 /// <summary>Filters of the cross-tenant usage list. Each is optional; all given ones must match.</summary>
-public sealed record StorageUsageFilter(string? Search, QuotaState? State, EntitlementStatus? SubscriptionStatus);
+public sealed record StorageUsageFilter(QuotaState? State, EntitlementStatus? SubscriptionStatus);
 
 /// <summary>
 /// One tenant of the cross-tenant usage list. A tenant without a stored projection has <see cref="HasUsage"/> false and its usage figures are
@@ -53,10 +54,10 @@ public interface IStorageUsageService
 
     /// <summary>
     /// One page of every tenant's standing, read in bulk from the stored projections (no per-tenant query, and nothing is recomputed or written by
-    /// a list). Filtering by quota state or subscription status is applied to the derived values before paging.
+    /// a list). Filtering by quota state or subscription status is applied to the derived values before paging; searching is by tenant name; sorting by tenant, used, limit or state (unknown field: <see cref="InvalidListQueryException"/>).
     /// </summary>
     Task<PagedResult<TenantStorageUsageListItem>> ListStorageUsageAsync(
-        StorageUsageFilter filter, int page, int pageSize, DateTimeOffset now, CancellationToken cancellationToken);
+        StorageUsageFilter filter, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>Effective limit (M1 entitlement) + policy + usage. Same freshness guarantee as <see cref="GetUsageAsync"/>.</summary>
     Task<TenantQuotaStatus?> GetQuotaStatusAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);

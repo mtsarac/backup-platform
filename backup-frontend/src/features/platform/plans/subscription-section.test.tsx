@@ -157,6 +157,33 @@ describe('subscription history', () => {
   })
 })
 
+describe('subscription history list', () => {
+  const lastQuery = () => vi.mocked(api.getSubscriptionHistory).mock.lastCall?.[1]
+
+  it('sends search, sorting and the page with the history page size', async () => {
+    vi.mocked(api.getSubscriptionHistory).mockResolvedValue(paged([active], { totalCount: 22, pageSize: 10 }))
+    const user = userEvent.setup()
+    mount()
+    await screen.findByRole('list', { name: 'Abonelik geçmişi' })
+    expect(lastQuery()).toEqual({ page: 1, pageSize: 10 })
+    await user.type(screen.getByRole('searchbox', { name: 'Plan ara' }), 'kurumsal')
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 10, search: 'kurumsal' }))
+    await user.selectOptions(screen.getByLabelText('Sırala'), 'plan:asc')
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 10, search: 'kurumsal', sort: 'plan', dir: 'asc' }))
+    await user.click(screen.getByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(lastQuery()).toMatchObject({ search: 'kurumsal', sort: 'plan', page: 2 }))
+  })
+
+  it('offers clearing the search when nothing matches', async () => {
+    vi.mocked(api.getSubscriptionHistory).mockResolvedValue(paged([], { pageSize: 10 }))
+    const user = userEvent.setup()
+    mount('/platform/tenants/tenant-a?search=zzz')
+    await screen.findByText('Aramayla eşleşen kayıt yok.')
+    await user.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    await waitFor(() => expect(lastQuery()).toEqual({ page: 1, pageSize: 10 }))
+  })
+})
+
 describe('assign and change plan', () => {
   it('assigns a plan by searching its name; hides system plans until asked', async () => {
     serve(null)

@@ -36,7 +36,7 @@ describe('platform name filters', () => {
     expect(picker).toHaveValue('Acme')
     expect(screen.getByTestId('location')).toHaveTextContent('search=sql&connectivity=offline&tenantId=tenant-acme')
     fireEvent.click(screen.getByRole('button', { name: 'Seçimi temizle' }))
-    await waitFor(() => expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ tenantId: '' }), expect.any(AbortSignal)))
+    await waitFor(() => expect((vi.mocked(request).mock.lastCall?.[0] as { tenantId?: string } | undefined)?.tenantId ?? '').toBe(''))
   })
 })
 

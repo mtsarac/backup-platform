@@ -88,8 +88,7 @@ describe('platform storage targets list', () => {
     await user.selectOptions(screen.getByLabelText('Durum'), 'false')
     await waitFor(() => expect(location()).toBe('/platform/storage-connections?ownership=all&providerType=central&enabled=false'))
     await waitFor(() => expect(api.getPlatformConnections).toHaveBeenLastCalledWith(expect.objectContaining({ ownership: undefined, providerType: 'central', enabled: false }), expect.any(AbortSignal)))
-    await user.type(screen.getByRole('searchbox', { name: "Çalışma alanı ara" }), 'acme')
-    await user.click(screen.getByRole('button', { name: 'Ara' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Depolama hedefi ara' }), 'acme')
     await waitFor(() => expect(api.getPlatformConnections).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'acme', providerType: 'central', enabled: false }), expect.any(AbortSignal)))
     await user.selectOptions(screen.getByLabelText('Sahiplik'), 'PlatformManaged')
     await waitFor(() => expect(location()).toBe('/platform/storage-connections?providerType=central&enabled=false&search=acme'))
@@ -260,5 +259,33 @@ describe('Managed target ekle', () => {
     await user.type(within(dialog).getByLabelText('Hedef adı'), 'İkinci')
     await user.click(within(dialog).getByRole('button', { name: "Yönetilen hedef ekle" }))
     expect(await within(dialog).findByText("Bu depolama sağlayıcısı için bağlantı sınırına ulaşıldı.")).toBeInTheDocument()
+  })
+})
+
+describe('platform storage targets list sorting', () => {
+  const lastQuery = () => vi.mocked(api.getPlatformConnections).mock.lastCall?.[0]
+
+  it('offers the backend sort keys only and sends the choice with the search and filters, back on page 1', async () => {
+    setViewport(false)
+    const user = userEvent.setup()
+    mount('/platform/storage-connections?enabled=true&page=2')
+    await screen.findByText('Managed Storage')
+    const sort = screen.getByLabelText('Sırala')
+    for (const key of ['name', 'provider', 'ownership', 'enabled', 'tenant', 'createdAt']) expect(sort.querySelector(`option[value="${key}:asc"]`)).not.toBeNull()
+    expect(sort.querySelector('option[value^="size:"]')).toBeNull()
+    expect(sort).toHaveValue('createdAt:desc')
+    await user.type(screen.getByRole('searchbox', { name: 'Depolama hedefi ara' }), 'acme')
+    await user.selectOptions(sort, 'provider:asc')
+    await waitFor(() => expect(lastQuery()).toMatchObject({ search: 'acme', enabled: true, sort: 'provider', dir: 'asc', page: 1 }))
+  })
+
+  it('offers clearing when the filters match nothing', async () => {
+    const user = userEvent.setup()
+    serve([])
+    mount('/platform/storage-connections?search=zzz')
+    await screen.findByText('Aramayla eşleşen kayıt yok.')
+    await user.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    await waitFor(() => expect(location()).toBe('/platform/storage-connections'))
+    expect(lastQuery()).not.toHaveProperty('search')
   })
 })

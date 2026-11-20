@@ -297,7 +297,7 @@ describe('delivery history', () => {
     await user.selectOptions(screen.getByLabelText('Kanal türü'), 'webhook')
     await user.selectOptions(screen.getByLabelText('Olay türü'), 'test')
     await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ status: 'failed', kind: 'webhook', eventType: 'test' }), expect.anything()))
-    const empty = screen.getByText('Gönderim kaydı bulunamadı.').parentElement!
+    const empty = screen.getByText('Aramayla eşleşen kayıt yok.').parentElement!
     await user.click(within(empty).getByRole('button', { name: 'Filtreleri temizle' }))
     await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: undefined, kind: undefined, eventType: undefined }, expect.anything()))
   })
@@ -328,6 +328,16 @@ describe('delivery history', () => {
     await user.selectOptions(screen.getByLabelText('Kanal türü'), 'webhook')
     await user.selectOptions(screen.getByLabelText('Olay türü'), 'test')
     await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: 'failed', kind: 'webhook', eventType: 'test' }, expect.anything()))
+  })
+
+  it('sends search and sorting together with the filters, back on page 1', async () => {
+    const user = userEvent.setup()
+    mount('/?tab=deliveries&status=failed&page=2')
+    await screen.findByText(/build-01/)
+    await user.type(screen.getByRole('searchbox', { name: 'Gönderim ara' }), 'smtp')
+    await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: 'failed', search: 'smtp' }, expect.anything()))
+    await user.selectOptions(screen.getByLabelText('Sırala'), 'attempts:desc')
+    await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: 'failed', search: 'smtp', sort: 'attempts', dir: 'desc' }, expect.anything()))
   })
 
   it('pages through results', async () => {

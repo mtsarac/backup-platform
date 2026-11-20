@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
@@ -33,8 +34,8 @@ internal class FakeNotificationStore : INotificationStore
     public Task<ChannelMutationResult> DeleteChannelAsync(TenantId tenantId, Guid id, NotificationActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<NotificationPolicy?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<(NotificationPolicy Policy, bool Changed)?> UpdatePolicyAsync(TenantId tenantId, NotificationActor actor, Func<NotificationPolicy, bool> apply, CancellationToken cancellationToken) => throw new NotSupportedException();
-    public Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, int page, int pageSize, CancellationToken cancellationToken) => throw new NotSupportedException();
-    public Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(int page, int pageSize, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, ListQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(ListQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<bool> RetryFailedDeliveryAsync(Guid id, NotificationActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();
     public virtual Task<int> GetHistoryRetentionDaysAsync(CancellationToken cancellationToken) => Task.FromResult(90);
     public Task SetHistoryRetentionDaysAsync(int days, NotificationActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -381,7 +381,20 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         await transaction.CommitAsync(cancellationToken);
         return new(PlatformChangeOutcome.Changed, item);
     }
-    public async Task<PagedResult<PlatformAuditItem>> ListAuditAsync(TenantId? tenantId, int page, int pageSize, CancellationToken cancellationToken)
+    private sealed class AuditRow
+    {
+        public required AuditEvent Event { get; init; }
+        public string? ActorName { get; init; }
+        public string? TenantName { get; init; }
+    }
+
+    private static readonly SortMap<AuditRow> AuditSorts = SortMap<AuditRow>.Create()
+        .Date("at", row => row.Event.At)
+        .Text("action", row => row.Event.Action)
+        .Text("actor", row => row.ActorName)
+        .Text("tenant", row => row.TenantName);
+
+    public async Task<PagedResult<PlatformAuditItem>> ListAuditAsync(TenantId? tenantId, ListQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var events = context.AuditEvents.AsNoTracking().AsQueryable();
@@ -389,25 +402,24 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         {
             events = events.Where(auditEvent => auditEvent.TenantId == tenantId);
         }
-        var total = await events.LongCountAsync(cancellationToken);
-        var rows = await events.OrderByDescending(auditEvent => auditEvent.At).ThenBy(auditEvent => auditEvent.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-        var actorIds = rows.Select(row => row.ActorUserId).Distinct().ToArray();
-        var tenantIds = rows.Where(row => row.TenantId is not null).Select(row => row.TenantId!).Distinct().ToArray();
-        var actors = actorIds.Length == 0 ? [] : await context.Users.AsNoTracking().Where(user => actorIds.Contains(user.Id))
-            .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken);
-        var tenants = tenantIds.Length == 0 ? [] : await context.Tenants.AsNoTracking().Where(tenant => tenantIds.Contains(tenant.Id))
-            .ToDictionaryAsync(tenant => tenant.Id, tenant => tenant.Name, cancellationToken);
+        var rows = from auditEvent in events
+                   select new AuditRow
+                   {
+                       Event = auditEvent,
+                       ActorName = auditEvent.ActorKind == AuditActorKind.System ? "System"
+                           : auditEvent.ActorKind == AuditActorKind.Anonymous ? "Anonymous"
+                           : context.Users.Where(user => user.Id == auditEvent.ActorUserId).Select(user => user.DisplayName).FirstOrDefault(),
+                       TenantName = context.Tenants.Where(tenant => tenant.Id == auditEvent.TenantId).Select(tenant => tenant.Name).FirstOrDefault()
+                   };
+        var page = await rows
+            .ApplySearch(query, row => row.Event.Action, row => row.ActorName, row => row.Event.TargetType, row => row.Event.TargetId, row => row.TenantName)
+            .ApplySort(AuditSorts, query, "at", row => row.Event.Id)
+            .ToPagedResultAsync(query, cancellationToken);
         return new PagedResult<PlatformAuditItem>(
-            rows.Select(row => new PlatformAuditItem(
-                row.Id, row.At, row.ActorUserId, row.ActorKind switch
-                {
-                    AuditActorKind.System => "System",
-                    AuditActorKind.Anonymous => "Anonymous",
-                    _ => actors.GetValueOrDefault(row.ActorUserId)
-                }, row.ActorKind, row.Action,
-                row.TenantId, row.TenantId is null ? null : tenants.GetValueOrDefault(row.TenantId), row.TargetType, row.TargetId, row.DetailsJson)).ToList(),
-            total, page, pageSize);
+            page.Items.Select(row => new PlatformAuditItem(
+                row.Event.Id, row.Event.At, row.Event.ActorUserId, row.ActorName, row.Event.ActorKind, row.Event.Action,
+                row.Event.TenantId, row.TenantName, row.Event.TargetType, row.Event.TargetId, row.Event.DetailsJson)).ToList(),
+            page.TotalCount, page.Page, page.PageSize);
     }
 
     private static string Id(TenantId id) => id.Value.ToString("D");

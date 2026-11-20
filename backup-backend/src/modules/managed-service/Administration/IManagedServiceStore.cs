@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.ManagedService.Plans;
@@ -24,8 +25,8 @@ public interface IManagedServiceStore
     /// <summary>The newest subscription row; <c>Current</c> is null while an existing tenant has none, <c>TenantExists</c> is false for an unknown tenant.</summary>
     Task<(bool TenantExists, SubscriptionRecord? Current)> GetCurrentSubscriptionAsync(TenantId tenantId, CancellationToken cancellationToken);
 
-    /// <summary>Newest first; null when the tenant does not exist.</summary>
-    Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken);
+    /// <summary>Newest start first unless sorted (startsAt, plan, status as users see it); null when the tenant does not exist.</summary>
+    Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken);
 
     Task<ManagedServiceChange<SubscriptionAssignment>> AssignPlanAsync(
         TenantId tenantId, PlanId planId, StorageLimitOverride limitOverride, DateTimeOffset? endsAt, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);

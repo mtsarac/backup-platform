@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
@@ -208,13 +209,13 @@ public sealed class NotificationAdministrationService(
     // ---- history ------------------------------------------------------------------------------------------------------------------------
 
     public async Task<PagedResult<NotificationDeliveryView>> ListDeliveriesAsync(
-        TenantId tenantId, string? status, string? kind, string? eventType, int page, int pageSize, CancellationToken cancellationToken)
+        TenantId tenantId, string? status, string? kind, string? eventType, ListQuery query, CancellationToken cancellationToken)
     {
         var filter = new DeliveryFilter(
             status is null ? null : ParseEnum<NotificationDeliveryStatus>(Pascal(status), "status"),
             kind is null ? null : ParseEnum<NotificationChannelKind>(kind, "kind"),
             eventType is null ? null : (eventType == NotificationEventTypes.Test || NotificationEventTypes.IsDetectable(eventType) ? eventType : throw new InvalidNotificationException("eventType", "invalid_value")));
-        var result = await store.ListDeliveriesAsync(tenantId, filter, page, pageSize, cancellationToken);
+        var result = await store.ListDeliveriesAsync(tenantId, filter, query, cancellationToken);
         return new PagedResult<NotificationDeliveryView>(result.Items.Select(ToView).ToList(), result.TotalCount, result.Page, result.PageSize);
     }
 

@@ -33,9 +33,6 @@ public sealed class QuotaPolicyRequest
 /// </summary>
 public static class QuotaEndpoints
 {
-    private const int DefaultPageSize = 25;
-    private const int MaximumPageSize = 100;
-
     public static IEndpointRouteBuilder MapQuotaEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -46,7 +43,7 @@ public static class QuotaEndpoints
         platform.MapGet("/tenants/{tenantId:guid}/quota", GetPlatformQuotaAsync);
         platform.MapPost("/tenants/{tenantId:guid}/storage-usage/reconcile", ReconcileAsync);
         platform.MapPost("/tenants/{tenantId:guid}/storage-usage/rebuild", RebuildAsync);
-        platform.MapGet("/storage-usage", ListStorageUsageAsync);
+        platform.MapGet("/storage-usage", ListStorageUsageAsync).WithListQuery();
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
         tenant.MapGet("/storage-quota", GetTenantQuotaAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -87,14 +84,8 @@ public static class QuotaEndpoints
     }
 
     private static async Task<IResult> ListStorageUsageAsync(
-        string? search, string? quotaState, string? subscriptionStatus, int? page, int? pageSize, IStorageUsageService usage, TimeProvider time, CancellationToken cancellationToken)
+        string? quotaState, string? subscriptionStatus, [AsParameters] ListParams list, IStorageUsageService usage, TimeProvider time, CancellationToken cancellationToken)
     {
-        var p = page ?? 1;
-        var size = pageSize ?? DefaultPageSize;
-        if (p is < 1 or > 1_000_000 || size is < 1 or > MaximumPageSize)
-        {
-            return Results.BadRequest(new { error = "invalid_request", field = "page", code = "invalid_value" });
-        }
         if (!TryEnum<QuotaState>(quotaState, out var state))
         {
             return Results.BadRequest(new { error = "invalid_request", field = "quotaState", code = "invalid_value" });
@@ -103,7 +94,7 @@ public static class QuotaEndpoints
         {
             return Results.BadRequest(new { error = "invalid_request", field = "subscriptionStatus", code = "invalid_value" });
         }
-        var result = await usage.ListStorageUsageAsync(new StorageUsageFilter(search, state, status), p, size, time.GetUtcNow(), cancellationToken);
+        var result = await usage.ListStorageUsageAsync(new StorageUsageFilter(state, status), list.ToQuery(), time.GetUtcNow(), cancellationToken);
         return Results.Ok(new { items = result.Items.Select(ToListItemResponse).ToList(), totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize });
     }
 

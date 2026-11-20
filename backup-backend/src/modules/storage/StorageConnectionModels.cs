@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
@@ -65,7 +66,7 @@ public sealed record StorageTestResult(StorageTestStatus Status, string? Code, s
 
 public sealed record StorageTestOutcome(StorageConnectionView Connection, StorageTestSummary Test, double DurationMilliseconds);
 
-public sealed record StorageConnectionFilter(StorageOwnership? Ownership, string? ProviderType, TenantId? TenantId, bool? Enabled, string? Search, bool ExcludeSmb = false);
+public sealed record StorageConnectionFilter(StorageOwnership? Ownership, string? ProviderType, TenantId? TenantId, bool? Enabled, bool ExcludeSmb = false);
 
 public enum StorageConnectionOutcome
 {
@@ -108,7 +109,7 @@ public interface IStorageConnectionStore
     /// <summary>The tenant's connections, name order. The system default connections are materialized first when missing. Null when the tenant does not exist.</summary>
     Task<IReadOnlyList<StorageConnectionRecord>?> ListAsync(TenantId tenantId, CancellationToken cancellationToken);
 
-    Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken);
 
     /// <summary>One connection. With <paramref name="tenantScope"/> it is found only inside that tenant, so another tenant's id is simply not found.</summary>
     Task<StorageConnectionRecord?> FindAsync(Guid id, TenantId? tenantScope, CancellationToken cancellationToken);

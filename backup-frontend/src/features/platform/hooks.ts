@@ -5,7 +5,7 @@ import {
 } from './api'
 import type { PlanFilters } from './plans/types'
 import type { StorageUsageFilters } from '@/features/storage/types'
-import type { AuditFilters, CreateUserInput, PageParams, PlatformAgentFilters, SearchParams, UpdateUserInput } from './types'
+import type { AuditFilters, CreateUserInput, ListQueryParams, PageParams, PlatformAgentFilters, SearchParams, UpdateUserInput } from './types'
 
 export const platformKeys = {
   all: ['platform'] as const,
@@ -24,7 +24,7 @@ export const platformKeys = {
   planList: (filters: PlanFilters) => ['platform', 'plans', 'list', filters] as const,
   subscription: (tenantId: string) => ['platform', 'tenants', 'subscription', tenantId] as const,
   subscriptionHistory: (tenantId: string) => ['platform', 'tenants', 'subscriptions', tenantId] as const,
-  subscriptionHistoryPage: (tenantId: string, params: PageParams) => ['platform', 'tenants', 'subscriptions', tenantId, params] as const,
+  subscriptionHistoryPage: (tenantId: string, params: ListQueryParams) => ['platform', 'tenants', 'subscriptions', tenantId, params] as const,
   /** Everything quota-shaped (global usage list, per-tenant standing, policies): one prefix, so any change that moves quota invalidates it in one call. */
   storage: ['platform', 'storage'] as const,
   storageUsageList: (filters: StorageUsageFilters) => ['platform', 'storage', 'usage', filters] as const,

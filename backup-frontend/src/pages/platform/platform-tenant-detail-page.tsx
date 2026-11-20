@@ -127,7 +127,7 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
   const requested = get('tab')
   const tab: TabValue = tabs.find((item) => item.value === (requested === legacyStorageTab ? 'storage' : requested))?.value ?? 'summary'
   return <div className="space-y-6">
-    <Tabs label={tx("Tenant bölümleri")} idPrefix="tenant" value={tab} items={tabs} onChange={(value) => update({ tab: value, memberPage: '', subPage: '' })} />
+    <Tabs label={tx("Tenant bölümleri")} idPrefix="tenant" value={tab} items={tabs} onChange={(value) => update({ tab: value, memberPage: '', subPage: '', search: '', sort: '', dir: '' })} />
     <div role="tabpanel" id={`tenant-panel-${tab}`} aria-labelledby={`tenant-tab-${tab}`} className="space-y-6">
       {tab === 'summary' && <>
         <div className="grid gap-4 sm:grid-cols-3"><KpiCard label={tx("Kişiler")} value={tenant.memberCount} /><KpiCard label={tx("Yedekleme bilgisayarları")} value={tenant.agents.total} /><KpiCard label={tx("Etkin yedekleme işleri")} value={tenant.enabledBackupJobs} /></div>

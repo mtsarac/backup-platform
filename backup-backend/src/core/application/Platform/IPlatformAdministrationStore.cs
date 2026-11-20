@@ -72,5 +72,5 @@ public interface IPlatformAdministrationStore
     Task<PlatformChange<PlatformMembershipItem>> RemoveMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<PagedResult<PlatformAuditItem>> ListAuditAsync(TenantId? tenantId, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformAuditItem>> ListAuditAsync(TenantId? tenantId, ListQuery query, CancellationToken cancellationToken);
 }

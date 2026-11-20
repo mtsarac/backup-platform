@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.ManagedService;
@@ -46,7 +47,7 @@ public sealed class ManagedServiceAdministrationServiceTests
         public Task<(bool TenantExists, SubscriptionRecord? Current)> GetCurrentSubscriptionAsync(TenantId tenantId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken) =>
+        public Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<ManagedServiceChange<SubscriptionAssignment>> AssignPlanAsync(

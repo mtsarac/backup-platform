@@ -1,6 +1,9 @@
+using System.Linq.Expressions;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.ManagedService;
 using BackupPlatform.ManagedService.Administration;
@@ -200,21 +203,29 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         return (true, row is null ? null : (await ToRecordsAsync(context, [row], cancellationToken))[0]);
     }
 
-    public async Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken)
+    /// <summary>The effective status users see (<see cref="TenantSubscription.EffectiveStatusAt"/>) as a rank: an open row past its end is Expired.</summary>
+    private static Expression<Func<Row, int>> EffectiveStatusRank(DateTimeOffset now) => row =>
+        (row.Subscription.Status == SubscriptionStatus.Active || row.Subscription.Status == SubscriptionStatus.Suspended) && row.Subscription.EndsAt != null && row.Subscription.EndsAt <= now ? 3
+        : row.Subscription.Status == SubscriptionStatus.Active ? 1
+        : row.Subscription.Status == SubscriptionStatus.Suspended ? 2
+        : row.Subscription.Status == SubscriptionStatus.Expired ? 3 : 4;
+
+    public async Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
         }
-        var query = Rows(context, tenantId);
-        var total = await query.LongCountAsync(cancellationToken);
-        var rows = await query
-            .OrderByDescending(item => item.Subscription.CreatedAt)
-            .ThenBy(item => item.Subscription.Status == SubscriptionStatus.Active || item.Subscription.Status == SubscriptionStatus.Suspended ? 0 : 1)
-            .ThenByDescending(item => item.Subscription.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-        return new PagedResult<SubscriptionRecord>(await ToRecordsAsync(context, rows, cancellationToken), total, page, pageSize);
+        var sorts = SortMap<Row>.Create()
+            .Date("startsAt", row => row.Subscription.StartsAt)
+            .Text("plan", row => row.Plan.Name)
+            .Value("status", EffectiveStatusRank(now));
+        var page = await Rows(context, tenantId)
+            .ApplySearch(query, row => row.Plan.Name)
+            .ApplySort(sorts, query, "startsAt", row => row.Subscription.Id)
+            .ToPagedResultAsync(query, cancellationToken);
+        return new PagedResult<SubscriptionRecord>(await ToRecordsAsync(context, [.. page.Items], cancellationToken), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<ManagedServiceChange<SubscriptionAssignment>> AssignPlanAsync(

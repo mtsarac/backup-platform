@@ -32,7 +32,7 @@ describe('platform storage hub', () => {
     expect(within(tabs).getByRole('link', { name: 'Kullanım' })).toHaveAttribute('aria-current', 'page')
     expect(menuEntry()).toHaveAttribute('aria-current', 'page')
     await userEvent.setup().click(within(tabs).getByRole('link', { name: 'Hedefler' }))
-    expect(await screen.findByRole('searchbox', { name: 'Çalışma alanı ara' })).toBeInTheDocument()
+    expect(await screen.findByRole('searchbox', { name: 'Depolama hedefi ara' })).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/platform/storage/connections')
     expect(within(tabs).getByRole('link', { name: 'Hedefler' })).toHaveAttribute('aria-current', 'page')
     expect(menuEntry()).toHaveAttribute('aria-current', 'page')
@@ -40,7 +40,7 @@ describe('platform storage hub', () => {
 
   it('keeps the old destinations URL and its filters working', async () => {
     renderPlatform(null, { path: '/platform/storage-connections?ownership=all&enabled=false', routes: tree })
-    expect(await screen.findByRole('searchbox', { name: 'Çalışma alanı ara' })).toBeInTheDocument()
+    expect(await screen.findByRole('searchbox', { name: 'Depolama hedefi ara' })).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/platform/storage/connections?ownership=all&enabled=false')
     expect(connectionApi.getPlatformConnections).toHaveBeenCalledWith(expect.objectContaining({ ownership: undefined, enabled: false }), expect.any(AbortSignal))
   })
