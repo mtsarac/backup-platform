@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { setViewport } from '@/test/viewport'
 import { DataList, type Column } from './data-list'
 
@@ -82,37 +82,4 @@ describe('DataList', () => {
     }
   })
 
-  describe('search', () => {
-    const many = Array.from({ length: 30 }, (_, index): Job => ({ id: String(index), name: `İş ${String(index).padStart(2, '0')}`, status: 'Başarılı', database: `db${index}`, agent: 'Ofis-PC', schedule: '', encryption: '' }))
-    const search = { label: 'İş ara', text: (job: Job) => `${job.name} ${job.agent}` }
-
-    it('filters rows and pages them in groups of 25', () => {
-      setViewport(true)
-      render(<DataList rows={many} columns={columns} keyExtractor={job => job.id} search={search} emptyMessage="Hiç iş yok." />)
-      expect(screen.getAllByRole('row')).toHaveLength(26)
-      fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
-      expect(screen.getAllByRole('row')).toHaveLength(6)
-      fireEvent.change(screen.getByRole('searchbox', { name: 'İş ara' }), { target: { value: 'iş 07' } })
-      expect(screen.getAllByRole('row')).toHaveLength(2)
-      expect(screen.getByText('İş 07')).toBeInTheDocument()
-    })
-
-    it('says nothing matched instead of showing an empty table', () => {
-      setViewport(true)
-      render(<DataList rows={many} columns={columns} keyExtractor={job => job.id} search={search} emptyMessage="Hiç iş yok." />)
-      fireEvent.change(screen.getByRole('searchbox', { name: 'İş ara' }), { target: { value: 'zzz' } })
-      expect(screen.queryByRole('table')).not.toBeInTheDocument()
-      expect(screen.getByText('Aramayla eşleşen kayıt yok.')).toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
-      expect(screen.getByRole('table')).toBeInTheDocument()
-      expect(screen.getByRole('searchbox', { name: 'İş ara' })).toHaveValue('')
-    })
-
-    it('searches and shows cards on a narrow screen', () => {
-      setViewport(false)
-      render(<DataList rows={many} columns={columns} keyExtractor={job => job.id} search={search} emptyMessage="Hiç iş yok." />)
-      fireEvent.change(screen.getByRole('searchbox', { name: 'İş ara' }), { target: { value: 'iş 07' } })
-      expect(screen.getAllByRole('listitem')).toHaveLength(1)
-    })
-  })
 })

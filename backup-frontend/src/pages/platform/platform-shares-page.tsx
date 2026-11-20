@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { FilterField, Filters } from '@/components/ui/filters'
+import { Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
@@ -24,7 +24,6 @@ export function PlatformSharesPage() {
   useLanguage()
   const { get, update } = useListParams()
   const tenantId = get('tenantId')
-  const status = get('status')
   const shareFilter = get('shareId')
   const artifactFilter = get('artifactId')
   const userFilter = get('userId')
@@ -34,7 +33,7 @@ export function PlatformSharesPage() {
   const [retentionOverride, setRetentionOverride] = useState<string | null>(null)
   const [retentionError, setRetentionError] = useState<string | null>(null)
 
-  const query = usePlatformShares({ tenantId, status })
+  const query = usePlatformShares({ tenantId })
   const shares = query.data ?? []
 
   const attemptsQuery = usePlatformDownloadAttempts({
@@ -76,27 +75,14 @@ export function PlatformSharesPage() {
         }
       />
 
-      <Filters
-        label={tx('Paylaşım filtreleri')}
-        onClear={tenantId || status ? () => update({ tenantId: '', status: '' }) : undefined}
-      >
-        <TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />
-        <FilterField label={tx('Durum')}>
-          <Select value={status} onChange={(e) => update({ status: e.target.value })}>
-            <option value="">{tx('Tümü')}</option>
-            <option value="Active">{tx('Aktif')}</option>
-            <option value="Expired">{tx('Süresi doldu')}</option>
-            <option value="Revoked">{tx('İptal edildi')}</option>
-          </Select>
-        </FilterField>
-      </Filters>
 
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         <SharesTable
           shares={shares}
           showTenant
+          tenantFilter={<TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />}
           emptyMessage={
-            tenantId || status
+            tenantId
               ? tx('Seçilen filtrelere uygun paylaşım bulunamadı.')
               : tx('Henüz paylaşım yapılmamış.')
           }

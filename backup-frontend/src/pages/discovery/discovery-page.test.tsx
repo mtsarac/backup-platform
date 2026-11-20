@@ -29,8 +29,8 @@ describe('discovery page', () => {
   it('links each server to its databases and keeps scan internals collapsed and copyable', async () => {
     mount()
     expect(await screen.findByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
-    expect(screen.queryByText('Veritabanı bulma filtreleri')).not.toBeInTheDocument()
-    expect(screen.getByText('Kimlik bilgisi gerekli')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Veritabanı bulma filtreleri' })).toBeInTheDocument()
+    expect(within(screen.getByRole('table')).getByText('Kimlik bilgisi gerekli')).toBeInTheDocument()
     const computer = screen.getByRole('region', { name: 'SQL Agent' })
     expect(within(computer).getByText('Liste güncel')).toBeInTheDocument()
     expect(screen.queryByText(/Docker yok demek değildir/)).not.toBeInTheDocument()
@@ -122,7 +122,7 @@ describe('discovery page', () => {
     vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [makeInstance({ access: 'Error', accessReasonCode: 'server_tls_unavailable' })] })
     mount()
     expect(await screen.findByText('Şifreli bağlantı yok')).toBeInTheDocument()
-    expect(screen.queryByText('Hata')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('table')).queryByText('Hata')).not.toBeInTheDocument()
   })
   it('offers nobody scan settings: automatic scans and Docker stay on, the interval is shown read-only', async () => {
     mount()

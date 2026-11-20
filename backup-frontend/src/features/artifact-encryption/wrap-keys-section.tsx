@@ -6,6 +6,9 @@ import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { bareListClass } from '@/features/lists/list-empty'
+import { compareDate, compareNumber } from '@/features/lists/compare'
+import { useClientList } from '@/features/lists/use-client-list'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { useWrapKeyActions, useWrapKeys } from './hooks'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import type { WrapKey } from './types'
@@ -15,6 +18,9 @@ import { RelativeTime } from '@/components/data/relative-time'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
+const listConfig = { sort: { first: { created: 'desc' }, default: { key: 'created', dir: 'desc' } } } as const
+const comparators = { created: (a: WrapKey, b: WrapKey) => compareDate(a.createdAt, b.createdAt) }
+
 /** TWK lifecycle of one tenant: versions, state and how many artifacts each version still protects. No key material is ever shown. */
 export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()
@@ -22,10 +28,12 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
   const { rotate, retire } = useWrapKeyActions(tenantId)
   const [rotating, setRotating] = useState(false)
   const [retiring, setRetiring] = useState<WrapKey | null>(null)
+  const state = useListState(listConfig)
+  const list = useClientList(keys.data?.items ?? [], state, { comparators, tieBreak: (a, b) => compareNumber(b.version, a.version) })
   const columns: Column<WrapKey>[] = [
     { key: 'name', card: 'title', header: tx('Anahtar'), render: key => key.state === 'Active' ? tx('Etkin anahtar') : key.state === 'Retired' ? tx('Kullanımdan kaldırılmış anahtar') : tx('Önceki anahtar') },
     { key: 'state', card: 'status', header: tx('Durum'), render: key => <StatusPill domain="wrapKey" status={key.state} /> },
-    { key: 'created', header: tx('Oluşturulma'), render: key => <RelativeTime value={key.createdAt} /> },
+    { key: 'created', header: tx('Oluşturulma'), sortable: true, render: key => <RelativeTime value={key.createdAt} /> },
     { key: 'artifacts', header: tx('Korunan yedek sayısı'), render: key => <span className="tabular-nums">{key.artifactCount}</span> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: key => key.state === 'Retired' ? <span className="text-text-muted">—</span>
       : <Button size="sm" variant="outline" disabled={key.state === 'Active'} title={key.state === 'Active' ? tx('Etkin anahtar önce döndürülmelidir.') : undefined} onClick={() => { retire.reset(); setRetiring(key) }}>{tx("Emekli et")}</Button> },
@@ -43,7 +51,7 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={keys.isPending} error={keys.error}>
       {keys.data && <div className="space-y-3">
         {keys.data.items.length === 0 && <div className="px-5 pt-4"><Notice tone="info">{tx("Bu tenant henüz şifreli yedek almadı; ilk şifreli çalıştırmada etkin bir anahtar oluşturulur.")}</Notice></div>}
-        {keys.data.items.length > 0 && <DataList className={bareListClass} rows={keys.data.items} columns={columns} keyExtractor={key => String(key.version)} emptyMessage={tx("Henüz şifreleme anahtarı yok.")} />}
+        {keys.data.items.length > 0 && <DataList className={bareListClass} rows={list.rows} sort={sortProps(state)} columns={columns} keyExtractor={key => String(key.version)} emptyMessage={tx("Henüz şifreleme anahtarı yok.")} />}
       </div>}
     </QueryState>
     <ConfirmDialog open={rotating} onClose={() => setRotating(false)} title={tx("Anahtar döndürülsün mü?")}

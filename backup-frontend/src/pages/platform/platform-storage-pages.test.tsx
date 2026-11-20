@@ -239,6 +239,23 @@ describe('Platform Storage Usage Page states and operations', () => {
 })
 
 describe('Platform Quota Policies Page and Dialog', () => {
+  it('sorts newest policies first, sorts names, and clears a search with no matches', async () => {
+    vi.mocked(storageApi.getQuotaPolicies).mockResolvedValue({ items: [
+      { ...samplePolicy, name: 'Alfa', createdAt: '2026-01-01T00:00:00Z' },
+      { ...samplePolicy, policyId: 'policy-2', name: 'Zeta', createdAt: '2026-02-01T00:00:00Z' },
+    ] })
+    renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
+    await screen.findByText('Zeta')
+    const names = () => screen.getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)
+    expect(names()[0]).toContain('Zeta')
+    fireEvent.click(within(screen.getByRole('columnheader', { name: 'Politika' })).getByRole('button'))
+    expect(names()[0]).toContain('Alfa')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Politika ara' }), { target: { value: 'yok' } })
+    expect(screen.getByText('Aramayla eşleşen kayıt yok.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(names()[0]).toContain('Alfa')
+  })
+
   it('keeps policy creation available from the header when no policies exist', async () => {
     vi.mocked(storageApi.getQuotaPolicies).mockResolvedValue({ items: [] })
     renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })

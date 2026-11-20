@@ -24,12 +24,12 @@ export interface Agent {
   capabilitiesRevision?: string | null
   capabilitiesReportedAt?: string | null
   capabilities: AgentCapability[]
+  enrolledAt?: string | null
 }
 
 export interface AgentDetail extends Agent {
   osDescription: string | null
   runtimeVersion: string | null
-  enrolledAt: string | null
 }
 
 export interface EnrollmentPolicy {

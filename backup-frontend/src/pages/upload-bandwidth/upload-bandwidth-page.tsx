@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
+import { RelativeTime } from '@/components/data/relative-time'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Disclosure } from '@/components/ui/disclosure'
@@ -14,6 +15,11 @@ import { useAgents } from '@/features/agents/hooks'
 import type { Agent } from '@/features/agents/types'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
+import { compareDate, compareNumber, compareText } from '@/features/lists/compare'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { useClientList } from '@/features/lists/use-client-list'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { AssignProfileDialog } from '@/features/upload-bandwidth/assign-profile-dialog'
 import { LimitDialog } from '@/features/upload-bandwidth/limit-dialog'
@@ -24,6 +30,11 @@ import { DAYS, describeSchedule } from '@/features/upload-bandwidth/schedule'
 import { formatBandwidth, formatExactRate } from '@/features/upload-bandwidth/units'
 
 type Tab = 'tenant' | 'agents' | 'jobs' | 'profiles'
+
+const listConfig = {
+  search: true,
+  sort: { first: { name: 'asc', agent: 'asc', limit: 'asc', profile: 'asc', created: 'desc' }, default: { key: 'created', dir: 'desc' } },
+} as const
 
 interface Editing { target: BandwidthTarget; name: string; current: number | null }
 
@@ -54,11 +65,38 @@ export function UploadBandwidthPage() {
   const jobProfiles = new Map(data?.jobs.map(item => [item.jobId, item.profileId]))
   const agentLimits = new Map(data?.agents.map(item => [item.agentId, item.bytesPerSecond]))
   const jobLimits = new Map(data?.jobs.map(item => [item.jobId, item.bytesPerSecond]))
+  const state = useListState<Record<never, never>, keyof typeof listConfig.sort.first>(listConfig)
+  const profileName = (id: string | null | undefined) => id ? profileMap.get(id) ?? tx('Atandı') : null
+  const agentList = useClientList(agents.data ?? [], state, {
+    searchText: agent => agent.hostName || agent.agentId,
+    comparators: {
+      name: (a, b) => compareText(a.hostName || a.agentId, b.hostName || b.agentId),
+      agent: (a, b) => compareText(a.hostName || a.agentId, b.hostName || b.agentId),
+      limit: (a, b) => compareNumber(agentLimits.get(a.agentId), agentLimits.get(b.agentId)),
+      profile: (a, b) => compareText(profileName(agentProfiles.get(a.agentId)), profileName(agentProfiles.get(b.agentId))),
+      created: (a, b) => compareDate(a.enrolledAt, b.enrolledAt),
+    },
+    tieBreak: (a, b) => compareText(a.hostName || a.agentId, b.hostName || b.agentId) || compareText(a.agentId, b.agentId),
+    pageSize: state.pageSize,
+  })
+  const jobList = useClientList(jobs.data ?? [], state, {
+    searchText: job => `${job.name} ${job.agentName ?? ''}`,
+    comparators: {
+      name: (a, b) => compareText(a.name, b.name),
+      agent: (a, b) => compareText(a.agentName, b.agentName),
+      limit: (a, b) => compareNumber(jobLimits.get(a.id), jobLimits.get(b.id)),
+      profile: (a, b) => compareText(profileName(jobProfiles.get(a.id)), profileName(jobProfiles.get(b.id))),
+      created: (a, b) => compareDate(a.createdAt, b.createdAt),
+    },
+    tieBreak: (a, b) => compareText(a.name, b.name) || compareText(a.id, b.id),
+    pageSize: state.pageSize,
+  })
   const edit = (target: BandwidthTarget, name: string, current: number | null | undefined) => <Button variant="outline" size="sm" aria-label={tx("{0} yükleme hız sınırını düzenle", { "0": name })} onClick={() => setEditing({ target, name, current: current ?? null })}>{tx("Düzenle")}</Button>
   const agentColumns: Column<Agent>[] = [
-    { key: 'name', header: tx('Yedekleme bilgisayarı'), wrap: true, render: agent => agent.hostName || agent.agentId },
-    { key: 'limit', header: tx('Hız sınırı'), wrap: true, render: agent => <Limit value={agentLimits.get(agent.agentId)} /> },
-    { key: 'profile', header: tx('Bant Genişliği Profili'), wrap: true, render: agent => agentProfiles.get(agent.agentId) ? profileMap.get(agentProfiles.get(agent.agentId)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
+    { key: 'name', header: tx('Yedekleme bilgisayarı'), sortable: true, wrap: true, render: agent => agent.hostName || agent.agentId },
+    { key: 'limit', header: tx('Hız sınırı'), sortable: true, wrap: true, render: agent => <Limit value={agentLimits.get(agent.agentId)} /> },
+    { key: 'profile', header: tx('Bant Genişliği Profili'), sortable: true, wrap: true, render: agent => agentProfiles.get(agent.agentId) ? profileMap.get(agentProfiles.get(agent.agentId)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
+    { key: 'created', header: tx('Kayıt tarihi'), sortable: true, render: agent => <RelativeTime value={agent.enrolledAt} /> },
     { key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (agent: Agent) => (
       <div className="flex gap-2">
         {edit({ scope: 'agent', id: agent.agentId }, agent.hostName || agent.agentId, agentLimits.get(agent.agentId))}
@@ -67,10 +105,11 @@ export function UploadBandwidthPage() {
     ) },
   ]
   const jobColumns: Column<BackupJob>[] = [
-    { key: 'name', header: tx('Yedekleme işi'), wrap: true, render: job => job.name },
-    { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: job => job.agentName || '—' },
-    { key: 'limit', header: tx('Hız sınırı'), wrap: true, render: job => <Limit value={jobLimits.get(job.id)} /> },
-    { key: 'profile', header: tx('Bant Genişliği Profili'), wrap: true, render: job => jobProfiles.get(job.id) ? profileMap.get(jobProfiles.get(job.id)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
+    { key: 'name', header: tx('Yedekleme işi'), sortable: true, wrap: true, render: job => job.name },
+    { key: 'agent', header: tx('Yedekleme bilgisayarı'), sortable: true, wrap: true, render: job => job.agentName || '—' },
+    { key: 'limit', header: tx('Hız sınırı'), sortable: true, wrap: true, render: job => <Limit value={jobLimits.get(job.id)} /> },
+    { key: 'profile', header: tx('Bant Genişliği Profili'), sortable: true, wrap: true, render: job => jobProfiles.get(job.id) ? profileMap.get(jobProfiles.get(job.id)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
+    { key: 'created', header: tx('Oluşturulma'), sortable: true, render: job => <RelativeTime value={job.createdAt} /> },
     { key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (job: BackupJob) => (
       <div className="flex gap-2">
         {edit({ scope: 'job', id: job.id }, job.name, jobLimits.get(job.id))}
@@ -101,14 +140,18 @@ export function UploadBandwidthPage() {
         {tab === 'agents' && <QueryState isPending={agents.isPending} error={agents.error}>
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-text-heading">{tx("Yedekleme bilgisayarı sınırları")}</h2>
-            <DataList rows={agents.data ?? []} columns={agentColumns} keyExtractor={agent => agent.agentId} search={{ label: tx("Yedekleme bilgisayarı ara"), text: agent => agent.hostName || agent.agentId }} emptyMessage={tx("Yedekleme bilgisayarı bulunamadı.")} />
+            <ListToolbar state={state} label={tx('Bilgisayar filtreleri')} total={agentList.total} search={{ label: tx('Yedekleme bilgisayarı ara') }} />
+            <DataList rows={agentList.rows} columns={agentColumns} keyExtractor={agent => agent.agentId} sort={sortProps(state)} emptyMessage={tx("Yedekleme bilgisayarı bulunamadı.")} onClearFilters={state.filtering ? state.clear : undefined} />
+            <ListPager state={state} total={agentList.total} label={tx('Bilgisayar sayfaları')} />
             <TechnicalDetails items={(agents.data ?? []).flatMap(agent => exactLimit(agent.hostName || agent.agentId, agentLimits.get(agent.agentId)))} />
           </div>
         </QueryState>}
         {tab === 'jobs' && <QueryState isPending={jobs.isPending} error={jobs.error}>
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-text-heading">{tx("Yedekleme işi sınırları")}</h2>
-            <DataList rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} search={{ label: tx("Yedekleme işi ara"), text: job => `${job.name} ${job.agentName ?? ''}` }} emptyMessage={tx("Yedekleme işi bulunamadı.")} />
+            <ListToolbar state={state} label={tx('İş filtreleri')} total={jobList.total} search={{ label: tx('Yedekleme işi ara') }} />
+            <DataList rows={jobList.rows} columns={jobColumns} keyExtractor={job => job.id} sort={sortProps(state)} emptyMessage={tx("Yedekleme işi bulunamadı.")} onClearFilters={state.filtering ? state.clear : undefined} />
+            <ListPager state={state} total={jobList.total} label={tx('Yedekleme işi sayfaları')} />
             <TechnicalDetails items={(jobs.data ?? []).flatMap(job => exactLimit(job.name, jobLimits.get(job.id)))} />
           </div>
         </QueryState>}

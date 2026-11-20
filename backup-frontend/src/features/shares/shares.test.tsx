@@ -1,8 +1,9 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { setViewport } from '@/test/viewport'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 import { SharesPage } from '@/pages/shares/shares-page'
@@ -214,14 +215,19 @@ async function renderDetailPage() {
   fireEvent.click(await screen.findByRole('button', { name: 'Paylaş' }))
   return queryClient
 }
+function LocationSearch() {
+  return <output data-testid="location-search">{useLocation().search}</output>
+}
 
-function renderSharesPage() {
+
+function renderSharesPage(path = '/tenants/tenant-a/backup-shares') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/tenants/tenant-a/backup-shares']}>
+      <MemoryRouter initialEntries={[path]}>
+        <LocationSearch />
         <Routes>
           <Route path="/tenants/:tenantId/backup-shares" element={<SharesPage />} />
         </Routes>
@@ -238,6 +244,7 @@ function renderPlatformSharesPage(path = '/platform/shares') {
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>
+        <LocationSearch />
         <Routes>
           <Route path="/platform/shares" element={<PlatformSharesPage />} />
         </Routes>
@@ -359,9 +366,9 @@ describe('BackupShare frontend', () => {
     await waitFor(() => {
       expect(screen.getByRole('table', { name: 'Paylaşımlarım' })).toBeInTheDocument()
       expect(screen.getAllByText('ProductionDb')).toHaveLength(3)
-      expect(screen.getByText('Aktif')).toBeInTheDocument()
-      expect(screen.getByText('Süresi doldu')).toBeInTheDocument()
-      expect(screen.getByText('İptal edildi')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Aktif')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Süresi doldu')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('İptal edildi')).toBeInTheDocument()
     })
   })
 
@@ -386,7 +393,7 @@ describe('BackupShare frontend', () => {
       expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
       expect(screen.getByText('Super Admin')).toBeInTheDocument()
       expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()
-      expect(screen.getByText('Aktif')).toBeInTheDocument()
+      expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Aktif')).toBeInTheDocument()
       // Ensure tenant view is read-only (no extend or revoke buttons exist)
       expect(screen.queryByRole('button', { name: /uzat|iptal/i })).not.toBeInTheDocument()
     })
@@ -421,6 +428,52 @@ describe('BackupShare frontend', () => {
       expect(screen.getByRole('region', { name: 'Paylaşım filtreleri' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
     })
+  })
+
+  it('restores and updates client search, status and sorting on the shares page', async () => {
+    request.mockImplementation(async (path: string) => path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, { ...expiredShare, artifactName: 'ArchiveDb', createdAtUtc: '2026-11-13T12:00:00Z' }])
+    renderSharesPage('/tenants/tenant-a/backup-shares?status=Expired&search=archive')
+    const table = await screen.findByRole('table', { name: 'Paylaşımlarım' })
+    expect(within(table).getByText('ArchiveDb')).toBeInTheDocument()
+    expect(within(table).queryByText('ProductionDb')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Paylaşım ara' }), { target: { value: 'missing' } })
+    expect(screen.getByText('Seçilen filtrelere uygun paylaşım bulunamadı.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(screen.getByTestId('location-search')).toHaveTextContent('')
+    const rows = within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getAllByRole('row')
+    expect(rows[1]).toHaveTextContent('ArchiveDb')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: /Yedek dosyası/ }))
+    expect(screen.getByTestId('location-search')).toHaveTextContent('sort=artifact')
+    expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getAllByRole('row')[1]).toHaveTextContent('ArchiveDb')
+  })
+
+  it('filters platform shares locally while retaining the tenant URL filter', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('platform/backup-shares')) return [platformShare, { ...testShare, status: 'Expired' }]
+      if (path.includes('platform/tenants')) return { items: [{ tenantId: 'tenant-b', name: 'Acme Corp' }], totalCount: 1, pageSize: 100, page: 1 }
+      return path.includes('download-attempts') ? { items: [], nextCursor: null } : []
+    })
+    renderPlatformSharesPage('/platform/shares?tenantId=tenant-b&status=Expired')
+    const table = await screen.findByRole('table', { name: 'Paylaşımlar' })
+    expect(within(table).getByText('ProductionDb')).toBeInTheDocument()
+    expect(within(table).queryByText('AnalyticsDb')).not.toBeInTheDocument()
+    expect(request.mock.calls.filter(([path]) => String(path).includes('platform/backup-shares')).every(([path]) => !String(path).includes('status='))).toBe(true)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Active' } })
+    expect(screen.getByTestId('location-search')).toHaveTextContent('tenantId=tenant-b')
+    expect(screen.getByTestId('location-search')).toHaveTextContent('status=Active')
+    expect(within(screen.getByRole('table', { name: 'Paylaşımlar' })).getByRole('link', { name: 'Acme Corp' })).toHaveAttribute('href', '/platform/tenants/tenant-b')
+  })
+
+  it('sorts share cards on narrow screens', async () => {
+    setViewport(false)
+    request.mockImplementation(async (path: string) => path.includes('download-attempts') ? { items: [], nextCursor: null } : [testShare, { ...expiredShare, artifactName: 'ArchiveDb', createdAtUtc: '2026-11-13T12:00:00Z' }])
+    renderSharesPage()
+    const sort = await screen.findByRole('combobox', { name: 'Sırala' })
+    expect(sort).toHaveValue('createdAt:desc')
+    fireEvent.change(sort, { target: { value: 'artifact:desc' } })
+    expect(screen.getByTestId('location-search')).toHaveTextContent('sort=artifact&dir=desc')
+    expect(screen.getAllByRole('heading', { level: 2 })[0]).toHaveTextContent('ProductionDb')
   })
 
   it('creates a share from Paylaşılan Yedekler screen via CreatePlatformShareDialog', async () => {

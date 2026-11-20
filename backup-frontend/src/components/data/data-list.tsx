@@ -1,11 +1,9 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import { Card, cardClass } from '@/components/ui/card'
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
-import { Pagination } from '@/components/data/pagination'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters } from '@/components/ui/filters'
-import { Select, TextInput } from '@/components/ui/text-input'
+import { Select } from '@/components/ui/text-input'
 import { useLargeScreen } from '@/hooks/use-large-screen'
 import { cn } from '@/lib/utils'
 
@@ -38,13 +36,10 @@ interface DataListProps<T> {
   className?: string
   /** Names the list for assistive tech (the table caption, the card list label). */
   caption?: string
-  /** Client-side search and paging (25 per page) for a list that arrives complete from its endpoint. */
-  search?: { label: string; text: (row: T) => string }
   /** The caller sorts `rows`; this only shows and changes the order. */
   sort?: SortState
 }
 
-const PAGE_SIZE = 25
 const KEY_FIELDS = 3
 
 type ListProps<T> = Pick<DataListProps<T>, 'columns' | 'keyExtractor' | 'className' | 'caption' | 'sort'> & { rows: readonly T[] }
@@ -145,30 +140,18 @@ function Table<T>({ rows, columns, keyExtractor, className, caption, sort }: Lis
  * One list for every page: a table on large screens, cards below them so phones never scroll sideways.
  * Cards show the title, the status and a few key fields; mark the rest of a row `card: 'hidden'`.
  */
-export function DataList<T>({ rows, columns, keyExtractor, emptyMessage, onClearFilters, className, caption, search, sort }: DataListProps<T>) {
+export function DataList<T>({ rows, columns, keyExtractor, emptyMessage, onClearFilters, className, caption, sort }: DataListProps<T>) {
   useLanguage()
   const large = useLargeScreen()
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(1)
-  const needle = query.trim().toLocaleLowerCase(currentLocale())
-  const matches = search && needle ? rows.filter(row => search.text(row).toLocaleLowerCase(currentLocale()).includes(needle)) : rows
-  const current = search ? Math.min(page, Math.max(1, Math.ceil(matches.length / PAGE_SIZE))) : 1
-  const visible = search ? matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE) : matches
   const List = large ? Table<T> : Cards<T>
   return (
     <div className="space-y-4">
-      {search && (
-        <Filters label={tx("{0} filtreleri", { "0": search.label })}>
-          <FilterField label={search.label}><TextInput type="search" aria-label={search.label} placeholder={search.label} className="text-sm" value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} /></FilterField>
-        </Filters>
-      )}
-      {visible.length === 0
-        ? <div className={cn(cardClass, className)}><EmptyState message={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} onClearFilters={needle ? () => { setQuery(''); setPage(1) } : onClearFilters} /></div>
+      {rows.length === 0
+        ? <div className={cn(cardClass, className)}><EmptyState message={emptyMessage} onClearFilters={onClearFilters} /></div>
         : <>
           {!large && sort && <SortMenu columns={columns} sort={sort} />}
-          <List rows={visible} columns={columns} keyExtractor={keyExtractor} className={className} caption={caption} sort={sort} />
+          <List rows={rows} columns={columns} keyExtractor={keyExtractor} className={className} caption={caption} sort={sort} />
         </>}
-      {search && matches.length > PAGE_SIZE && <Pagination label={tx("{0} sayfaları", { "0": search.label })} page={current} pageSize={PAGE_SIZE} totalCount={matches.length} onPageChange={setPage} />}
     </div>
   )
 }

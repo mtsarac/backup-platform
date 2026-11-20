@@ -5,8 +5,15 @@ import { DataList, type Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { FilterField } from '@/components/ui/filters'
 import { linkClass, rowLinkClass } from '@/components/ui/form-styles'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { Select } from '@/components/ui/text-input'
+import { compareDate, compareText } from '@/features/lists/compare'
+import { ListEmpty } from '@/features/lists/list-empty'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { useClientList } from '@/features/lists/use-client-list'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { formatBytes, formatDateTime } from '@/lib/format'
@@ -17,12 +24,30 @@ import { canExtendShare, canManageShare, type BackupShareView, type DownloadAtte
 import { prepareDownload } from '@/features/artifacts/api'
 import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 
+const listConfig = {
+  search: true,
+  filters: { status: ['Active', 'Expired', 'Revoked'] },
+  sort: { first: { tenant: 'asc', artifact: 'asc', creator: 'asc', role: 'asc', createdAt: 'desc', expiresAt: 'desc', status: 'asc', reason: 'asc' }, default: { key: 'createdAt', dir: 'desc' } },
+} as const
+
+const comparators = {
+  tenant: (a: BackupShareView, b: BackupShareView) => compareText(a.tenantName || a.tenantId, b.tenantName || b.tenantId),
+  artifact: (a: BackupShareView, b: BackupShareView) => compareText(a.artifactName || tx('Yedek dosyası'), b.artifactName || tx('Yedek dosyası')),
+  creator: (a: BackupShareView, b: BackupShareView) => compareText(a.createdByDisplayName || a.createdByUserId, b.createdByDisplayName || b.createdByUserId),
+  role: (a: BackupShareView, b: BackupShareView) => compareText(a.createdByRole, b.createdByRole),
+  createdAt: (a: BackupShareView, b: BackupShareView) => compareDate(a.createdAtUtc, b.createdAtUtc),
+  expiresAt: (a: BackupShareView, b: BackupShareView) => compareDate(a.expiresAtUtc, b.expiresAtUtc),
+  status: (a: BackupShareView, b: BackupShareView) => compareText(a.status, b.status),
+  reason: (a: BackupShareView, b: BackupShareView) => compareText(a.reason, b.reason),
+}
+
 export interface SharesTableProps {
   shares: BackupShareView[]
   showTenant?: boolean
   emptyMessage?: string
   emptyAction?: ReactNode
   caption?: string
+  tenantFilter?: ReactNode
 }
 
 export function SharesTable({
@@ -31,10 +56,17 @@ export function SharesTable({
   emptyMessage,
   emptyAction,
   caption,
+  tenantFilter,
 }: SharesTableProps) {
   useLanguage()
   const { user } = useAuth()
   const tenantContext = useContext(TenantContext)
+  const state = useListState(listConfig)
+  const list = useClientList(shares, state, {
+    searchText: share => `${share.artifactName ?? ''} ${share.createdByDisplayName || share.createdByUserId} ${share.createdByRole} ${share.reason ?? ''} ${showTenant ? share.tenantName || share.tenantId : ''}`,
+    filters: { status: (share, value) => share.status === value },
+    comparators,
+  })
 
   const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<BackupShareView | null>(null)
@@ -81,6 +113,7 @@ export function SharesTable({
           {
             key: 'tenant',
             header: tx('Tenant'),
+            sortable: true,
             render: (share: BackupShareView) => (
               <Link className={`${linkClass} ${rowLinkClass}`} to={`/platform/tenants/${share.tenantId}`}>
                 {share.tenantName || share.tenantId}
@@ -92,6 +125,7 @@ export function SharesTable({
     {
       key: 'artifact',
       header: tx('Yedek dosyası'),
+      sortable: true,
       card: 'title' as const,
       render: (share: BackupShareView) => (
         <ArtifactRunLink className={`${linkClass} ${rowLinkClass}`} tenantId={share.tenantId} artifactId={share.artifactId}>
@@ -102,32 +136,38 @@ export function SharesTable({
     {
       key: 'creator',
       header: tx('Oluşturan'),
+      sortable: true,
       render: (share: BackupShareView) => share.createdByDisplayName || share.createdByUserId,
     },
     {
       key: 'role',
       header: tx('Rol'),
+      sortable: true,
       render: (share: BackupShareView) => share.createdByRole,
     },
     {
       key: 'createdAt',
       header: tx('Oluşturulma'),
+      sortable: true,
       render: (share: BackupShareView) => formatDateTime(share.createdAtUtc),
     },
     {
       key: 'expiresAt',
       header: tx('Bitiş'),
+      sortable: true,
       render: (share: BackupShareView) => formatDateTime(share.expiresAtUtc),
     },
     {
       key: 'status',
       header: tx('Durum'),
+      sortable: true,
       card: 'status' as const,
       render: (share: BackupShareView) => <StatusPill domain="share" status={share.status} />,
     },
     {
       key: 'reason',
       header: tx('Gerekçe'),
+      sortable: true,
       wrap: true,
       render: (share: BackupShareView) => share.reason || '—',
     },
@@ -179,15 +219,6 @@ export function SharesTable({
     },
   ]
 
-  if (shares.length === 0) {
-    return (
-      <EmptyState
-        icon={Share2}
-        message={emptyMessage || tx('Henüz paylaşım yapılmamış.')}
-        action={emptyAction}
-      />
-    )
-  }
 
   return (
     <div className="space-y-4">
@@ -195,13 +226,29 @@ export function SharesTable({
       {errorNotice && (
         <ErrorNotice what={errorNotice} />
       )}
+      <ListToolbar state={state} label={tx('Paylaşım filtreleri')} total={list.total} search={{ label: tx('Paylaşım ara') }}>
+        {tenantFilter}
+        <FilterField label={tx('Durum')}>
+          <Select aria-label={tx('Durum')} value={state.filters.status} onChange={event => state.setFilter('status', event.target.value)}>
+            <option value="">{tx('Tümü')}</option>
+            <option value="Active">{tx('Aktif')}</option>
+            <option value="Expired">{tx('Süresi doldu')}</option>
+            <option value="Revoked">{tx('İptal edildi')}</option>
+          </Select>
+        </FilterField>
+      </ListToolbar>
+      {shares.length === 0 && !state.filtering
+        ? <ListEmpty icon={Share2} message={emptyMessage || tx('Henüz paylaşım yapılmamış.')} action={emptyAction} />
+        :
       <DataList
-        emptyMessage={tx('Henüz paylaşım yapılmamış.')}
-        rows={shares}
+        emptyMessage={tx('Seçilen filtrelere uygun paylaşım bulunamadı.')}
+        onClearFilters={state.filtering ? state.clear : undefined}
+        rows={list.rows}
         columns={columns}
         keyExtractor={(share) => share.id}
         caption={caption || tx('Paylaşımlar')}
-      />
+        sort={sortProps(state)}
+      />}
       <ShareActionDialogs
         tenantId={extendTarget?.tenantId || revokeTarget?.tenantId || tenantContext?.tenantId || ''}
         extendTarget={extendTarget}
