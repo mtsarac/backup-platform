@@ -575,6 +575,21 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
     }
 
     [Fact]
+    public async Task ListCanReachRestoresBeyondTheFirstHundred()
+    {
+        await using var scenario = await CreateAsync(fixture);
+        var backup = await scenario.AcceptBackupAsync();
+        for (var index = 0; index < 101; index++)
+            await scenario.StartAsync(backup.ArtifactId, scenario.Body($"Target{index}"));
+
+        using var response = await scenario.GetRawAsync("/restores?purpose=All&page=2&pageSize=100");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = AgentWorld.ReadJson(response);
+        Assert.Equal(101, page.GetProperty("totalCount").GetInt32());
+        Assert.Single(page.GetProperty("items").EnumerateArray());
+    }
+
+    [Fact]
     public async Task TheListLeavesTheResultOutAndTheDetailViewHasIt()
     {
         await using var scenario = await CreateAsync(fixture);
