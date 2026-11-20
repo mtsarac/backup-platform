@@ -21,8 +21,9 @@
  *
  * A page with tabs or two lists gives each list its own `paramPrefix` and `pageKey` (switching a tab then never clears anything) and keeps the tab itself in `useUrlParams`.
  * Any change but paging goes back to page 1; unknown values in the URL are ignored; typing in the search box replaces the history entry.
+ * The page is capped at `MAX_PAGE`; `ListPager` falls back to the last page when the URL asks for one past it.
  */
-import { useUrlParams, oneOf, dayParam, LIST_PAGE_SIZE } from './url-params'
+import { useUrlParams, oneOf, dayParam, pageParam, LIST_PAGE_SIZE } from './url-params'
 import type { SortDirection, SortState } from '@/components/data/data-list'
 
 /** What a filter accepts: a closed set of values (`as const`), a `YYYY-MM-DD` day, or free text. */
@@ -61,12 +62,15 @@ export interface ListState<K extends string = string, F extends Record<string, F
   defaultSort: boolean
   /** A search or any filter is set. */
   filtering: boolean
+  /** Anything but the defaults is in the URL (a search, a filter, another sort, a later page): a collapsed section holding the list opens for it. */
+  customized: boolean
   setSearch: (value: string) => void
   setFilter: (name: keyof F & string, value: string) => void
   setSort: (key: K, dir: SortDirection) => void
   /** Active key: flips the direction; another key: its first direction. */
   toggleSort: (key: K) => void
-  setPage: (page: number) => void
+  /** `replace` rewrites the history entry (the fall-back from a page past the last). */
+  setPage: (page: number, options?: { replace?: boolean }) => void
   /** Empties the search and every filter (the sort stays). */
   clear: () => void
 }
@@ -86,8 +90,7 @@ export function parseListState<K extends string, F extends Record<string, Filter
 export function useListState<const F extends Record<string, FilterSpec> = Record<never, FilterSpec>, K extends string = string>(config: ListConfig<K, F>): ListState<K, F> {
   const { get, update: write } = useUrlParams()
   const pageKey = config.pageKey ?? 'page'
-  const asked = Number(get(pageKey))
-  const page = Number.isInteger(asked) && asked >= 1 ? asked : 1
+  const page = pageParam(get(pageKey))
   // Any change but a page change goes back to page 1.
   const update = (changes: Record<string, string | number>, options?: { replace?: boolean }) => write({ [pageKey]: '', ...changes }, options)
   const { search, filters, sort } = parseListState(get, config)
@@ -102,10 +105,11 @@ export function useListState<const F extends Record<string, FilterSpec> = Record
     first: config.sort.first,
     defaultSort: isDefault(sort.key, sort.dir),
     filtering: Boolean(search.trim() || Object.values(filters).some(Boolean)),
+    customized: Boolean(search || Object.values(filters).some(Boolean) || !isDefault(sort.key, sort.dir) || page > 1),
     setSearch: value => update({ [`${prefix}search`]: value }, { replace: true }),
     setFilter: (name, value) => update({ [name]: value }),
     toggleSort: key => setSort(key, key === sort.key ? (sort.dir === 'asc' ? 'desc' : 'asc') : config.sort.first[key]),
-    setPage: next => update({ [pageKey]: next === 1 ? '' : next }),
+    setPage: (next, options) => update({ [pageKey]: next === 1 ? '' : next }, options),
     clear: () => update(Object.fromEntries([...(config.search ? [`${prefix}search`] : []), ...names].map(name => [name, '']))),
   }
 }

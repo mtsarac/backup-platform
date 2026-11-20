@@ -14,7 +14,7 @@ export const isRescanThrottled = (error: unknown) => error instanceof ApiError &
 export const isStaleList = (instance: Pick<DiscoveryInstanceSummary, 'access'>) => instance.access !== 'Authenticated'
 export const staleListTitle = () => tx("Son bilinen liste")
 export const staleListNote = () => tx("Veritabanları listelenemiyor; son başarılı aramadan kalan liste gösteriliyor.")
-export const engineLabels: Record<string, string> = { mssql: 'MSSQL', postgres: 'PostgreSQL' }
+export const engineLabels: Record<string, string> = { mssql: 'SQL Server', postgres: 'PostgreSQL', get 'file-system'() { return tx("Dosya / Klasör") } }
 
 // Reason codes are agent-produced fixed codes; unknown ones are shown as the bare code, never as free text.
 const reasonLabels: Record<string, string> = {

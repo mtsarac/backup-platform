@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
 import { parseListState } from './use-list-state'
+import { dayParam, isCompleteDay, pageParam, MAX_PAGE } from './url-params'
 
 const config = {
   search: true,
@@ -34,4 +35,18 @@ it('reads the search and sort from prefixed parameters', () => {
   const state = parse('attempts-search=abc&attempts-sort=name&search=zzz&sort=created', { ...config, paramPrefix: 'attempts-' })
   expect(state.search).toBe('abc')
   expect(state.sort).toEqual({ key: 'name', dir: 'asc' })
+})
+
+it('accepts only valid calendar dates and recognizes an incomplete typed year', () => {
+  expect(dayParam('2024-02-29')).toBe('2024-02-29')
+  expect(dayParam('2026-02-29')).toBe('')
+  expect(dayParam('2026-13-01')).toBe('')
+  expect(isCompleteDay('0002-11-19')).toBe(false)
+  expect(isCompleteDay('2026-11-19')).toBe(true)
+})
+
+it('caps oversized pages and ignores invalid page numbers', () => {
+  expect(pageParam('2147483648')).toBe(MAX_PAGE)
+  expect(pageParam('2.5')).toBe(1)
+  expect(pageParam('-1')).toBe(1)
 })

@@ -8,6 +8,7 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { platformPaths } from '@/features/platform/paths'
 import { linkClass } from '@/components/ui/form-styles'
 import { ConnectionActions } from './connection-actions'
+import { connectionDisplayName } from './labels'
 import { ConnectionState, LastTest, SecretStatus } from './connection-parts'
 import type { ConnectionOps } from './hooks'
 import type { ConnectionView, ProviderDescriptor } from './types'
@@ -22,7 +23,7 @@ export function PlatformConnectionTable({ rows, providers, ops, showTenant, empt
 }) {
   useLanguage()
   const columns: Column<ConnectionView>[] = [
-    { key: 'name', card: 'title', header: tx('Bağlantı'), sortable: true, wrap: true, render: (row) => <div className="flex flex-wrap items-center gap-1.5"><span className="font-medium text-text-heading">{row.name}</span>{row.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</div> },
+    { key: 'name', card: 'title', header: tx('Bağlantı'), sortable: true, wrap: true, render: (row) => <div className="flex flex-wrap items-center gap-1.5"><span className="font-medium text-text-heading">{connectionDisplayName(row)}</span>{row.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</div> },
     { key: 'enabled', card: 'status', header: tx('Durum'), sortable: true, wrap: true, render: (row) => <ConnectionState connection={row} /> },
     ...(showTenant ? [{ key: 'tenant', header: tx('Çalışma alanı'), sortable: true, wrap: true, render: (row: ConnectionView) => <Link className={linkClass} to={platformPaths.tenant(row.tenantId)}>{row.tenantName ?? tx('Çalışma alanı')}</Link> }] : []),
     { key: 'provider', header: tx('Depolama sağlayıcısı'), sortable: true, wrap: true, render: (row) => tx(row.providerDisplayName) },

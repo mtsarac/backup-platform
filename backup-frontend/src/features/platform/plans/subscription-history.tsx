@@ -58,7 +58,7 @@ export function SubscriptionHistory({ tenantId }: { tenantId: string }) {
       <div className="space-y-3">
         <ListToolbar state={state} label={tx("Abonelik geçmişi filtreleri")} search={{ label: tx("Plan ara"), placeholder: tx("Plan adı") }} total={data?.totalCount} />
         <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
-          {data && (data.items.length === 0
+          {data && (data.totalCount === 0
             ? <ListEmpty message={tx("Abonelik geçmişi yok.")} filtering={state.filtering} onClear={state.clear} />
             : <>
               <SortMenu options={[{ key: 'startsAt', label: tx('Başlangıç') }, { key: 'plan', label: tx('Plan') }, { key: 'status', label: tx('Durum') }]} sort={sortProps(state)} />

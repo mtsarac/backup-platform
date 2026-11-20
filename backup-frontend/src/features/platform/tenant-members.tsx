@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { errorMessage, platformOnlyMessage } from '@/lib/api/failure-messages'
 import { useAddMembership, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
 import { bareListClass, ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -78,7 +79,7 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (data.totalCount === 0
           ? <ListEmpty icon={Users} message={tx("Bu tenant'ın henüz üyesi yok.")} action={<Button onClick={() => formRef.current?.querySelector('input')?.focus()}>{tx("İlk üyeyi ekle")}</Button>} filtering={state.filtering} onClear={state.clear} />
-          : <DataList className={bareListClass} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} onClearFilters={state.filtering ? state.clear : undefined} />)}
+          : <DataList className={bareListClass} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(member) => member.userId} emptyMessage={pastLastPageMessage()} onClearFilters={state.filtering ? state.clear : undefined} />)}
       </QueryState>
     </Section>
     {data && <ListPager state={state} total={data.totalCount} label={tx('Üyelik sayfaları')} disabled={query.isFetching} />}

@@ -1,5 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { searchFor } from '@/test/search'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -79,7 +80,7 @@ it('ignores an unknown sort in the URL', async () => {
 it('searches by name; the search lives in the URL', async () => {
   mount()
   await ready()
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), { target: { value: 'sat' } })
+  searchFor(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), 'sat')
   expect(names()).toEqual(['Satış-PC'])
   expect(location()).toHaveTextContent('search=sat')
 })

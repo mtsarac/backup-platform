@@ -48,7 +48,7 @@ export function NotificationAdministration() {
         <ListToolbar state={state} label={tx('Başarısız gönderim filtreleri')} search={{ label: tx('Gönderim ara'), placeholder: tx('Kanal, hedef veya olay') }} total={failed.data?.totalCount} />
         <QueryState isPending={failed.isPending} error={failed.error}>
           {retry.error && <ErrorNotice error={retry.error} />}
-          {failed.data && (failed.data.items.length === 0
+          {failed.data && (failed.data.totalCount === 0
             ? <ListEmpty message={tx("Başarısız bildirim gönderimi yok.")} filtering={state.filtering} onClear={state.clear} />
             : <>
               <SortMenu options={sortOptions()} sort={sortProps(state)} />

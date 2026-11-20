@@ -14,6 +14,7 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { useAssignTemporaryPassword, useCreateUser, useDisableUser, usePlatformTenants, usePlatformUsers, useUpdateUser } from '@/features/platform/hooks'
 import { enableUser } from '@/features/platform/api'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -143,7 +144,7 @@ export function PlatformUsersPage() {
     <ListToolbar state={state} label={tx('Kullanıcı filtreleri')} total={data?.totalCount} search={{ label: tx('Kullanıcı ara'), placeholder: tx('Ad veya kullanıcı adı') }} />
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {data.totalCount === 0 ? <ListEmpty icon={Users} message={tx('Henüz kullanıcı yok.')} filtering={state.filtering} filteredMessage={tx('Aramaya uygun kullanıcı bulunamadı.')} onClear={state.clear} /> : <DataList className="[&_td]:!min-w-0" caption={tx('Kullanıcılar')} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(user) => user.userId} emptyMessage={tx('Aramaya uygun kullanıcı bulunamadı.')} onClearFilters={state.filtering ? state.clear : undefined} />}
+        {data.totalCount === 0 ? <ListEmpty icon={Users} message={tx('Henüz kullanıcı yok.')} filtering={state.filtering} filteredMessage={tx('Aramaya uygun kullanıcı bulunamadı.')} onClear={state.clear} /> : <DataList className="[&_td]:!min-w-0" caption={tx('Kullanıcılar')} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(user) => user.userId} emptyMessage={pastLastPageMessage()} onClearFilters={state.filtering ? state.clear : undefined} />}
         <ListPager state={state} total={data.totalCount} label={tx('Kullanıcı sayfaları')} disabled={query.isFetching} />
       </div>}
     </QueryState>

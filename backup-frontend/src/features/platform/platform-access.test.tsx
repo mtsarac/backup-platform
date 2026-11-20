@@ -74,7 +74,7 @@ describe('PlatformAdminRoute guard', () => {
     expect(screen.getByRole('link', { name: /Platform Operatörü/ })).toHaveAttribute('href', '/account')
     expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText("Çalışma Alanı")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Çalışma alanı")).not.toBeInTheDocument()
     expect(api.getSummary).toHaveBeenCalled()
   })
 })

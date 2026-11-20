@@ -99,7 +99,7 @@ describe('discovery-first source step', () => {
     expect(await screen.findByRole('heading', { name: 'Seçilen kaynak' })).toBeInTheDocument()
     const summary = screen.getByRole('heading', { name: 'Seçilen kaynak' }).closest('div')!.parentElement!
     await waitFor(() => expect(summary).toHaveTextContent('SQL Agent'))
-    expect(summary).toHaveTextContent('SQL Server (default) · MSSQL · localhost:1433')
+    expect(summary).toHaveTextContent('SQL Server (default) · SQL Server · localhost:1433')
     expect(summary).toHaveTextContent('ERP, CRM')
     expect(screen.queryByLabelText('Yedekleme bilgisayarı')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Veritabanı')).not.toBeInTheDocument()

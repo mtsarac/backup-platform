@@ -28,7 +28,7 @@ export function DownloadAttemptsList({ scope }: { scope: DownloadAttemptScope })
   const columns: Column<DownloadAttemptView>[] = [
     ...(platform ? [{ key: 'tenant', header: tx('Tenant'), sortable: true, render: (attempt: DownloadAttemptView) => attempt.tenantName || attempt.tenantId }] : []),
     { key: 'artifact', header: tx('Yedek dosyası'), sortable: true, card: 'title', render: attempt => attempt.artifactName || attempt.artifactId },
-    { key: 'share', header: tx('Paylaşım'), render: attempt => attempt.shareId || '—' },
+    { key: 'share', header: tx('Paylaşım'), render: attempt => attempt.shareId ? <span title={attempt.shareId}>#{attempt.shareId.slice(0, 8)}</span> : '—' },
     { key: 'user', header: tx('Kullanıcı'), sortable: true, render: attempt => attempt.initiatingUserDisplayName || attempt.initiatingUserId },
     { key: 'startedAt', header: tx('Başlangıç'), sortable: true, render: attempt => formatDateTime(attempt.startedAtUtc) },
     { key: 'endedAt', header: tx('Bitiş'), sortable: true, render: attempt => (attempt.endedAtUtc ? formatDateTime(attempt.endedAtUtc) : '—') },

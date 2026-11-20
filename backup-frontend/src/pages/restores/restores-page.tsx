@@ -21,6 +21,7 @@ import { restoreModeLabel, restoreStatuses, targetStateLabel } from '@/features/
 import { restoreTitle, sourceBackupLabel, useSourceDatabaseName } from '@/features/restores/source-backup'
 import type { RestoreView } from '@/features/restores/types'
 import { ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -83,7 +84,7 @@ export function RestoresPage() {
       {query.data?.totalCount === 0
         ? <ListEmpty icon={History} filtering={filtering} onClear={state.clear} filteredMessage={tx("Bu filtrelere uyan geri yükleme yok.")} message={tx("Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.")}
           action={<Link className={buttonVariants()} to={`${base}/backup-runs`}>{tx("Yedek dosyalarını aç")}</Link>} />
-        : <DataList rows={query.data?.items ?? []} columns={columns} sort={sortProps(state)} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} emptyMessage={tx("Henüz geri yükleme yapılmadı. Bir yedeğin ayrıntısından geri yükleyebilirsiniz.")} />}
+        : <DataList rows={query.data?.items ?? []} columns={columns} sort={sortProps(state)} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} emptyMessage={pastLastPageMessage()} />}
       {query.data && <ListPager state={state} total={query.data.totalCount} disabled={query.isFetching} label={tx("Geri yükleme sayfaları")} />}
     </QueryState>
   </div>

@@ -1,4 +1,5 @@
 import { useState, useContext, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Share2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
@@ -13,10 +14,12 @@ import { ListEmpty } from '@/features/lists/list-empty'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { useClientList } from '@/features/lists/use-client-list'
 import { sortProps, useListState } from '@/features/lists/use-list-state'
+import { accountRoleLabel } from '@/features/auth/role-label'
 import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
+import { downloadAttemptsKey } from './hooks'
 import { ShareActionDialogs } from './share-dialogs'
 import { canExtendShare, canManageShare, type BackupShareView } from './types'
 import { prepareDownload } from '@/features/artifacts/api'
@@ -32,7 +35,7 @@ const comparators = {
   tenant: (a: BackupShareView, b: BackupShareView) => compareText(a.tenantName || a.tenantId, b.tenantName || b.tenantId),
   artifact: (a: BackupShareView, b: BackupShareView) => compareText(a.artifactName || tx('Yedek dosyası'), b.artifactName || tx('Yedek dosyası')),
   creator: (a: BackupShareView, b: BackupShareView) => compareText(a.createdByDisplayName || a.createdByUserId, b.createdByDisplayName || b.createdByUserId),
-  role: (a: BackupShareView, b: BackupShareView) => compareText(a.createdByRole, b.createdByRole),
+  role: (a: BackupShareView, b: BackupShareView) => compareText(accountRoleLabel(a.createdByRole), accountRoleLabel(b.createdByRole)),
   createdAt: (a: BackupShareView, b: BackupShareView) => compareDate(a.createdAtUtc, b.createdAtUtc),
   expiresAt: (a: BackupShareView, b: BackupShareView) => compareDate(a.expiresAtUtc, b.expiresAtUtc),
   status: (a: BackupShareView, b: BackupShareView) => compareText(a.status, b.status),
@@ -59,9 +62,10 @@ export function SharesTable({
   useLanguage()
   const { user } = useAuth()
   const tenantContext = useContext(TenantContext)
+  const queryClient = useQueryClient()
   const state = useListState(listConfig)
   const list = useClientList(shares, state, {
-    searchText: share => `${share.artifactName ?? ''} ${share.createdByDisplayName || share.createdByUserId} ${share.createdByRole} ${share.reason ?? ''} ${showTenant ? share.tenantName || share.tenantId : ''}`,
+    searchText: share => `${share.artifactName ?? ''} ${share.createdByDisplayName || share.createdByUserId} ${accountRoleLabel(share.createdByRole)} ${share.reason ?? ''} ${showTenant ? share.tenantName || share.tenantId : ''}`,
     filters: { status: (share, value) => share.status === value },
     comparators,
   })
@@ -102,6 +106,7 @@ export function SharesTable({
       setErrorNotice(msg)
     } finally {
       setDownloadingId(null)
+      void queryClient.invalidateQueries({ queryKey: downloadAttemptsKey })
     }
   }
 
@@ -141,7 +146,7 @@ export function SharesTable({
       key: 'role',
       header: tx('Rol'),
       sortable: true,
-      render: (share: BackupShareView) => share.createdByRole,
+      render: (share: BackupShareView) => accountRoleLabel(share.createdByRole),
     },
     {
       key: 'createdAt',

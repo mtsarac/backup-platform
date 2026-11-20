@@ -1,5 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { searchFor } from '@/test/search'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -75,9 +76,9 @@ it('puts servers without a working login last when sorting by eligible databases
 it('searches the server and the computer name; the search lives in the URL', async () => {
   mount()
   await ready()
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Sunucu veya bilgisayar ara' }), { target: { value: 'depo' } })
+  searchFor(screen.getByRole('searchbox', { name: 'Sunucu veya bilgisayar ara' }), 'depo')
   expect(names()).toEqual(['Depo', 'Satış'])
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Sunucu veya bilgisayar ara' }), { target: { value: 'muhasebe' } })
+  searchFor(screen.getByRole('searchbox', { name: 'Sunucu veya bilgisayar ara' }), 'muhasebe')
   expect(names()).toEqual(['Muhasebe'])
   expect(location()).toHaveTextContent('search=muhasebe')
 })

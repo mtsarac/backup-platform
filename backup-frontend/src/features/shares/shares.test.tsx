@@ -395,7 +395,7 @@ describe('BackupShare frontend', () => {
       expect(screen.getByText('AnalyticsDb')).toBeInTheDocument()
       expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
       expect(screen.getByText('Super Admin')).toBeInTheDocument()
-      expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()
+      expect(screen.getByText('Platform Yöneticisi')).toBeInTheDocument()
       expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Aktif')).toBeInTheDocument()
       // Ensure tenant view is read-only (no extend or revoke buttons exist)
       expect(screen.queryByRole('button', { name: /uzat|iptal/i })).not.toBeInTheDocument()
@@ -427,7 +427,7 @@ describe('BackupShare frontend', () => {
       expect(screen.getByText('Acme Corp')).toBeInTheDocument()
       expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
       expect(screen.getByText('Super Admin')).toBeInTheDocument()
-      expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()
+      expect(screen.getByText('Platform Yöneticisi')).toBeInTheDocument()
       expect(screen.getByRole('region', { name: 'Paylaşım filtreleri' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
     })
@@ -440,6 +440,7 @@ describe('BackupShare frontend', () => {
     expect(within(table).getByText('ArchiveDb')).toBeInTheDocument()
     expect(within(table).queryByText('ProductionDb')).not.toBeInTheDocument()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Paylaşım ara' }), { target: { value: 'missing' } })
+    fireEvent.blur(screen.getByRole('searchbox', { name: 'Paylaşım ara' }))
     expect(screen.getByText('Seçilen filtrelere uygun paylaşım bulunamadı.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
     expect(screen.getByTestId('location-search')).toHaveTextContent('')
@@ -518,7 +519,7 @@ describe('BackupShare frontend', () => {
     })
 
     // Select tenant
-    const tenantInput = screen.getByRole('combobox', { name: 'Çalışma Alanı' })
+    const tenantInput = screen.getByRole('combobox', { name: 'Çalışma alanı' })
     fireEvent.change(tenantInput, { target: { value: 'Acme' } })
 
     await waitFor(() => {
@@ -807,12 +808,12 @@ describe('BackupShare frontend', () => {
     })
 
     renderSharesPage()
-    expect(screen.getByText('İndirme girişimleri', { selector: 'h2' })).not.toBeVisible()
+    expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
     fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
 
     await waitFor(() => {
       expect(screen.getByRole('table', { name: 'Paylaşımlarım' })).toBeInTheDocument()
-      expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
+      expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).toHaveAttribute('open')
       const history = within(screen.getByRole('table', { name: 'İndirme girişimleri' }))
       expect(history.getByText('Tamamlandı')).toBeInTheDocument()
       expect(history.getByText('Reddedildi')).toBeInTheDocument()
@@ -927,12 +928,12 @@ describe('BackupShare frontend', () => {
     })
 
     renderPlatformSharesPage()
-    expect(screen.getByText('İndirme girişimleri', { selector: 'h2' })).not.toBeVisible()
+    expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
     fireEvent.click(screen.getByText('İndirme girişimleri', { selector: 'summary' }))
     fireEvent.click(screen.getByText('Denetim ve paylaşım geçmişi saklama süresi', { selector: 'summary' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'İndirme girişimleri' })).toBeInTheDocument()
+      expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).toHaveAttribute('open')
       expect(screen.getByText('Paylaşım iptal edilmiş.')).toBeInTheDocument()
       expect(screen.getByText(/Dosya sağlama toplamı doğrulaması başarısız/)).toBeInTheDocument()
       expect(screen.getByDisplayValue('365')).toBeInTheDocument()

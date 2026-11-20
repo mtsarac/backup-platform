@@ -200,3 +200,12 @@ body {
   outline: 3px solid var(--ring);
   outline-offset: 2px;
 }
+
+/* A table wider than its card scrolls inside it: a soft shadow on each edge that still has columns behind it says so (the white covers hide a shadow once that edge is reached). */
+.scroll-shadow-x {
+  background:
+    linear-gradient(to right, var(--surface), var(--surface)) left center / 1.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--surface), var(--surface)) right center / 1.5rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.22), transparent) left center / 0.75rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.22), transparent) right center / 0.75rem 100% no-repeat scroll;
+}

@@ -10,6 +10,7 @@ import { FilterField } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { bareListClass, ListEmpty } from '@/features/lists/list-empty'
+import { pastLastPageMessage } from '@/features/lists/list-messages'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
 import { toServerQuery } from '@/features/lists/server-list-query'
@@ -129,7 +130,7 @@ export function PlatformStoragePage() {
     {
       key: 'state',
       card: 'status',
-      header: tx('Kota Durumu'),
+      header: tx('Kota durumu'),
       sortable: true,
       render: (row) => (
         <div className="space-y-1">
@@ -137,7 +138,7 @@ export function PlatformStoragePage() {
           {!row.newBackupsAllowed && (
             <div>
               <StatusPill level="urgent">
-                {row.denialCode === 'quota_exceeded' ? tx('Kota Doldu') : tx('Engellendi')}
+                {row.denialCode === 'quota_exceeded' ? tx('Kota doldu') : tx('Engellendi')}
               </StatusPill>
             </div>
           )}
@@ -200,12 +201,12 @@ export function PlatformStoragePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />{tx("Yenile")}</Button>
-        <Link to={platformPaths.quotaPolicies} className={buttonVariants({ variant: 'outline' })}><ShieldCheck aria-hidden="true" className="size-4" />{tx("Kota Politikaları")}</Link>
+        <Link to={platformPaths.quotaPolicies} className={buttonVariants({ variant: 'outline' })}><ShieldCheck aria-hidden="true" className="size-4" />{tx("Kota politikaları")}</Link>
       </div>
       {statusMessage && <Notice tone="success">{statusMessage}</Notice>}
       <ListToolbar state={state} label={tx("Depolama kullanım filtreleri")} total={data?.totalCount} search={{ label: tx("Tenant ara"), placeholder: tx("Tenant adı...") }}>
         <FilterField label={tx("Kota durumu")}><Select className="text-sm" value={quotaState} onChange={(event) => state.setFilter('quotaState', event.target.value)}>
-          <option value="">{tx("Tümü")}</option><option value="Normal">{tx("Yeterli alan var")}</option><option value="Warning">{tx("Alan azalıyor")}</option><option value="Critical">{tx("Alan dolmak üzere")}</option><option value="OverQuota">{tx("Kota Doldu")}</option><option value="Unlimited">{tx("Limitsiz")}</option>
+          <option value="">{tx("Tümü")}</option><option value="Normal">{tx("Yeterli alan var")}</option><option value="Warning">{tx("Alan azalıyor")}</option><option value="Critical">{tx("Alan dolmak üzere")}</option><option value="OverQuota">{tx("Kota doldu")}</option><option value="Unlimited">{tx("Limitsiz")}</option>
         </Select></FilterField>
         <FilterField label={tx("Abonelik")}><Select className="text-sm" value={subscriptionStatus} onChange={(event) => state.setFilter('subscriptionStatus', event.target.value)}>
           <option value="">{tx("Tümü")}</option><option value="Active">{tx("Etkin")}</option><option value="Suspended">{tx("Askıda")}</option><option value="Expired">{tx("Süresi doldu")}</option><option value="NoSubscription">{tx("Abonelik yok")}</option>
@@ -216,10 +217,10 @@ export function PlatformStoragePage() {
         {data && (
           <div className="space-y-4">
             <Section title={tx("Çalışma alanlarının kullanımı")} description={tx("Gösterilen kullanım, kullanılan ve ayrılmış alanın toplamıdır. Doğrulama ve baştan hesaplama yalnızca kullanım kayıtlarını günceller; yedek dosyalarını silmez.")} flush className="overflow-hidden">
-              {data.items.length === 0
+              {data.totalCount === 0
                 ? <ListEmpty message={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} filtering={state.filtering} onClear={state.clear}
                     action={<Link className={buttonVariants()} to={platformPaths.tenants}>{tx("Çalışma alanlarını görüntüle")}</Link>} />
-                : <DataList caption={tx("Depolama kullanımı")} className={bareListClass} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} />}
+                : <DataList caption={tx("Depolama kullanımı")} className={bareListClass} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(row) => row.tenantId} emptyMessage={pastLastPageMessage()} />}
             </Section>
             <ListPager state={state} total={data.totalCount} disabled={query.isFetching} label={tx("Kullanım sayfaları")} />
           </div>

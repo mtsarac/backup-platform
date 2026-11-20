@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react'
 import { X } from 'lucide-react'
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { foldSearch } from '@/features/lists/fold-search'
+import { tx, useLanguage } from '@/lib/i18n'
 import { filterControlClass } from '@/components/ui/filters'
 import { cn } from '@/lib/utils'
 
@@ -12,8 +13,6 @@ export interface PickerOption {
   /** A second line that is searched too (a job name, a date). */
   description?: string
 }
-
-const normalize = (text: string) => text.toLocaleLowerCase(currentLocale())
 
 /**
  * Search the loaded names; `onSearchChange` can also load matching names from the server.
@@ -30,8 +29,8 @@ export function SearchablePicker({ label, options, value, onChange, selectedLabe
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const chosen = options.find(option => option.value === value)?.label ?? selectedLabel ?? ''
-  const needle = normalize(query ?? '')
-  const matches = options.filter(option => normalize(`${option.label} ${option.description ?? ''}`).includes(needle))
+  const needle = foldSearch(query ?? '')
+  const matches = options.filter(option => foldSearch(`${option.label} ${option.description ?? ''}`).includes(needle))
   const current = Math.min(active, matches.length - 1)
   const expanded = open && !disabled
 

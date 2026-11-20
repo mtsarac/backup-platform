@@ -1,8 +1,8 @@
-import { currentLocale } from '@/lib/i18n'
+import { foldSearch } from './fold-search'
 import type { ListState, FilterSpec } from './use-list-state'
 
 interface ClientListOptions<T, K extends string, F extends Record<string, FilterSpec>> {
-  /** The text the search matches (case-insensitive substring). */
+  /** The text the search matches (a substring, folded by `foldSearch`). */
   searchText?: (row: T) => string
   /** One per filter, called only while the filter is set. */
   filters?: { [N in keyof F]?: (row: T, value: string) => boolean }
@@ -16,10 +16,10 @@ interface ClientListOptions<T, K extends string, F extends Record<string, Filter
 
 /** Search, filter, sort and page a list that arrives complete. Returns the visible page, the matching count and the (clamped) page. */
 export function useClientList<T, K extends string, F extends Record<string, FilterSpec>>(rows: readonly T[], state: ListState<K, F>, options: ClientListOptions<T, K, F>) {
-  const needle = state.search.trim().toLocaleLowerCase(currentLocale())
+  const needle = foldSearch(state.search.trim())
   const active = Object.entries(state.filters).filter(([, value]) => value) as [keyof F & string, string][]
   const compare = options.comparators[state.sort.key]
-  const matching = rows.filter(row => (!needle || options.searchText?.(row).toLocaleLowerCase(currentLocale()).includes(needle))
+  const matching = rows.filter(row => (!needle || foldSearch(options.searchText?.(row) ?? '').includes(needle))
     && active.every(([name, value]) => options.filters?.[name]?.(row, value) ?? true))
   const sorted = matching.toSorted((a, b) => { const order = compare(a, b); return (state.sort.dir === 'asc' || !Number.isFinite(order) ? order : -order) || (options.tieBreak?.(a, b) ?? 0) })
   const { pageSize } = options

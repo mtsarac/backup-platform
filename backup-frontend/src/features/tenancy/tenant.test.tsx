@@ -76,7 +76,7 @@ describe('top-bar tenant selector and role navigation', () => {
         </AuthContext.Provider>
       </QueryClientProvider>
     )
-    const select = screen.getByLabelText('Çalışma Alanı')
+    const select = screen.getByLabelText('Çalışma alanı')
     expect(select).toHaveValue('tenant-a')
     await userEvent.selectOptions(select, 'tenant-b')
     expect(await screen.findByText('Public B')).toBeInTheDocument()

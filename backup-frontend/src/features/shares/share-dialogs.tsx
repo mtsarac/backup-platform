@@ -88,7 +88,7 @@ export function ShareActionDialogs({
           onConfirm={handleRevokeConfirm}
           consequence={{
             what: tx('Paylaşım hemen iptal edilir ve indirme erişimi sonlandırılır.'),
-            who: tx('Bu paylaşıma erişen PlatformAdmin kullanıcıları etkilenir.'),
+            who: tx('Bu paylaşıma erişen Platform yöneticileri etkilenir.'),
             reversible: tx('Hayır, iptal edilen bir paylaşım tekrar etkinleştirilemez.'),
           }}
         />
