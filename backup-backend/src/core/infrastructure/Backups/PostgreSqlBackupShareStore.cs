@@ -644,7 +644,6 @@ public sealed class PostgreSqlBackupShareStore(DbContextOptions<PlatformDbContex
         .Date("startedAt", r => r.StartedAtUtc)
         .Date("endedAt", r => r.EndedAtUtc)
         .Text("artifact", r => r.ArtifactName)
-        .Value("share", r => r.ShareId)
         .Text("user", r => r.UserName)
         .Text("tenant", r => r.TenantName)
         .Text("result", r => r.Result)

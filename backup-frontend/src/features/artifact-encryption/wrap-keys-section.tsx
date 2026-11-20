@@ -18,7 +18,7 @@ import { RelativeTime } from '@/components/data/relative-time'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
-const listConfig = { sort: { first: { created: 'desc' }, default: { key: 'created', dir: 'desc' } } } as const
+const listConfig = { sort: { first: { created: 'desc' }, default: { key: 'created', dir: 'desc' } }, paramPrefix: 'keys-' } as const
 const comparators = { created: (a: WrapKey, b: WrapKey) => compareDate(a.createdAt, b.createdAt) }
 
 /** TWK lifecycle of one tenant: versions, state and how many artifacts each version still protects. No key material is ever shown. */

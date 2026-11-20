@@ -93,6 +93,8 @@ A paged list endpoint accepts `page`, `pageSize` (default 25, at most 100), `sea
 
 Platform list sort fields: tenants `name`, `memberCount`, `agentCount`, `enrollmentEnabled` (default `name`); tenant memberships `displayName`, `username` (default `displayName`); agents `hostName`, `tenantName`, `status`, `connectivity`, `lastSeenAt`, `enrolledAt` (default `enrolledAt`); plans `name`, `enabled`, `storageLimitBytes`, `tenantCount`, `createdAt` (default `createdAt`). Tenants and memberships have no stored creation date. Agent enrolment is the first credential's issue time, not agent creation; agents without a credential sort last. Tenant and plan searches match name, membership searches match display name or username, and agent searches match host or tenant name. Agent `tenantId`, `connectivity` and `status`, and plan `enabled`, remain available alongside search and sort.
 
+Backup files (`GET /api/tenants/{id}/backup-artifacts`) sort by `createdAt` (default, newest first), `size`, `status`, `jobName` and `databaseName`, and `search` matches the job name, the database name and the stored file name (not the folder it sits in). `status` orders Available, DeletePending, Deleting, DeleteFailed, Deleted. The filters are `jobId`, `agentId`, `state`, `from` and `to`; the job and database names are joined in SQL.
+
 ### Request boundary
 
 Hostile input is refused at the edge with a controlled `400`, after authentication and authorization (an anonymous or unauthorized caller still gets `401`/`403` first, whatever the id) and before any handler or database call. The body is always `{ "error": "invalid_request", "field": …, "code": "invalid_value" }`; nothing about the database or an exception is ever returned.
@@ -231,7 +233,7 @@ through a temporary password. Security events on an account always create an in-
 address, an email.
 
 Download attempts are listed at `GET /api/platform/download-attempts` (PlatformAdmin) and
-`GET /api/tenants/{tenantId}/backup-shares/download-attempts` (UserAdmin) with the shared list query above (`search` matches backup file, user, tenant and result; `sort` is one of `startedAt` (default, newest first), `endedAt`, `artifact`, `share`, `user`, `tenant`, `result`, `bytes`) and the filters `shareId`, `artifactId`, `userId` and `result` (the platform route also `tenantId`). Audit and share history retention is read
+`GET /api/tenants/{tenantId}/backup-shares/download-attempts` (UserAdmin) with the shared list query above (`search` matches backup file, user, tenant and result; `sort` is one of `startedAt` (default, newest first), `endedAt`, `artifact`, `user`, `tenant`, `result`, `bytes`) and the filters `shareId`, `artifactId`, `userId` and `result` (the platform route also `tenantId`). Audit and share history retention is read
 and changed at `GET`/`PUT /api/platform/settings/audit-retention` (`{ "retentionDays": 365 }`, default 365) and pruned
 hourly; active shares and running downloads are never pruned. The security model is described in
 [SECURITY.md](../SECURITY.md).

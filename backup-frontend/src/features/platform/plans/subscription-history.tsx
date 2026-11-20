@@ -21,7 +21,8 @@ const listConfig = {
   search: true,
   sort: { first: { startsAt: 'desc', plan: 'asc', status: 'asc' }, default: { key: 'startsAt', dir: 'desc' } },
   pageSize: 10,
-  pageKey: 'subPage',
+  pageKey: 'subscription-page',
+  paramPrefix: 'subscription-',
 } as const
 
 function HistoryCard({ row }: { row: Subscription }) {

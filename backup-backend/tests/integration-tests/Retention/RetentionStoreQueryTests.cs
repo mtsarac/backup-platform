@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Backups;
 
 namespace BackupPlatform.IntegrationTests;
@@ -120,10 +121,10 @@ public sealed class RetentionStoreQueryTests(PostgreSqlFixture fixture) : IClass
         var expected = await RetentionKit.SeedBatchAsync(_world.Harness, agent, job, times);
         var stranger = await _world.SeedAsync(Policy);
         var store = _world.Store();
-        var query = new BackupArtifactQuery(JobId: job.Id, AgentId: agent.AgentId.Value, State: "Available", PageSize: 100);
+        var query = new BackupArtifactQuery(new ListQuery(PageSize: 100), JobId: job.Id, AgentId: agent.AgentId.Value, State: "Available");
         var first = await store.QueryArtifactsAsync(agent.TenantId, query, default);
-        var second = await store.QueryArtifactsAsync(agent.TenantId, query with { Page = 2 }, default);
-        var third = await store.QueryArtifactsAsync(agent.TenantId, query with { Page = 3 }, default);
+        var second = await store.QueryArtifactsAsync(agent.TenantId, query with { List = query.List with { Page = 2 } }, default);
+        var third = await store.QueryArtifactsAsync(agent.TenantId, query with { List = query.List with { Page = 3 } }, default);
         Assert.Equal(205, first.TotalCount);
         Assert.Equal(205, third.TotalCount);
         Assert.Equal(expected.AsEnumerable().Reverse().Select(item => item.ArtifactId),
@@ -152,7 +153,7 @@ public sealed class RetentionStoreQueryTests(PostgreSqlFixture fixture) : IClass
     {
         var backup = await _world.SeedAsync(Policy);
         var store = _world.Store();
-        var query = new BackupArtifactQuery(JobId: backup.JobId);
+        var query = new BackupArtifactQuery(new ListQuery(), JobId: backup.JobId);
         var due = await _world.RequestDeleteAsync(store, backup, T0.AddDays(1));
         Assert.Single((await store.QueryArtifactsAsync(backup.TenantId, query with { State = "DeletePending" }, default)).Items);
         var claim = await RetentionWorld.ClaimAsync(store, backup, due);
@@ -177,7 +178,7 @@ public sealed class RetentionStoreQueryTests(PostgreSqlFixture fixture) : IClass
         var store = _world.Store();
         var due = await _world.RequestDeleteAsync(store, backup, T0.AddDays(1));
         await store.ClaimDueDeletionsAsync("worker", due, TimeSpan.FromMinutes(5), 100, default);
-        var query = new BackupArtifactQuery(JobId: job.Id);
+        var query = new BackupArtifactQuery(new ListQuery(), JobId: job.Id);
         Assert.Single((await store.QueryArtifactsAsync(agent.TenantId, query with { State = "Deleting" }, default)).Items);
         Assert.Empty((await store.QueryArtifactsAsync(agent.TenantId, query with { State = "DeleteFailed" }, default)).Items);
     }

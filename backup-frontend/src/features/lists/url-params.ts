@@ -1,31 +1,24 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+/** Rows per page of every list, unless its config says otherwise. */
 export const LIST_PAGE_SIZE = 25
 
-function positiveInt(value: string | null) {
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1
-}
-
-/** URL-backed list state. Changing any filter drops the page unless `pageKey` itself is updated. `replace` rewrites the current history entry (typing in a search box). */
-export function useListParams(pageKey = 'page') {
+/** The query string as `get` / `update`: for page state that is not a list (a tab, a scope). Lists use `useListState`, which is built on this. `replace` rewrites the current history entry. */
+export function useUrlParams() {
   const [params, setParams] = useSearchParams()
-  const page = positiveInt(params.get(pageKey))
   const get = (key: string) => params.get(key) ?? ''
   const update = useCallback((changes: Record<string, string | number | undefined>, options?: { replace?: boolean }) => {
     setParams((current) => {
       const next = new URLSearchParams(current)
-      const pageChange = pageKey in changes
       for (const [key, value] of Object.entries(changes)) {
-        if (value === undefined || value === '' || (key === pageKey && value === 1)) next.delete(key)
+        if (value === undefined || value === '') next.delete(key)
         else next.set(key, String(value))
       }
-      if (!pageChange) next.delete(pageKey)
       return next
     }, options)
-  }, [pageKey, setParams])
-  return { page, get, update }
+  }, [setParams])
+  return { get, update }
 }
 
 /** A URL value if it is one of `allowed`, else undefined (an unknown or hand-edited value is ignored, never sent to the API). */

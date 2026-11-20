@@ -38,9 +38,6 @@ public sealed class PlatformMembershipRequest
 /// </summary>
 public static class PlatformEndpoints
 {
-    private const int DefaultPageSize = 25;
-    private const int MaximumPageSize = 100;
-
     public static IEndpointRouteBuilder MapPlatformEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -340,14 +337,6 @@ public static class PlatformEndpoints
         }));
     }
 
-    private static bool TryPaging(int? page, int? pageSize, out int p, out int size)
-    {
-        p = page ?? 1;
-        size = pageSize ?? DefaultPageSize;
-        return p is >= 1 and <= 1_000_000 && size is >= 1 and <= MaximumPageSize;
-    }
-
-
     private static object Page<TSource, TResult>(PagedResult<TSource> result, Func<TSource, TResult> map) => new
     {
         items = result.Items.Select(map).ToList(),
@@ -421,8 +410,6 @@ public static class PlatformEndpoints
     private static IResult TenantNotFound() => Results.NotFound(new { error = "tenant_not_found" });
 
     private static IResult MembershipNotFound() => Results.NotFound(new { error = "membership_not_found" });
-
-    private static IResult InvalidPaging() => Results.BadRequest(new { error = "invalid_request", field = "page", code = "invalid_value" });
 
     private static IResult Invalid(InvalidPlatformRequestException exception) =>
         Results.BadRequest(new { error = "invalid_request", field = exception.Field, code = exception.Code });

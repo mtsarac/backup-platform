@@ -1,5 +1,9 @@
+using BackupPlatform.Application.Lists;
+using BackupPlatform.Application.Platform;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Domain.Storage;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Text;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Application.Backups;
@@ -287,44 +291,66 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         return artifacts.Select(artifact => ToRecord(artifact, owners)).ToList();
     }
 
-    public async Task<BackupArtifactPage<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken)
+    // One row per artifact with everything the list sorts or searches by resolved in SQL (job and database names by joining the run and the job).
+    // StateRank is the lifecycle state the API reports: 0 Available, 1 DeletePending, 2 Deleting, 3 DeleteFailed, 4 Deleted (the filter and the sort share it).
+    private sealed class ArtifactRow
+    {
+        public required Guid Id { get; init; }
+        public required DateTimeOffset CreatedAt { get; init; }
+        public required long SizeBytes { get; init; }
+        public required string JobName { get; init; }
+        public string? DatabaseName { get; init; }
+        public string? FileName { get; init; }
+        public required int StateRank { get; init; }
+    }
+
+    private static readonly string[] ArtifactStates = ["Available", "DeletePending", "Deleting", "DeleteFailed", "Deleted"];
+
+    private static readonly SortMap<ArtifactRow> ArtifactSorts = SortMap<ArtifactRow>.Create()
+        .Date("createdAt", row => row.CreatedAt)
+        .Value("size", row => row.SizeBytes)
+        .Value("status", row => row.StateRank)
+        .Text("jobName", row => row.JobName)
+        .Text("databaseName", row => row.DatabaseName);
+
+    public async Task<PagedResult<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var artifacts = context.BackupArtifacts.AsNoTracking().Where(artifact => artifact.TenantId == tenantId);
-        if (query.JobId is not null || query.AgentId is not null)
-            artifacts = artifacts.Where(artifact => context.BackupRunAttempts.Any(attempt =>
-                attempt.Id == artifact.AttemptId && attempt.TenantId == tenantId && context.BackupRuns.Any(run =>
-                    run.Id == attempt.RunId && run.TenantId == tenantId &&
-                    (query.JobId == null || run.JobId == query.JobId) &&
-                    (query.AgentId == null || run.AgentId == new AgentId(query.AgentId.Value)))));
         if (query.From is { } from) artifacts = artifacts.Where(artifact => artifact.CreatedAt >= from.ToUniversalTime());
         if (query.To is { } to) artifacts = artifacts.Where(artifact => artifact.CreatedAt <= to.ToUniversalTime());
-        if (query.EncryptedOnly) artifacts = artifacts.Where(artifact => artifact.Format == BackupArtifact.BpeFormat);
-        artifacts = FilterState(artifacts, query.State);
-        var totalCount = await artifacts.LongCountAsync(cancellationToken);
-        var offset = (long)(query.Page - 1) * query.PageSize;
-        if (offset >= totalCount) return new([], totalCount, query.Page, query.PageSize);
-        var rows = await artifacts.Include(artifact => artifact.Replicas)
-            .OrderByDescending(artifact => artifact.AcceptedAt ?? artifact.CreatedAt).ThenBy(artifact => artifact.Id)
-            .Skip(checked((int)offset)).Take(query.PageSize).AsSplitQuery().ToListAsync(cancellationToken);
-        var owners = await ResolveOwnersAsync(context, tenantId, rows.Select(artifact => artifact.AttemptId).Distinct().ToArray(), cancellationToken);
-        return new(rows.Select(artifact => ToRecord(artifact, owners)).ToList(), totalCount, query.Page, query.PageSize);
+        var agentId = query.AgentId is { } agent ? new AgentId(agent) : (AgentId?)null;
+        var rows = from artifact in artifacts
+                   join attempt in context.BackupRunAttempts.AsNoTracking() on new { artifact.AttemptId, artifact.TenantId } equals new { AttemptId = attempt.Id, attempt.TenantId }
+                   join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
+                   join job in context.BackupJobs.AsNoTracking() on new { run.JobId, run.TenantId } equals new { JobId = job.Id, job.TenantId }
+                   where (query.JobId == null || run.JobId == query.JobId) && (agentId == null || run.AgentId == agentId)
+                   select new ArtifactRow
+                   {
+                       Id = artifact.Id, CreatedAt = artifact.CreatedAt, SizeBytes = artifact.SizeBytes, JobName = job.Name, DatabaseName = run.Configuration.Database,
+                       FileName = artifact.Replicas.OrderBy(replica => replica.CreatedAt).ThenBy(replica => replica.Id)
+                           .Select(replica => Regex.Replace(replica.Key, "^.*/", "")).FirstOrDefault(),
+                       StateRank = artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Available) ? 0
+                           : artifact.Replicas.Any() && artifact.Replicas.All(replica => replica.Status == BackupReplicaStatus.Deleted) ? 4
+                           : artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeleteFailed && replica.DeleteFailureCode != null) ? 3
+                           : artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Deleting) ? 2
+                           : 1
+                   };
+        if (query.State is { } state)
+        {
+            var rank = Array.IndexOf(ArtifactStates, state);
+            rows = rows.Where(row => row.StateRank == rank);
+        }
+        var page = await rows
+            .ApplySearch(query.List, row => row.JobName, row => row.DatabaseName, row => row.FileName)
+            .ApplySort(ArtifactSorts, query.List, "createdAt", row => row.Id)
+            .ToPagedResultAsync(query.List, cancellationToken);
+        var ids = page.Items.Select(row => row.Id).ToArray();
+        var loaded = (await context.BackupArtifacts.AsNoTracking().Include(artifact => artifact.Replicas)
+            .Where(artifact => artifact.TenantId == tenantId && ids.Contains(artifact.Id)).AsSplitQuery().ToListAsync(cancellationToken)).ToDictionary(artifact => artifact.Id);
+        var owners = await ResolveOwnersAsync(context, tenantId, loaded.Values.Select(artifact => artifact.AttemptId).Distinct().ToArray(), cancellationToken);
+        return new([.. ids.Select(id => ToRecord(loaded[id], owners))], page.TotalCount, page.Page, page.PageSize);
     }
-
-    private static IQueryable<BackupArtifact> FilterState(IQueryable<BackupArtifact> artifacts, string? state) => state switch
-    {
-        "Available" => artifacts.Where(artifact => artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Available)),
-        "Deleted" => artifacts.Where(artifact => artifact.Replicas.Any() && artifact.Replicas.All(replica => replica.Status == BackupReplicaStatus.Deleted)),
-        "DeleteFailed" => artifacts.Where(artifact => !artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Available) &&
-            artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeleteFailed && replica.DeleteFailureCode != null)),
-        "Deleting" => artifacts.Where(artifact => !artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Available ||
-            replica.Status == BackupReplicaStatus.DeleteFailed && replica.DeleteFailureCode != null) &&
-            artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Deleting)),
-        "DeletePending" => artifacts.Where(artifact => !artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Available ||
-            replica.Status == BackupReplicaStatus.Deleting || replica.Status == BackupReplicaStatus.DeleteFailed && replica.DeleteFailureCode != null) &&
-            (!artifact.Replicas.Any() || artifact.Replicas.Any(replica => replica.Status != BackupReplicaStatus.Deleted))),
-        _ => artifacts
-    };
 
     public async Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
     {

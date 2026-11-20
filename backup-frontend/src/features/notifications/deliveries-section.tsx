@@ -26,6 +26,8 @@ const listConfig = {
   search: true,
   filters: { status: deliveryStatuses, kind: channelKinds, eventType: [...eventTypes, 'test'] },
   sort: { first: { createdAt: 'desc', status: 'asc', kind: 'asc', eventType: 'asc', channel: 'asc', attempts: 'desc' }, default: { key: 'createdAt', dir: 'desc' } },
+  pageKey: 'deliveries-page',
+  paramPrefix: 'deliveries-',
 } as const
 const sortOptions = () => [
   { key: 'createdAt', label: tx('Zaman') }, { key: 'status', label: tx('Durum') }, { key: 'kind', label: tx('Kanal türü') },

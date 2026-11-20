@@ -8,26 +8,25 @@ import { Section } from '@/components/ui/section'
 import { TextInput } from '@/components/ui/text-input'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { TenantPicker } from '@/features/platform/tenant-picker'
-import { useListParams } from '@/features/platform/use-list-params'
+import { useUrlParams } from '@/features/lists/url-params'
+import { useListState } from '@/features/lists/use-list-state'
 import { CreatePlatformShareDialog } from '@/features/shares/create-platform-share-dialog'
 import {
   useAuditRetention,
   usePlatformShares,
   useUpdateAuditRetention,
 } from '@/features/shares/hooks'
+import { downloadAttemptsListConfig } from '@/features/shares/download-attempts-config'
 import { DownloadAttemptsList } from '@/features/shares/download-attempts-list'
 import { SharesTable } from '@/features/shares/shares-table'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
 import { tx, useLanguage } from '@/lib/i18n'
 export function PlatformSharesPage() {
   useLanguage()
-  const { get, update } = useListParams()
+  const { get, update } = useUrlParams()
   const tenantId = get('tenantId')
-  const shareFilter = get('shareId')
-  const artifactFilter = get('artifactId')
-  const userFilter = get('userId')
-  const resultFilter = get('result')
-  const [auditOpen, setAuditOpen] = useState(() => Boolean(shareFilter || artifactFilter || userFilter || resultFilter))
+  const attempts = useListState(downloadAttemptsListConfig)
+  const [auditOpen, setAuditOpen] = useState(attempts.filtering)
   const [createOpen, setCreateOpen] = useState(false)
   const [retentionOverride, setRetentionOverride] = useState<string | null>(null)
   const [retentionError, setRetentionError] = useState<string | null>(null)

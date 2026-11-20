@@ -854,6 +854,8 @@ describe('BackupShare frontend', () => {
     await waitFor(() => expect(attemptCalls().at(-1)).toContain('search=ay%C5%9Fe&result=Refused'))
     expect(within(history).queryByRole('textbox', { name: 'Paylaşım ID' })).not.toBeInTheDocument()
 
+    // The share id means nothing to a user, so its column does not sort.
+    expect(within(screen.getByRole('table', { name: 'İndirme girişimleri' })).queryByRole('button', { name: 'Paylaşım' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sonuç' }))
     await waitFor(() => expect(attemptCalls().at(-1)).toContain('sort=result&dir=asc'))
     fireEvent.click(screen.getByRole('button', { name: 'Sonuç' }))
@@ -880,6 +882,18 @@ describe('BackupShare frontend', () => {
     renderPlatformSharesPage('/platform/shares?result=Failed')
     expect(await screen.findByRole('combobox', { name: 'Sonuç' })).toHaveValue('Failed')
     expect(await screen.findByText(/Dosya sağlama toplamı doğrulaması başarısız/)).toBeVisible()
+  })
+
+  it('opens the platform download history when its search is in the URL', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('platform/download-attempts')) return attemptPage([failedAttempt])
+      if (path.includes('audit-retention')) return { retentionDays: 365 }
+      return []
+    })
+    renderPlatformSharesPage('/platform/shares?attempts-search=sağlama')
+    expect(await screen.findByRole('searchbox', { name: 'İndirme girişimi ara' })).toHaveValue('sağlama')
+    expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).toHaveAttribute('open')
   })
 
   it('renders download attempt history with filters and configurable 365-day retention in Paylaşılan Yedekler for PlatformAdmin', async () => {

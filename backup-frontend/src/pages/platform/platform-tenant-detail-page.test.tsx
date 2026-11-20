@@ -46,12 +46,32 @@ beforeEach(() => {
 
 describe('platform tenant detail', () => {
   it('searches and sorts members with the member page key', async () => {
-    renderPlatform(<PlatformTenantDetailPage />, { path: '/platform/tenants/tenant-a?tab=people&memberPage=2', route: '/platform/tenants/:tenantId' })
+    renderPlatform(<PlatformTenantDetailPage />, { path: '/platform/tenants/tenant-a?tab=people&members-page=2', route: '/platform/tenants/:tenantId' })
     await screen.findByText('Ayşe Yılmaz')
     await userEvent.type(screen.getByRole('searchbox', { name: 'Üye ara' }), 'ayse')
     await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse' }, expect.any(AbortSignal)))
     await userEvent.click(screen.getByRole('button', { name: /Kullanıcı adı/ }))
     await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse', sort: 'username', dir: 'asc' }, expect.any(AbortSignal)))
+  })
+
+  it('keeps each tab\'s own search, sort and page in the URL when the tab changes', async () => {
+    vi.mocked(encryptionApi.getWrapKeys).mockResolvedValue({ items: [{ version: 1, keyId: 'wrap-1', state: 'Active', artifactCount: 1, createdAt: '2026-10-20T10:00:00Z' }] })
+    renderPlatform(<PlatformTenantDetailPage />, { path: '/platform/tenants/tenant-a?tab=people&members-search=ayse&members-sort=username&members-dir=desc', route: '/platform/tenants/:tenantId' })
+    await screen.findByText('Ayşe Yılmaz')
+    expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse', sort: 'username', dir: 'desc' }, expect.any(AbortSignal))
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Güvenlik' }))
+    await screen.findByRole('button', { name: 'Oluşturulma' })
+    expect(screen.getByTestId('location')).toHaveTextContent('tab=security')
+    expect(screen.getByTestId('location')).toHaveTextContent('members-search=ayse&members-sort=username&members-dir=desc')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oluşturulma' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('keys-sort=created')
+    expect(screen.getByTestId('location')).not.toHaveTextContent(/[?&]sort=/)
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Kişiler' }))
+    await waitFor(() => expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, search: 'ayse', sort: 'username', dir: 'desc' }, expect.any(AbortSignal)))
+    expect(screen.getByRole('searchbox', { name: 'Üye ara' })).toHaveValue('ayse')
   })
 
   it('offers one action to add the first member', async () => {
@@ -277,11 +297,11 @@ describe('platform tenant detail', () => {
     expect(await screen.findByText(/Çalışma alanı bulunamadı\./)).toBeInTheDocument()
   })
 
-  it('paginates memberships through the memberPage URL parameter', async () => {
+  it('paginates memberships through the members-page URL parameter', async () => {
     vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse], { totalCount: 40 }))
     mount('people')
     await userEvent.click(await screen.findByRole('button', { name: 'Sonraki' }))
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?tab=people&memberPage=2'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?tab=people&members-page=2'))
     expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal))
   })
 

@@ -19,9 +19,10 @@
  *   <ListPager state={state} total={query.data.totalCount} disabled={query.isFetching} label="..." />
  * Pages never pass a page size: it is `pageSize` of the config, default `LIST_PAGE_SIZE`.
  *
+ * A page with tabs or two lists gives each list its own `paramPrefix` and `pageKey` (switching a tab then never clears anything) and keeps the tab itself in `useUrlParams`.
  * Any change but paging goes back to page 1; unknown values in the URL are ignored; typing in the search box replaces the history entry.
  */
-import { useListParams, oneOf, dayParam, LIST_PAGE_SIZE } from '@/features/platform/use-list-params'
+import { useUrlParams, oneOf, dayParam, LIST_PAGE_SIZE } from './url-params'
 import type { SortDirection, SortState } from '@/components/data/data-list'
 
 /** What a filter accepts: a closed set of values (`as const`), a `YYYY-MM-DD` day, or free text. */
@@ -83,7 +84,12 @@ export function parseListState<K extends string, F extends Record<string, Filter
 }
 
 export function useListState<const F extends Record<string, FilterSpec> = Record<never, FilterSpec>, K extends string = string>(config: ListConfig<K, F>): ListState<K, F> {
-  const { page, get, update } = useListParams(config.pageKey)
+  const { get, update: write } = useUrlParams()
+  const pageKey = config.pageKey ?? 'page'
+  const asked = Number(get(pageKey))
+  const page = Number.isInteger(asked) && asked >= 1 ? asked : 1
+  // Any change but a page change goes back to page 1.
+  const update = (changes: Record<string, string | number>, options?: { replace?: boolean }) => write({ [pageKey]: '', ...changes }, options)
   const { search, filters, sort } = parseListState(get, config)
   const names = Object.keys(config.filters ?? {})
   const isDefault = (key: K, dir: SortDirection) => key === config.sort.default.key && dir === config.sort.default.dir
@@ -99,7 +105,7 @@ export function useListState<const F extends Record<string, FilterSpec> = Record
     setSearch: value => update({ [`${prefix}search`]: value }, { replace: true }),
     setFilter: (name, value) => update({ [name]: value }),
     toggleSort: key => setSort(key, key === sort.key ? (sort.dir === 'asc' ? 'desc' : 'asc') : config.sort.first[key]),
-    setPage: next => update({ [config.pageKey ?? 'page']: next }),
+    setPage: next => update({ [pageKey]: next === 1 ? '' : next }),
     clear: () => update(Object.fromEntries([...(config.search ? [`${prefix}search`] : []), ...names].map(name => [name, '']))),
   }
 }

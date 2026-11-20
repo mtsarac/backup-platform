@@ -53,7 +53,8 @@ function AddMemberForm({ tenantId, formRef }: { tenantId: string; formRef: RefOb
 
 const memberListConfig = {
   search: true,
-  pageKey: 'memberPage',
+  pageKey: 'members-page',
+  paramPrefix: 'members-',
   sort: { first: { displayName: 'asc', username: 'asc' }, default: { key: 'displayName', dir: 'asc' } },
 } as const
 

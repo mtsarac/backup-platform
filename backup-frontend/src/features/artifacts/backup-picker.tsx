@@ -4,8 +4,8 @@ import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { useArtifact, useArtifacts } from '@/features/artifacts/hooks'
 import { backupOption } from '@/features/artifacts/backup-option'
 
-// shortcut: the list endpoint has no name search, so only the 100 newest backups are searchable; move the search to the endpoint when tenants outgrow that.
-const loaded = { page: 1, pageSize: 100, state: '', from: '', to: '' } as const
+// shortcut: only the 100 newest backups are offered and SearchablePicker filters them by database, job and date text; pass `search` to the endpoint (it also matches file names) once the picker can show server matches.
+const loaded = { page: 1, pageSize: 100 } as const
 
 /** Picks a backup file (artifact) by typing its database or job name, so nobody has to paste an id. */
 export function BackupPicker({ tenantId, value, onChange }: { tenantId: string; value: string; onChange: (id: string) => void }) {

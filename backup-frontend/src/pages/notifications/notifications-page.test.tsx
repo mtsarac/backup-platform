@@ -86,7 +86,7 @@ describe('URL state', () => {
   })
 
   it('restores delivery filters and page from the URL and drops unknown filter values', async () => {
-    mount('/?tab=deliveries&status=failed&kind=webhook&eventType=bogus&page=2')
+    mount('/?tab=deliveries&status=failed&kind=webhook&eventType=bogus&deliveries-page=2')
     await screen.findByText(/build-01/)
     expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 2, pageSize: 25, status: 'failed', kind: 'webhook', eventType: undefined }, expect.anything())
     expect(screen.getByLabelText('Durum')).toHaveValue('failed')
@@ -332,7 +332,7 @@ describe('delivery history', () => {
 
   it('sends search and sorting together with the filters, back on page 1', async () => {
     const user = userEvent.setup()
-    mount('/?tab=deliveries&status=failed&page=2')
+    mount('/?tab=deliveries&status=failed&deliveries-page=2')
     await screen.findByText(/build-01/)
     await user.type(screen.getByRole('searchbox', { name: 'Gönderim ara' }), 'smtp')
     await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: 'failed', search: 'smtp' }, expect.anything()))
