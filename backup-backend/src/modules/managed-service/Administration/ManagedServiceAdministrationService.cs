@@ -51,9 +51,9 @@ public sealed class ManagedServiceAdministrationService(IManagedServiceStore sto
         return exists ? new TenantSubscriptionState(tenantId, current is null ? null : ToView(current, timeProvider.GetUtcNow())) : null;
     }
 
-    public async Task<PagedResult<SubscriptionView>?> ListSubscriptionsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<PagedResult<SubscriptionView>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, CancellationToken cancellationToken)
     {
-        var result = await store.ListSubscriptionsAsync(tenantId, page, pageSize, cancellationToken);
+        var result = await store.ListSubscriptionsAsync(tenantId, query, timeProvider.GetUtcNow(), cancellationToken);
         if (result is null)
         {
             return null;

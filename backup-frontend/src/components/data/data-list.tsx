@@ -102,10 +102,11 @@ function SortButton<T>({ column, sort }: { column: Column<T>; sort: SortState })
   </button>
 }
 
-function SortMenu<T>({ columns, sort }: { columns: readonly Column<T>[]; sort: SortState }) {
+/** The sort select shown instead of the table's header buttons; also for a list of cards that is not a `DataList`. */
+export function SortMenu({ options, sort }: { options: readonly { key: string; label: string }[]; sort: SortState }) {
   return <label className="block space-y-1 text-sm font-medium text-text-heading">{tx('Sırala')}
     <Select value={`${sort.key}:${sort.direction}`} onChange={event => { const [key, direction] = event.target.value.split(':'); sort.onChange(key, direction as SortDirection) }}>
-      {columns.filter(column => column.sortable).flatMap(column => (['asc', 'desc'] as const).map(direction => <option key={`${column.key}:${direction}`} value={`${column.key}:${direction}`}>{direction === 'asc' ? tx('{0}, artan', { '0': String(column.header) }) : tx('{0}, azalan', { '0': String(column.header) })}</option>))}
+      {options.flatMap(option => (['asc', 'desc'] as const).map(direction => <option key={`${option.key}:${direction}`} value={`${option.key}:${direction}`}>{direction === 'asc' ? tx('{0}, artan', { '0': option.label }) : tx('{0}, azalan', { '0': option.label })}</option>))}
     </Select>
   </label>
 }
@@ -149,7 +150,7 @@ export function DataList<T>({ rows, columns, keyExtractor, emptyMessage, onClear
       {rows.length === 0
         ? <div className={cn(cardClass, className)}><EmptyState message={emptyMessage} onClearFilters={onClearFilters} /></div>
         : <>
-          {!large && sort && <SortMenu columns={columns} sort={sort} />}
+          {!large && sort && <SortMenu options={columns.filter(column => column.sortable).map(column => ({ key: column.key, label: String(column.header) }))} sort={sort} />}
           <List rows={rows} columns={columns} keyExtractor={keyExtractor} className={className} caption={caption} sort={sort} />
         </>}
     </div>

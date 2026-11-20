@@ -129,6 +129,12 @@ export interface SearchParams extends PageParams {
   search?: string
 }
 
+/** What a server-paged list endpoint accepts besides its own filters (the wire contract of `toServerQuery`). */
+export interface ListQueryParams extends SearchParams {
+  sort?: string
+  dir?: 'asc' | 'desc'
+}
+
 export type AuditDetailValue = string | number | boolean | null
 
 export interface PlatformAuditEntry {
@@ -145,6 +151,6 @@ export interface PlatformAuditEntry {
   details: Record<string, AuditDetailValue>
 }
 
-export interface AuditFilters extends PageParams {
+export interface AuditFilters extends ListQueryParams {
   tenantId?: string
 }

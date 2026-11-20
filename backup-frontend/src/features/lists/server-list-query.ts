@@ -1,3 +1,4 @@
+import type { ListQueryParams } from '@/features/platform/types'
 import type { FilterSpec, ListState } from './use-list-state'
 
 /**
@@ -6,7 +7,7 @@ import type { FilterSpec, ListState } from './use-list-state'
  * The endpoint's `sort` allowlist uses the same field names as the list's sort keys.
  */
 export type ServerListQuery<F extends Record<string, FilterSpec> = Record<string, FilterSpec>> =
-  { page: number; pageSize: number; search?: string; sort?: string; dir?: 'asc' | 'desc' } & { [N in keyof F]?: string }
+  ListQueryParams & { page: number; pageSize: number } & { [N in keyof F]?: F[N] extends readonly (infer V)[] ? V : string }
 
 /** The query object a feature `api.ts` puts into the URL. */
 export function toServerQuery<K extends string, F extends Record<string, FilterSpec>>(state: ListState<K, F>): ServerListQuery<F> {

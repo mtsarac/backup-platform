@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
-import { DataList, type Column } from '@/components/data/data-list'
+import { DataList, type Column, type SortState } from '@/components/data/data-list'
 import { RelativeTime } from '@/components/data/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -23,13 +23,13 @@ const actorLabels: Record<PlatformAuditEntry['actorKind'], string> = {
  * Visible: when (everyday time), what happened (plain label), who, which tenant.
  * Collapsed and copyable: action code, target type and id, entry and actor ids, exact time, actor kind, and the raw detail pairs.
  */
-export function AuditTable({ rows, emptyMessage, showTenant = true, className }: { rows: readonly PlatformAuditEntry[]; emptyMessage: string; showTenant?: boolean; className?: string }) {
+export function AuditTable({ rows, emptyMessage, showTenant = true, className, sort }: { rows: readonly PlatformAuditEntry[]; emptyMessage: string; showTenant?: boolean; className?: string; sort?: SortState }) {
   useLanguage()
   const columns: Column<PlatformAuditEntry>[] = [
-    { key: 'at', header: tx('Zaman'), render: (entry) => <RelativeTime value={entry.at} /> },
-    { key: 'action', card: 'title', header: tx('İşlem'), wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action) ?? tx('Bilinmeyen işlem')}</span> },
-    { key: 'actor', header: tx('Yapan'), wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? tx('Bilinmeyen kullanıcı')}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'accent'}>{actorLabels[entry.actorKind]}</Badge></div> },
-    ...(showTenant ? [{ key: 'tenant', header: tx('Tenant'), wrap: true, render: (entry: PlatformAuditEntry) => entry.tenantId ? <Link className={`${linkClass} inline-flex min-h-6 items-center`} to={platformPaths.tenant(entry.tenantId)}>{entry.tenantName ?? tx('Tenant')}</Link> : <span className="text-text-muted">—</span> }] : []),
+    { key: 'at', header: tx('Zaman'), sortable: true, render: (entry) => <RelativeTime value={entry.at} /> },
+    { key: 'action', card: 'title', header: tx('İşlem'), sortable: true, wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action) ?? tx('Bilinmeyen işlem')}</span> },
+    { key: 'actor', header: tx('Yapan'), sortable: true, wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? tx('Bilinmeyen kullanıcı')}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'accent'}>{actorLabels[entry.actorKind]}</Badge></div> },
+    ...(showTenant ? [{ key: 'tenant', header: tx('Tenant'), sortable: true, wrap: true, render: (entry: PlatformAuditEntry) => entry.tenantId ? <Link className={`${linkClass} inline-flex min-h-6 items-center`} to={platformPaths.tenant(entry.tenantId)}>{entry.tenantName ?? tx('Tenant')}</Link> : <span className="text-text-muted">—</span> }] : []),
     { key: 'technical', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: (entry) => <TechnicalDetails items={[
       { label: tx('İşlem kodu'), value: entry.action },
       { label: tx('Hedef türü'), value: entry.targetType },
@@ -41,5 +41,5 @@ export function AuditTable({ rows, emptyMessage, showTenant = true, className }:
       ...auditDetailItems(entry.details),
     ]} /> },
   ]
-  return <DataList caption={tx('Denetim kayıtları')} rows={rows} columns={columns} keyExtractor={(entry) => entry.id} emptyMessage={emptyMessage} className={className} />
+  return <DataList caption={tx('Denetim kayıtları')} rows={rows} columns={columns} keyExtractor={(entry) => entry.id} emptyMessage={emptyMessage} className={className} sort={sort} />
 }

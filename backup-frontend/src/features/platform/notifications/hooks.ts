@@ -1,11 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  clearEmailSecret, clearSmsSecret, getTransports, setEmailSecret, setSmsSecret, updateEmailTransport, updateSmsTransport,
+  clearEmailSecret, clearSmsSecret, getFailedDeliveries, getTransports, setEmailSecret, setSmsSecret, updateEmailTransport, updateSmsTransport,
 } from './api'
+import type { ListQueryParams } from '@/features/platform/types'
 import type { EmailTransportInput, SmsTransportInput } from './types'
 
 /** Under the `['platform']` root so logout clears it. Secret VALUES are request bodies only. */
 export const transportKeys = { all: ['platform', 'notification-transports'] as const }
+export const failedDeliveryKeys = { all: ['platform', 'failed-notification-deliveries'] as const }
 
 export function useNotificationTransports() {
   return useQuery({ queryKey: transportKeys.all, queryFn: ({ signal }) => getTransports(signal) })
@@ -26,3 +28,7 @@ export const useClearEmailSecret = () => useTransportMutation(() => clearEmailSe
 export const useUpdateSmsTransport = () => useTransportMutation((input: SmsTransportInput) => updateSmsTransport(input))
 export const useSetSmsSecret = () => useTransportMutation((value: string) => setSmsSecret(value), true)
 export const useClearSmsSecret = () => useTransportMutation(() => clearSmsSecret())
+
+export function useFailedDeliveries(params: ListQueryParams) {
+  return useQuery({ queryKey: [...failedDeliveryKeys.all, params], queryFn: ({ signal }) => getFailedDeliveries(params, signal), placeholderData: keepPreviousData })
+}

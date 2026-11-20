@@ -60,7 +60,7 @@ public static class PlatformEndpoints
         platform.MapPost("/users/{userId:guid}/disable", DisableUserAsync);
         platform.MapPost("/users/{userId:guid}/enable", EnableUserAsync);
         platform.MapPost("/users/{userId:guid}/temporary-password", AssignTemporaryPasswordAsync);
-        platform.MapGet("/audit", ListAuditAsync);
+        platform.MapGet("/audit", ListAuditAsync).WithListQuery();
         return endpoints;
     }
 
@@ -321,13 +321,9 @@ public static class PlatformEndpoints
     }
 
     private static async Task<IResult> ListAuditAsync(
-        Guid? tenantId, int? page, int? pageSize, IPlatformAdministrationStore store, CancellationToken cancellationToken)
+        Guid? tenantId, [AsParameters] ListParams list, IPlatformAdministrationStore store, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await store.ListAuditAsync(tenantId is null ? null : new TenantId(tenantId.Value), p, size, cancellationToken);
+        var result = await store.ListAuditAsync(tenantId is null ? null : new TenantId(tenantId.Value), list.ToQuery(), cancellationToken);
         return Results.Ok(Page(result, item => new
         {
             id = item.Id,

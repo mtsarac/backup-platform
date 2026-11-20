@@ -3,21 +3,22 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
-import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Disclosure } from '@/components/ui/disclosure'
-import { FilterField, Filters } from '@/components/ui/filters'
+import { FilterField } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { bareListClass, ListEmpty } from '@/features/lists/list-empty'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { toServerQuery } from '@/features/lists/server-list-query'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { QuotaMeter } from '@/features/storage/quota-meter'
 import { quotaStates, type StorageUsageRow, type EntitlementStatus } from '@/features/storage/types'
 import { platformPaths } from '@/features/platform/paths'
-import { SearchForm } from '@/features/platform/search-form'
 import { linkClass } from '@/components/ui/form-styles'
-import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
@@ -27,22 +28,17 @@ import { platformOnlyMessage } from '@/lib/api/failure-messages'
 import { Select } from '@/components/ui/text-input'
 
 const subscriptionStatuses: readonly EntitlementStatus[] = ['Active', 'Suspended', 'Expired', 'NoSubscription']
+const listConfig = {
+  search: true,
+  filters: { quotaState: quotaStates, subscriptionStatus: subscriptionStatuses },
+  sort: { first: { tenant: 'asc', used: 'desc', quota: 'desc', state: 'asc' }, default: { key: 'tenant', dir: 'asc' } },
+} as const
 
 export function PlatformStoragePage() {
   useLanguage()
-  const { page, get, update } = useListParams()
-  const search = get('search')
-  const quotaState = oneOf(get('quotaState'), quotaStates)
-  const subscriptionStatus = oneOf(get('subscriptionStatus'), subscriptionStatuses)
-  const filtered = Boolean(search || quotaState || subscriptionStatus)
-
-  const query = useStorageUsage({
-    search,
-    quotaState,
-    subscriptionStatus,
-    page,
-    pageSize: LIST_PAGE_SIZE,
-  })
+  const state = useListState(listConfig)
+  const { quotaState, subscriptionStatus } = state.filters
+  const query = useStorageUsage({ ...toServerQuery(state), quotaState: quotaState || undefined, subscriptionStatus: subscriptionStatus || undefined })
 
   const [activeReconcile, setActiveReconcile] = useState<StorageUsageRow | null>(null)
   const [activeRebuild, setActiveRebuild] = useState<StorageUsageRow | null>(null)
@@ -81,6 +77,7 @@ export function PlatformStoragePage() {
     {
       key: 'tenant',
       header: tx('Tenant'),
+      sortable: true,
       wrap: true,
       render: (row) => (
         <div>
@@ -97,23 +94,19 @@ export function PlatformStoragePage() {
       ),
     },
     {
-      key: 'usage',
-      header: tx('Kullanılan / Limit'),
+      key: 'used',
+      header: tx('Kullanılan'),
+      sortable: true,
       wrap: true,
       render: (row) => {
-        if (!row.hasUsage || row.usedBytes === null) {
-          return <span className="text-sm text-text-muted">{tx("Henüz hesaplanmadı")} / {row.limitBytes === null ? row.unlimited ? tx('Limitsiz') : tx('Limit tanımlı değil') : formatBytes(row.limitBytes)}</span>
-        }
+        if (!row.hasUsage || row.usedBytes === null) return <span className="text-sm text-text-muted">{tx("Henüz hesaplanmadı")}</span>
         const used = row.usedBytes
         const reserved = row.reservedBytes ?? 0
         const limit = row.limitBytes
 
         return (
           <div className="min-w-0 space-y-1">
-            <div className="text-sm tabular-nums">
-              <span className="font-semibold text-text-heading">{formatBytes(used + reserved)}</span>
-              <span className="text-text-muted"> / {limit === null ? row.unlimited ? tx('Limitsiz') : tx('Limit tanımlı değil') : formatBytes(limit)}</span>
-            </div>
+            <div className="text-sm font-semibold tabular-nums text-text-heading">{formatBytes(used + reserved)}</div>
             {limit !== null && (
               <QuotaMeter
                 usedBytes={used}
@@ -128,9 +121,16 @@ export function PlatformStoragePage() {
       },
     },
     {
+      key: 'quota',
+      header: tx('Limit'),
+      sortable: true,
+      render: (row) => <span className="text-sm tabular-nums">{row.limitBytes === null ? row.unlimited ? tx('Limitsiz') : tx('Limit tanımlı değil') : formatBytes(row.limitBytes)}</span>,
+    },
+    {
       key: 'state',
       card: 'status',
       header: tx('Kota Durumu'),
+      sortable: true,
       render: (row) => (
         <div className="space-y-1">
           {row.state ? <StatusPill domain="quota" status={row.state} /> : <StatusPill level="neutral">{tx("Henüz hesaplanmadı")}</StatusPill>}
@@ -203,36 +203,25 @@ export function PlatformStoragePage() {
         <Link to={platformPaths.quotaPolicies} className={buttonVariants({ variant: 'outline' })}><ShieldCheck aria-hidden="true" className="size-4" />{tx("Kota Politikaları")}</Link>
       </div>
       {statusMessage && <Notice tone="success">{statusMessage}</Notice>}
-      <Filters label={tx("Depolama kullanım filtreleri")} onClear={filtered ? () => update({ search: '', quotaState: '', subscriptionStatus: '' }) : undefined}>
-        <SearchForm className="sm:col-span-2" label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı...")} />
-        <FilterField label={tx("Kota durumu")}><Select className="text-sm" value={quotaState ?? ''} onChange={(event) => update({ quotaState: event.target.value })}>
+      <ListToolbar state={state} label={tx("Depolama kullanım filtreleri")} total={data?.totalCount} search={{ label: tx("Tenant ara"), placeholder: tx("Tenant adı...") }}>
+        <FilterField label={tx("Kota durumu")}><Select className="text-sm" value={quotaState} onChange={(event) => state.setFilter('quotaState', event.target.value)}>
           <option value="">{tx("Tümü")}</option><option value="Normal">{tx("Yeterli alan var")}</option><option value="Warning">{tx("Alan azalıyor")}</option><option value="Critical">{tx("Alan dolmak üzere")}</option><option value="OverQuota">{tx("Kota Doldu")}</option><option value="Unlimited">{tx("Limitsiz")}</option>
         </Select></FilterField>
-        <FilterField label={tx("Abonelik")}><Select className="text-sm" value={subscriptionStatus ?? ''} onChange={(event) => update({ subscriptionStatus: event.target.value })}>
+        <FilterField label={tx("Abonelik")}><Select className="text-sm" value={subscriptionStatus} onChange={(event) => state.setFilter('subscriptionStatus', event.target.value)}>
           <option value="">{tx("Tümü")}</option><option value="Active">{tx("Etkin")}</option><option value="Suspended">{tx("Askıda")}</option><option value="Expired">{tx("Süresi doldu")}</option><option value="NoSubscription">{tx("Abonelik yok")}</option>
         </Select></FilterField>
-      </Filters>
+      </ListToolbar>
 
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (
           <div className="space-y-4">
             <Section title={tx("Çalışma alanlarının kullanımı")} description={tx("Gösterilen kullanım, kullanılan ve ayrılmış alanın toplamıdır. Doğrulama ve baştan hesaplama yalnızca kullanım kayıtlarını günceller; yedek dosyalarını silmez.")} flush className="overflow-hidden">
               {data.items.length === 0
-                ? <ListEmpty message={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} action={!filtered
-                  ? <Link className={buttonVariants()} to={platformPaths.tenants}>{tx("Çalışma alanlarını görüntüle")}</Link>
-                  : undefined} />
-                : <DataList caption={tx("Depolama kullanımı")} className={bareListClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} />}
+                ? <ListEmpty message={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} filtering={state.filtering} onClear={state.clear}
+                    action={<Link className={buttonVariants()} to={platformPaths.tenants}>{tx("Çalışma alanlarını görüntüle")}</Link>} />
+                : <DataList caption={tx("Depolama kullanımı")} className={bareListClass} rows={data.items} columns={columns} sort={sortProps(state)} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} />}
             </Section>
-            {data.totalCount > 0 && (
-              <Pagination
-                label={tx("Kullanım sayfaları")}
-                page={page}
-                pageSize={data.pageSize}
-                totalCount={data.totalCount}
-                disabled={query.isFetching}
-                onPageChange={(next) => update({ page: next })}
-              />
-            )}
+            <ListPager state={state} total={data.totalCount} disabled={query.isFetching} label={tx("Kullanım sayfaları")} />
           </div>
         )}
       </QueryState>

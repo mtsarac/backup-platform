@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
@@ -88,7 +89,7 @@ internal sealed class InMemoryStorageConnectionStore(EventLog? log = null) : ISt
         return Task.FromResult(list);
     }
 
-    public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, int page, int pageSize, CancellationToken cancellationToken)
+    public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken)
     {
         var matches = _connections.Values
             .Where(item => filter.Ownership is null || item.Ownership == filter.Ownership)
@@ -96,7 +97,7 @@ internal sealed class InMemoryStorageConnectionStore(EventLog? log = null) : ISt
             .Where(item => filter.TenantId is null || item.TenantId == filter.TenantId)
             .Where(item => filter.Enabled is null || item.Enabled == filter.Enabled)
             .OrderBy(item => item.Name, StringComparer.Ordinal).ToList();
-        return Task.FromResult(new PagedResult<StorageConnectionRecord>([.. matches.Skip((page - 1) * pageSize).Take(pageSize).Select(Record)], matches.Count, page, pageSize));
+        return Task.FromResult(new PagedResult<StorageConnectionRecord>([.. matches.Skip(query.Skip).Take(query.PageSize).Select(Record)], matches.Count, query.Page, query.PageSize));
     }
 
     public Task<StorageConnectionRecord?> FindAsync(Guid id, TenantId? tenantScope, CancellationToken cancellationToken) =>

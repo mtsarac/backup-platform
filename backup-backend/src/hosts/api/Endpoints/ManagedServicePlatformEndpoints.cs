@@ -43,6 +43,7 @@ public sealed class AssignPlanRequest
 public static class ManagedServicePlatformEndpoints
 {
     private const int DefaultHistoryPageSize = 25;
+    private const int DefaultPlanPageSize = 50;
     private const int MaximumPageSize = 100;
 
     public static IEndpointRouteBuilder MapManagedServicePlatformEndpoints(this IEndpointRouteBuilder endpoints)
@@ -53,7 +54,7 @@ public static class ManagedServicePlatformEndpoints
         platform.MapPut("/plans/{planId:guid}", UpdatePlanAsync);
         platform.MapPut("/plans/{planId:guid}/enabled", SetPlanEnabledAsync);
         platform.MapGet("/tenants/{tenantId:guid}/subscription", GetSubscriptionAsync);
-        platform.MapGet("/tenants/{tenantId:guid}/subscriptions", ListSubscriptionsAsync);
+        platform.MapGet("/tenants/{tenantId:guid}/subscriptions", ListSubscriptionsAsync).WithListQuery();
         platform.MapPut("/tenants/{tenantId:guid}/subscription", AssignPlanAsync);
         platform.MapPost("/tenants/{tenantId:guid}/subscription/suspend", SuspendAsync);
         platform.MapPost("/tenants/{tenantId:guid}/subscription/resume", ResumeAsync);
@@ -102,13 +103,9 @@ public static class ManagedServicePlatformEndpoints
     }
 
     private static async Task<IResult> ListSubscriptionsAsync(
-        Guid tenantId, int? page, int? pageSize, ManagedServiceAdministrationService service, CancellationToken cancellationToken)
+        Guid tenantId, [AsParameters] ListParams list, ManagedServiceAdministrationService service, CancellationToken cancellationToken)
     {
-        if (!TryPaging(page, pageSize, DefaultHistoryPageSize, out var p, out var size))
-        {
-            return InvalidPaging();
-        }
-        var result = await service.ListSubscriptionsAsync(new TenantId(tenantId), p, size, cancellationToken);
+        var result = await service.ListSubscriptionsAsync(new TenantId(tenantId), list.ToQuery(), cancellationToken);
         return result is null ? Failure(ManagedServiceOutcome.TenantNotFound, null) : Results.Ok(Page(result, ToResponse));
     }
 

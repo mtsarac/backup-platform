@@ -1,6 +1,6 @@
 import { apiRequest } from '@/lib/api/client'
 import type {
-  AuditFilters, CreateUserInput, PageParams, PagedResult, PlatformAgent, PlatformAgentDetail,
+  AuditFilters, CreateUserInput, ListQueryParams, PageParams, PagedResult, PlatformAgent, PlatformAgentDetail,
   PlatformAgentFilters, PlatformAuditEntry, PlatformMembership, PlatformSummary, PlatformTenant, PlatformTenantDetail,
   PlatformUser, SearchParams, TenantEnrollmentResult, UpdateUserInput,
 } from './types'
@@ -120,7 +120,7 @@ export function getTenantSubscription(tenantId: string, signal?: AbortSignal) {
   return apiRequest<TenantSubscription>(subscriptionUrl(tenantId), { signal })
 }
 
-export function getSubscriptionHistory(tenantId: string, params: PageParams, signal?: AbortSignal) {
+export function getSubscriptionHistory(tenantId: string, params: ListQueryParams, signal?: AbortSignal) {
   return apiRequest<PagedResult<Subscription>>(`${tenantUrl(tenantId)}/subscriptions${query(params)}`, { signal })
 }
 

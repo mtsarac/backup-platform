@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Infrastructure.Notifications;
@@ -81,8 +82,8 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
         await _world.ConfigureSmtpAsync(1);
         Assert.Equal(NotificationOutcome.Changed, (await _world.Admin().RequestTestAsync(a, channel.Id, _world.Actor, default)).Outcome);
 
-        var own = await _world.Admin().ListDeliveriesAsync(a, null, null, null, 1, 25, default);
-        var foreign = await _world.Admin().ListDeliveriesAsync(b, null, null, null, 1, 25, default);
+        var own = await _world.Admin().ListDeliveriesAsync(a, null, null, null, new ListQuery(), default);
+        var foreign = await _world.Admin().ListDeliveriesAsync(b, null, null, null, new ListQuery(), default);
 
         Assert.Equal(1, own.TotalCount);
         Assert.Equal(0, foreign.TotalCount);
@@ -341,11 +342,11 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
         var first = Assert.Single(await store.ClaimDueAsync("old-worker", now, 10, TimeSpan.FromMinutes(1), 4, default));
         Assert.False(await store.RetryFailedDeliveryAsync(first.DeliveryId, _world.PlatformActor, default));
         Assert.True(await store.CompleteAsync(first.DeliveryId, "old-worker", first.Attempt, new DeliveryResult(NotificationDeliveryStatus.Failed, "http_400"), now, default));
-        Assert.Single((await store.ListFailedDeliveriesAsync(1, 25, default)).Items);
+        Assert.Single((await store.ListFailedDeliveriesAsync(new ListQuery(), default)).Items);
 
         var retries = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => _world.Store().RetryFailedDeliveryAsync(first.DeliveryId, _world.PlatformActor, default)));
         Assert.Single(retries, changed => changed);
-        Assert.Empty((await store.ListFailedDeliveriesAsync(1, 25, default)).Items);
+        Assert.Empty((await store.ListFailedDeliveriesAsync(new ListQuery(), default)).Items);
         var retry = Assert.Single(await store.ClaimDueAsync("new-worker", now, 10, TimeSpan.FromMinutes(1), 4, default));
         Assert.Equal(1, retry.Attempt);
         Assert.False(await store.CompleteAsync(first.DeliveryId, "old-worker", first.Attempt, new DeliveryResult(NotificationDeliveryStatus.Sent), now, default));
