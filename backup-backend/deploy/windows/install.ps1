@@ -49,7 +49,7 @@ function New-ProtectedDirectory([string] $Path) {
     $null = [IO.Directory]::CreateDirectory($Path)
     Set-Acl -Path $Path -AclObject $security
 }
-function Refuse-Existing { Fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again. Alternatively run it in a terminal to be asked, or add -ReplaceExisting to remove the existing agent and reinstall without asking.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin -ReplaceExisting ekleyin.' }
+function Refuse-Existing { Fail 'An existing agent installation was found; nothing was replaced. Run Uninstall-BackupAgentService.ps1 -RemoveIdentity first, then run this installer again. Alternatively run it in a terminal to be asked, or add -ReplaceExisting to remove the existing agent and reinstall without asking.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once Uninstall-BackupAgentService.ps1 -RemoveIdentity calistirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin -ReplaceExisting ekleyin.' }
 # Same protections as Uninstall-BackupAgentService.ps1 -RemoveIdentity: only the agent credential store files may be present.
 function Assert-PurgeStore([string] $Path) {
     $full = (Assert-SafePath $Path).TrimEnd('\')
