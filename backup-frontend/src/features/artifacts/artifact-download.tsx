@@ -12,20 +12,20 @@ import { useArtifactDownload } from './use-artifact-download'
 import { formatBytes } from '@/lib/format'
 import { storageProviderLabel } from '@/features/storage-connections/labels'
 
-export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
+export function ArtifactDownload({ tenantId, artifactId, eligible }: { tenantId: string; artifactId: string; eligible: boolean }) {
   useLanguage()
   // Remount the controller on scope/permission changes: pending requests cannot initiate a download in a new scope.
-  return <DownloadController key={`${tenantId}:${artifactId}:${canAdmin}:${eligible}`} tenantId={tenantId} artifactId={artifactId} canAdmin={canAdmin} eligible={eligible} />
+  return <DownloadController key={`${tenantId}:${artifactId}:${eligible}`} tenantId={tenantId} artifactId={artifactId} eligible={eligible} />
 }
-function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
+function DownloadController({ tenantId, artifactId, eligible }: { tenantId: string; artifactId: string; eligible: boolean }) {
   useLanguage()
   const [decrypt, setDecrypt] = useState(false)
   const [copyNotice, setCopyNotice] = useState('')
   // The decrypt flag is only sent when chosen: the default request stays exactly the stored-file download.
   // Remounting on scope/permission changes (the key above) plus `enabled` keeps a pending request from starting a download in a new scope.
   const { availability, flow, replicaId, setReplicaId, selected } = useArtifactDownload({
-    enabled: canAdmin && eligible,
-    availabilityKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId, canAdmin],
+    enabled: eligible,
+    availabilityKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId],
     fetchAvailability: signal => getDownloadAvailability(tenantId, artifactId, signal),
     refetchInterval: 10_000,
     prepare: replica => decrypt ? prepareDownload(tenantId, artifactId, replica, true) : prepareDownload(tenantId, artifactId, replica),
@@ -33,7 +33,6 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
     statusKey: sessionId => ['tenant', tenantId, 'backup-artifacts', 'download-status', artifactId, sessionId],
   })
   const { session } = flow
-  if (!canAdmin) return <Notice tone="info">{tx("Download Backup yalnızca Owner / Admin için açıktır.")}</Notice>
   if (!eligible) return <Notice tone="info">{tx("Bu Backup silme sürecinde veya silinmiş; indirme kullanılamıyor.")}</Notice>
   const busy = flow.busy
   async function copyChecksum() {
@@ -43,7 +42,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
   return <Section title={tx("Download Backup")} description={tx("Harici depolama indirmeleri yetkili Agent üzerinden doğrudan diske aktarılır; platform depolaması tarayıcının indirme yöneticisini kullanır.")} className="max-w-3xl">
     <div className="space-y-4">
       {availability.isPending && <p role="status" className="text-sm text-text-muted">{tx("İndirme kullanılabilirliği kontrol ediliyor…")}</p>}
-      {availability.error ? <ErrorNotice error={availability.error} /> : null}
+      {availability.error ? <ErrorNotice error={availability.error} onRetry={() => void availability.refetch()} /> : null}
       {availability.data && <>
         <Facts columns={1}>
           <Fact label={tx("Boyut")}>{formatBytes(availability.data.sizeBytes)}</Fact>
@@ -70,7 +69,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
         {!availability.data.available && <Notice tone="warning">{tx("İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil (")}{failureMessage(availability.data.reason)}).</Notice>}
         <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => void flow.start()}>{flow.pending || flow.state === 'Preparing' ? tx('İndirme hazırlanıyor…') : availability.data.format === 'v2-bpe' && decrypt ? tx('Çözülmüş dosyayı indir') : tx('Download Backup')}</Button>
       </>}
-      <DownloadFlowStatus flow={flow} />
+      <DownloadFlowStatus flow={flow} onRetry={!busy && availability.data?.available && !(selected && !selected.available) ? () => void flow.start() : undefined} />
     </div>
   </Section>
 }

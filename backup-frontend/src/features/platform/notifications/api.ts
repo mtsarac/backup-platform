@@ -1,5 +1,7 @@
 import { apiRequest } from '@/lib/api/client'
-import type { EmailTransport, EmailTransportInput, NotificationTransports, SmsTransport, SmsTransportInput } from './types'
+import { query } from '@/features/platform/api'
+import type { ListQueryParams, PagedResult } from '@/features/platform/types'
+import type { EmailTransport, FailedDelivery, EmailTransportInput, NotificationTransports, SmsTransport, SmsTransportInput } from './types'
 
 const base = 'platform/notification-transports'
 
@@ -29,4 +31,8 @@ export function setSmsSecret(value: string) {
 
 export function clearSmsSecret() {
   return apiRequest<SmsTransport>(`${base}/sms/secret`, { method: 'DELETE' })
+}
+
+export function getFailedDeliveries(params: ListQueryParams, signal?: AbortSignal) {
+  return apiRequest<PagedResult<FailedDelivery>>(`platform/notifications/deliveries/failed${query(params)}`, { signal })
 }

@@ -1,15 +1,16 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  addMembership, assignTemporaryPassword, createTenant, createUser, disableUser, enableUser, getAudit, getMemberships, getPlatformAgent,
+  addMembership, assignTemporaryPassword, createTenant, createUser, disableUser, enableUser, getAudit, getMemberships, getPlatformAgent, getPlatformEncryptionStatus,
   getPlatformAgents, getSummary, getTenant, getTenants, getUsers, removeMembership, renameTenant, setTenantEnrollment, updateUser,
 } from './api'
 import type { PlanFilters } from './plans/types'
 import type { StorageUsageFilters } from '@/features/storage/types'
-import type { AuditFilters, CreateUserInput, PageParams, PlatformAgentFilters, SearchParams, UpdateUserInput } from './types'
+import type { AuditFilters, CreateUserInput, ListQueryParams, PageParams, PlatformAgentFilters, SearchParams, UpdateUserInput } from './types'
 
 export const platformKeys = {
   all: ['platform'] as const,
   summary: ['platform', 'summary'] as const,
+  encryptionStatus: ['platform', 'encryption-status'] as const,
   tenants: ['platform', 'tenants'] as const,
   tenantList: (params: SearchParams) => ['platform', 'tenants', 'list', params] as const,
   tenant: (tenantId: string) => ['platform', 'tenants', 'detail', tenantId] as const,
@@ -23,7 +24,7 @@ export const platformKeys = {
   planList: (filters: PlanFilters) => ['platform', 'plans', 'list', filters] as const,
   subscription: (tenantId: string) => ['platform', 'tenants', 'subscription', tenantId] as const,
   subscriptionHistory: (tenantId: string) => ['platform', 'tenants', 'subscriptions', tenantId] as const,
-  subscriptionHistoryPage: (tenantId: string, params: PageParams) => ['platform', 'tenants', 'subscriptions', tenantId, params] as const,
+  subscriptionHistoryPage: (tenantId: string, params: ListQueryParams) => ['platform', 'tenants', 'subscriptions', tenantId, params] as const,
   /** Everything quota-shaped (global usage list, per-tenant standing, policies): one prefix, so any change that moves quota invalidates it in one call. */
   storage: ['platform', 'storage'] as const,
   storageUsageList: (filters: StorageUsageFilters) => ['platform', 'storage', 'usage', filters] as const,
@@ -35,6 +36,10 @@ export const platformKeys = {
 
 export function usePlatformSummary() {
   return useQuery({ queryKey: platformKeys.summary, queryFn: ({ signal }) => getSummary(signal) })
+}
+
+export function usePlatformEncryptionStatus() {
+  return useQuery({ queryKey: platformKeys.encryptionStatus, queryFn: ({ signal }) => getPlatformEncryptionStatus(signal) })
 }
 
 export function usePlatformTenants(params: SearchParams) {

@@ -17,6 +17,7 @@ internal static class SqlServerFailureCauses
             or SqlServerPreCheckReasons.MetadataUnavailable => BackupFailureCause.DatabaseUnavailable,
         SqlServerPreCheckReasons.ConnectionTimeout => BackupFailureCause.Timeout,
         SqlServerPreCheckReasons.ConnectionSettingsInvalid => BackupFailureCause.InvalidConfiguration,
+        SqlServerPreCheckReasons.ServerCertificateUntrusted => BackupFailureCause.ServerCertificateUntrusted,
         SqlServerPreCheckReasons.AuthenticationFailed => BackupFailureCause.AuthenticationFailed,
         SqlServerPreCheckReasons.DatabaseNotFound => BackupFailureCause.DatabaseNotFound,
         SqlServerPreCheckReasons.PermissionDenied or SqlServerPreCheckReasons.VerifyPermissionDenied => BackupFailureCause.PermissionDenied,
@@ -33,6 +34,7 @@ internal static class SqlServerFailureCauses
     {
         SqlServerBackupReasons.ServerUnavailable or SqlServerBackupReasons.ConnectionLost => BackupFailureCause.DatabaseUnavailable,
         SqlServerBackupReasons.BackupTimeout or SqlServerBackupReasons.VerifyTimeout => BackupFailureCause.Timeout,
+        SqlServerBackupReasons.ServerCertificateUntrusted => BackupFailureCause.ServerCertificateUntrusted,
         SqlServerBackupReasons.AuthenticationFailed => BackupFailureCause.AuthenticationFailed,
         SqlServerBackupReasons.PermissionDenied or SqlServerBackupReasons.VerifyPermissionDenied => BackupFailureCause.PermissionDenied,
         SqlServerBackupReasons.DatabaseNotFound => BackupFailureCause.DatabaseNotFound,
@@ -53,6 +55,8 @@ internal static class SqlServerFailureCauses
         SqlServerRestoreReasons.ConnectionTimeout or SqlServerRestoreReasons.InspectTimeout or SqlServerRestoreReasons.RestoreTimeout
             or SqlServerRestoreReasons.VerifyTimeout => BackupFailureCause.Timeout,
         SqlServerRestoreReasons.ConnectionSettingsInvalid or SqlServerRestoreReasons.DatabaseNameInvalid => BackupFailureCause.InvalidConfiguration,
+        // The same literal as the pre-check and backup reasons: one code names it in every direction.
+        SqlServerRestoreReasons.ServerCertificateUntrusted => BackupFailureCause.ServerCertificateUntrusted,
         SqlServerRestoreReasons.AuthenticationFailed => BackupFailureCause.AuthenticationFailed,
         SqlServerRestoreReasons.PermissionDenied or SqlServerRestoreReasons.RestorePermissionDenied => BackupFailureCause.PermissionDenied,
         RestoreReasonCodes.TargetDatabaseMissing => BackupFailureCause.DatabaseNotFound,

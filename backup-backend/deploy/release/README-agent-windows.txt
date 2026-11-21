@@ -28,7 +28,9 @@ Existing identity and uninstall
   .\Install-BackupAgentService.ps1 -BinaryDirectory .\bin
     Reinstalls without a new token, verifies the saved credential as the service account and retains AgentId.
   .\Uninstall-BackupAgentService.ps1 -RemoveIdentity
-    Explicitly deletes local enrollment (alias -PurgeIdentity). Does not delete/revoke the backend Agent record.
+    Explicitly deletes local enrollment (alias -PurgeIdentity) and the installation directory C:\Program Files\BackupAgent, so the
+    platform installer (install.ps1) no longer finds an existing installation. Does not delete/revoke the backend Agent record.
+    A plain uninstall keeps that directory: it holds the binaries the reinstall above uses.
 
 Windows VSS snapshots (optional, off by default)
   A file source with SnapshotKind "Vss" reads a point-in-time shadow copy through the native VSS requester API. That needs two things:
@@ -43,8 +45,11 @@ Windows VSS snapshots (optional, off by default)
   Windows removes it. No other shadow copy on the machine is ever touched.
   Verified on Windows 11. Windows Server has not been verified.
 
-Backup-specific setup is separate from onboarding: staging/storage and SQL Server credentials are documented in
-config\agent.settings.example.json. Never put Agent permanent credentials in that file.
+The installer prepares the working folders so backups run without extra setup: C:\ProgramData\BackupAgentData\staging (SQL Server
+backup files pass through here; a local SQL Server service account is given write access to this folder only) and
+C:\ProgramData\BackupAgentData\backups (backups stored on this computer). Uninstall never deletes them. The newest PostgreSQL client
+tools under Program Files\PostgreSQL are found and configured automatically. Other storage settings and SQL Server credentials are
+documented in config\agent.settings.example.json. Never put Agent permanent credentials in that file.
 
 Limitations of this release
   - A backend that sets AgentDistribution__PackagesDirectory serves this archive plus a guided/automatic one-line installer

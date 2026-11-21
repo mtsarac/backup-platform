@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.ManagedService.Plans;
@@ -12,8 +13,8 @@ namespace BackupPlatform.ManagedService.Administration;
 /// </summary>
 public sealed class ManagedServiceAdministrationService(IManagedServiceStore store, TimeProvider timeProvider)
 {
-    public Task<PagedResult<PlanView>> ListPlansAsync(bool? enabled, string? search, int page, int pageSize, CancellationToken cancellationToken) =>
-        store.ListPlansAsync(new PlanFilter(enabled, string.IsNullOrWhiteSpace(search) ? null : search.Trim()), page, pageSize, cancellationToken);
+    public Task<PagedResult<PlanView>> ListPlansAsync(bool? enabled, ListQuery query, CancellationToken cancellationToken) =>
+        store.ListPlansAsync(enabled, query, cancellationToken);
 
     public Task<ManagedServiceChange<PlanView>> CreatePlanAsync(
         string? name, long? storageLimitBytes, bool? unlimited, string? quotaPolicyReference, bool? enabled, UserId actor, CancellationToken cancellationToken)
@@ -50,9 +51,9 @@ public sealed class ManagedServiceAdministrationService(IManagedServiceStore sto
         return exists ? new TenantSubscriptionState(tenantId, current is null ? null : ToView(current, timeProvider.GetUtcNow())) : null;
     }
 
-    public async Task<PagedResult<SubscriptionView>?> ListSubscriptionsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<PagedResult<SubscriptionView>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, CancellationToken cancellationToken)
     {
-        var result = await store.ListSubscriptionsAsync(tenantId, page, pageSize, cancellationToken);
+        var result = await store.ListSubscriptionsAsync(tenantId, query, timeProvider.GetUtcNow(), cancellationToken);
         if (result is null)
         {
             return null;

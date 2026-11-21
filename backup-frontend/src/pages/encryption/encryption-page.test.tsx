@@ -9,9 +9,9 @@ import { TenantContext } from '@/features/tenancy/tenant-context'
 import { EncryptionPage } from './encryption-page'
 
 vi.mock('@/features/artifact-encryption/api')
-function mount(canAdmin = true) {
+function mount() {
   const tenantId = 'tenant-a'
-  return renderPlatform(<TenantContext.Provider value={{ tenantId, tenant: { tenantId, name: 'Acme' }, canAdmin, canOperate: canAdmin, switchTenant: vi.fn() }}><EncryptionPage /></TenantContext.Provider>, { path: '/tenants/tenant-a/encryption' })
+  return renderPlatform(<TenantContext.Provider value={{ tenantId, tenant: { tenantId, name: 'Acme' }, switchTenant: vi.fn() }}><EncryptionPage /></TenantContext.Provider>, { path: '/tenants/tenant-a/encryption' })
 }
 beforeEach(() => {
   vi.resetAllMocks()
@@ -19,37 +19,30 @@ beforeEach(() => {
 })
 
 describe('tenant encryption page', () => {
-  it('makes no request when access is denied', () => {
-    mount(false)
-    expect(screen.getByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
-    expect(api.getTenantEncryption).not.toHaveBeenCalled()
-  })
-
   it('shows protection with copyable collapsed key details', async () => {
     mount()
-    expect(await screen.findByText('Kurtarma anahtarınız eklenmemiş')).toBeInTheDocument()
-    expect(screen.getByText('Şifreli yedekleriniz korunuyor')).toBeInTheDocument()
+    expect(screen.getByText('Şifreli yedeklerinizin korumasını inceleyin.')).toBeInTheDocument()
+    expect(await screen.findByText('Kendi kurtarma anahtarınız yok.')).toBeInTheDocument()
+    expect(screen.queryByText('Şifreli yedekleriniz korunuyor')).not.toBeInTheDocument()
     expect(screen.queryByText(keyId)).not.toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[0])
-    const details = await screen.findByRole('dialog')
-    expect(within(details).getByRole('button', { name: 'Kopyala: Yedekleme anahtarı kimliği' })).toBeInTheDocument()
+    const details = screen.getByRole('region', { name: 'Teknik ayrıntılar' })
+    expect(within(details).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
-  it('warns when the platform has no recovery key configured', async () => {
+  it('does not show the platform recovery key status to the tenant', async () => {
     vi.mocked(api.getTenantEncryption).mockResolvedValue(makeTenantEncryption({ platformRecovery: { configured: false, keyId: null, keyVersion: null }, wrapKey: null }))
     mount()
-    expect(await screen.findByText(/Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli/)).toBeInTheDocument()
-    expect(screen.getByText('Henüz şifreli yedek oluşturulmadı')).toBeInTheDocument()
-    expect(screen.queryByText('Platform kurtarma anahtarı hazır değil')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Genel anahtarı yükle veya değiştir'))
+    expect(await screen.findByText('Kendi kurtarma anahtarınız yok.')).toBeInTheDocument()
+    expect(screen.queryByText(/Platform kurtarma anahtarı yapılandırılmamış/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Kendi anahtarınızı ekleyin veya değiştirin'))
     expect(screen.getByRole('button', { name: 'Anahtarı kaydet' })).toBeDisabled()
   })
 
   it('registers a recovery public key, trims it and clears the field', async () => {
     vi.mocked(api.setTenantRecoveryKey).mockResolvedValue(makeTenantEncryption({ tenantRecovery: { keyId: 'e'.repeat(32), keyVersion: 1, createdAt: '2026-10-19T10:00:00Z' } }))
     mount()
-    fireEvent.click(await screen.findByText('Genel anahtarı yükle veya değiştir'))
+    fireEvent.click(await screen.findByText('Kendi anahtarınızı ekleyin veya değiştirin'))
     const pem = await screen.findByLabelText('Genel anahtar (PEM)')
     fireEvent.change(pem, { target: { value: '  -----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----\n ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anahtarı kaydet' }))
@@ -61,7 +54,7 @@ describe('tenant encryption page', () => {
 
   it.each(['PRIVATE KEY', 'RSA PRIVATE KEY', 'EC PRIVATE KEY', 'OPENSSH PRIVATE KEY', 'ENCRYPTED PRIVATE KEY'])('rejects %s before the API and wipes it', async (kind) => {
     mount()
-    fireEvent.click(await screen.findByText('Genel anahtarı yükle veya değiştir'))
+    fireEvent.click(await screen.findByText('Kendi anahtarınızı ekleyin veya değiştirin'))
     const field = await screen.findByLabelText('Genel anahtar (PEM)')
     fireEvent.change(field, { target: { value: `-----BEGIN ${kind}-----\nsecret` } })
     fireEvent.click(screen.getByRole('button', { name: 'Anahtarı kaydet' }))
@@ -74,7 +67,7 @@ describe('tenant encryption page', () => {
   it('loads a public key file and rejects a private key file without sending it', async () => {
     vi.mocked(api.setTenantRecoveryKey).mockResolvedValue(makeTenantEncryption())
     mount()
-    fireEvent.click(await screen.findByText('Genel anahtarı yükle veya değiştir'))
+    fireEvent.click(await screen.findByText('Kendi anahtarınızı ekleyin veya değiştirin'))
     const upload = await screen.findByLabelText('Genel anahtar dosyası')
     fireEvent.change(upload, { target: { files: [new File(['-----BEGIN RSA PRIVATE KEY-----\nsecret'], 'private.pem')] } })
     expect(await screen.findByText(/Özel anahtar kabul edilmez/)).toBeInTheDocument()
@@ -89,7 +82,7 @@ describe('tenant encryption page', () => {
 
   it('does not send input that is not a public PEM key', async () => {
     mount()
-    fireEvent.click(await screen.findByText('Genel anahtarı yükle veya değiştir'))
+    fireEvent.click(await screen.findByText('Kendi anahtarınızı ekleyin veya değiştirin'))
     const field = await screen.findByLabelText('Genel anahtar (PEM)')
     fireEvent.change(field, { target: { value: 'not a public key' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anahtarı kaydet' }))

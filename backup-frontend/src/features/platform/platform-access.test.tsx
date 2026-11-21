@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { Route } from 'react-router-dom'
 import { PlatformAdminRoute } from '@/components/auth/platform-admin-route'
 import { PlatformShell } from '@/components/layout/platform-shell'
@@ -14,7 +13,7 @@ import { paged, platformAdmin, renderPlatform, tenantOwner } from './test-utils'
 
 vi.mock('./api')
 vi.mock('./storage/api')
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Acme' } }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Acme' } }) }))
 
 const tree = <Route path="/platform" element={<PlatformAdminRoute />}>
   <Route element={<ThemeProvider><PlatformShell /></ThemeProvider>}><Route index element={<PlatformDashboardPage />} /></Route>
@@ -33,7 +32,7 @@ describe('Platform Administration entry points', () => {
     for (const link of screen.getAllByText(/Platform Administration|Platform Yönetimi/)) expect(link.closest('a')).toHaveAttribute('href', '/platform')
   })
 
-  it('tenant sidebar hides it from a user who is only a tenant Owner', () => {
+  it('tenant sidebar hides it from a user who is only a tenant user', () => {
     renderPlatform(<Sidebar />, { user: tenantOwner })
     expect(screen.queryByText(/Platform Administration|Platform Yönetimi/)).not.toBeInTheDocument()
     expect(screen.getAllByText(/Yedeklemeler/).length).toBeGreaterThan(0)
@@ -54,6 +53,8 @@ describe('PlatformAdminRoute guard', () => {
     renderPlatform(null, { routes: tree, user: tenantOwner })
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Bu alan için yetkiniz yok')
+    expect(alert).toHaveTextContent('Bu alan yalnızca platform yöneticileri içindir.')
+    expect(alert).not.toHaveTextContent(/Yöneticinize danışın|Çalışma alanı yöneticiliği/)
     expect(within(alert).getByRole('link', { name: 'Ana sayfaya dön' })).toHaveAttribute('href', '/')
     expect(screen.queryByRole('navigation', { name: "Platform gezinme menüsü" })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Platform özeti' })).not.toBeInTheDocument()
@@ -69,13 +70,11 @@ describe('PlatformAdminRoute guard', () => {
     expect(within(nav).getByRole('link', { name: "Depolama" })).toHaveAttribute('href', '/platform/storage')
     expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
     expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
-    expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()
+    expect(within(nav.closest('aside')!).getByText("Platform Yöneticisi")).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Platform Operatörü/ })).toHaveAttribute('href', '/account')
-    expect(screen.queryByRole('button', { name: "Temayı değiştir" })).not.toBeInTheDocument()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Görünüm' }))
     expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText("Çalışma Alanı")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Çalışma alanı")).not.toBeInTheDocument()
     expect(api.getSummary).toHaveBeenCalled()
   })
 })

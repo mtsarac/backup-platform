@@ -34,7 +34,8 @@ public static class BackupShareEndpoints
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/shares/{shareId:guid}/revoke", RevokeShareForArtifactAsync)
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-shares/download-attempts", ListTenantDownloadAttemptsAsync)
-            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+            .RequireAuthorization(AuthorizationPolicies.TenantAccess)
+            .WithListQuery();
 
         var platform = endpoints.MapGroup("/api/platform/backup-shares")
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -45,7 +46,7 @@ public static class BackupShareEndpoints
 
         var platformRoot = endpoints.MapGroup("/api/platform")
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
-        platformRoot.MapGet("/download-attempts", ListPlatformDownloadAttemptsAsync);
+        platformRoot.MapGet("/download-attempts", ListPlatformDownloadAttemptsAsync).WithListQuery();
         platformRoot.MapGet("/settings/audit-retention", GetAuditRetentionAsync);
         platformRoot.MapPut("/settings/audit-retention", UpdateAuditRetentionAsync);
 
@@ -347,32 +348,21 @@ public static class BackupShareEndpoints
     }
 
     private static async Task<IResult> ListTenantDownloadAttemptsAsync(
-        [FromQuery] Guid? shareId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [FromQuery] string? cursor, [FromQuery] int? limit,
+        [FromQuery] Guid? shareId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [AsParameters] ListParams list,
         ITenantContext tenant, BackupShareService service, CancellationToken cancellationToken)
     {
-        if (!TryPage(result, cursor, limit, out var after, out var size, out var problem)) return problem!;
+        if (!IsValidResultFilter(result)) return Results.BadRequest(new { error = "invalid_result" });
         return Results.Ok(await service.ListTenantDownloadAttemptsAsync(
-            tenant.TenantId!, new DownloadAttemptFilter(shareId, tenant.TenantId!, artifactId, userId, result), after, size, cancellationToken));
+            tenant.TenantId!, new DownloadAttemptFilter(shareId, tenant.TenantId!, artifactId, userId, result), list.ToQuery(), cancellationToken));
     }
 
     private static async Task<IResult> ListPlatformDownloadAttemptsAsync(
-        [FromQuery] Guid? shareId, [FromQuery] Guid? tenantId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [FromQuery] string? cursor, [FromQuery] int? limit,
+        [FromQuery] Guid? shareId, [FromQuery] Guid? tenantId, [FromQuery] Guid? artifactId, [FromQuery] Guid? userId, [FromQuery] string? result, [AsParameters] ListParams list,
         BackupShareService service, CancellationToken cancellationToken)
     {
-        if (!TryPage(result, cursor, limit, out var after, out var size, out var problem)) return problem!;
+        if (!IsValidResultFilter(result)) return Results.BadRequest(new { error = "invalid_result" });
         return Results.Ok(await service.ListPlatformDownloadAttemptsAsync(
-            new DownloadAttemptFilter(shareId, tenantId is { } id ? new TenantId(id) : null, artifactId, userId, result), after, size, cancellationToken));
-    }
-
-    private static bool TryPage(string? result, string? cursor, int? limit, out DownloadAttemptCursor? after, out int size, out IResult? problem)
-    {
-        after = null;
-        size = limit ?? DownloadAttemptPage.DefaultLimit;
-        problem = !IsValidResultFilter(result) ? Results.BadRequest(new { error = "invalid_result" })
-            : size is < 1 or > DownloadAttemptPage.MaximumLimit ? Results.BadRequest(new { error = "invalid_limit" })
-            : cursor is not null && !DownloadAttemptCursor.TryParse(cursor, out after) ? Results.BadRequest(new { error = "invalid_cursor" })
-            : null;
-        return problem is null;
+            new DownloadAttemptFilter(shareId, tenantId is { } id ? new TenantId(id) : null, artifactId, userId, result), list.ToQuery(), cancellationToken));
     }
 
     private static async Task<IResult> GetAuditRetentionAsync(BackupShareService service, CancellationToken cancellationToken) =>

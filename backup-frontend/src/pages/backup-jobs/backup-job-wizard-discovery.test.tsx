@@ -11,7 +11,7 @@ import { catalog, makeConnection, makeManaged } from '@/features/storage-connect
 import { ApiError } from '@/lib/api/client'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online', capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] }]) }))
 vi.mock('@/features/storage-connections/api')
@@ -31,7 +31,6 @@ async function toSummary() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
   vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
@@ -100,7 +99,7 @@ describe('discovery-first source step', () => {
     expect(await screen.findByRole('heading', { name: 'Seçilen kaynak' })).toBeInTheDocument()
     const summary = screen.getByRole('heading', { name: 'Seçilen kaynak' }).closest('div')!.parentElement!
     await waitFor(() => expect(summary).toHaveTextContent('SQL Agent'))
-    expect(summary).toHaveTextContent('SQL Server (default) · MSSQL · localhost:1433')
+    expect(summary).toHaveTextContent('SQL Server (default) · SQL Server · localhost:1433')
     expect(summary).toHaveTextContent('ERP, CRM')
     expect(screen.queryByLabelText('Yedekleme bilgisayarı')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Veritabanı')).not.toBeInTheDocument()
@@ -133,11 +132,28 @@ describe('discovery-first source step', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Otomatik keşiften bir veritabanı seçin veya kaynağı elle yapılandırın.')
     expect(screen.queryByLabelText('Depolama bağlantısı')).not.toBeInTheDocument()
   })
+  it('takes each validation message away as soon as its field is fixed', async () => {
+    mount()
+    const name = await screen.findByLabelText('İş adı')
+    next()
+    expect(await screen.findAllByRole('alert')).toHaveLength(2)
+    expect(screen.getByText('İş adını girin.')).toBeVisible()
+    fireEvent.change(name, { target: { value: 'ERP' } })
+    await waitFor(() => expect(screen.queryByText('İş adını girin.')).not.toBeInTheDocument())
+    expect(name).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Otomatik keşiften bir veritabanı seçin veya kaynağı elle yapılandırın.')).toBeVisible()
+    fireEvent.change(await screen.findByLabelText('Veritabanı Sunucusu'), { target: { value: 'inst-1' } })
+    fireEvent.click(await screen.findByLabelText('ERP seç'))
+    fireEvent.click(screen.getByRole('button', { name: 'Seçimi uygula (1)' }))
+    await screen.findByRole('heading', { name: 'Seçilen kaynak' })
+    expect(screen.queryByText('Otomatik keşiften bir veritabanı seçin veya kaynağı elle yapılandırın.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
   it('points to the discovery page when the computer has no usable server', async () => {
     vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
     mount()
     expect(await screen.findByText('Bu bilgisayarda kullanılabilir veritabanı sunucusu yok.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Veritabanı bulma sayfasına gidin' })).toHaveAttribute('href', '/tenants/tenant-a/discovery')
+    expect(screen.getByRole('link', { name: 'Bulunan veritabanları sayfasına gidin' })).toHaveAttribute('href', '/tenants/tenant-a/agents/databases')
     expect(screen.getByRole('button', { name: 'Elle yapılandır' })).toBeInTheDocument()
   })
   it('opens the choice on the linked computer and instance when none of the linked databases can be picked any more', async () => {

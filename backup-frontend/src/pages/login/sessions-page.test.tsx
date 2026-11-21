@@ -15,9 +15,12 @@ vi.mock('@/lib/api/client', async importOriginal => ({ ...await importOriginal<t
 const clearAuth = vi.fn(async () => {})
 const login = vi.fn(async () => {})
 const auth = { user: null, tenants: [], isAuthenticated: false, isLoading: false, error: null, sessionExpired: false, login, completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth, refresh: vi.fn() }
+const FF = 'Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0'
+const CH = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36'
+const IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 const records = [
-  { id: 'current', device: 'Firefox', ipAddress: '127.0.0.1', lastActivityAt: '2026-01-01T12:00:00Z', isCurrent: true },
-  { id: 'other', device: 'Chrome', ipAddress: '192.0.2.1', lastActivityAt: '2026-01-02T12:00:00Z', isCurrent: false },
+  { id: 'current', device: FF, ipAddress: '127.0.0.1', lastActivityAt: '2026-01-01T12:00:00Z', isCurrent: true },
+  { id: 'other', device: CH, ipAddress: '192.0.2.1', lastActivityAt: '2026-01-02T12:00:00Z', isCurrent: false },
 ]
 function mount(ui: ReactNode) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -27,19 +30,30 @@ beforeEach(() => { vi.clearAllMocks(); api.mockImplementation(async (_path, opti
 afterEach(() => vi.restoreAllMocks())
 
 describe('session management', () => {
+  it('shows a friendly device name and keeps the raw user agent in collapsed technical details', async () => {
+    api.mockResolvedValue([...records, { id: 'ios', device: IOS, ipAddress: null, lastActivityAt: '2026-01-03T12:00:00Z', isCurrent: false }, { id: 'none', device: null, ipAddress: null, lastActivityAt: '2026-01-04T12:00:00Z', isCurrent: false }])
+    mount(<SessionsPage />)
+    expect(await screen.findByText('Chrome · Windows')).toBeInTheDocument()
+    expect(screen.getByText('Mobil Safari · iOS')).toBeInTheDocument()
+    expect(screen.getByText('Bilinmeyen cihaz')).toBeInTheDocument()
+    expect(screen.queryByText(CH)).not.toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Teknik ayrıntılar' })[1])
+    expect(screen.getByText(CH, { exact: false })).toBeInTheDocument()
+  })
+
   it('lists devices and revokes another session without clearing authentication', async () => {
     mount(<SessionsPage />)
-    expect(await screen.findByText(/Firefox/)).toBeInTheDocument()
+    expect(await screen.findByText(/Firefox · Linux/)).toBeInTheDocument()
     expect(screen.getByText('127.0.0.1', { exact: false })).toBeInTheDocument()
     expect(screen.getByText(/Bu oturum/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Chrome oturumunu sonlandır' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Chrome · Windows oturumunu sonlandır' }))
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Oturumu sonlandır' }))
     await waitFor(() => expect(api).toHaveBeenCalledWith('auth/sessions/other', { method: 'DELETE' }))
     expect(clearAuth).not.toHaveBeenCalled()
   })
-  it.each([['current', 'Firefox oturumunu sonlandır', 'auth/sessions/current'], ['all', 'Tüm oturumları sonlandır', 'auth/sessions']])('clears authentication when revoking %s', async (_kind, button, path) => {
+  it.each([['current', 'Firefox · Linux oturumunu sonlandır', 'auth/sessions/current'], ['all', 'Tüm oturumları sonlandır', 'auth/sessions']])('clears authentication when revoking %s', async (_kind, button, path) => {
     mount(<SessionsPage />)
-    await screen.findByText(/Firefox/)
+    await screen.findByText(/Firefox · Linux/)
     await userEvent.click(screen.getByRole('button', { name: button }))
     const dialog = screen.getByRole('dialog')
     await userEvent.click(within(dialog).getByRole('button', { name: button === 'Tüm oturumları sonlandır' ? button : 'Oturumu sonlandır' }))
@@ -49,8 +63,8 @@ describe('session management', () => {
   it('keeps authentication on a failed revoke', async () => {
     api.mockImplementation(async (_path, options) => { if (options?.method === 'DELETE') throw new Error('failure'); return records })
     mount(<SessionsPage />)
-    await screen.findByText(/Firefox/)
-    await userEvent.click(screen.getByRole('button', { name: 'Firefox oturumunu sonlandır' }))
+    await screen.findByText(/Firefox · Linux/)
+    await userEvent.click(screen.getByRole('button', { name: 'Firefox · Linux oturumunu sonlandır' }))
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Oturumu sonlandır' }))
     await waitFor(() => expect(api).toHaveBeenCalledWith('auth/sessions/current', { method: 'DELETE' }))
     expect(clearAuth).not.toHaveBeenCalled()

@@ -12,6 +12,7 @@ interface Props {
   tenantId: string
   agentId: string
   idPrefix: string
+  host: string
   /** The reference of the login already stored for this target, if any. */
   reference: string | null | undefined
   onStored: (reference: string) => void
@@ -23,7 +24,7 @@ interface Props {
  * The database login for a restore target. It is encrypted on the server first and the form keeps only the returned reference, so the password never
  * sits in the restore request (which is retried and fingerprinted) and a retried submit stays idempotent.
  */
-export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onStored, onPendingChange }: Props) {
+export function StoredLoginPanel({ tenantId, agentId, idPrefix, host, reference, onStored, onPendingChange }: Props) {
   const [login, setLogin] = useState<DatabaseLogin | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
@@ -31,6 +32,10 @@ export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onSto
   useEffect(() => { onPendingChange?.(pending); return () => onPendingChange?.(false) }, [pending, onPendingChange])
   const save = async () => {
     if (!login || !agentId) return
+    if (!host.trim()) {
+      setError({ what: tx('Sunucu adresini girin.'), technical: [] })
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -50,6 +55,6 @@ export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onSto
     </Button>
     {pending && <Notice tone="warning">{tx("Yazdığınız giriş henüz kaydedilmedi; devam etmeden önce “Girişi kaydet”e basın.")}</Notice>}
     {reference && !login && <Notice tone="success">{tx("Bu hedef için kayıtlı bir veritabanı girişi seçili.")}</Notice>}
-    {error && <ErrorNotice {...error} />}
+    {error && <ErrorNotice {...error} onAction={error.actionKind === 'fixCredentials' ? () => document.getElementById(`${idPrefix}-user`)?.focus() : undefined} onRetry={error.actionKind === 'retry' && pending && agentId && !saving ? () => void save() : undefined} />}
   </div>
 }

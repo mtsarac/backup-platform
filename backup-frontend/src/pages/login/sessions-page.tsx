@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -10,6 +11,8 @@ import { usePageTitle } from '@/hooks/use-page-title'
 import { apiRequest } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
+import { TechnicalDetails } from '@/components/ui/technical-details'
+import { deviceName } from './device-name'
 
 type Session = { id: string; device: string | null; ipAddress: string | null; lastActivityAt: string; isCurrent: boolean }
 
@@ -40,11 +43,12 @@ export function SessionsPage() {
   const all = selected === 'all'
   return <div className="space-y-6">
     <PageHeader title={tx('Oturumlarım')} description={tx('Etkin oturumlarınızı görüntüleyin ve sonlandırın.')} actions={<Button variant="destructive" disabled={!sessions.data?.length || pending} onClick={() => { setError(null); setSelected('all') }}>{tx('Tüm oturumları sonlandır')}</Button>} />
-    <QueryState isPending={sessions.isPending} error={sessions.error} empty={sessions.data?.length === 0} onRetry={() => { void sessions.refetch() }}>
+    <QueryState isPending={sessions.isPending} error={sessions.error} empty={sessions.data?.length === 0} emptyState={<EmptyState message={tx('Henüz etkin oturum görünmüyor.')} />} onRetry={() => { void sessions.refetch() }}>
       <Card padding="none"><ul className="divide-y divide-border">{sessions.data?.map(session => <li key={session.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
-        <div className="min-w-0 space-y-1"><p className="break-words font-semibold text-text-heading">{session.device || tx('Bilinmiyor')} {session.isCurrent && <span className="text-sm font-normal text-text-muted">· {tx('Bu oturum')}</span>}</p>
-          <p className="break-words text-sm text-text-muted">{tx('IP adresi')}: {session.ipAddress || tx('Bilinmiyor')}</p><p className="text-sm text-text-muted">{tx('Son etkinlik')}: {formatDateTime(session.lastActivityAt)}</p></div>
-        <Button variant="outline" size="sm" disabled={pending} aria-label={tx('{0} oturumunu sonlandır', { '0': session.device || tx('Bilinmiyor') })} onClick={() => { setError(null); setSelected(session) }}>{tx('Oturumu sonlandır')}</Button>
+        <div className="min-w-0 space-y-1"><p className="break-words font-semibold text-text-heading">{deviceName(session.device)} {session.isCurrent && <span className="text-sm font-normal text-text-muted">· {tx('Bu oturum')}</span>}</p>
+          <p className="break-words text-sm text-text-muted">{tx('IP adresi')}: {session.ipAddress || tx('Bilinmiyor')}</p><p className="text-sm text-text-muted">{tx('Son etkinlik')}: {formatDateTime(session.lastActivityAt)}</p>
+          <TechnicalDetails items={session.device ? [{ label: 'User agent', value: session.device }] : []} /></div>
+        <Button variant="outline" size="sm" disabled={pending} aria-label={tx('{0} oturumunu sonlandır', { '0': deviceName(session.device) })} onClick={() => { setError(null); setSelected(session) }}>{tx('Oturumu sonlandır')}</Button>
       </li>)}</ul></Card>
     </QueryState>
     <ConfirmDialog open={selected !== null} onClose={() => setSelected(null)} title={all ? tx('Tüm oturumlar sonlandırılsın mı?') : tx('Oturum sonlandırılsın mı?')} consequence={{ what: all ? tx('Tüm oturumlarınız sonlandırılır.') : tx('Seçilen oturum sonlandırılır.'), who: all ? tx('Bu cihaz dahil tüm cihazlarda çıkış yapılır.') : selected?.isCurrent ? tx('Bu cihazda çıkış yapılır.') : tx('Seçilen cihazda çıkış yapılır.'), reversible: tx('Yeniden giriş yapabilirsiniz.') }} pending={pending} error={error} onConfirm={() => { void revoke() }} confirmLabel={all ? tx('Tüm oturumları sonlandır') : tx('Oturumu sonlandır')} />

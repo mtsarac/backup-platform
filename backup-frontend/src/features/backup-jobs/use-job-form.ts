@@ -9,8 +9,8 @@ import { discoveredConfiguration } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import type { FieldErrors } from '@/features/backup-jobs/job-field-kit'
-import { initialValues, resetSource, switchEngine, type Engine, type EngineMemory, type JobPrefill, type JobValues } from '@/features/backup-jobs/job-form-values'
-import { stepOfField } from '@/features/backup-jobs/job-wizard-model'
+import { initialValues, resetSource, switchEngine, type Engine, type EngineMemory, type JobDraft, type JobPrefill, type JobValues } from '@/features/backup-jobs/job-form-values'
+import { stepOfField, validateJob } from '@/features/backup-jobs/job-wizard-model'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
 import type { BackupConfiguration, BackupJob, BackupJobInput } from '@/features/backup-jobs/types'
@@ -18,17 +18,17 @@ import { ApiError } from '@/lib/api/client'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 
-/** State, validation inputs and saving shared by the create wizard and the single-page edit form. */
-export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPrefill }) {
-  const { tenantId, canAdmin } = useTenant()
+/** State, validation inputs and saving shared by the create wizard and the section forms of an existing job. `onSaved` replaces the return to the list. */
+export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }: { job?: BackupJob; prefill?: JobPrefill; draft?: JobDraft; storageConnectionId?: string; onSaved?: () => void }) {
+  const { tenantId } = useTenant()
   const navigate = useNavigate()
   const save = useSaveBackupJob(job?.id)
   const agents = useQuery({ queryKey: ['tenant', tenantId, 'agents'], queryFn: ({ signal }) => getAgents(tenantId, signal) })
   const [saved, setSaved] = useState(() => initialValues(job, prefill))
-  const [values, setValues] = useState(saved)
+  const [values, setValues] = useState(draft?.values ?? saved)
   const [results, setResults] = useState<Record<string, string>>({})
   /** The inventory instance the selected databases belong to; the source summary shows it and a failed create is checked against it. */
-  const [discovered, setDiscovered] = useState<DiscoveryInstanceDetail | null>(prefill?.databases.length ? prefill.instance : null)
+  const [discovered, setDiscovered] = useState<DiscoveryInstanceDetail | null>(draft ? draft.discovered : prefill?.databases.length ? prefill.instance : null)
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const engines = useRef<EngineMemory>({})
   const saving = useRef(false)
@@ -50,6 +50,8 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   const multi = selected.length > 1
   const saveError = multi ? null : save.error
   const serverErrors: FieldErrors = saveError instanceof ApiError ? { ...Object.fromEntries(Object.entries(saveError.fields).map(([field, code]) => [field.replace(/^schedule\./, ''), failureMessage(code)])), ...(saveError.field ? { [saveError.field.replace(/^schedule\./, '')]: errorMessage(saveError) } : {}) } : {}
+  // A message shown by Devam/Kaydet goes away as soon as its field is fixed, without pressing the button again.
+  const stillInvalid = Object.keys(clientErrors).length ? validateJob(values).errors : {}
   const nextOccurrence = job && (job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt)
 
   function refreshConnections() {
@@ -79,6 +81,15 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     set({ selected: [], configuration: resetSource(configuration) })
     setResults({})
   }
+  // A connection just created in the storage wizard becomes the primary target once the refreshed lists know it.
+  const adopted = useRef(false)
+  const adoptable = storageConnectionId ? connectionItems.find(item => item.id === storageConnectionId) : undefined
+  const adoptableLocation = providerItems.find(item => item.providerType === adoptable?.providerType)?.executionLocation
+  useEffect(() => {
+    if (adopted.current || !adoptable || !adoptableLocation) return
+    adopted.current = true
+    setValues(current => ({ ...current, configuration: { ...current.configuration, destinations: current.configuration.destinations.map(item => item.isPrimary ? { ...item, storageProvider: adoptable.providerType, storageConnectionId: adoptable.id, storageExecutionLocation: adoptableLocation } : item) } }))
+  }, [adoptable, adoptableLocation])
   const listPath = `/tenants/${tenantId}/backup-jobs`
   useEffect(() => {
     if (!finished) return
@@ -86,13 +97,22 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   }, [finished, listPath, navigate])
   function finish() {
     setSaved(values)
-    setFinished(true)
+    if (onSaved) onSaved()
+    else setFinished(true)
+  }
+  /** Starts a section edit from the job as it is now, or drops the edit in progress (`next` omitted). */
+  function restart(next?: BackupJob) {
+    const fresh = next ? initialValues(next) : saved
+    setSaved(fresh)
+    setValues(fresh)
+    setClientErrors({})
+    save.reset()
   }
   function submit() {
     if (saving.current || cannotSave) return
     saving.current = true
     const { name, agentId, enabled, scheduled, schedule, overlap, retry, retention } = values
-    const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, ...(!job ? { enabled } : {}), schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, ...(canAdmin ? { retention } : {}) }
+    const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, ...(!job ? { enabled } : {}), schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, retention }
     if (multi) { void createMany(input); return }
     save.mutate(input, {
       onSuccess: finish,
@@ -132,11 +152,11 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   }, [clientErrors])
 
   return {
-    job, tenantId, canAdmin, listPath, saved, values, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery, discovered, prefillInstanceId: prefill?.instance.id,
+    job, tenantId, listPath, saved, values, restart, set, setConfiguration, changeEngine, applyDiscovery, clearDiscovery, discovered, prefillInstanceId: prefill?.instance.id,
     agents, agent: agents.data?.find(item => item.agentId === values.agentId),
     picker: { connections: connectionItems, providers: providerItems, pending: pickerPending, error: pickerError, existingTarget, onRefresh: refreshConnections },
     cannotSave, results, failedCount: Object.values(results).filter(value => value !== 'ok').length,
-    save, saveError, serverErrors, clientErrors, setClientErrors, errors: { ...serverErrors, ...clientErrors } as FieldErrors,
+    save, saveError, serverErrors, clientErrors, setClientErrors, errors: { ...serverErrors, ...Object.fromEntries(Object.entries(clientErrors).filter(([field]) => field in stillInvalid)) } as FieldErrors,
     errorSteps: [...new Set(Object.keys(serverErrors).map(stepOfField).filter(step => step !== undefined))],
     dirty: JSON.stringify(values) !== JSON.stringify(saved), submit,
     nextRun: job ? nextOccurrence ? formatDateTime(nextOccurrence) : tx('Planlanmamış') : undefined,

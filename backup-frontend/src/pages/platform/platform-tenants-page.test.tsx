@@ -34,7 +34,7 @@ describe('platform tenants list', () => {
     expect(within(row).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/tenants/tenant-a')
     expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByText('Kayıt kapalı')).toBeInTheDocument()
     expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/tenants/tenant-b')
-    expect(api.getTenants).toHaveBeenCalledWith({ search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    expect(api.getTenants).toHaveBeenCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
   })
 
   it('shows workspace names, people, computers and enrollment as cards on small screens', async () => {
@@ -55,15 +55,21 @@ describe('platform tenants list', () => {
     vi.mocked(api.getTenants).mockResolvedValue(paged([acme], { totalCount: 60, pageSize: 25 }))
     renderPlatform(<PlatformTenantsPage />, { path: '/platform/tenants?page=2' })
     expect(await screen.findByText('60 kayıt · Sayfa 2 / 3')).toBeInTheDocument()
-    expect(api.getTenants).toHaveBeenCalledWith({ search: '', page: 2, pageSize: 25 }, expect.any(AbortSignal))
+    expect(api.getTenants).toHaveBeenCalledWith({ page: 2, pageSize: 25 }, expect.any(AbortSignal))
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/tenants?page=3'))
     await screen.findByText('60 kayıt · Sayfa 3 / 3')
     expect(screen.getByRole('button', { name: 'Sonraki' })).toBeDisabled()
     await userEvent.type(screen.getByRole('searchbox', { name: "Çalışma alanı ara" }), 'acme')
-    await userEvent.click(screen.getByRole('button', { name: 'Ara' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/tenants?search=acme'))
     expect(api.getTenants).toHaveBeenLastCalledWith({ search: 'acme', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+  })
+
+  it('sends sortable column changes to the server', async () => {
+    renderPlatform(<PlatformTenantsPage />)
+    await screen.findByRole('link', { name: 'Acme A.Ş.' })
+    await userEvent.click(screen.getByRole('button', { name: /Kişiler/ }))
+    await waitFor(() => expect(api.getTenants).toHaveBeenLastCalledWith({ page: 1, pageSize: 25, sort: 'memberCount', dir: 'asc' }, expect.any(AbortSignal)))
   })
 
   it('renders an empty state', async () => {

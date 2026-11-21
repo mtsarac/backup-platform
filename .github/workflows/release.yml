@@ -115,9 +115,46 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # Inno Setup only runs on Windows, so the wizard is built outside the Linux package matrix.
+  setup-wizard:
+    name: Package Windows setup wizard
+    needs: [ci, version]
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Inno Setup 6.7.3 from the unofficial Tools.InnoSetup NuGet package (the vendor installer is not on a stable URL); pinned by hash.
+      - name: Fetch Inno Setup compiler
+        run: |
+          Invoke-WebRequest https://api.nuget.org/v3-flatcontainer/tools.innosetup/6.7.3/tools.innosetup.6.7.3.nupkg -OutFile inno.zip
+          if ((Get-FileHash inno.zip -Algorithm SHA256).Hash -ne 'F780898E402FF80612CC8D9FCB8C6E02932BD1CB4C900FFDAA31F9341CFB49F4') { throw 'Inno Setup package hash mismatch.' }
+          Expand-Archive inno.zip inno
+
+      - name: Build setup wizard
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # The file version must be numeric; the full semantic version stays in the product version and the file name.
+          $fileVersion = ($env:VERSION -split '-')[0] + '.0'
+          & inno/tools/ISCC.exe "/DAppVersion=$env:VERSION" "/DFileVersion=$fileVersion" "/Fbackup-agent-win-x64-setup-$env:VERSION" /Orelease-out backup-backend/deploy/windows/installer/BackupAgentSetup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-agent-win-x64-setup
+          path: release-out/*
+          retention-days: 14
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
-    needs: [version, package]
+    needs: [version, package, setup-wizard]
     if: ${{ needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -150,6 +187,7 @@ jobs:
           | Archive | Contents |
           |---|---|
           | \`backup-agent-win-x64-${VERSION}.zip\` | Windows Agent (self-contained) with service install/uninstall scripts |
+          | \`backup-agent-win-x64-setup-${VERSION}.exe\` | Windows setup wizard: asks only for the one-time enrollment key and the computer name. Not code-signed, so SmartScreen warns. Serve it from the backend as \`backup-agent-win-x64-setup.exe\` in the packages directory; the backend adds its server address on download. |
           | \`backup-agent-linux-x64-${VERSION}.tar.gz\` | Linux Agent (self-contained). **No official installer or systemd unit yet.** |
           | \`backup-backend-linux-x64-${VERSION}.tar.gz\` | Backend API (self-contained) with the PostgreSQL migration script |
           | \`backup-frontend-${VERSION}.tar.gz\` | Static web UI; serve it on the same origin as the backend |

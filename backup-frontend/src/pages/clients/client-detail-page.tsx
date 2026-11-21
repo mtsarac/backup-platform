@@ -15,21 +15,26 @@ import { useAgent, agentQueryKeys } from '@/features/agents/hooks'
 import { revokeAgent } from '@/features/agents/api'
 import { AgentTechnicalDetails } from '@/features/agents/agent-technical-details'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { useBackupJobs } from '@/features/backup-jobs/hooks'
+import { backupJobQueryKeys, useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { notFound } from '@/lib/api/failure-messages'
+import { formatDateTime } from '@/lib/format'
 import { supportsDiscovery } from '@/features/discovery/status'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { linkClass } from '@/components/ui/form-styles'
+import { compareDate, compareNumber, compareText } from '@/features/lists/compare'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { useClientList } from '@/features/lists/use-client-list'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
+import { AgentDatabases } from './agent-databases'
 
 export function ClientDetailPage() {
   useLanguage()
-  const { tenantId, canAdmin } = useTenant()
+  const { tenantId } = useTenant()
   const { id = '' } = useParams()
-  return <AgentDetailContent key={`${tenantId}:${id}`} tenantId={tenantId} id={id} canAdmin={canAdmin} />
+  return <AgentDetailContent key={`${tenantId}:${id}`} tenantId={tenantId} id={id} />
 }
 
-function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: string; canAdmin: boolean }) {
+function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) {
   useLanguage()
   const query = useAgent(tenantId, id)
   const client = useQueryClient()
@@ -38,6 +43,7 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
     setConfirmOpen(false)
     await Promise.all([
       client.invalidateQueries({ queryKey: agentQueryKeys.all(tenantId) }),
+      client.invalidateQueries({ queryKey: backupJobQueryKeys.all(tenantId) }),
       client.invalidateQueries({ queryKey: ['tenant', tenantId, 'dashboard'] }),
     ])
   } })
@@ -47,13 +53,13 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
     {!id ? <><PageHeader title={tx("Yedekleme bilgisayarı bulunamadı")} crumbs={crumbs} /><ErrorNotice {...notFound(tx("Yedekleme bilgisayarı bulunamadı."))} /></> : <QueryState isPending={query.isPending} error={query.error}>
       {agent && <>
         <PageHeader crumbs={crumbs} title={agent.hostName ?? tx('Adsız bilgisayar')}
-          description={<>{tx("Son görülme")}: {agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
-          meta={<><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
+          description={<>{tx("Son görülme")}: {agent.lastSeenAt ? agent.status === 'Revoked' ? formatDateTime(agent.lastSeenAt) : <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
+          meta={agent.status === 'Revoked' ? <StatusPill domain="agent" status="Revoked" /> : <><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
           actions={<>
-            {supportsDiscovery(agent.capabilities) && <Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/discovery?agentId=${encodeURIComponent(id)}`}>{tx("Bulunan veritabanı sunucuları")}</Link>}
-            {canAdmin && agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
+            {agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
           </>} />
         {agent.status === 'Active' && agent.connectivity === 'offline' && <Notice tone="warning">{tx("Bu bilgisayar çevrimdışı; yedeklemeler bilgisayar yeniden bağlanana kadar çalışmaz. Bilgisayarın açık olduğunu ve yedekleme programının çalıştığını kontrol edin.")}</Notice>}
+        {agent.status !== 'Revoked' && supportsDiscovery(agent.capabilities) && <AgentDatabases agentId={id} />}
         <AgentJobs agentId={id} />
         <AgentTechnicalDetails agent={agent} />
       </>}
@@ -64,24 +70,42 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
         who: tx("Bu bilgisayarda çalışan yedekleme işleri durur."),
         reversible: tx("Hayır. Yeniden kayıt için yeni bir kimlik gerekir."),
       }}
-      confirmLabel={tx("İptali onayla")} pending={revoke.isPending} error={revoke.error} onConfirm={() => { if (canAdmin) revoke.mutate() }} />
+      confirmLabel={tx("İptali onayla")} destructive pending={revoke.isPending} error={revoke.error} onConfirm={() => { revoke.mutate() }} />
   </div>
+}
+
+const jobsListConfig = {
+  search: true,
+  sort: { first: { name: 'asc', enabled: 'asc', lastRun: 'asc', next: 'asc', created: 'desc' }, default: { key: 'created', dir: 'desc' } },
+} as const
+const jobComparators = {
+  name: (a: BackupJob, b: BackupJob) => compareText(a.name, b.name),
+  enabled: (a: BackupJob, b: BackupJob) => compareNumber(Number(b.enabled && !b.agentRevoked), Number(a.enabled && !a.agentRevoked)),
+  lastRun: (a: BackupJob, b: BackupJob) => compareText(a.lastRun?.status, b.lastRun?.status),
+  next: (a: BackupJob, b: BackupJob) => compareDate(a.agentRevoked ? null : a.nextOccurrenceAt, b.agentRevoked ? null : b.nextOccurrenceAt),
+  created: (a: BackupJob, b: BackupJob) => compareDate(a.createdAt, b.createdAt),
 }
 
 function AgentJobs({ agentId }: { agentId: string }) {
   useLanguage()
   const { tenantId } = useTenant()
   const jobs = useBackupJobs()
+  const state = useListState(jobsListConfig)
   const rows = (jobs.data ?? []).filter((job) => job.agentId === agentId)
+  const list = useClientList(rows, state, { searchText: job => job.name, comparators: jobComparators, tieBreak: (a, b) => compareText(a.name, b.name) || compareText(a.id, b.id) })
   const columns: Column<BackupJob>[] = [
-    { key: 'name', header: tx('Yedekleme işi'), card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}/edit`}>{job.name}</Link> },
-    { key: 'enabled', card: 'status', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
-    { key: 'lastRun', header: tx('Son sonuç'), render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted"><RelativeTime value={job.lastRun.createdAt} /></span></div> : tx('Henüz çalışmadı') },
-    { key: 'next', header: tx('Sonraki yedek'), render: (job) => job.nextOccurrenceAt ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },
+    { key: 'name', header: tx('Yedekleme işi'), sortable: true, card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}`}>{job.name}</Link> },
+    { key: 'enabled', card: 'status', header: tx('Durum'), sortable: true, render: (job) => <StatusPill status={job.enabled && !job.agentRevoked ? 'Active' : 'Disabled'} /> },
+    { key: 'lastRun', header: tx('Son sonuç'), sortable: true, render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted"><RelativeTime value={job.lastRun.createdAt} /></span></div> : tx('Henüz çalışmadı') },
+    { key: 'next', header: tx('Sonraki yedek'), sortable: true, render: (job) => job.nextOccurrenceAt && !job.agentRevoked ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },
+    { key: 'created', header: tx('Oluşturulma'), sortable: true, render: job => <RelativeTime value={job.createdAt} /> },
   ]
   return <Section title={tx("Bu bilgisayarın yedekleme işleri")} flush>
     <QueryState isPending={jobs.isPending} error={jobs.error}>
-      <DataList rows={rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={tx("Bu bilgisayar için tanımlı yedekleme işi yok.")} className="rounded-none border-0 shadow-none" />
+      <div className="space-y-4">
+        {rows.length > 10 && <ListToolbar state={state} label={tx('İş filtreleri')} total={list.total} search={{ label: tx('Yedekleme işi ara') }} />}
+        <DataList rows={list.rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={state.filtering ? tx('Aramanızla eşleşen iş yok.') : tx("Bu bilgisayar için tanımlı yedekleme işi yok.")} onClearFilters={state.filtering ? state.clear : undefined} sort={sortProps(state)} className="rounded-none border-0" />
+      </div>
     </QueryState>
   </Section>
 }

@@ -38,9 +38,9 @@ describe('platform backup computer page', () => {
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     for (const value of ['agent-a', 'Windows Server 2025', '1.4.0', '.NET 10', 'rev-3', 'vendor.custom-feature']) expect(screen.queryByText(value)).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const technical = within(await screen.findByRole('dialog'))
+    const technical = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
     for (const value of ['agent-a', 'Windows Server 2025', '1.4.0', '.NET 10', 'rev-3', 'vendor.custom-feature']) expect(technical.getByText(value)).toBeVisible()
-    expect(technical.getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+    expect(technical.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('shows a revoked lifecycle beside the offline connection instead of folding them together', async () => {
@@ -57,7 +57,7 @@ describe('platform backup computer page', () => {
     renderPlatform(<PlatformAgentDetailPage />, { path, route })
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
   })
 
   it('shows the authorization state for 403', async () => {

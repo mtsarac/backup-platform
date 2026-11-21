@@ -114,7 +114,7 @@ describe('in-app notifications', () => {
     expect(await screen.findByText(/Paylaşım oluşturuldu/)).toBeInTheDocument()
     expect(screen.getByText(/Paylaşım süresi uzatıldı/)).toBeInTheDocument()
     expect(screen.getByText(/Paylaşım iptal edildi/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'ProductionDb' })).toHaveAttribute('href', '/tenants/tenant-a/shares')
+    expect(screen.getByRole('link', { name: 'ProductionDb' })).toHaveAttribute('href', '/tenants/tenant-a/backup-shares')
     unmount()
 
     const platformClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })

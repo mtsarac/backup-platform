@@ -1,21 +1,24 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { useRemoveRollbackCopy, useRetryRestoreCleanup } from './hooks'
+import { useRemoveRollbackCopy, useRetryRestoreCleanup, useStartRestoreVerification } from './hooks'
 import { isActiveRestore, verificationCheckLabel, verificationCleanupText } from './presentation'
 import type { RestoreView } from './types'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { describeFailure } from '@/lib/api/failure-messages'
+import { useIdempotencyKey } from '@/lib/idempotency-key'
+import { restorePath } from '@/lib/routes'
 
 /** Detail of a disposable-database restore test: outcome, checks and whether the temporary database is gone. */
 export function VerificationDetail({ restore }: { restore: RestoreView }) {
   useLanguage()
-  const { canOperate } = useTenant()
   const retry = useRetryRestoreCleanup(restore.id)
   const verification = restore.result?.verification
   const cleanup = restore.cleanup
@@ -26,18 +29,19 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
           {restore.verificationOutcome && <Fact label={tx("Sonuç")}><StatusPill domain="verification" status={restore.verificationOutcome} /></Fact>}
           {verification && <Fact label={tx("Tablolar")}>{verification.readableTableCount ?? '—'}{' '}{tx("okunabilir /")}{' '}{verification.userTableCount ?? '—'}{' '}{tx("kullanıcı tablosu")}</Fact>}
         </Facts>}
-        {restore.verificationOutcome === 'Failed' && (restore.reason || restore.failureCode) && <ErrorNotice {...describeFailure(restore.failureCode, 'restore')} {...(restore.reason ? { what: restore.reason } : {})} />}
-        {verification && verification.checks.length > 0 && <ul aria-label={tx("Doğrulama kontrolleri")} className="divide-y divide-border text-sm">{verification.checks.map((check) => <li key={check.checkId} className="flex flex-wrap justify-between gap-2 py-3">
-          <span className="min-w-0 break-words">{verificationCheckLabel(check.checkId)} · {check.message}</span><span className="font-medium">{check.status === 'Passed' ? tx('Geçti') : tx('Başarısız')}</span></li>)}</ul>}
+        {restore.verificationOutcome === 'Failed' && (restore.reason || restore.failureCode) && <VerificationFailure restore={restore} />}
+        {verification && verification.checks.length > 0 && <><ul aria-label={tx("Doğrulama kontrolleri")} className="divide-y divide-border text-sm">{verification.checks.map((check) => <li key={check.checkId} className="flex flex-wrap justify-between gap-2 py-3">
+          <span className="min-w-0 break-words">{verificationCheckLabel(check.checkId)}</span><span className="font-medium">{check.status === 'Passed' ? tx('Geçti') : tx('Başarısız')}</span></li>)}</ul>
+          <TechnicalDetails items={verification.checks.filter(check => check.message).map(check => ({ label: verificationCheckLabel(check.checkId), value: check.message }))} /></>}
       </div>
     </Section>
     {cleanup && <Section title={tx("Geçici Database")}>
       <div className="space-y-3">
         <p className="text-sm">{verificationCleanupText(cleanup)}{cleanup.databaseName && <> · <code className="font-mono">{cleanup.databaseName}</code></>}</p>
-        {cleanup.reason && cleanup.state !== 'Completed' && <p className="text-sm text-text-muted">{cleanup.reason}</p>}
+        {cleanup.reason && cleanup.state !== 'Completed' && <TechnicalDetails items={[{ label: tx('Sunucu mesajı'), value: cleanup.reason }]} />}
         {cleanup.needsAttention && <Notice tone="warning">{tx("Otomatik denemeler tükendi. Geçici Database'in elle kaldırılması gerekebilir.")}</Notice>}
         {cleanup.state === 'Pending' && !isActiveRestore(restore.status) && cleanup.nextAttemptAt && <p className="text-xs text-text-muted">{tx("Sonraki deneme:")}{' '}{formatDateTime(cleanup.nextAttemptAt)}</p>}
-        {canOperate && cleanup.state === 'Pending' && cleanup.canRequest && <>
+        {cleanup.state === 'Pending' && cleanup.canRequest && <>
           <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate('')}>{retry.isPending ? tx('İşleniyor…') : tx('Temizliği yeniden dene')}</Button>
           {retry.error && <ErrorNotice error={retry.error} scope="restore" />}
         </>}
@@ -46,10 +50,34 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
   </>
 }
 
+/** Why a restore test failed; an unverifiable server certificate offers to run the test again with it trusted, for that test only. */
+function VerificationFailure({ restore }: { restore: RestoreView }) {
+  useLanguage()
+  const { tenantId } = useTenant()
+  const navigate = useNavigate()
+  const start = useStartRestoreVerification()
+  const idempotencyKey = useIdempotencyKey()
+  const failure = describeFailure(restore.failureCode, 'restore')
+  const technical = [...failure.technical, ...(restore.reason ? [{ label: tx('Sunucu mesajı'), value: restore.reason }] : [])]
+  async function retryTrusting() {
+    const request = { agentId: restore.agentId, target: { ...restore.target, trustServerCertificate: true }, options: { verifyChecksum: true, verifyBackup: true } }
+    try {
+      const started = await start.mutateAsync({ artifactId: restore.artifactId, idempotencyKey: idempotencyKey.keyFor(request), request })
+      idempotencyKey.settle()
+      navigate(restorePath(tenantId, started.id))
+    } catch (error) {
+      idempotencyKey.settle(error)
+    }
+  }
+  return <div className="space-y-3">
+    <ErrorNotice {...failure} technical={technical} trust={{ note: tx("Bu güven yalnızca bu geri yükleme testi için geçerlidir; sertifika kaydedilmez."), pending: start.isPending, onConfirm: () => void retryTrusting() }} />
+    {start.error && <ErrorNotice error={start.error} scope="restore" />}
+  </div>
+}
+
 /** An ordinary replace restore keeps the previous database; only a tenant administrator may ask for its removal. */
 export function RollbackCopyPanel({ restore }: { restore: RestoreView }) {
   useLanguage()
-  const { canAdmin } = useTenant()
   const remove = useRemoveRollbackCopy(restore.id)
   const [open, setOpen] = useState(false)
   const cleanup = restore.cleanup
@@ -59,7 +87,7 @@ export function RollbackCopyPanel({ restore }: { restore: RestoreView }) {
     if (remove.isPending) return
     try { await remove.mutateAsync(name); setOpen(false) } catch { /* shown in dialog */ }
   }
-  return <Section title={tx("Rollback kopyası")} actions={canAdmin && cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setOpen(true) }}>{tx("Rollback kopyasını kaldır")}</Button>}>
+  return <Section title={tx("Rollback kopyası")} actions={cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setOpen(true) }}>{tx("Rollback kopyasını kaldır")}</Button>}>
     <p className="text-sm">{tx("Rollback kopyası saklanıyor:")}{' '}<code className="font-mono">{name}</code>{tx(". Otomatik olarak asla kaldırılmaz.")}</p>
     {cleanup.retainedUntil && <p className="mt-1 text-sm text-text-muted">{tx("Koruma süresi sonu:")}{' '}{formatDateTime(cleanup.retainedUntil)}</p>}
     <ConfirmDialog open={open} onClose={() => setOpen(false)} title={tx("Rollback kopyası kaldırılsın mı?")} confirmLabel={tx("Kalıcı olarak kaldır")} name={name}

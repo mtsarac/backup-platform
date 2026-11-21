@@ -2,7 +2,6 @@ import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Section } from '@/components/ui/section'
-import { Disclosure } from '@/components/ui/disclosure'
 
 export function FormGrid({ children }: { children: ReactNode }) {
   useLanguage()
@@ -15,16 +14,10 @@ export function Question({ title, why, children, headingLevel, compact }: { titl
   return <Section title={title} headingLevel={headingLevel} className={compact ? '[&>div:first-child]:border-0 [&>div:first-child]:pb-0 [&>div:nth-child(2)]:pt-2' : undefined} description={compact ? undefined : <><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}{why}</>}>{children}</Section>
 }
 
-/** Collapsed-by-default settings with safe defaults; opens when one of its fields has an error. */
-export function Advanced({ open, title, children }: { open?: boolean; title?: string; children: ReactNode }) {
-  useLanguage()
-  return <Disclosure open={open} title={title ?? tx("Teknik ayrıntılar")}><FormGrid>{children}</FormGrid></Disclosure>
-}
-
 /** A ready-made choice for a setting: exactly one option is pressed, or none when the current value is custom. */
-export function PresetChoice({ label, options, disabled }: { label: string; options: readonly { text: string; pressed: boolean; onSelect: () => void }[]; disabled?: boolean }) {
+export function PresetChoice({ label, options }: { label: string; options: readonly { text: string; pressed: boolean; onSelect: () => void }[]}) {
   useLanguage()
   return <div role="group" aria-label={label} className="flex flex-wrap gap-2 md:col-span-2">
-    {options.map(option => <Button key={option.text} type="button" variant={option.pressed ? 'default' : 'outline'} aria-pressed={option.pressed} disabled={disabled} onClick={option.onSelect}>{option.text}</Button>)}
+    {options.map(option => <Button key={option.text} type="button" variant={option.pressed ? 'default' : 'outline'} aria-pressed={option.pressed} onClick={option.onSelect}>{option.text}</Button>)}
   </div>
 }

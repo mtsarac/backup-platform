@@ -4,7 +4,7 @@ import {
   setPlanEnabled, setStorageLimitOverride, suspendSubscription, updatePlan,
 } from '../api'
 import { platformKeys } from '../hooks'
-import type { PageParams } from '../types'
+import type { ListQueryParams } from '../types'
 import { invalidateStorageViews } from '../storage/hooks'
 import type { AssignSubscriptionInput, CreatePlanInput, PlanFilters, PlanInput, StorageLimitOverride } from './types'
 
@@ -23,7 +23,7 @@ export function useTenantSubscription(tenantId: string) {
   })
 }
 
-export function useSubscriptionHistory(tenantId: string, params: PageParams, enabled: boolean) {
+export function useSubscriptionHistory(tenantId: string, params: ListQueryParams, enabled: boolean) {
   return useQuery({
     queryKey: platformKeys.subscriptionHistoryPage(tenantId, params),
     queryFn: ({ signal }) => getSubscriptionHistory(tenantId, params, signal),

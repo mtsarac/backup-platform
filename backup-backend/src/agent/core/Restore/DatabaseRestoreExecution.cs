@@ -724,8 +724,13 @@ internal sealed class DatabaseRestoreExecution
 
         var failed = report.Checks.FirstOrDefault(check => !check.Passed);
         var reason = failed?.ReasonCode ?? RestorePipelineReasons.VerificationFailed;
-        throw Fail(stage, reason == RestorePipelineReasons.Timeout ? RestoreAgentFailureCodes.OperationTimedOut : RestoreAgentFailureCodes.VerificationFailed,
-            reason, failed?.Message ?? "The restored database did not pass its verification checks.");
+        var code = reason switch
+        {
+            RestorePipelineReasons.Timeout => RestoreAgentFailureCodes.OperationTimedOut,
+            RestoreReasonCodes.ServerCertificateUntrusted => RestoreAgentFailureCodes.ServerCertificateUntrusted,
+            _ => RestoreAgentFailureCodes.VerificationFailed
+        };
+        throw Fail(stage, code, reason, failed?.Message ?? "The restored database did not pass its verification checks.");
     }
 
     /// <summary>

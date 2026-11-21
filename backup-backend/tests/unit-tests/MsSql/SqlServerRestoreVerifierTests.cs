@@ -17,6 +17,7 @@ public sealed class SqlServerRestoreVerifierTests
     [InlineData(DatabaseFailureKind.Unreachable, "connection-failed")]
     [InlineData(DatabaseFailureKind.Unexpected, "unexpected-error")]
     [InlineData(DatabaseFailureKind.InvalidConfiguration, "unexpected-error")]
+    [InlineData(DatabaseFailureKind.ServerCertificateUntrusted, "server-certificate-untrusted")]
     public void EngineFailureKindsMapToStableReasonCodes(DatabaseFailureKind kind, string expected) =>
         Assert.Equal(expected, SqlServerVerificationReasons.ForKind(kind));
 

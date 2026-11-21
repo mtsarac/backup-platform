@@ -79,9 +79,6 @@ public sealed class SmsTransportRequest
 /// </summary>
 public static class NotificationEndpoints
 {
-    private const int DefaultPageSize = 25;
-    private const int MaximumPageSize = 100;
-
     public static IEndpointRouteBuilder MapNotificationEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}/notifications").WithMetadata(new TenantScopedEndpoint())
@@ -110,7 +107,7 @@ public static class NotificationEndpoints
         tenant.MapPost("/channels/{id:guid}/disable", (Guid id, ITenantContext t, ICurrentUser u, NotificationAdministrationService s, CancellationToken c) => ToggleAsync(id, false, t, u, s, c));
         tenant.MapDelete("/channels/{id:guid}", DeleteChannelAsync);
         tenant.MapPost("/channels/{id:guid}/test", TestChannelAsync);
-        tenant.MapGet("/deliveries", ListDeliveriesAsync);
+        tenant.MapGet("/deliveries", ListDeliveriesAsync).WithListQuery();
 
         var platform = endpoints.MapGroup("/api/platform/notification-transports").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("", ListTransportsAsync);
@@ -119,7 +116,7 @@ public static class NotificationEndpoints
         platform.MapPut("/{key}/secret", SetTransportSecretAsync);
         platform.MapDelete("/{key}/secret", ClearTransportSecretAsync);
         var administration = endpoints.MapGroup("/api/platform/notifications").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
-        administration.MapGet("/deliveries/failed", ListFailedDeliveriesAsync);
+        administration.MapGet("/deliveries/failed", ListFailedDeliveriesAsync).WithListQuery();
         administration.MapPost("/deliveries/{id:guid}/retry", RetryDeliveryAsync);
         administration.MapGet("/history-retention", GetHistoryRetentionAsync);
         administration.MapPut("/history-retention", PutHistoryRetentionAsync);
@@ -251,13 +248,10 @@ public static class NotificationEndpoints
     // ---- history ------------------------------------------------------------------------------------------------------------------------
 
     private static Task<IResult> ListDeliveriesAsync(
-        string? status, string? kind, string? eventType, int? page, int? pageSize, ITenantContext tenant, NotificationAdministrationService service, CancellationToken cancellationToken) =>
+        string? status, string? kind, string? eventType, [AsParameters] ListParams list, ITenantContext tenant, NotificationAdministrationService service, CancellationToken cancellationToken) =>
         GuardAsync(async () =>
         {
-            var p = page ?? 1;
-            var size = pageSize ?? DefaultPageSize;
-            if (p is < 1 or > 1_000_000 || size is < 1 or > MaximumPageSize) throw new InvalidNotificationException("page", "invalid_value");
-            var result = await service.ListDeliveriesAsync(tenant.TenantId!, status, kind, eventType, p, size, cancellationToken);
+            var result = await service.ListDeliveriesAsync(tenant.TenantId!, status, kind, eventType, list.ToQuery(), cancellationToken);
             return Results.Ok(new
             {
                 items = result.Items.Select(d => new
@@ -270,13 +264,10 @@ public static class NotificationEndpoints
             });
         });
 
-    private static Task<IResult> ListFailedDeliveriesAsync(int? page, int? pageSize, INotificationStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> ListFailedDeliveriesAsync([AsParameters] ListParams list, INotificationStore store, CancellationToken cancellationToken) =>
         GuardAsync(async () =>
         {
-            var p = page ?? 1;
-            var size = pageSize ?? DefaultPageSize;
-            if (p is < 1 or > 1_000_000 || size is < 1 or > MaximumPageSize) throw new InvalidNotificationException("page", "invalid_value");
-            var result = await store.ListFailedDeliveriesAsync(p, size, cancellationToken);
+            var result = await store.ListFailedDeliveriesAsync(list.ToQuery(), cancellationToken);
             return Results.Ok(new
             {
                 items = result.Items.Select(row => new

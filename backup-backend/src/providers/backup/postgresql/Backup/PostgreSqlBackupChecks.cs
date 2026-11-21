@@ -53,7 +53,7 @@ internal static class PostgreSqlBackupChecks
         if (resolution.Tool is not { } found)
             return PostgreSqlFailures.Failed("postgres.tools." + tool,
                 resolution.Status == PostgreSqlToolStatus.Missing ? PostgreSqlReasons.ToolsMissing : PostgreSqlReasons.ToolsUnusable,
-                "A required PostgreSQL client tool is missing or cannot run. Configure ClientToolsDirectory or the agent PATH.", BackupFailureCause.Unsupported);
+                "A required PostgreSQL client tool is missing or cannot run. Configure ClientToolsDirectory or the agent PATH.", BackupFailureCause.AgentNotConfigured);
         if (serverMajor is { } major && found.Major < major)
             return PostgreSqlFailures.Failed("postgres.tools." + tool, PostgreSqlReasons.ToolVersionTooOld,
                 "The PostgreSQL client tool must be at least as new as the source server.", BackupFailureCause.Unsupported);

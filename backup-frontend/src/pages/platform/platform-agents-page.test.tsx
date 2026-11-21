@@ -32,7 +32,7 @@ describe('platform global agents list', () => {
     expect(screen.getByRole('link', { name: 'SQL-01' })).toHaveAttribute('href', '/platform/tenants/tenant-a/agents/agent-a')
     expect(within(first).getByText('Çevrimiçi')).toBeInTheDocument()
     expect(within(first).getByText('3 saat önce')).toHaveAttribute('title', expect.stringContaining('2026'))
-    for (const hidden of ['Etkin', 'Windows', 'Windows Server 2025', '1.4.0', 'agent-a', /yetenek/i]) expect(within(first).queryByText(hidden)).not.toBeInTheDocument()
+    for (const hidden of ['Windows', 'Windows Server 2025', '1.4.0', 'agent-a', /yetenek/i]) expect(within(first).queryByText(hidden)).not.toBeInTheDocument()
 
     const second = screen.getByRole('link', { name: 'SQL-02' }).closest('tr')!
     expect(within(second).getByText('İptal edildi')).toBeInTheDocument()
@@ -65,7 +65,14 @@ describe('platform global agents list', () => {
     await screen.findByRole('link', { name: 'SQL-01' })
     fireEvent.change(screen.getByRole('combobox', { name: 'Bağlantı' }), { target: { value: 'online' } })
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/agents?connectivity=online'))
-    expect(api.getPlatformAgents).toHaveBeenLastCalledWith({ tenantId: '', connectivity: 'online', status: undefined, search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    expect(api.getPlatformAgents).toHaveBeenLastCalledWith({ connectivity: 'online', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+  })
+
+  it('sends sort changes with the active filter', async () => {
+    renderPlatform(<PlatformAgentsPage />, { path: '/platform/agents?connectivity=online' })
+    await screen.findByRole('link', { name: 'SQL-01' })
+    fireEvent.click(screen.getByRole('button', { name: /Son görülme/ }))
+    await waitFor(() => expect(api.getPlatformAgents).toHaveBeenLastCalledWith({ connectivity: 'online', page: 1, pageSize: 25, sort: 'lastSeenAt', dir: 'desc' }, expect.any(AbortSignal)))
   })
 
   it('renders the empty state for filters without results', async () => {

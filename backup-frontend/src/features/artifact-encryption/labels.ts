@@ -1,16 +1,9 @@
 import { tx } from '@/lib/i18n'
 import type { ArtifactFormat, EncryptionPolicy, RecipientType } from './types'
 
-export const policyLabels: Record<EncryptionPolicy, string> = {
-  get Off() { return tx("Kapalı · şifrelenmez") },
-  get Optional() { return tx("İsteğe bağlı · mümkünse şifrele") },
-  get Required() { return tx("Zorunlu · şifrelenemezse başarısız") },
-}
-export const policyDescriptions: Record<EncryptionPolicy, string> = {
-  get Off() { return tx("Yedek dosyası düz (v1-plain) olarak yazılır. Mevcut davranış korunur.") },
-  get Optional() { return tx("Yedek, Agent'ta şifrelenir (v2-bpe). Agent şifreleyemezse düz dosya (v1-plain) olarak kabul edilir; yedek reddedilmez.") },
-  get Required() { return tx("Yedek yalnızca şifreli (v2-bpe) gelirse kabul edilir. Düz dosya gelirse çalıştırma başarısız olur ve dosya yayımlanmaz. Üçüncü taraf depolama için önerilir.") },
-}
+/** "Açık" covers both Required and Optional; only Off is "Kapalı". */
+export const encryptionOn = (policy: EncryptionPolicy) => policy !== 'Off'
+export const encryptionStateLabel = (policy: EncryptionPolicy) => encryptionOn(policy) ? tx('Açık') : tx('Kapalı')
 
 export const formatLabels: Record<ArtifactFormat, string> = {
   get 'v1-plain'() { return tx("v1-plain · şifresiz") }, get 'v2-bpe'() { return tx("v2-bpe · şifreli (AES-256-GCM)") },

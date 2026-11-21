@@ -205,12 +205,14 @@ internal static class PostgreSqlRestoreVerifier
     private static RestoreVerificationCheck Failed(string checkId, string reasonCode, string message) => new(checkId, false, reasonCode, message);
 
     /// <summary>The stable reason of a failed engine call; <paramref name="fallback"/> is the one for a server error that has no better name.</summary>
-    private static string ReasonFor(DatabaseProviderException exception, string fallback) => exception.Kind switch
+    internal static string ReasonFor(DatabaseProviderException exception, string fallback) => exception.Kind switch
     {
         DatabaseFailureKind.AuthenticationFailed => PostgreSqlReasons.AuthenticationFailed,
         DatabaseFailureKind.PermissionDenied => PostgreSqlReasons.PermissionDenied,
         DatabaseFailureKind.Timeout => PostgreSqlVerificationReasons.Timeout,
         DatabaseFailureKind.Unreachable => PostgreSqlVerificationReasons.ConnectionFailed,
+        DatabaseFailureKind.ServerCertificateUntrusted => RestoreReasonCodes.ServerCertificateUntrusted,
+        DatabaseFailureKind.ServerTlsUnavailable => PostgreSqlReasons.ServerTlsUnavailable,
         DatabaseFailureKind.InvalidConfiguration => PostgreSqlSession.IsDatabaseMissing(exception) ? PostgreSqlReasons.DatabaseNotFound : PostgreSqlReasons.ConnectionSettingsInvalid,
         _ => fallback
     };

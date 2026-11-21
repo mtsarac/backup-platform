@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
+import { searchFor } from '@/test/search'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { ReactNode } from 'react'
@@ -13,10 +14,13 @@ import { AddAgentDialog } from './add-agent-dialog'
 import type { AgentDetail, CreatedEnrollmentToken } from './types'
 import * as api from './api'
 import * as jobsApi from '@/features/backup-jobs/api'
+import * as discoveryApi from '@/features/discovery/api'
+import { makeDatabase, makeDetail, makeInstance, supportedAgent } from '@/features/discovery/test-fixtures'
 import { setViewport } from '@/test/viewport'
 
-const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test' } }))
+const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { tenantId: 'tenant-a', name: 'Test' } }))
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn() }))
+vi.mock('@/features/discovery/api', () => ({ getDiscoveryAgents: vi.fn(), getDiscoveryInstances: vi.fn(), getDiscoveryInstance: vi.fn() }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 vi.mock('./api', () => ({ getAgentDistribution: vi.fn(), getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), getEnrollmentTokenStatus: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
 
@@ -36,9 +40,11 @@ function mount(content: ReactNode, path = '/tenants/tenant-a/agents') {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true } })
-  Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
+  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true, 'win-x64-setup': true } })
+  Object.assign(tenancy, { tenantId: 'tenant-a' })
   vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([])
+  vi.mocked(discoveryApi.getDiscoveryAgents).mockResolvedValue({ items: [] })
+  vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [] })
   vi.mocked(api.getAgents).mockResolvedValue([agent])
   vi.mocked(api.getAgent).mockResolvedValue(agent)
   vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: true })
@@ -56,7 +62,7 @@ describe('Backup computers list', () => {
     const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000).toISOString()
     vi.mocked(api.getAgents).mockResolvedValue([{ ...agent, lastSeenAt: threeHoursAgo }])
     mount(<ClientsPage />)
-    expect(screen.getByRole('heading', { level: 1, name: 'Yedekleme bilgisayarları' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Bilgisayarlar' })).toBeInTheDocument()
     const link = await screen.findByRole('link', { name: 'SQL-01' })
     expect(link).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
     const row = link.closest('tr')!
@@ -78,7 +84,7 @@ describe('Backup computers list', () => {
     expect(api.getAgents).toHaveBeenLastCalledWith('tenant-a', expect.any(AbortSignal), true)
   })
 
-  it('keeps revoked and disabled lifecycle separate from offline connectivity', async () => {
+  it('shows one status for a revoked computer, and lifecycle beside connectivity for a disabled one', async () => {
     vi.mocked(api.getAgents).mockResolvedValue([
       { ...agent, hostName: 'Revoked host', status: 'Revoked', operationalStatus: 'Revoked', connectivity: 'offline' },
       { ...agent, agentId: 'agent-b', hostName: 'Disabled host', status: 'Disabled', operationalStatus: 'Disabled', connectivity: 'online' },
@@ -86,7 +92,7 @@ describe('Backup computers list', () => {
     mount(<ClientsPage />)
     const revoked = (await screen.findByRole('link', { name: 'Revoked host' })).closest('tr')!
     expect(within(revoked).getByText('İptal edildi')).toBeInTheDocument()
-    expect(within(revoked).getByText('Çevrimdışı')).toBeInTheDocument()
+    expect(within(revoked).queryByText('Çevrimdışı')).not.toBeInTheDocument()
     const disabled = screen.getByRole('link', { name: 'Disabled host' }).closest('tr')!
     expect(within(disabled).getByText('Devre dışı')).toBeInTheDocument()
     expect(within(disabled).getByText('Çevrimiçi')).toBeInTheDocument()
@@ -106,45 +112,49 @@ describe('Backup computers list', () => {
     vi.mocked(api.getAgents).mockResolvedValue([agent, { ...agent, agentId: 'agent-b', hostName: 'Depo-PC', connectivity: 'offline' }])
     mount(<ClientsPage />)
     await screen.findByRole('link', { name: 'Depo-PC' })
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), { target: { value: 'sql' } })
+    searchFor(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), 'sql')
     expect(screen.queryByRole('link', { name: 'Depo-PC' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'SQL-01' })).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), { target: { value: '' } })
+    searchFor(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), '')
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'offline' } })
     expect(screen.queryByRole('link', { name: 'SQL-01' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Depo-PC' })).toBeInTheDocument()
   })
 
-  it('an administrator with no computers gets one primary action; others are told to ask their administrator', async () => {
+  it('with no computers offers one primary action', async () => {
     vi.mocked(api.getAgents).mockResolvedValue([])
-    const admin = mount(<ClientsPage />)
+    mount(<ClientsPage />)
     await screen.findByText(/Henüz yedekleme bilgisayarı eklenmedi/)
     expect(screen.getAllByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).toHaveLength(1)
-    admin.unmount()
-    tenancy.canAdmin = false
-    mount(<ClientsPage />)
-    await screen.findByText(/Henüz yedekleme bilgisayarı eklenmedi/)
-    expect(screen.getByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
-  })
-
-  it('does not offer the enrolment tabs to a non-administrator', async () => {
-    tenancy.canAdmin = false
-    mount(<ClientsPage />)
-    await screen.findByRole('link', { name: 'SQL-01' })
-    expect(screen.queryByRole('navigation', { name: 'Yedekleme bilgisayarı bölümleri' })).not.toBeInTheDocument()
   })
 })
 
 describe('Backup computer page', () => {
-  it('can read the computer but cannot remove it without admin', async () => {
-    tenancy.canAdmin = false
+  it('shows the databases found on this computer, with whether each can be backed up', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: supportedAgent.capabilities as AgentDetail['capabilities'] })
+    vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [makeInstance(), makeInstance({ id: 'inst-2', displayName: 'Kilitli sunucu', access: 'CredentialsRequired' })] })
+    vi.mocked(discoveryApi.getDiscoveryInstance).mockResolvedValue(makeDetail({ databases: [makeDatabase({ name: 'ERP' }), makeDatabase({ name: 'master', isSystem: true, fullBackup: 'Unsupported' })] }))
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
-    expect(await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).toBeInTheDocument()
-    expect(screen.getByText('Çevrimiçi')).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: 'Sayfa yolu' })).toHaveTextContent('Yedekleme bilgisayarları')
-    expect(screen.queryByRole('button', { name: 'Bilgisayar kaydını iptal et' })).not.toBeInTheDocument()
-    expect(api.getAgent).toHaveBeenCalledWith('tenant-a', 'agent-a', expect.any(AbortSignal))
+    const section = within(await screen.findByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' }))
+    expect(await section.findByText('ERP')).toBeVisible()
+    expect(section.getByText('master')).toBeVisible()
+    expect(section.getByRole('link', { name: 'SQL Server (default)' })).toHaveAttribute('href', '/tenants/tenant-a/discovery/instances/inst-1')
+    expect(section.getByRole('link', { name: 'Kilitli sunucu' })).toBeVisible()
+    expect(discoveryApi.getDiscoveryInstances).toHaveBeenCalledWith('tenant-a', { agentId: 'agent-a' }, expect.any(AbortSignal))
+    expect(discoveryApi.getDiscoveryInstance).not.toHaveBeenCalledWith('tenant-a', 'inst-2', expect.anything())
+  })
+
+  it('shows the databases of a server whose login fails as a muted last known list without availability pills', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: supportedAgent.capabilities as AgentDetail['capabilities'] })
+    vi.mocked(discoveryApi.getDiscoveryInstances).mockResolvedValue({ items: [makeInstance({ access: 'Error', accessReasonCode: 'server_tls_unavailable' })] })
+    vi.mocked(discoveryApi.getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'Error', accessReasonCode: 'server_tls_unavailable', databases: [makeDatabase({ name: 'ERP' })] }))
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const section = within(await screen.findByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' }))
+    expect(await section.findByText('ERP')).toBeVisible()
+    expect(section.getByText('Son bilinen liste')).toBeVisible()
+    expect(section.getByText('Veritabanları listelenemiyor; son başarılı aramadan kalan liste gösteriliyor.')).toBeVisible()
+    expect(section.queryByText('Yedeklenemez')).not.toBeInTheDocument()
+    expect(section.queryByText('Yedeklenebilir')).not.toBeInTheDocument()
   })
 
   it('keeps platform, versions, identifiers and lifecycle in collapsed, copyable technical details', async () => {
@@ -152,9 +162,9 @@ describe('Backup computer page', () => {
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     for (const value of ['agent-a', 'Windows', 'Windows Server', '1.2.0', '.NET 10']) expect(screen.queryByText(value)).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const dialog = within(await screen.findByRole('dialog'))
+    const dialog = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
     for (const value of ['agent-a', 'Windows Server', '1.2.0', '.NET 10']) expect(dialog.getByText(value)).toBeVisible()
-    expect(dialog.getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
   })
 
   it('lists reported capabilities under technical details with separate supported, unsupported and unknown states', async () => {
@@ -169,7 +179,7 @@ describe('Backup computer page', () => {
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     expect(screen.queryByRole('heading', { name: 'Bildirilen yetenekler' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const dialog = within(await screen.findByRole('dialog'))
+    const dialog = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
     const section = dialog.getByRole('heading', { name: 'Bildirilen yetenekler' }).parentElement!
     expect(within(section).getAllByText('Destekleniyor')).toHaveLength(2)
     expect(within(section).getByText('Desteklenmiyor')).toBeInTheDocument()
@@ -184,7 +194,7 @@ describe('Backup computer page', () => {
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
     await userEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
   })
 
   it('shows only this computer\'s backup jobs', async () => {
@@ -197,17 +207,32 @@ describe('Backup computer page', () => {
     expect(screen.queryByText('Başka bilgisayarın işi')).not.toBeInTheDocument()
   })
 
-  it('links each job to its edit page and offers the discovered servers only for a computer that can scan', async () => {
+  it('sorts this computer’s jobs by newest creation and lets the reader sort by name', async () => {
+    vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([
+      { id: 'a', name: 'Alfa', agentId: 'agent-a', enabled: true, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', name: 'Zeta', agentId: 'agent-a', enabled: true, createdAt: '2026-02-01T00:00:00Z' },
+    ] as never)
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const section = within(await screen.findByRole('region', { name: 'Bu bilgisayarın yedekleme işleri' }))
+    await section.findByRole('link', { name: 'Zeta' })
+    const names = () => section.getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)
+    expect(names()).toEqual(['Zeta', 'Alfa'])
+    fireEvent.click(within(section.getByRole('columnheader', { name: 'Yedekleme işi' })).getByRole('button'))
+    expect(names()).toEqual(['Alfa', 'Zeta'])
+    expect(section.queryByRole('searchbox')).not.toBeInTheDocument()
+  })
+
+  it('links each job to its details and lists the discovered databases only for a computer that can scan', async () => {
     vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([{ id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, lastRun: null, nextOccurrenceAt: null }] as never)
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] })
     const view = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
-    expect(await screen.findByRole('link', { name: 'Muhasebe' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-1/edit')
-    expect(screen.getByRole('link', { name: 'Bulunan veritabanı sunucuları' })).toHaveAttribute('href', '/tenants/tenant-a/discovery?agentId=agent-a')
+    expect(await screen.findByRole('link', { name: 'Muhasebe' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-1')
+    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
     view.unmount()
     vi.mocked(api.getAgent).mockResolvedValue(agent)
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
-    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' })).not.toBeInTheDocument()
   })
 
   it('tells the reader what to check when an active computer is offline, and says Bilinmiyor when the connection is unknown', async () => {
@@ -232,19 +257,46 @@ describe('Backup computer page', () => {
     await waitFor(() => expect(api.revokeAgent).toHaveBeenCalledWith('tenant-a', 'agent-a'))
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'agents'] }))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-jobs'] })
+  })
+
+  it('colours the confirm button red like the button that opened the dialog', async () => {
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const trigger = await screen.findByRole('button', { name: 'Bilgisayar kaydını iptal et' })
+    fireEvent.click(trigger)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'İptali onayla' }).className).toBe(trigger.className)
+  })
+
+  it('for a revoked computer shows the exact last seen time and no list of databases to back up', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, status: 'Revoked', operationalStatus: 'Revoked', capabilities: supportedAgent.capabilities as AgentDetail['capabilities'], lastSeenAt: new Date(Date.now() - 5000).toISOString() })
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const header = (await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).closest('header')!
+    expect(within(header).queryByText(/şimdi/)).not.toBeInTheDocument()
+    expect(within(header).getByText(/Son görülme: .*\d{4}/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Bu bilgisayarda bulunan veritabanları' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
+    expect(discoveryApi.getDiscoveryInstances).not.toHaveBeenCalled()
+  })
+
+  it('updates the page at once after the revoke: one status, and its jobs inactive', async () => {
+    let revoked = false
+    vi.mocked(api.getAgent).mockImplementation(async () => revoked ? { ...agent, status: 'Revoked', operationalStatus: 'Revoked' } : agent)
+    vi.mocked(api.revokeAgent).mockImplementation(async () => { revoked = true })
+    vi.mocked(jobsApi.getBackupJobs).mockImplementation(async () => [{ id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, agentRevoked: revoked, lastRun: null, nextOccurrenceAt: '2026-11-20T02:00:00Z' }] as never)
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const jobRow = (await screen.findByRole('link', { name: 'Muhasebe' })).closest('tr')!
+    expect(within(jobRow).getByText('Etkin')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Bilgisayar kaydını iptal et' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'İptali onayla' }))
+    const header = (await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).closest('header')!
+    await waitFor(() => expect(within(header).getByText('İptal edildi')).toBeInTheDocument())
+    expect(within(header).queryByText('Çevrimiçi')).not.toBeInTheDocument()
+    await waitFor(() => expect(within(jobRow).getByText('Devre dışı')).toBeInTheDocument())
+    expect(within(jobRow).getByText('Zamanlanmadı')).toBeInTheDocument()
   })
 })
 describe('Adding a computer from the new-computer page', () => {
-  it('cannot query or mutate enrollment administration without admin', () => {
-    tenancy.canAdmin = false
-    mount(<AgentRegisterPage />)
-    expect(screen.getByRole('heading', { level: 1, name: 'Yeni bilgisayar kaydı' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('yöneticisi')
-    expect(api.getEnrollmentPolicy).not.toHaveBeenCalled()
-    expect(api.getEnrollmentTokens).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
-  })
-
   it('shows policy off and disables token creation, while admin may enable enrollment', async () => {
     vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: false })
     mount(<AgentRegisterPage />)
@@ -260,6 +312,7 @@ describe('Adding a computer from the new-computer page', () => {
     await screen.findByRole('switch')
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     expect(await screen.findByDisplayValue('secret-once-only')).toBeInTheDocument()
@@ -292,6 +345,7 @@ describe('Adding a computer from the new-computer page', () => {
     vi.mocked(api.createEnrollmentToken).mockReturnValue(promise)
     const onCreated = vi.fn()
     const view = mount(<AddAgentDialog tenantId="tenant-a" onClose={vi.fn()} onCreated={onCreated} />)
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     fireEvent.click(await screen.findByRole('button', { name: 'İleri' }))
     fireEvent.click(await screen.findByRole('button', { name: "Kayıt anahtarı oluştur" }))
     const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![1]
@@ -306,6 +360,7 @@ describe('Adding a computer from the new-computer page', () => {
     await screen.findByRole('switch')
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Office' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     await screen.findByDisplayValue('secret-once-only')

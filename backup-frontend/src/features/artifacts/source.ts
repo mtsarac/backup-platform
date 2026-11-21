@@ -13,7 +13,7 @@ export function artifactSourceScope(artifact: Pick<BackupArtifact, 'sourcePaths'
 /** The kind of source from the engine the backup reported; null when the response does not say, never a guess. */
 export function artifactSourceType(artifact: Pick<BackupArtifact, 'backupMetadata'>): string | null {
   switch (artifact.backupMetadata?.engine) {
-    case 'mssql': return tx('MSSQL')
+    case 'mssql': return tx('SQL Server')
     case 'postgres': return tx('PostgreSQL')
     case 'file-system': return tx('Dosya yedeği')
     default: return null
@@ -25,7 +25,7 @@ export function artifactSource(artifact: SourceFields) {
   return { type: artifactSourceType(artifact), name: artifact.databaseName || null, agent: artifact.agentName || null }
 }
 
-/** "MSSQL · Accounting · SQL Agent" with missing parts left out. */
+/** "SQL Server · Accounting · SQL Agent" with missing parts left out. */
 export function artifactSourceLabel(artifact: SourceFields): string {
   const { type, name, agent } = artifactSource(artifact)
   return [type, name, agent].filter(Boolean).join(' · ')

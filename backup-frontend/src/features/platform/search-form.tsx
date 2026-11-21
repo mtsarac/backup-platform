@@ -14,6 +14,6 @@ export function SearchForm({ value, onSearch, label, placeholder, className }: {
   function submit(event: FormEvent) { event.preventDefault(); onSearch(draft.trim()) }
   return <form role="search" onSubmit={submit} className={cn('flex min-w-0 flex-1 items-end gap-2', className)}>
     <label className="block min-w-0 flex-1 space-y-1 text-sm font-medium text-text-heading">{tx(label)}<span className="relative block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted" aria-hidden="true" /><TextInput type="search" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={placeholder} className="pl-9 text-sm font-normal" /></span></label>
-    <Button type="submit" variant="outline" className="h-10">{tx("Ara")}</Button>
+    <Button type="submit" variant="outline">{tx("Ara")}</Button>
   </form>
 }

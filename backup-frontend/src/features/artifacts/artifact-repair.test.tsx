@@ -6,10 +6,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import type { BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest } from './types'
-import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
+import { ArtifactDetail } from '@/pages/artifacts/artifact-detail-page'
 
 const state = vi.hoisted(() => ({
-  canOperate: true,
   artifact: undefined as BackupArtifact | undefined,
   repairOp: undefined as ReplicaRepairOperation | undefined,
   startRepairFn: vi.fn(),
@@ -17,7 +16,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/tenancy/use-tenant', () => ({
-  useTenant: () => ({ tenantId: 'tenant-1', canAdmin: true, canOperate: state.canOperate }),
+  useTenant: () => ({ tenantId: 'tenant-1' }),
 }))
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { role: 'UserAdmin' } }) }))
 
@@ -145,7 +144,7 @@ function renderPage() {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/tenants/tenant-1/artifacts/artifact-1']}>
         <Routes>
-          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetailPage />} />
+          <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetail id="artifact-1" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -155,24 +154,24 @@ function renderPage() {
 describe('Manual replica repair frontend flow', () => {
   beforeEach(() => {
     setFeatureFlags({ replicaRepair: true })
-    state.canOperate = true
     state.artifact = undefined
     state.repairOp = undefined
     state.startRepairFn.mockClear()
     state.cancelRepairFn.mockClear()
   })
 
+  const openDetails = () => fireEvent.click(screen.getByRole('button', { name: 'Teknik ayrıntılar' }))
   it('keeps copy counts with replication while preserving destination outcome and stored replica lifecycle', () => {
     state.artifact = sampleArtifact('Failed', true)
     renderPage()
     const answers = within(screen.getByRole('region', { name: 'Kısaca durum' }))
     expect(answers.getByText('Sağlam')).toBeVisible()
     expect(answers.queryByText(/kopyanın bütünlüğü doğrulandı/)).not.toBeInTheDocument()
+    openDetails()
     const replication = within(screen.getByRole('region', { name: 'Çoğaltma' }))
     expect(replication.getByText('1 / 2 doğrulanmış kopya gerekli · 2 hedef')).toBeVisible()
     expect(within(replication.getByRole('list', { name: 'Hedef sonuçları' })).getByText('Doğrulandı')).toBeVisible()
     expect(replication.getByRole('button', { name: 'Onar' })).toBeEnabled()
-    fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
     const replicas = within(screen.getByRole('region', { name: 'Kopyalar' }))
     expect(replicas.getByText('Evet · dosya korunuyor')).toBeVisible()
     expect(replicas.getByText('Doğrulama durumu').closest('div')).toHaveTextContent('Doğrulandı')
@@ -182,22 +181,14 @@ describe('Manual replica repair frontend flow', () => {
     setFeatureFlags({})
     state.artifact = sampleArtifact('Failed', true)
     renderPage()
+    openDetails()
     expect(screen.queryByRole('button', { name: 'Onar' })).not.toBeInTheDocument()
-  })
-
-  it('does not expose replica repair or repair cancellation to Viewer', () => {
-    state.canOperate = false
-    state.artifact = sampleArtifact('Failed', true)
-    renderPage()
-    expect(screen.queryByRole('button', { name: 'Onar' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Onarımı iptal et' })).not.toBeInTheDocument()
-    expect(state.startRepairFn).not.toHaveBeenCalled()
-    expect(state.cancelRepairFn).not.toHaveBeenCalled()
   })
 
   it('renders Repair button for failed destination when verified source exists', async () => {
     state.artifact = sampleArtifact('Failed', true)
     renderPage()
+    openDetails()
 
     const repairButton = screen.getByRole('button', { name: /onar/i })
     expect(repairButton).toBeInTheDocument()
@@ -206,6 +197,7 @@ describe('Manual replica repair frontend flow', () => {
   it('does not render Repair button for verified destination', async () => {
     state.artifact = sampleArtifact('Verified', true)
     renderPage()
+    openDetails()
 
     expect(screen.queryByRole('button', { name: /^onar$/i })).not.toBeInTheDocument()
   })
@@ -213,6 +205,7 @@ describe('Manual replica repair frontend flow', () => {
   it('does not render Repair button when no verified source replica exists', async () => {
     state.artifact = sampleArtifact('Failed', false)
     renderPage()
+    openDetails()
 
     expect(screen.queryByRole('button', { name: /^onar$/i })).not.toBeInTheDocument()
   })
@@ -239,6 +232,7 @@ describe('Manual replica repair frontend flow', () => {
     }
 
     renderPage()
+    openDetails()
 
     const user = userEvent.setup()
     const repairButton = screen.getByRole('button', { name: /^onar$/i })
@@ -283,6 +277,7 @@ describe('Manual replica repair frontend flow', () => {
     }
 
     renderPage()
+    openDetails()
 
     expect(screen.getByText(/Otomatik yeniden deneme bekleniyor \(Deneme 2 \/ 5\)/i)).toBeInTheDocument()
     expect(screen.getAllByText(/StorageUnavailable/i).length).toBeGreaterThanOrEqual(1)
@@ -316,6 +311,7 @@ describe('Manual replica repair frontend flow', () => {
     }
 
     renderPage()
+    openDetails()
 
     expect(screen.getByText(/Yeniden deneme sınırına ulaşıldı \(5 \/ 5\)/i)).toBeInTheDocument()
     expect(screen.getByText(/Son hata: StorageUnavailable/i)).toBeInTheDocument()

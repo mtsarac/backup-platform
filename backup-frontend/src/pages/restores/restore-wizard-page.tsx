@@ -2,40 +2,36 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { PageHeader } from '@/components/ui/page-header'
-import { useArtifact } from '@/features/artifacts/hooks'
+import { useBackup } from '@/features/backups/hooks'
 import { useRestoreTargets } from '@/features/restores/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { FileRestoreWizard } from '@/features/restores/file-restore-wizard'
 import { RestoreWizard } from '@/features/restores/restore-wizard'
-import { AccessDenied } from '@/components/auth/access-denied'
 
 export function RestoreWizardPage() {
   useLanguage()
   const { id = '' } = useParams<{ id: string }>()
-  const { tenantId, canOperate } = useTenant()
-  const artifactQuery = useArtifact(tenantId, id)
-  const targetsQuery = useRestoreTargets(id)
+  const { tenantId } = useTenant()
+  const runQuery = useBackup(id)
+  const latest = runQuery.data?.attempts.flatMap(attempt => attempt.artifacts).at(-1)
+  const targetsQuery = useRestoreTargets(latest?.id ?? '')
+  // A PostgreSQL artifact may carry no database name; the run's configuration always does.
+  const artifact = latest && (targetsQuery.data?.engine === 'file-system' ? latest : { ...latest, databaseName: latest.databaseName ?? runQuery.data?.configuration.database })
 
-  if (!canOperate) {
-    return <div className="space-y-6">
-      <PageHeader title={tx("Yedek dosyasını geri yükle")} crumbs={[{ label: tx('Yedek dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: tx('Yedek dosyası'), to: `/tenants/${tenantId}/artifacts/${id}` }, { label: tx('Geri yükleme') }]} />
-      <AccessDenied what={tx("Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur.")} />
-    </div>
-  }
 
   const title = targetsQuery.data?.engine === 'file-system' ? tx('Dosyaları geri yükle') : targetsQuery.data ? tx('Veritabanını geri yükle') : tx('Yedek dosyasını geri yükle')
   return (
     <div className="space-y-6">
       <PageHeader title={title}
         description={targetsQuery.data?.engine === 'file-system' ? tx('Dosya arşivini özgün veya alternatif konuma, tümüyle ya da seçili yollarla geri yükleyin.') : targetsQuery.data?.engine === 'postgres' ? tx("PostgreSQL pg_dump custom arşivini pg_restore ile hedef PostgreSQL sunucusuna geri yükleyin.") : tx("Doğrulanmış backup'ı aynı Database motoruna güvenli ve denetlenebilir adımlarla geri yükleyin.")}
-        crumbs={[{ label: tx('Yedek dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: artifactQuery.data?.databaseName ?? tx('Yedek dosyası'), to: `/tenants/${tenantId}/artifacts/${id}` }, { label: tx('Geri yükleme') }]}
+        crumbs={[{ label: tx('Yedekleme denemeleri'), to: `/tenants/${tenantId}/backup-runs` }, { label: artifact?.databaseName ?? tx('Yedekleme denemesi'), to: `/tenants/${tenantId}/backup-runs/${id}` }, { label: tx('Geri yükleme') }]}
       />
-      <QueryState isPending={artifactQuery.isPending || targetsQuery.isPending} error={artifactQuery.error || targetsQuery.error}>
-        {artifactQuery.data && targetsQuery.data && (
-          targetsQuery.data.engine === 'file-system' ? <FileRestoreWizard key={`${tenantId}:${id}`} tenantId={tenantId} artifact={artifactQuery.data} targets={targetsQuery.data} /> : <RestoreWizard
+      <QueryState isPending={runQuery.isPending || (Boolean(artifact) && targetsQuery.isPending)} error={runQuery.error || targetsQuery.error} empty={!runQuery.isPending && !artifact} emptyState={<p>{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p>}>
+        {artifact && targetsQuery.data && (
+          targetsQuery.data.engine === 'file-system' ? <FileRestoreWizard key={`${tenantId}:${id}`} tenantId={tenantId} artifact={artifact} targets={targetsQuery.data} /> : <RestoreWizard
             key={`${tenantId}:${id}`}
             tenantId={tenantId}
-            artifact={artifactQuery.data}
+            artifact={artifact}
             targets={targetsQuery.data}
           />
         )}

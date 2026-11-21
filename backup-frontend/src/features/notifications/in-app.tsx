@@ -6,6 +6,7 @@ import { Link, useInRouterContext } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { linkClass } from '@/components/ui/form-styles'
 import { ErrorNotice } from '@/components/ui/notice'
+import { EmptyState } from '@/components/ui/empty-state'
 import { QueryState } from '@/components/data/query-state'
 import { AuthContext } from '@/features/auth/auth-context'
 import { TenantContext } from '@/features/tenancy/tenant-context'
@@ -32,7 +33,7 @@ function shareHref(item: InAppNotification, role?: string, currentTenantId?: str
   if (item.subjectKind !== 'backup_share' && !shareEventTypes[item.type]) return null
   if (role === 'PlatformAdmin') return '/platform/shares'
   const tenantId = item.tenantId || currentTenantId
-  return tenantId ? `/tenants/${encodeURIComponent(tenantId)}/shares` : '/platform/shares'
+  return tenantId ? `/tenants/${encodeURIComponent(tenantId)}/backup-shares` : '/platform/shares'
 }
 
 export function InAppNotifications({ userId }: { userId: string }) {
@@ -84,8 +85,8 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
     <Button variant="outline" size="sm" aria-expanded={open} aria-controls="in-app-notifications" onClick={() => setOpen(!open)}>
       <Bell aria-hidden="true" className="size-4" />{tx('Bildirimler')} {unread > 0 && <span>({unread})</span>}
     </Button>
-    {open && <section id="in-app-notifications" aria-label={tx('Bildirimler')} className="absolute right-0 z-20 mt-2 max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-auto rounded-lg border border-border bg-surface p-4 shadow-overlay">
-      <QueryState isPending={list.isPending} error={list.error} empty={list.data?.length === 0}>
+    {open && <section id="in-app-notifications" aria-label={tx('Bildirimler')} tabIndex={0} className="absolute right-0 z-20 mt-2 max-h-[min(70vh,32rem)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-surface-raised p-4 shadow-overlay">
+      <QueryState isPending={list.isPending} error={list.error} empty={list.data?.length === 0} emptyState={<EmptyState message={tx("Henüz bildiriminiz yok.")} action={<Button disabled={list.isFetching} onClick={() => void list.refetch()}>{tx('Yenile')}</Button>} />}>
         {markRead.error && <ErrorNotice error={markRead.error} />}
         <ul className="space-y-3" aria-live="polite">{list.data?.map((item) => {
           const href = shareHref(item, auth?.user?.role, tenant?.tenantId)

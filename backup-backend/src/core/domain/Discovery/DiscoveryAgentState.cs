@@ -22,8 +22,8 @@ public sealed class DiscoveryAgentState : ITenantOwned
     public const int MaximumIntervalMinutes = 10_080;
     /// <summary>A claimed scan that has not reported within this time is considered dead and may be claimed again.</summary>
     public static readonly TimeSpan RunningTimeout = TimeSpan.FromMinutes(10);
-    /// <summary>Manual requests closer together than this are refused.</summary>
-    public static readonly TimeSpan MinimumManualInterval = TimeSpan.FromSeconds(30);
+    /// <summary>A manual request this soon after the last scan was requested or started is refused; an agent-wide request while one is still pending is simply acknowledged.</summary>
+    public static readonly TimeSpan MinimumManualInterval = TimeSpan.FromSeconds(5);
     public const double JitterFraction = 0.10;
 
     private DiscoveryAgentState() { TenantId = null!; AgentId = null!; SourcesJson = "[]"; }

@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
@@ -48,12 +49,12 @@ public interface IPlatformAdministrationStore
 {
     Task<PlatformCounts> GetCountsAsync(DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(string? search, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(ListQuery query, CancellationToken cancellationToken);
     Task<PlatformTenantDetail?> GetTenantAsync(TenantId tenantId, CancellationToken cancellationToken);
     Task<PlatformTenantItem> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformTenantItem>> RenameTenantAsync(TenantId tenantId, string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<PagedResult<PlatformUserItem>> ListUsersAsync(string? search, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformUserItem>> ListUsersAsync(ListQuery query, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformUserItem>> CreateUserAsync(
         UserId userId, string displayName, string username, string email, string passwordHash, UserRole role, IReadOnlyList<TenantId> tenantIds, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformUserItem>> UpdateUserAsync(
@@ -65,11 +66,11 @@ public interface IPlatformAdministrationStore
     Task<PlatformChange<PlatformUserItem>> AssignTemporaryPasswordAsync(
         UserId targetUserId, string passwordHash, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     /// <summary>Null when the tenant does not exist.</summary>
-    Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, ListQuery query, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformMembershipItem>> RemoveMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<PagedResult<PlatformAuditItem>> ListAuditAsync(TenantId? tenantId, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<PlatformAuditItem>> ListAuditAsync(TenantId? tenantId, ListQuery query, CancellationToken cancellationToken);
 }

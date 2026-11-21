@@ -66,7 +66,7 @@ export function LoginPage() {
       setPassword('')
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Kullanıcı adı veya şifre hatalı.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describeError(error))
+      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Kullanıcı adı veya şifre hatalı.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describeError(error))
     } finally {
       setLoading(false)
     }
@@ -75,15 +75,15 @@ export function LoginPage() {
     e.preventDefault()
     setError(null)
     if (newPassword.length < 12) {
-      setError({ what: tx('Şifre en az 12 karakter olmalıdır.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Daha uzun bir şifre girin.'), technical: [] })
+      setError({ what: tx('Şifre en az 12 karakter olmalıdır.'), action: tx('Daha uzun bir şifre girin.'), technical: [] })
       return
     }
     if (newPassword !== newPasswordConfirm) {
-      setError({ what: tx('Yeni şifreler eşleşmiyor.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Lütfen yeni şifreyi tekrar kontrol edin.'), technical: [] })
+      setError({ what: tx('Yeni şifreler eşleşmiyor.'), action: tx('Lütfen yeni şifreyi tekrar kontrol edin.'), technical: [] })
       return
     }
     if (newPassword === currentPasswordForChange) {
-      setError({ what: tx('Yeni şifre mevcut şifreyle aynı olamaz.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Farklı bir şifre seçin.'), technical: [] })
+      setError({ what: tx('Yeni şifre mevcut şifreyle aynı olamaz.'), action: tx('Farklı bir şifre seçin.'), technical: [] })
       return
     }
     setLoading(true)
@@ -104,11 +104,11 @@ export function LoginPage() {
       if (err instanceof ApiError && err.status === 400) {
         const errCode = err.code
         if (errCode === 'password_same_as_current') {
-          setError({ what: tx('Yeni şifre mevcut şifreyle aynı olamaz.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Farklı bir şifre seçin.'), technical: [] })
+          setError({ what: tx('Yeni şifre mevcut şifreyle aynı olamaz.'), action: tx('Farklı bir şifre seçin.'), technical: [] })
         } else if (errCode === 'password_common_or_breached') {
-          setError({ what: tx('Bu şifre çok yaygın veya sızdırılmış listelerde yer alıyor. Farklı bir şifre seçin.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Daha güvenli ve tahmin edilmesi zor bir şifre belirleyin.'), technical: [] })
+          setError({ what: tx('Bu şifre çok yaygın veya sızdırılmış listelerde yer alıyor. Farklı bir şifre seçin.'), action: tx('Daha güvenli ve tahmin edilmesi zor bir şifre belirleyin.'), technical: [] })
         } else if (errCode === 'password_too_short') {
-          setError({ what: tx('Şifre en az 12 karakter olmalıdır.'), dataImpact: tx('Şifre güncellenmedi.'), action: tx('Daha uzun bir şifre girin.'), technical: [] })
+          setError({ what: tx('Şifre en az 12 karakter olmalıdır.'), action: tx('Daha uzun bir şifre girin.'), technical: [] })
         } else {
           setError(describeError(err))
         }
@@ -145,7 +145,7 @@ export function LoginPage() {
       if (error instanceof ApiError && error.status === 429) {
         setError({ what: tx('Çok fazla başarısız deneme.'), dataImpact: tx('Giriş geçici olarak kilitlendi.'), action: tx('Lütfen daha sonra tekrar deneyin.'), technical: [] })
       } else if (error instanceof ApiError && (error.status === 401 || error.status === 400)) {
-        setError({ what: factorMode === 'totp' ? tx('Doğrulama kodu hatalı veya süresi dolmuş.') : tx('Kurtarma kodu geçersiz veya daha önce kullanılmış.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] })
+        setError({ what: factorMode === 'totp' ? tx('Doğrulama kodu hatalı veya süresi dolmuş.') : tx('Kurtarma kodu geçersiz veya daha önce kullanılmış.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] })
       } else {
         setError(describeError(error))
       }
@@ -161,7 +161,7 @@ export function LoginPage() {
       await loginWithPasskey?.(rememberMe, loginIdentifier.trim() || undefined)
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Geçiş anahtarı doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describePasskeyError(error))
+      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Geçiş anahtarı doğrulaması başarısız oldu.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describePasskeyError(error))
     } finally {
       setLoading(false)
     }
@@ -175,7 +175,7 @@ export function LoginPage() {
       setPassword('')
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('İkinci faktör doğrulaması başarısız oldu.'), dataImpact: tx('Oturum açılmadı; verileriniz değişmedi.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : factorMode === 'passkey' ? describePasskeyError(error) : describeError(error))
+      setError(error instanceof ApiError && error.status === 401 ? { what: tx('İkinci faktör doğrulaması başarısız oldu.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : factorMode === 'passkey' ? describePasskeyError(error) : describeError(error))
     } finally {
       setLoading(false)
     }
@@ -199,7 +199,7 @@ export function LoginPage() {
       <main className="flex min-h-svh items-center justify-center px-4 py-10">
         <div className="w-full max-w-sm space-y-6">
           <BrandMark size="sm" />
-          <h1 className="text-2xl font-semibold text-text-heading">
+          <h1 className="text-xl font-semibold text-text-heading">
             {secondFactorPending ? (factorMode === 'passkey' ? tx('İkinci faktör doğrulaması') : tx('İki faktörlü doğrulama')) : tx('Giriş yapın')}
           </h1>
           {passwordChangePending ? (

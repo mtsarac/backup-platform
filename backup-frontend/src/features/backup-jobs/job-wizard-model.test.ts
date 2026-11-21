@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { initialValues, switchEngine, type EngineMemory } from './job-form-values'
-import { changedSections, jobSteps, stepOfField, validateJob, validateStep } from './job-wizard-model'
+import { hasNonStandardSettings, initialValues, switchEngine, type EngineMemory } from './job-form-values'
+import { jobSteps, stepOfField, validateEdit, validateJob, validateStep } from './job-wizard-model'
+import type { BackupJob } from './types'
 
 describe('job steps', () => {
   it('has four steps in order', () => {
@@ -9,7 +10,7 @@ describe('job steps', () => {
   it.each([
     ['name', 'source'], ['agentId', 'source'], ['configuration.host', 'source'], ['configuration.databaseLogin.password', 'source'], ['configuration.files.paths[0]', 'source'],
     ['configuration.destinations[0].storageConnectionId', 'storage'], ['configuration.requiredVerifiedReplicaCount', 'storage'],
-    ['schedule.cronExpression', 'schedule'], ['retryPolicy.maxAttempts', 'schedule'], ['retention.keepForSeconds', 'schedule'], ['overlapPolicy', 'schedule'],
+    ['schedule.cronExpression', 'schedule'], ['retryPolicy.maxAttempts', 'schedule'], ['retention.keepForSeconds', 'protection'], ['overlapPolicy', 'schedule'],
     ['configuration.encryptionPolicy', 'protection'], ['configuration.checksumPolicy', 'protection'], ['configuration.copyOnly', 'protection'],
   ] as const)('routes the server field %s to %s', (field, step) => {
     expect(stepOfField(field)).toBe(step)
@@ -64,11 +65,29 @@ describe('engine switching', () => {
   })
 })
 
-describe('changed sections', () => {
-  it('names only the sections that differ from the saved values', () => {
-    const saved = initialValues()
-    expect(changedSections(saved, saved)).toEqual([])
-    const edited = { ...saved, retention: { ...saved.retention, keepForSeconds: 1 }, configuration: { ...saved.configuration, encryptionPolicy: 'Required' as const, storagePrefix: 'p' } }
-    expect(changedSections(saved, edited)).toEqual(['storage', 'schedule', 'protection'])
+describe('editing an existing job', () => {
+  const values = initialValues()
+  it('checks only what a section form shows, so hidden saved values never block a save', () => {
+    expect(validateEdit('source', { ...values, name: ' ' })).toEqual({ name: expect.any(String) })
+    expect(validateEdit('schedule', { ...values, retry: { ...values.retry, maxAttempts: 0 } })).toEqual({})
+    expect(validateEdit('protection', values)).toEqual({})
+    const files = { ...values.configuration, engine: 'file-system' as const, database: 'src', files: { paths: [], includes: [], excludes: [], symlinkPolicy: 'Skip' as const } }
+    expect(Object.keys(validateEdit('source', { ...values, sourceMode: 'manual' as const, name: 'n', configuration: files }))).toEqual(['configuration.files.paths'])
+  })
+  const standard = { ...initialValues().configuration, host: 'h', database: 'd' }
+  const job = { name: 'n', agentId: 'a', configuration: standard, retryPolicy: initialValues().retry, overlapPolicy: 'Skip', schedule: initialValues().schedule, retention: initialValues().retention } as BackupJob
+  it.each([
+    ['a standard job', {}, false],
+    ['a retry count', { retryPolicy: { ...job.retryPolicy, maxAttempts: 9 } }, true],
+    ['a queueing overlap policy', { overlapPolicy: 'Queue' }, true],
+    ['a missed-run tolerance', { schedule: { ...job.schedule!, missedRunGraceSeconds: 5 } }, true],
+    ['a delete grace period', { retention: { ...job.retention!, deleteGracePeriodSeconds: 5 } }, true],
+    ['a storage prefix', { configuration: { ...standard, storagePrefix: 'x' } }, true],
+    ['a checksum policy', { configuration: { ...standard, checksumPolicy: 'Disabled' } }, true],
+    ['a copy-only flag other than the engine default', { configuration: { ...standard, copyOnly: false } }, true],
+    ['the PostgreSQL defaults', { configuration: { ...standard, engine: 'postgres', copyOnly: false, checksumPolicy: 'Preferred' } }, false],
+    ['file filters', { configuration: { ...standard, engine: 'file-system', files: { paths: ['.'], includes: ['**'], excludes: ['*.tmp'], symlinkPolicy: 'Skip' } } }, true],
+  ])('reports %s as non-standard: %s', (_name, patch, expected) => {
+    expect(hasNonStandardSettings({ ...job, ...patch } as BackupJob)).toBe(expected)
   })
 })

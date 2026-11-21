@@ -123,6 +123,15 @@ public sealed class BackupScheduleService(
         return BackupOrchestrator.ToView(job, now);
     }
 
+    /// <summary>Retires the job for good: its schedule stops and nothing starts again. False when the job does not exist; throws <see cref="BackupJobArchivedException"/> when it already is archived.</summary>
+    public async Task<bool> ArchiveAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken, UserId actor)
+    {
+        var now = time.GetUtcNow();
+        if (await schedules.ArchiveJobAsync(tenantId, jobId, actor, now, cancellationToken) is null) return false;
+        await TrySynchronizeAsync(tenantId, jobId, cancellationToken);
+        return true;
+    }
+
     public async Task<IReadOnlyList<BackupOccurrenceView>?> ListOccurrencesAsync(TenantId tenantId, Guid jobId, int limit, CancellationToken cancellationToken)
     {
         if (await runs.GetJobAsync(tenantId, jobId, cancellationToken) is null) return null;

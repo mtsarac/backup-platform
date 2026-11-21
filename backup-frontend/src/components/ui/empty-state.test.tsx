@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { EmptyState } from './empty-state'
 
 describe('EmptyState', () => {
@@ -9,14 +10,16 @@ describe('EmptyState', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1)
   })
 
-  it('sends a user without permission to their administrator instead of showing the action', () => {
-    render(<EmptyState message="Henüz depolama bağlantısı yok." action={<button>Bağlantı ekle</button>} canAct={false} />)
-    expect(screen.getByText('Yöneticinize danışın')).toBeInTheDocument()
+  it('shows no call to action when nothing can be done', () => {
+    render(<EmptyState message="Henüz paylaşım yok." />)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('shows no call to action when nothing can be done', () => {
-    render(<EmptyState message="Kayıt bulunamadı." />)
-    expect(screen.queryByText('Yöneticinize danışın')).not.toBeInTheDocument()
+  it('offers "Filtreleri temizle" as the one action when filters hid everything', async () => {
+    const clear = vi.fn()
+    render(<EmptyState message="Bu filtrelerde yedekleme denemesi yok." action={<button>Yedekle</button>} onClearFilters={clear} />)
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(clear).toHaveBeenCalledOnce()
   })
 })

@@ -131,8 +131,8 @@ internal sealed class BackupApiScenario : IAsyncDisposable
         return World.SendAgentAsync(HttpMethod.Post, $"/api/agent/tasks/{claim.AttemptId}/{action}", caller.CredentialId, caller.Secret, body: body);
     }
 
-    public Task<HttpResponseMessage> StartAttemptRawAsync(TaskClaim claim, Guid? token = null) => AgentCallAsync(claim, "start",
-        new BackupTaskStartRequest { LeaseToken = token ?? claim.LeaseToken, SoftwareVersion = "1.2.3", ProtocolVersion = "1.0", Platform = "linux" });
+    public Task<HttpResponseMessage> StartAttemptRawAsync(TaskClaim claim, Guid? token = null, EnrolledAgent? agent = null) => AgentCallAsync(claim, "start",
+        new BackupTaskStartRequest { LeaseToken = token ?? claim.LeaseToken, SoftwareVersion = "1.2.3", ProtocolVersion = "1.0", Platform = "linux" }, agent);
 
     public Task<HttpResponseMessage> RenewRawAsync(TaskClaim claim, Guid? token = null) =>
         AgentCallAsync(claim, "lease", new BackupTaskLeaseRequest { LeaseToken = token ?? claim.LeaseToken });
@@ -140,7 +140,7 @@ internal sealed class BackupApiScenario : IAsyncDisposable
     public Task<HttpResponseMessage> ProgressRawAsync(TaskClaim claim, Guid? token = null) =>
         AgentCallAsync(claim, "progress", new BackupTaskProgressRequest { LeaseToken = token ?? claim.LeaseToken, Stage = "BackingUp", Percent = 10 });
 
-    public Task<HttpResponseMessage> CompleteRawAsync(TaskClaim claim, BackupTaskCompletionRequest request) => AgentCallAsync(claim, "complete", WithDestinationReports(request));
+    public Task<HttpResponseMessage> CompleteRawAsync(TaskClaim claim, BackupTaskCompletionRequest request, EnrolledAgent? agent = null) => AgentCallAsync(claim, "complete", WithDestinationReports(request), agent);
 
     // An agent reports every destination it transferred to; a test that only names the artifact's replicas sends the report a real agent would.
     private static BackupTaskCompletionRequest WithDestinationReports(BackupTaskCompletionRequest request) =>
@@ -156,9 +156,9 @@ internal sealed class BackupApiScenario : IAsyncDisposable
     public Task<HttpResponseMessage> FailRawAsync(TaskClaim claim, string code, Guid? token = null) =>
         CompleteRawAsync(claim, new BackupTaskCompletionRequest { LeaseToken = token ?? claim.LeaseToken, Status = "Failed", FailureCode = code });
 
-    public async Task StartAttemptAsync(TaskClaim claim)
+    public async Task StartAttemptAsync(TaskClaim claim, EnrolledAgent? agent = null)
     {
-        using var response = await StartAttemptRawAsync(claim);
+        using var response = await StartAttemptRawAsync(claim, agent: agent);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
@@ -182,7 +182,7 @@ internal sealed class BackupApiScenario : IAsyncDisposable
     }
 
     /// <summary>A completion that passes the backend's artifact validation for the job created by <see cref="JobBody"/>.</summary>
-    public BackupTaskCompletionRequest SuccessRequest(TaskClaim claim, Guid? token = null)
+    public BackupTaskCompletionRequest SuccessRequest(TaskClaim claim, Guid? token = null, string database = "master")
     {
         var now = Clock.GetUtcNow();
         var checksum = new string('b', 64);
@@ -199,7 +199,7 @@ internal sealed class BackupApiScenario : IAsyncDisposable
                 SourceMetadataJson = JsonSerializer.Serialize(new
                 {
                     engine = "mssql",
-                    databaseName = "master",
+                    databaseName = database,
                     backupType = "Full",
                     backupStartedAt = now.AddSeconds(-10),
                     backupFinishedAt = now.AddSeconds(-5),

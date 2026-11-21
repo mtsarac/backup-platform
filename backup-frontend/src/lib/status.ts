@@ -219,10 +219,10 @@ const dictionary = {
 
 export type StatusDomain = keyof typeof dictionary
 
-/** Level and label for a status. Anything the dictionary does not know is shown as itself, neutral, so nothing is hidden. */
+/** Unknown statuses are neutral and never expose raw wire values. */
 export function statusMeta(domain: StatusDomain, status: string): StatusMeta {
   const entries: Record<string, StatusMeta> = dictionary[domain]
-  return Object.hasOwn(entries, status) ? entries[status] : { level: 'neutral', label: status }
+  return Object.hasOwn(entries, status) ? entries[status] : { level: 'neutral', label: tx('Bilinmiyor') }
 }
 
 /** The one label-map helper: the plain-language label of a status, for filters and sentences. */

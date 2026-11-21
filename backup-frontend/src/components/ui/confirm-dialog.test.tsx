@@ -35,7 +35,7 @@ describe('ConfirmDialog', () => {
     const onConfirm = vi.fn()
     render(<ConfirmDialog open onClose={() => {}} title="Silinsin mi?" consequence={consequence} pending error={new ApiError(409, { code: 'connection_in_use' })} onConfirm={onConfirm} confirmLabel="Sil" />)
     expect(screen.getByRole('button', { name: 'İşleniyor…' })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Ne yapmalı')
+    expect(screen.getByRole('alert')).toHaveTextContent('Önce bu bağlantıyı kullanan işleri başka bir depolamaya taşıyın.')
   })
 })
 

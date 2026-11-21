@@ -1,6 +1,9 @@
+using System.Linq.Expressions;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.ManagedService;
 using BackupPlatform.ManagedService.Administration;
@@ -26,31 +29,37 @@ namespace BackupPlatform.Infrastructure.ManagedService;
 /// </remarks>
 public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbContext> options, IStorageUsageService usage, TimeProvider time) : IManagedServiceStore
 {
-    public async Task<PagedResult<PlanView>> ListPlansAsync(PlanFilter filter, int page, int pageSize, CancellationToken cancellationToken)
+    private sealed class PlanRow
+    {
+        public required Plan Plan { get; init; }
+        public required int TenantCount { get; init; }
+    }
+
+    private static readonly SortMap<PlanRow> PlanSorts = SortMap<PlanRow>.Create()
+        .Natural("name", row => row.Plan.Name)
+        .Value("enabled", row => row.Plan.Enabled)
+        .Value("storageLimitBytes", row => row.Plan.StorageLimitBytes)
+        .Value("tenantCount", row => row.TenantCount)
+        .Date("createdAt", row => row.Plan.CreatedAt);
+
+    public async Task<PagedResult<PlanView>> ListPlansAsync(bool? enabled, ListQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var plans = context.Plans.AsNoTracking().AsQueryable();
-        if (filter.Enabled is { } enabled)
+        if (enabled is { } only)
         {
-            plans = plans.Where(plan => plan.Enabled == enabled);
+            plans = plans.Where(plan => plan.Enabled == only);
         }
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            var term = filter.Search.Trim().ToLowerInvariant();
-            plans = plans.Where(plan => plan.NormalizedName.Contains(term));
-        }
-        var total = await plans.LongCountAsync(cancellationToken);
-        var rows = await plans
-            .OrderBy(plan => plan.IsSystem).ThenBy(plan => plan.StorageLimitBytes == null).ThenBy(plan => plan.StorageLimitBytes)
-            .ThenBy(plan => plan.NormalizedName).ThenBy(plan => plan.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize)
-            .Select(plan => new
+        var page = await plans.Select(plan => new PlanRow
             {
                 Plan = plan,
                 TenantCount = context.TenantSubscriptions.Count(subscription =>
                     subscription.PlanId == plan.Id && (subscription.Status == SubscriptionStatus.Active || subscription.Status == SubscriptionStatus.Suspended))
-            }).ToListAsync(cancellationToken);
-        return new PagedResult<PlanView>(rows.Select(row => ToView(row.Plan, row.TenantCount)).ToList(), total, page, pageSize);
+            })
+            .ApplySearch(query, row => row.Plan.Name)
+            .ApplySort(PlanSorts, query, "createdAt", row => row.Plan.Id)
+            .ToPagedResultAsync(query, cancellationToken);
+        return new PagedResult<PlanView>(page.Items.Select(row => ToView(row.Plan, row.TenantCount)).ToList(), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<ManagedServiceChange<PlanView>> CreatePlanAsync(Plan plan, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
@@ -200,21 +209,27 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         return (true, row is null ? null : (await ToRecordsAsync(context, [row], cancellationToken))[0]);
     }
 
-    public async Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, int page, int pageSize, CancellationToken cancellationToken)
+    /// <summary>The effective status users see (<see cref="TenantSubscription.EffectiveStatusAt"/>): an open row past its end is Expired.</summary>
+    private static Expression<Func<Row, SubscriptionStatus>> EffectiveStatus(DateTimeOffset now) => row =>
+        (row.Subscription.Status == SubscriptionStatus.Active || row.Subscription.Status == SubscriptionStatus.Suspended) && row.Subscription.EndsAt != null && row.Subscription.EndsAt <= now
+            ? SubscriptionStatus.Expired : row.Subscription.Status;
+
+    public async Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
         }
-        var query = Rows(context, tenantId);
-        var total = await query.LongCountAsync(cancellationToken);
-        var rows = await query
-            .OrderByDescending(item => item.Subscription.CreatedAt)
-            .ThenBy(item => item.Subscription.Status == SubscriptionStatus.Active || item.Subscription.Status == SubscriptionStatus.Suspended ? 0 : 1)
-            .ThenByDescending(item => item.Subscription.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-        return new PagedResult<SubscriptionRecord>(await ToRecordsAsync(context, rows, cancellationToken), total, page, pageSize);
+        var sorts = SortMap<Row>.Create()
+            .Date("startsAt", row => row.Subscription.StartsAt)
+            .Text("plan", row => row.Plan.Name)
+            .Ordinal("status", EffectiveStatus(now), SubscriptionStatus.Suspended, SubscriptionStatus.Superseded, SubscriptionStatus.Active, SubscriptionStatus.Expired);
+        var page = await Rows(context, tenantId)
+            .ApplySearch(query, row => row.Plan.Name)
+            .ApplySort(sorts, query, "startsAt", row => row.Subscription.Id)
+            .ToPagedResultAsync(query, cancellationToken);
+        return new PagedResult<SubscriptionRecord>(await ToRecordsAsync(context, [.. page.Items], cancellationToken), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<ManagedServiceChange<SubscriptionAssignment>> AssignPlanAsync(

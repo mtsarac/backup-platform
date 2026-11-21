@@ -12,10 +12,9 @@ async function ids(ctx, tenantId) {
 }
 const tenantPages = (i) => [
   ['dashboard', ''], ['agents', '/agents'], i.agent && ['agent-detail', '/agents/' + i.agent], ['enrollment', '/enrollment'], ['jobs', '/backup-jobs'], ['job-wizard', '/backup-jobs/new'],
-  i.job && ['job-edit', `/backup-jobs/${i.job}/edit`], ['runs', '/backup-runs'], i.run && ['run-detail', '/backup-runs/' + i.run], ['artifacts', '/artifacts'],
-  i.artifact && ['artifact-detail', '/artifacts/' + i.artifact], i.artifact && ['restore-wizard', `/artifacts/${i.artifact}/restore`], ['restores', '/restores'],
-  i.restore && ['restore-detail', '/restores/' + i.restore], ['storage', '/storage'], ['storage-usage', '/storage/usage'], ['storage-providers', '/storage/providers'],
-  ['storage-conn-new', '/storage/connections/new'], i.conn && ['storage-conn-detail', '/storage/connections/' + i.conn], ['discovery', '/discovery'], ['bandwidth', '/upload-bandwidth'],
-  ['notifications', '/notifications'], ['encryption', '/encryption'],
+  i.job && ['job-detail', '/backup-jobs/' + i.job], ['runs', '/backup-runs'], i.run && ['run-detail', '/backup-runs/' + i.run], i.run && ['restore-wizard', `/backup-runs/${i.run}/restore`], ['restores', '/restores'],
+  i.restore && ['restore-detail', '/restores/' + i.restore], ['storage', '/storage'],
+  ['storage-conn-new', '/storage/connections/new'], i.conn && ['storage-conn-detail', '/storage/connections/' + i.conn], ['discovery', '/agents/databases'],
+  ['settings', '/settings'], ['recovery-key', '/settings/recovery-key'], ['bandwidth', '/settings/bandwidth'],
 ].filter(Boolean);
 module.exports = { ids, tenantPages };

@@ -1,5 +1,6 @@
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Backups;
@@ -298,7 +299,7 @@ internal sealed class FlakyRetentionStore(IBackupRetentionStore inner) : IBackup
     public Task<IReadOnlyList<BackupArtifactRecord>> ListArtifactsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken) =>
         inner.ListArtifactsAsync(tenantId, jobId, limit, cancellationToken);
 
-    public Task<BackupArtifactPage<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken) =>
+    public Task<PagedResult<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken) =>
         inner.QueryArtifactsAsync(tenantId, query, cancellationToken);
 
     public Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken) =>

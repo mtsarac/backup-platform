@@ -462,14 +462,14 @@ public sealed class RestoreTaskWorkerTests
     }
 
     [Fact]
-    public async Task Missing_default_staging_fails_the_restore_as_staging_invalid_before_anything_is_touched()
+    public async Task Missing_default_staging_fails_the_restore_as_agent_not_configured_before_anything_is_touched()
     {
         await using var harness = new RestoreTaskHarness(staging: false);
         harness.Start();
         Assert.True(harness.Worker.TryPublish(harness.Envelope()));
         await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "staging error result");
         var completion = Assert.Single(harness.Client.Completions);
-        Assert.Equal("StagingInvalid", completion.FailureCode);
+        Assert.Equal("AgentNotConfigured", completion.FailureCode);
         Assert.Equal("NotModified", completion.TargetState);
         Assert.Empty(harness.Pipeline.Calls);
     }

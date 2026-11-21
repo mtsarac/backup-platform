@@ -23,7 +23,7 @@ install -d -m 0755 -o backup-agent -g backup-agent "$base"
 runuser -u backup-agent -- install -d -m 0755 "$base/releases"
 [[ ! -L /var/lib/backup-platform-agent ]] || { printf 'Unsafe state root.\n' >&2; exit 1; }
 install -d -m 0750 -o root -g backup-agent /var/lib/backup-platform-agent
-for directory in identity staging updates; do
+for directory in identity staging backups updates; do
   [[ ! -L "/var/lib/backup-platform-agent/$directory" ]] || { printf 'Unsafe state directory.\n' >&2; exit 1; }
   install -d -m 0700 -o backup-agent -g backup-agent "/var/lib/backup-platform-agent/$directory"
 done

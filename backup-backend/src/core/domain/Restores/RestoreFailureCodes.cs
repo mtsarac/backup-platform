@@ -36,9 +36,13 @@ public static class RestoreFailureCodes
     public const string InvalidConfiguration = "InvalidConfiguration";
     public const string UnsupportedCapability = "UnsupportedCapability";
     public const string StagingInvalid = "StagingInvalid";
+    /// <summary>The agent is not set up for the work (staging folder, local storage volume or database client tools missing); only a change on the agent helps.</summary>
+    public const string AgentNotConfigured = "AgentNotConfigured";
     public const string InternalError = "InternalError";
     /// <summary>The backup restored, but the restored database did not pass the engine's integrity or data-read checks.</summary>
     public const string VerificationFailed = "VerificationFailed";
+    /// <summary>The database server's TLS certificate could not be verified as trusted; a restore may be requested again with the owner's explicit decision to trust it.</summary>
+    public const string ServerCertificateUntrusted = "ServerCertificateUntrusted";
 
     // Outcomes that are not agent-reported failures.
     public const string Cancelled = "Cancelled";
@@ -52,7 +56,7 @@ public static class RestoreFailureCodes
         BackupInvalid, BackupTypeUnsupported, IncompatibleVersion, FileMappingFailed,
         PreCheckFailed, TargetDatabaseExists, TargetDatabaseNotFound, TargetInUse, TargetProtected, InsufficientDiskSpace,
         SqlRestoreFailed, DatabaseUnavailable, OperationTimedOut, AuthenticationFailed, PermissionDenied,
-        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError, VerificationFailed
+        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError, VerificationFailed, ServerCertificateUntrusted, AgentNotConfigured
     };
 
     /// <summary>Codes an agent may report together with a Failed outcome.</summary>

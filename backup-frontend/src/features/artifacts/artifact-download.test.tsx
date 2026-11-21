@@ -4,16 +4,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactDownload } from './artifact-download'
 import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './api'
-import type { DownloadAvailability, DownloadStatus } from './api'
+import type { DownloadAvailability } from './api'
 
 vi.mock('./api', () => ({ getDownloadAvailability: vi.fn(), getDownloadStatus: vi.fn(), prepareDownload: vi.fn() }))
 const availability: DownloadAvailability = { available: true, reason: null, checksum: 'expected-sha256', sizeBytes: 4096, format: 'v1-plain', replicas: [
   { replicaId: 'central', storageProvider: 'Central', storageTarget: 'Managed storage', available: true, reason: null },
   { replicaId: 'local', storageProvider: 'Local', storageTarget: 'Agent storage', available: false, reason: 'agent_unavailable' },
 ] }
-function mount(tenantId = 'tenant-a', canAdmin = true, eligible = true) {
+function mount(tenantId = 'tenant-a', eligible = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const view = render(<QueryClientProvider client={client}><ArtifactDownload tenantId={tenantId} artifactId="artifact-a" canAdmin={canAdmin} eligible={eligible} /></QueryClientProvider>)
+  const view = render(<QueryClientProvider client={client}><ArtifactDownload tenantId={tenantId} artifactId="artifact-a" eligible={eligible} /></QueryClientProvider>)
   return { client, ...view }
 }
 beforeEach(() => {
@@ -76,12 +76,8 @@ describe('secure Backup download', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('sağlama toplamı doğrulaması başarısız')
     expect(click).not.toHaveBeenCalled()
   })
-  it('denies non-admin and deletion-pending artifacts without requesting availability', () => {
+  it('denies deletion-pending artifacts without requesting availability', () => {
     mount('tenant-a', false)
-    expect(screen.getByText(/yalnızca Sahip/)).toBeInTheDocument()
-    expect(getDownloadAvailability).not.toHaveBeenCalled()
-    cleanup()
-    mount('tenant-a', true, false)
     expect(screen.getByRole('status')).toHaveTextContent('siliniyor veya silinmiş')
     expect(getDownloadAvailability).not.toHaveBeenCalled()
   })
@@ -106,22 +102,10 @@ describe('secure Backup download', () => {
     await screen.findByText("Sağlama toplamı kopyalandı.")
     expect(writeText).toHaveBeenCalledWith('expected-sha256')
     vi.mocked(getDownloadAvailability).mockResolvedValue({ ...availability, checksum: 'tenant-b-checksum' })
-    rerender(<QueryClientProvider client={client}><ArtifactDownload tenantId="tenant-b" artifactId="artifact-a" canAdmin eligible /></QueryClientProvider>)
+    rerender(<QueryClientProvider client={client}><ArtifactDownload tenantId="tenant-b" artifactId="artifact-a" eligible /></QueryClientProvider>)
     expect(screen.queryByText('expected-sha256')).not.toBeInTheDocument()
     await screen.findByText('tenant-b-checksum')
     expect(getDownloadAvailability).toHaveBeenLastCalledWith('tenant-b', 'artifact-a', expect.any(AbortSignal))
     vi.unstubAllGlobals()
-  })
-  it('does not start a pending download after permissions are revoked', async () => {
-    const deferred = Promise.withResolvers<DownloadStatus>()
-    vi.mocked(getDownloadStatus).mockReturnValue(deferred.promise)
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    const { client, rerender } = mount()
-    fireEvent.click(await screen.findByRole('button', { name: "Yedeklemeyi İndir" }))
-    await waitFor(() => expect(getDownloadStatus).toHaveBeenCalled())
-    rerender(<QueryClientProvider client={client}><ArtifactDownload tenantId="tenant-a" artifactId="artifact-a" canAdmin={false} eligible /></QueryClientProvider>)
-    deferred.resolve({ sessionId: 'session-a', state: 'Ready', transferredBytes: 0 })
-    await screen.findByText(/yalnızca Sahip/)
-    expect(click).not.toHaveBeenCalled()
   })
 })

@@ -35,7 +35,7 @@ export function ForgotPasswordPage() {
       setSent(true)
     } catch (err) {
       setError(err instanceof ApiError && err.status === 429
-        ? { what: tx('Çok fazla istek gönderildi.'), dataImpact: tx('Şifreniz değişmedi.'), action: tx('Bir süre sonra tekrar deneyin.'), technical: [] }
+        ? { what: tx('Çok fazla istek gönderildi.'), action: tx('Bir süre sonra tekrar deneyin.'), technical: [] }
         : describeError(err))
     } finally {
       setLoading(false)
@@ -47,7 +47,7 @@ export function ForgotPasswordPage() {
       <main className="flex min-h-svh items-center justify-center px-4 py-10">
         <div className="w-full max-w-sm space-y-6">
           <BrandMark size="sm" />
-          <h1 className="text-2xl font-semibold text-text-heading">{tx('Şifremi unuttum')}</h1>
+          <h1 className="text-xl font-semibold text-text-heading">{tx('Şifremi unuttum')}</h1>
           <QueryState isPending={availability.isPending} error={availability.error} onRetry={() => { void availability.refetch() }}>
             {availability.data?.available ? (
               sent ? (

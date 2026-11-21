@@ -184,7 +184,8 @@ internal sealed class DatabaseBackupExecution
         {
             throw Fail(BackupExecutionStage.Preparing, BackupPipelineReasons.StorageNotAvailable, targets.Length == 1
                 ? "The requested storage provider is not available on this agent."
-                : "Too few of the requested storage destinations are available on this agent to reach the required number of copies.");
+                : "Too few of the requested storage destinations are available on this agent to reach the required number of copies.",
+                cause: BackupFailureCause.AgentNotConfigured);
         }
 
         return (_provider, targets);

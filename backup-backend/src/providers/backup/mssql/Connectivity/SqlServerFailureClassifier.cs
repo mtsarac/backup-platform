@@ -16,6 +16,8 @@ internal enum SqlServerOperationPhase
 /// </summary>
 internal static class SqlServerFailureClassifier
 {
+    private const int ServerCertificateUntrustedNumber = -2146893019;
+
     // Login failed, account disabled/locked/expired/must change password, requested database cannot be opened.
     private static readonly HashSet<int> AuthenticationErrors = [18451, 18452, 18456, 18470, 18486, 18487, 18488, 4060, 4064];
 
@@ -51,12 +53,19 @@ internal static class SqlServerFailureClassifier
         DatabaseFailureKind.AuthenticationFailed => Messages.Authentication,
         DatabaseFailureKind.PermissionDenied => Messages.Permission,
         DatabaseFailureKind.InvalidConfiguration => Messages.InvalidConfiguration,
+        DatabaseFailureKind.ServerCertificateUntrusted => Messages.ServerCertificateUntrusted,
         _ => Messages.Unexpected
     };
 
     /// <summary>Classifies a SQL Server error number. Pure, so every mapping is unit-testable without a live server.</summary>
     internal static (DatabaseFailureKind Kind, string UserMessage, int? SqlErrorNumber) ClassifyNumber(int number, SqlServerOperationPhase phase)
     {
+        // SEC_E_UNTRUSTED_ROOT: the pre-login TLS handshake rejected the certificate (verified against SqlClient 7.1.1, inner AuthenticationException).
+        if (number == ServerCertificateUntrustedNumber)
+        {
+            return (DatabaseFailureKind.ServerCertificateUntrusted, Messages.ServerCertificateUntrusted, number);
+        }
+
         if (number == -2)
         {
             return (DatabaseFailureKind.Timeout, Messages.Timeout, number);
@@ -91,6 +100,7 @@ internal static class SqlServerFailureClassifier
         public const string Authentication = "SQL Server rejected the supplied credentials or the login cannot use the requested database.";
         public const string Permission = "The SQL Server principal lacks a permission required for this operation.";
         public const string InvalidConfiguration = "The SQL Server connection settings are invalid.";
+        public const string ServerCertificateUntrusted = "The SQL Server's certificate could not be verified.";
         public const string Unexpected = "An unexpected SQL Server error occurred. Details are in the agent log.";
     }
 }

@@ -17,7 +17,7 @@ public static class BackupArtifactEndpoints
     public static IEndpointRouteBuilder MapBackupArtifactEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
-        tenant.MapGet("/backup-artifacts", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        tenant.MapGet("/backup-artifacts", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithListQuery();
         tenant.MapGet("/backup-artifacts/{artifactId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapDelete("/backup-artifacts/{artifactId:guid}", DeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/cancel-delete", CancelDeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -32,15 +32,14 @@ public static class BackupArtifactEndpoints
     }
 
     private static async Task<IResult> ListAsync(Guid? jobId, Guid? agentId, string? state, DateTimeOffset? from, DateTimeOffset? to,
-        int? page, int? pageSize, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
+        [AsParameters] ListParams list, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
     {
-        if (page is < 1 or > 1_000_000 || pageSize is < 1 or > 100)
-            return Results.BadRequest(new { error = "invalid_request", message = "Page must be positive and page size must be between 1 and 100." });
+        var listQuery = list.ToQuery();
         if (state is not null && state is not ("Available" or "DeletePending" or "Deleting" or "DeleteFailed" or "Deleted"))
             return Results.BadRequest(new { error = "invalid_request", message = "Unknown artifact state." });
         if (from > to)
             return Results.BadRequest(new { error = "invalid_request", message = "From must not be later than to." });
-        var query = new BackupArtifactQuery(jobId, agentId, state, from?.ToUniversalTime(), to?.ToUniversalTime(), page ?? 1, pageSize ?? 25);
+        var query = new BackupArtifactQuery(listQuery, jobId, agentId, state, from?.ToUniversalTime(), to?.ToUniversalTime());
         return Results.Ok(await service.QueryAsync(tenant.TenantId!, query, cancellationToken));
     }
 

@@ -20,7 +20,7 @@ export function AssignProfileDialog({ target, name, currentProfileId, onClose }:
 
   return (
     <FormDialog
-      title={tx("Profil Ata: {0}", { "0": name })}
+      title={tx("Profil ata: {0}", { "0": name })}
       description={tx("Bu hedefe zaman pencereli bir hız profili atayın veya atamayı kaldırın.")}
       submitLabel={tx("Kaydet")}
       pendingLabel={tx("Kaydediliyor…")}
@@ -29,7 +29,7 @@ export function AssignProfileDialog({ target, name, currentProfileId, onClose }:
       onSubmit={submit}
       onClose={onClose}
     >
-      <Field label={tx("Bant Genişliği Profili")}>
+      <Field label={tx("Bant genişliği profili")}>
         {control => (
           <Select {...control} value={selectedProfileId} onChange={e => setSelectedProfileId(e.target.value)}>
             <option value="">{tx("Profil Yok (Yalnızca Statik Limit / Limitsiz)")}</option>

@@ -17,7 +17,23 @@ const healthy: PlatformSummary = {
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.getSummary).mockResolvedValue(healthy)
+  vi.mocked(api.getPlatformEncryptionStatus).mockResolvedValue({ platformRecovery: { configured: true, keyId: 'k1' } })
   vi.mocked(storageApi.getStorageUsage).mockResolvedValue(paged([]))
+})
+
+describe('platform recovery key notice', () => {
+  const text = /Platform kurtarma anahtarı yapılandırılmamış/
+  it('warns when the platform recovery key is not configured', async () => {
+    vi.mocked(api.getPlatformEncryptionStatus).mockResolvedValue({ platformRecovery: { configured: false, keyId: null } })
+    renderPlatform(<PlatformDashboardPage />)
+    expect(await screen.findByText(text)).toBeInTheDocument()
+  })
+  it('shows nothing when it is configured', async () => {
+    renderPlatform(<PlatformDashboardPage />)
+    await waitFor(() => expect(api.getPlatformEncryptionStatus).toHaveBeenCalled())
+    await screen.findByText('Çalışma alanları')
+    expect(screen.queryByText(text)).not.toBeInTheDocument()
+  })
 })
 
 describe('platform dashboard status', () => {

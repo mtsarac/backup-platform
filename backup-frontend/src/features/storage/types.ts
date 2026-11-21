@@ -1,3 +1,4 @@
+import type { ListQueryParams } from '@/features/platform/types'
 /** Wire types of the quota API. Every value is the backend's; the UI derives nothing authoritative from them (state, thresholds, remaining). */
 export type QuotaState = 'Normal' | 'Warning' | 'Critical' | 'OverQuota' | 'Unlimited'
 export type EntitlementStatus = 'Active' | 'Suspended' | 'Expired' | 'NoSubscription'
@@ -78,12 +79,9 @@ export interface StorageUsageRow {
   calculatedAt: string | null
 }
 
-export interface StorageUsageFilters {
-  search?: string
+export interface StorageUsageFilters extends ListQueryParams {
   quotaState?: QuotaState
   subscriptionStatus?: EntitlementStatus
-  page?: number
-  pageSize?: number
 }
 
 export interface QuotaPolicy {

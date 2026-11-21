@@ -26,7 +26,7 @@ export function VerifyEmailPage() {
       setDone(true)
     } catch (err) {
       setError(err instanceof ApiError && err.status === 400
-        ? { what: tx('Doğrulama bağlantısı geçersiz veya süresi dolmuş.'), dataImpact: tx('E-posta adresiniz doğrulanmadı.'), action: tx('Güvenlik ayarlarından yeni bir doğrulama e-postası isteyin.'), technical: [] }
+        ? { what: tx('Doğrulama bağlantısı geçersiz veya süresi dolmuş.'), action: tx('Güvenlik ayarlarından yeni bir doğrulama e-postası isteyin.'), technical: [] }
         : describeError(err))
     } finally {
       setLoading(false)
@@ -38,7 +38,7 @@ export function VerifyEmailPage() {
       <main className="flex min-h-svh items-center justify-center px-4 py-10">
         <div className="w-full max-w-sm space-y-6">
           <BrandMark size="sm" />
-          <h1 className="text-2xl font-semibold text-text-heading">{tx('E-posta doğrulama')}</h1>
+          <h1 className="text-xl font-semibold text-text-heading">{tx('E-posta doğrulama')}</h1>
           {done ? (
             <Notice tone="success">{tx('E-posta adresiniz doğrulandı.')}</Notice>
           ) : !token ? (

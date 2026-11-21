@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using static BackupPlatform.UnitTests.Retention.RetentionFixtures;
@@ -32,6 +33,7 @@ public sealed class BackupArtifactServiceTests
         public Task<IReadOnlyList<BackupJob>> ListScheduledJobsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ExpireUnclaimedRunsAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<BackupScheduleOccurrence>> ListOccurrencesAsync(TenantId tenantId, Guid jobId, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BackupJob?> ArchiveJobAsync(TenantId tenantId, Guid jobId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private static BackupJob Job(TenantId tenant, BackupRetentionPolicy policy) =>
@@ -208,14 +210,14 @@ public sealed class BackupArtifactServiceTests
     {
         var tenant = TenantId.New();
         var record = Record(tenant) with { JobName = "Nightly", DatabaseName = "Accounting", AgentName = "db-host", AgentId = Guid.NewGuid() };
-        var query = new BackupArtifactQuery(Page: 12, PageSize: 25);
+        var query = new BackupArtifactQuery(new ListQuery(12, 25));
         var store = new FakeRetentionStore
         {
             OnQueryArtifacts = (actualTenant, actualQuery) =>
             {
                 Assert.Equal(tenant, actualTenant);
                 Assert.Equal(query, actualQuery);
-                return new([record], 301, query.Page, query.PageSize);
+                return new([record], 301, query.List.Page, query.List.PageSize);
             }
         };
         var service = Service(null, store);

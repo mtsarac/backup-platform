@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createPlatformShare,
   createShare,
@@ -6,21 +6,23 @@ import {
   getAuditRetention,
   getPlatformShare,
   getShare,
-  listPlatformDownloadAttempts,
+  listDownloadAttempts,
   listPlatformShares,
   listShares,
-  listTenantDownloadAttempts,
   revokeShare,
   updateAuditRetention,
 } from './api'
 import type {
   CreatePlatformShareRequest,
   CreateShareRequest,
-  DownloadAttemptFilters,
-  DownloadAttemptPage,
+  DownloadAttemptQuery,
+  DownloadAttemptScope,
   ExtendShareRequest,
   RevokeShareRequest,
 } from './types'
+
+/** Every download-history query: a download leaves a new attempt behind, so the history is refreshed after one. */
+export const downloadAttemptsKey = ['download-attempts'] as const
 
 export function useShares(tenantId: string, artifactId?: string) {
   return useQuery({
@@ -100,25 +102,12 @@ export function useRevokeShare(tenantId: string) {
   })
 }
 
-const attemptPaging = {
-  initialPageParam: undefined as string | undefined,
-  getNextPageParam: (page: DownloadAttemptPage) => page.nextCursor ?? undefined,
-}
-
-export function useTenantDownloadAttempts(tenantId: string, filters?: DownloadAttemptFilters) {
-  return useInfiniteQuery({
-    queryKey: ['tenant-download-attempts', tenantId, filters ?? {}],
-    queryFn: ({ pageParam, signal }) => listTenantDownloadAttempts(tenantId, filters, pageParam, signal),
-    enabled: Boolean(tenantId),
-    ...attemptPaging,
-  })
-}
-
-export function usePlatformDownloadAttempts(filters?: DownloadAttemptFilters) {
-  return useInfiniteQuery({
-    queryKey: ['platform-download-attempts', filters ?? {}],
-    queryFn: ({ pageParam, signal }) => listPlatformDownloadAttempts(filters, pageParam, signal),
-    ...attemptPaging,
+export function useDownloadAttempts(scope: DownloadAttemptScope, list: DownloadAttemptQuery) {
+  return useQuery({
+    queryKey: [...downloadAttemptsKey, scope, list],
+    queryFn: ({ signal }) => listDownloadAttempts(scope, list, signal),
+    enabled: scope.route === 'platform' || Boolean(scope.tenantId),
+    placeholderData: keepPreviousData,
   })
 }
 

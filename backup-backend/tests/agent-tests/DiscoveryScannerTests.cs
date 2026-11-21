@@ -469,6 +469,8 @@ public sealed class DiscoveryScannerTests
     [InlineData(DatabaseFailureKind.Timeout, DiscoveryAccess.Unreachable, "timeout", DiscoveryReachability.Unreachable)]
     [InlineData(DatabaseFailureKind.InvalidConfiguration, DiscoveryAccess.Error, "invalid_configuration", DiscoveryReachability.Unknown)]
     [InlineData(DatabaseFailureKind.Unexpected, DiscoveryAccess.Error, "unexpected", DiscoveryReachability.Unknown)]
+    [InlineData(DatabaseFailureKind.ServerCertificateUntrusted, DiscoveryAccess.Error, "server_certificate_untrusted", DiscoveryReachability.Reachable)]
+    [InlineData(DatabaseFailureKind.ServerTlsUnavailable, DiscoveryAccess.Error, "server_tls_unavailable", DiscoveryReachability.Reachable)]
     public async Task Provider_failures_map_to_fixed_access_states_and_codes(DatabaseFailureKind kind, string access, string reason, string reachability)
     {
         var rig = new Rig();

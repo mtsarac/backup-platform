@@ -1,25 +1,38 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import type { ChangeEvent } from 'react'
-import { Pagination } from '@/components/data/pagination'
+import { SortMenu } from '@/components/data/data-list'
 import { Send } from 'lucide-react'
-import { EmptyState } from '@/components/ui/empty-state'
+import { ListEmpty } from '@/features/lists/list-empty'
+import { ListPager } from '@/features/lists/list-pager'
+import { ListToolbar } from '@/features/lists/list-toolbar'
+import { toServerQuery } from '@/features/lists/server-list-query'
+import { sortProps, useListState } from '@/features/lists/use-list-state'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters } from '@/components/ui/filters'
+import { FilterField } from '@/components/ui/filters'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Card } from '@/components/ui/card'
 import { QueryState } from '@/components/data/query-state'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useNotificationDeliveries } from './hooks'
 import { eventTypeLabels, kindLabels, phaseLabels, severityLabels } from './labels'
-import { channelKinds, deliveryStatuses, visibleChannelKinds, visibleEventTypes } from './types'
-import type { DeliveryFilters, NotificationDelivery } from './types'
-import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
+import { channelKinds, deliveryStatuses, eventTypes, visibleChannelKinds, visibleEventTypes } from './types'
+import type { NotificationDelivery } from './types'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { statusLabel } from '@/lib/status'
 import { Select } from '@/components/ui/text-input'
 
-const eventFilters = () => [...visibleEventTypes(), 'test'] as const
+const listConfig = {
+  search: true,
+  filters: { status: deliveryStatuses, kind: channelKinds, eventType: [...eventTypes, 'test'] },
+  sort: { first: { createdAt: 'desc', status: 'asc', kind: 'asc', eventType: 'asc', channel: 'asc', attempts: 'desc' }, default: { key: 'createdAt', dir: 'desc' } },
+  pageKey: 'deliveries-page',
+  paramPrefix: 'deliveries-',
+} as const
+const sortOptions = () => [
+  { key: 'createdAt', label: tx('Zaman') }, { key: 'status', label: tx('Durum') }, { key: 'kind', label: tx('Kanal türü') },
+  { key: 'eventType', label: tx('Olay türü') }, { key: 'channel', label: tx('Kanal') }, { key: 'attempts', label: tx('Deneme') },
+]
 
 function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
   const event = eventTypeLabels[delivery.eventType] ?? delivery.eventType
@@ -48,29 +61,27 @@ function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
 
 export function DeliveriesSection() {
   useLanguage()
-  const { page, get, update } = useListParams()
-  const status = oneOf(get('status'), deliveryStatuses)
-  const kind = oneOf(get('kind'), channelKinds)
-  const eventType = oneOf(get('eventType'), eventFilters())
-  const filters: DeliveryFilters = { page, pageSize: LIST_PAGE_SIZE, status, kind, eventType }
-  const deliveries = useNotificationDeliveries(filters)
+  const state = useListState(listConfig)
+  const deliveries = useNotificationDeliveries(toServerQuery(state))
   const data = deliveries.data
-  const filter = (key: 'status' | 'kind' | 'eventType') => (event: ChangeEvent<HTMLSelectElement>) => update({ [key]: event.target.value })
+  const { status, kind, eventType } = state.filters
+  const filter = (name: 'status' | 'kind' | 'eventType') => (event: ChangeEvent<HTMLSelectElement>) => state.setFilter(name, event.target.value)
 
   return <Section title={tx("Gönderim geçmişi")} description={tx("En yeni bildirim gönderimleri; silinen kanalların kayıtları korunur.")}>
     <div className="space-y-4">
-      <Filters label={tx("Gönderim filtreleri")} onClear={status || kind || eventType ? () => update({ status: '', kind: '', eventType: '' }) : undefined}>
-        <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status ?? ''} onChange={filter('status')}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{statusLabel('delivery', item)}</option>)}</Select></FilterField>
-        <FilterField label={tx("Kanal türü")}><Select aria-label={tx("Kanal türü")} value={kind ?? ''} onChange={filter('kind')}><option value="">{tx("Tümü")}</option>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</Select></FilterField>
-        <FilterField label={tx("Olay türü")}><Select aria-label={tx("Olay türü")} value={eventType ?? ''} onChange={filter('eventType')}><option value="">{tx("Tümü")}</option>{eventFilters().map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</Select></FilterField>
-      </Filters>
+      <ListToolbar state={state} label={tx("Gönderim filtreleri")} search={{ label: tx("Gönderim ara"), placeholder: tx("Kanal, hedef veya olay") }} total={data?.totalCount}>
+        <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status} onChange={filter('status')}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{statusLabel('delivery', item)}</option>)}</Select></FilterField>
+        <FilterField label={tx("Kanal türü")}><Select aria-label={tx("Kanal türü")} value={kind} onChange={filter('kind')}><option value="">{tx("Tümü")}</option>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</Select></FilterField>
+        <FilterField label={tx("Olay türü")}><Select aria-label={tx("Olay türü")} value={eventType} onChange={filter('eventType')}><option value="">{tx("Tümü")}</option>{[...visibleEventTypes(), 'test' as const].map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</Select></FilterField>
+      </ListToolbar>
       <QueryState isPending={deliveries.isPending} error={deliveries.error}>
         {data && (data.totalCount === 0
-          ? <EmptyState icon={Send} message={tx("Gönderim kaydı bulunamadı.")} action={<Button disabled={deliveries.isFetching} onClick={() => void deliveries.refetch()}>{tx('Yenile')}</Button>} />
+          ? <ListEmpty icon={Send} message={tx("Gönderim kaydı bulunamadı.")} filtering={state.filtering} onClear={state.clear} action={<Button disabled={deliveries.isFetching} onClick={() => void deliveries.refetch()}>{tx('Yenile')}</Button>} />
           : <>
+            <SortMenu options={sortOptions()} sort={sortProps(state)} />
             <ul className="space-y-3">{data.items.map(delivery => <DeliveryCard key={delivery.id} delivery={delivery} />)}</ul>
-            <Pagination page={data.page} pageSize={data.pageSize} totalCount={data.totalCount} onPageChange={next => update({ page: next })} disabled={deliveries.isFetching} />
           </>)}
+        {data && <ListPager state={state} total={data.totalCount} disabled={deliveries.isFetching} label={tx("Gönderim sayfaları")} />}
       </QueryState>
     </div>
   </Section>

@@ -21,6 +21,9 @@ internal static class AgentPlatformHosting
         // The Windows lifetime also routes logging to the Application event log under the service name. That source must already exist
         // (the installer registers it): a virtual service account is not allowed to create one.
         services.AddWindowsService(options => options.ServiceName = WindowsServiceName);
+        // The generic host names the log source after the application (BackupPlatform.Agent.Host), which the installer never registers, so
+        // every log line was lost. Use the registered service-name source; the AddWindowsService default only applies to an empty name.
+        services.Configure<Microsoft.Extensions.Logging.EventLog.EventLogSettings>(settings => settings.SourceName = WindowsServiceName);
 #endif
         return services;
     }

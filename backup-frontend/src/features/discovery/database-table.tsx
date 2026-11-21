@@ -5,7 +5,7 @@ import { DataList, type Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { linkClass } from '@/components/ui/form-styles'
-import { databaseAvailability, databaseSelectable } from './status'
+import { databaseAvailability, databaseSelectable, isStaleList } from './status'
 import type { DiscoveryDatabase, DiscoveryInstanceDetail } from './types'
 
 /** Databases of one instance: name, whether it can be backed up and why not. Pass `onChange` to make the backupable ones pickable; without it the list is read-only. */
@@ -13,6 +13,7 @@ export function DatabaseTable({ instance, selected = [], onChange }: { instance:
   useLanguage()
   const { tenantId } = useTenant()
   const toggle = (name: string, checked: boolean) => onChange?.(checked ? [...selected, name] : selected.filter(item => item !== name))
+  const stale = isStaleList(instance)
   const columns: Column<DiscoveryDatabase>[] = [
     { key: 'name', card: 'title', header: tx('Veritabanı'), wrap: true, render: db => onChange
       ? <CheckField label={db.name} aria-label={tx("{0} seç", { "0": db.name })} checked={selected.includes(db.name)} disabled={!databaseSelectable(db, instance)} onChange={event => toggle(db.name, event.target.checked)} />
@@ -24,7 +25,9 @@ export function DatabaseTable({ instance, selected = [], onChange }: { instance:
       return <StatusPill level={db.isSystem ? 'neutral' : 'attention'}>{tx("Yedeklenemez")}</StatusPill>
     } },
     { key: 'why', header: tx('Neden'), wrap: true, render: db => databaseAvailability(db, instance).reason ?? <span className="text-text-muted">—</span> },
-    { key: 'jobs', header: tx('Yedekleme işi'), wrap: true, render: db => db.jobs.length === 0 ? <span className="text-text-muted">—</span> : <ul className="space-y-0.5">{db.jobs.map(job => <li key={job.id}><Link className={linkClass} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}/edit`}>{job.name}</Link></li>)}</ul> },
+    { key: 'jobs', header: tx('Yedekleme işi'), wrap: true, render: db => db.jobs.length === 0 ? <span className="text-text-muted">—</span> : <ul className="space-y-0.5">{db.jobs.map(job => <li key={job.id}><Link className={linkClass} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}`}>{job.name}</Link></li>)}</ul> },
   ]
-  return <DataList rows={instance.databases} columns={columns} keyExtractor={db => db.name} caption={tx("Veritabanları")} emptyMessage={tx("Bu sunucuda listelenmiş veritabanı yok.")} />
+  // Without a working login the availability verdicts are unknown: only the names (and jobs) of the last known list stay.
+  const list = <DataList rows={instance.databases} columns={stale ? columns.filter(column => column.key !== 'backup' && column.key !== 'why') : columns} keyExtractor={db => db.name} caption={tx("Veritabanları")} emptyMessage={tx("Bu sunucuda listelenmiş veritabanı yok.")} />
+  return stale ? <div className="opacity-60">{list}</div> : list
 }

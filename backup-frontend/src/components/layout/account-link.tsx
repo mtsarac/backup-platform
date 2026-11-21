@@ -9,8 +9,8 @@ export function AccountLink() {
   const { user } = useAuth()
   const active = useLocation().pathname.startsWith('/account')
   return <Link to="/account" aria-current={active ? 'page' : undefined}
-    className={`flex min-h-11 items-center gap-3 rounded-md px-3 py-1.5 text-body transition-colors ${active ? 'bg-sidebar-active text-text-heading' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
-    <Settings aria-hidden="true" className="size-4 shrink-0 text-sidebar-muted" />
-    <span className="min-w-0 leading-tight"><span className="block truncate font-medium" title={user?.displayName}>{user?.displayName}</span><span className="block text-xs text-sidebar-muted">{tx('Ayarlar')}</span></span>
+    className={`flex min-h-control items-center gap-3 rounded-lg px-3 py-1.5 text-body transition-colors ${active ? 'bg-accent text-primary' : 'text-text hover:bg-border'}`}>
+    <Settings aria-hidden="true" className={`size-4 shrink-0 ${active ? 'text-primary' : 'text-text-muted'}`} />
+    <span className="min-w-0 leading-tight"><span className="block truncate font-medium" title={user?.displayName}>{user?.displayName}</span><span className="block text-xs text-text-muted">{tx('Ayarlar')}</span></span>
   </Link>
 }

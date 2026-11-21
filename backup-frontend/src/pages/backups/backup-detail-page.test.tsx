@@ -11,10 +11,9 @@ import { runStatuses } from '@/features/backups/presentation'
 import type { BackupRun } from '@/features/backups/types'
 import { BackupDetailPage } from './backup-detail-page'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { formatDateTime } from '@/lib/format'
+import { formatBytes, formatDateTime } from '@/lib/format'
 
 const state = vi.hoisted(() => ({
-  canOperate: true,
   query: { data: undefined as BackupRun | undefined, isPending: false, error: null as unknown },
   retry: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
   cancel: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
@@ -22,8 +21,9 @@ const state = vi.hoisted(() => ({
   resume: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
 }))
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: state.canOperate }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backups/hooks', () => ({ useBackup: () => state.query, useBackupActions: () => ({ retry: state.retry, cancel: state.cancel, pause: state.pause, resume: state.resume }) }))
+vi.mock('@/pages/artifacts/artifact-detail-page', () => ({ ArtifactDetail: ({ id }: { id: string }) => <div data-testid="artifact-detail">{id}</div> }))
 
 function renderDetail() {
   return render(<MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter>)
@@ -32,7 +32,6 @@ function renderDetail() {
 beforeEach(() => {
   setFeatureFlags({ sizeAnomaly: true })
   vi.clearAllMocks()
-  state.canOperate = true
   state.query.data = makeRun()
   state.query.error = null
   state.retry.error = null
@@ -47,9 +46,40 @@ beforeEach(() => {
 })
 
 describe('run detail controls and attention', () => {
+  it.each([
+    ['Available', true],
+    ['DeletePending', false],
+    ['DeleteFailed', false],
+    ['Deleted', false],
+  ] as const)('a successful run whose backup file is %s offers the restore flow only when restorable', (artifactState, restorable) => {
+    const run = makeRun({ status: 'Succeeded' })
+    run.attempts[0].artifacts = [{ id: 'artifact-a', state: artifactState, backupType: 'Full', replicas: [{ verificationState: 'Verified', usable: true, status: 'Available' }] } as unknown as BackupArtifact]
+    state.query.data = run
+    renderDetail()
+    expect(screen.getByTestId('artifact-detail')).toHaveTextContent('artifact-a')
+    const link = screen.queryByRole('link', { name: 'Geri yükle' })
+    if (restorable) expect(link).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id/restore')
+    else expect(link).not.toBeInTheDocument()
+  })
+
+  it.each(['Failed', 'Running'] as const)('a %s run shows no backup file panel and no restore action', (status) => {
+    state.query.data = makeRun({ status })
+    renderDetail()
+    expect(screen.queryByTestId('artifact-detail')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    if (status === 'Failed') expect(screen.getAllByRole('button', { name: 'Yeniden dene' }).length).toBeGreaterThan(0)
+    else expect(screen.getByRole('button', { name: 'Duraklat' })).toBeInTheDocument()
+  })
+  it('links a missing run back to the run list', () => {
+    state.query.data = undefined
+    renderDetail()
+    const empty = screen.getByText(/Bu yedekleme denemesi bulunamadı/).parentElement!
+    expect(within(empty).getByRole('link', { name: 'Yedekleme denemeleri' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs')
+  })
+
   it('keeps identity and start time in the summary and links attempt outputs to their artifact owner', () => {
     const run = makeRun()
-    run.attempts[0].artifacts = [{ id: 'artifact-a' } as BackupArtifact]
+    run.attempts[0].artifacts = [{ id: 'artifact-a', sizeBytes: 4096 } as BackupArtifact]
     state.query.data = run
     renderDetail()
     expect(screen.getByText('Veritabanı').closest('div')).toHaveTextContent('Uygulama')
@@ -57,7 +87,7 @@ describe('run detail controls and attention', () => {
     expect(screen.getByText('Başlangıç').closest('div')?.querySelector('time')).toHaveAttribute('dateTime', run.startedAt)
     fireEvent.click(screen.getByRole('tab', { name: /^Denemeler/ }))
     const output = within(screen.getByRole('region', { name: '1. deneme çıktıları' }))
-    expect(output.getByRole('link', { name: 'Yedek dosyasını aç' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a')
+    expect(output.getByText(formatBytes(4096))).toBeInTheDocument()
     expect(output.queryByText('Uygulama')).not.toBeInTheDocument()
     expect(output.queryByText('SQL ajanı')).not.toBeInTheDocument()
     expect(output.queryByText('Yedekleme bilgileri')).not.toBeInTheDocument()
@@ -134,7 +164,7 @@ describe('run detail controls and attention', () => {
     state.query.data = failed
     state.retry.mutateAsync.mockResolvedValue(makeRun({ status: 'Pending' }))
     renderDetail()
-    expect(within(screen.getByRole('alert')).getByText(/Yeniden dene/)).toBeInTheDocument()
+    expect(within(screen.getByRole('alert')).getByRole('button', { name: 'Bilgileri düzelt' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
     await screen.findByText('Yeni deneme sıraya alındı.')
     expect(state.retry.mutateAsync).toHaveBeenCalledTimes(1)
@@ -148,13 +178,9 @@ describe('run detail controls and attention', () => {
     expect(screen.queryByText('unsafe internal exception')).not.toBeInTheDocument()
   })
 
-  it('hides retry/cancel for Viewer and disables duplicate mutations', () => {
-    state.canOperate = false
-    const view = renderDetail()
-    expect(screen.queryByRole('button', { name: 'İptal et' })).not.toBeInTheDocument()
-    state.canOperate = true
+  it('disables duplicate mutations', () => {
     state.cancel.isPending = true
-    view.rerender(<MemoryRouter><BackupDetailPage /></MemoryRouter>)
+    renderDetail()
     expect(screen.getByRole('button', { name: 'İletiliyor…' })).toBeDisabled()
   })
 
@@ -193,27 +219,15 @@ describe('run detail controls and attention', () => {
     await waitFor(() => expect(screen.getByText('Yedekleme denemesi özeti')).toBeInTheDocument())
   })
 
-  it('says what went wrong, that data is safe and what to do, with the code only under collapsed technical details', async () => {
+  it('says what went wrong and what to do in one sentence, with the code only under collapsed technical details', async () => {
     state.query.data = makeRun({ status: 'Failed', reasonCode: 'PermissionDenied' })
     renderDetail()
     const alert = within(screen.getByRole('alert'))
-    expect(alert.getByText('İşlem için gerekli izinler bulunmuyor.')).toBeInTheDocument()
-    expect(alert.getByText(/Verileriniz için:/)).toBeInTheDocument()
-    expect(alert.getByText(/Ne yapmalı:/).closest('p')).toHaveTextContent(/Yeniden dene/)
+    expect(alert.getByText(/İşlem için gerekli izinler bulunmuyor\./)).toHaveTextContent('Bağlantı bilgilerini kontrol edip düzeltin.')
     expect(screen.queryByText('PermissionDenied')).not.toBeInTheDocument()
     await userEvent.click(alert.getByRole('button', { name: 'Teknik ayrıntılar' }))
-    expect(within(await screen.findByRole('dialog')).getByText('PermissionDenied')).toBeInTheDocument()
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(within(screen.getByRole('region', { name: 'Teknik ayrıntılar' })).getByText('PermissionDenied')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Yeniden dene' })).toBeEnabled()
-  })
-
-  it('sends a viewer to their administrator instead of offering retry', () => {
-    state.canOperate = false
-    state.query.data = makeRun({ status: 'AgentLost' })
-    renderDetail()
-    expect(within(screen.getByRole('alert')).getByText(/Ne yapmalı:/).closest('p')).toHaveTextContent('Yöneticinize danışın')
-    expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
   })
 
   it('keeps trigger, planned time, attempt counts, engine and the run id under collapsed copyable technical details', async () => {
@@ -223,10 +237,10 @@ describe('run detail controls and attention', () => {
     expect(screen.queryByText('run-id')).not.toBeInTheDocument()
     expect(screen.queryByText('Elle başlatıldı')).not.toBeInTheDocument()
     await userEvent.click(within(region).getByRole('button', { name: 'Teknik ayrıntılar' }))
-    const details = within(await screen.findByRole('dialog'))
-    for (const label of ['Yedekleme denemesi kimliği', 'Tetikleyici', 'Planlanan zaman', 'Deneme sayısı', 'Veritabanı motoru']) expect(details.getByText(label)).toBeInTheDocument()
+    const details = within(screen.getByRole('region', { name: 'Teknik ayrıntılar' }))
+    for (const label of ['Yedekleme denemesi kimliği', 'Tetikleyici', 'Planlanan zaman', 'Deneme sayısı', 'Veritabanı motoru']) expect(details.getByText(`${label}:`)).toBeInTheDocument()
     expect(details.getByText('run-id')).toBeInTheDocument()
-    expect(details.getByRole('button', { name: 'Kopyala: Yedekleme denemesi kimliği' })).toBeInTheDocument()
+    expect(details.getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
     expect(details.getByText('Elle başlatıldı')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Zamanlama ve politika' })).not.toBeInTheDocument()
   })

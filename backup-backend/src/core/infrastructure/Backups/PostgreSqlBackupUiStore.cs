@@ -1,6 +1,9 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,28 +11,64 @@ namespace BackupPlatform.Infrastructure.Backups;
 
 public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> options) : IBackupUiStore
 {
-    public async Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, bool includeArchived, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return await ReadJobsAsync(context, tenantId, null, now, cancellationToken);
+        return await ReadJobsAsync(context, tenantId, null, includeArchived, now, cancellationToken);
     }
 
     public async Task<BackupJobView?> GetJobAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return (await ReadJobsAsync(context, tenantId, jobId, now, cancellationToken)).SingleOrDefault();
+        return (await ReadJobsAsync(context, tenantId, jobId, true, now, cancellationToken)).SingleOrDefault();
     }
+
+    /// <summary>One run as the list sorts and searches it: the columns it shows, none of the run itself.</summary>
+    private sealed class RunRow
+    {
+        public required Guid Id { get; init; }
+        public required DateTimeOffset CreatedAt { get; init; }
+        public DateTimeOffset? StartedAt { get; init; }
+        public required BackupStatus Status { get; init; }
+        public string? JobName { get; init; }
+        public string? Computer { get; init; }
+        public string? Database { get; init; }
+        public TimeSpan? Duration { get; init; }
+        public long? Size { get; init; }
+    }
+
+    // createdAt is the default (queued runs that have not started are the newest); the list's "Başlangıç" column sorts by startedAt. Status sorts by its Turkish label; the duration of a run that has not finished and the size of one without a backup file sort last.
+    private static readonly SortMap<RunRow> RunSorts = SortMap<RunRow>.Create()
+        .Date("createdAt", row => row.CreatedAt)
+        .Date("startedAt", row => row.StartedAt)
+        .Ordinal("status", row => row.Status,
+            BackupStatus.AgentLost, BackupStatus.Leased, BackupStatus.Succeeded, BackupStatus.Failed, BackupStatus.Running, BackupStatus.Paused,
+            BackupStatus.Cancelled, BackupStatus.Pending, BackupStatus.RetryPending)
+        .Text("jobName", row => row.JobName)
+        .Text("computer", row => row.Computer)
+        .Value("duration", row => row.Duration)
+        .Value("size", row => row.Size);
 
     public async Task<BackupRunPage> ListRunsAsync(TenantId tenantId, BackupRunQuery filter, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var query = Filter(context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId), filter);
-        var total = await query.LongCountAsync(cancellationToken);
-        var ids = await query.OrderByDescending(run => run.CreatedAt).ThenBy(run => run.Id)
-            .Skip(checked((filter.Page - 1) * filter.PageSize)).Take(filter.PageSize).Select(run => run.Id).ToArrayAsync(cancellationToken);
-        var runs = await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().Where(run => run.TenantId == tenantId && ids.Contains(run.Id))
-            .OrderByDescending(run => run.CreatedAt).ThenBy(run => run.Id).ToListAsync(cancellationToken);
-        return new(await RunViewsAsync(context, tenantId, runs, cancellationToken), total, filter.Page, filter.PageSize);
+        var rows = Filter(context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId), filter).Select(run => new RunRow
+        {
+            Id = run.Id, CreatedAt = run.CreatedAt, StartedAt = run.StartedAt, Status = run.Status, Database = run.Configuration.Database,
+            JobName = context.BackupJobs.Where(job => job.TenantId == tenantId && job.Id == run.JobId).Select(job => job.Name).FirstOrDefault(),
+            Computer = context.Agents.Where(agent => agent.TenantId == tenantId && agent.Id == run.AgentId).Select(agent => agent.HostName).FirstOrDefault(),
+            Duration = run.CompletedAt - run.StartedAt,
+            // The size the list shows: the backup file of the run's current attempt, for a run that succeeded.
+            Size = run.Status != BackupStatus.Succeeded ? null : context.BackupArtifacts.Where(artifact => artifact.TenantId == tenantId
+                && context.BackupRunAttempts.Any(attempt => attempt.Id == artifact.AttemptId && attempt.RunId == run.Id && attempt.Number == run.CurrentAttemptNumber)).Max(artifact => (long?)artifact.SizeBytes)
+        });
+        var page = await rows
+            .ApplySearch(filter.List, row => row.JobName, row => row.Database, row => row.Computer)
+            .ApplySort(RunSorts, filter.List, "createdAt", row => row.Id)
+            .ToPagedResultAsync(filter.List, cancellationToken);
+        var ids = page.Items.Select(row => row.Id).ToArray();
+        var loaded = (await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().Where(run => run.TenantId == tenantId && ids.Contains(run.Id)).ToListAsync(cancellationToken)).ToDictionary(run => run.Id);
+        return new(await RunViewsAsync(context, tenantId, [.. ids.Select(id => loaded[id])], cancellationToken), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<BackupRunView?> GetRunAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken)
@@ -42,7 +81,8 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
     public async Task<BackupDashboardView> GetDashboardAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var jobs = await ReadJobsAsync(context, tenantId, null, now, cancellationToken);
+        // A revoked computer's jobs no longer protect anything: they stay in the job list, not in the dashboard numbers.
+        var jobs = (await ReadJobsAsync(context, tenantId, null, false, now, cancellationToken)).Where(job => !job.AgentRevoked).ToList();
         var runs = context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId);
         var since = now.AddHours(-24);
         var active = await runs.CountAsync(run => run.Status == BackupStatus.Pending || run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running || run.Status == BackupStatus.RetryPending || run.Status == BackupStatus.Paused, cancellationToken);
@@ -74,6 +114,19 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
             jobs.Where(job => job.NextOccurrenceAt is not null).OrderBy(job => job.NextOccurrenceAt).Take(5).ToArray());
     }
 
+    // shortcut: one narrow row per run of the last ~16 days is read and bucketed in memory (a zone's midnights cannot be cut in SQL portably); push it into SQL if a tenant's run count makes this heavy.
+    public async Task<BackupHealthTimelineView> GetHealthTimelineAsync(TenantId tenantId, TimeZoneInfo zone, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null
+                && !context.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked))
+            .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new HealthTimelineJobRow(job.Id, job.Name, job.CreatedAt)).ToListAsync(cancellationToken);
+        var since = BackupHealthTimeline.RunsSince(now);
+        var runs = await context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId && run.CreatedAt >= since)
+            .Select(run => new HealthTimelineRunRow(run.JobId, run.CreatedAt, run.Status)).ToListAsync(cancellationToken);
+        return new(zone.Id, BackupHealthTimeline.Build(zone, now, jobs, runs));
+    }
+
     private static IQueryable<BackupRun> Filter(IQueryable<BackupRun> query, BackupRunQuery filter)
     {
         if (filter.JobId is { } jobId) query = query.Where(run => run.JobId == jobId);
@@ -96,13 +149,14 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         return query;
     }
 
-    private static async Task<IReadOnlyList<BackupJobView>> ReadJobsAsync(PlatformDbContext context, TenantId tenantId, Guid? jobId, DateTimeOffset now, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<BackupJobView>> ReadJobsAsync(PlatformDbContext context, TenantId tenantId, Guid? jobId, bool includeArchived, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var rows = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && (jobId == null || job.Id == jobId))
+        var rows = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && (jobId == null || job.Id == jobId) && (includeArchived || job.ArchivedAt == null))
             .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new
             {
                 Job = job,
                 AgentName = context.Agents.Where(agent => agent.TenantId == tenantId && agent.Id == job.AgentId).Select(agent => agent.HostName).FirstOrDefault(),
+                AgentRevoked = context.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked),
                 LastRun = context.BackupRuns.Where(run => run.TenantId == tenantId && run.JobId == job.Id).OrderByDescending(run => run.CreatedAt).ThenBy(run => run.Id)
                     .Select(run => new { run.Id, run.Status, run.CreatedAt, run.StartedAt, run.CompletedAt, run.TerminalReason, run.CancellationRequestedAt }).FirstOrDefault()
             }).ToListAsync(cancellationToken);
@@ -110,7 +164,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         {
             var view = BackupOrchestrator.ToView(row.Job, now);
             var last = row.LastRun;
-            return view with { AgentName = row.AgentName, LastRun = last is null ? null : new(last.Id, BackupOrchestrator.RunStatus(last.Status, last.CancellationRequestedAt), last.CreatedAt, last.StartedAt, last.CompletedAt, last.TerminalReason), NextOccurrenceAt = view.Schedule?.NextOccurrenceAt };
+            return view with { AgentName = row.AgentName, AgentRevoked = row.AgentRevoked, LastRun = last is null ? null : new(last.Id, BackupOrchestrator.RunStatus(last.Status, last.CancellationRequestedAt), last.CreatedAt, last.StartedAt, last.CompletedAt, last.TerminalReason), NextOccurrenceAt = view.Schedule?.NextOccurrenceAt };
         }).ToArray();
     }
 

@@ -1,8 +1,11 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
+using System.Linq.Expressions;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Storage;
@@ -38,7 +41,20 @@ public sealed class PostgreSqlStorageConnectionStore(
         return rows.Select(ToRecord).ToList();
     }
 
-    public async Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, int page, int pageSize, CancellationToken cancellationToken)
+    // The descriptor's display name ("SFTP", "Managed Storage (Central)") is searchable beside the type key. The Turkish text the page shows exists only
+    // in the frontend catalog, so the provider column sorts by its type key and the Turkish label is not searched here.
+    private static readonly Expression<Func<Row, string?>> ProviderLabel = SortKeys.Label<Row>(
+        row => row.Connection.ProviderType, BuiltInStorageProviders.All.ToDictionary(descriptor => descriptor.ProviderType, descriptor => descriptor.DisplayName));
+
+    private static readonly SortMap<Row> ConnectionSorts = SortMap<Row>.Create()
+        .Text("name", row => row.Connection.Name)
+        .Text("provider", row => row.Connection.ProviderType)
+        .Value("ownership", row => row.Connection.Ownership)
+        .Value("enabled", row => row.Connection.Enabled && !row.Connection.AdministrativelyDisabled)
+        .Text("tenant", row => row.TenantName)
+        .Date("createdAt", row => row.Connection.CreatedAt);
+
+    public async Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filter);
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
@@ -59,17 +75,13 @@ public sealed class PostgreSqlStorageConnectionStore(
         }
         if (filter.Enabled is { } enabled)
         {
-            rows = rows.Where(row => row.Connection.Enabled && !row.Connection.AdministrativelyDisabled == enabled);
+            rows = rows.Where(row => (row.Connection.Enabled && !row.Connection.AdministrativelyDisabled) == enabled);
         }
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            var term = filter.Search.Trim().ToLowerInvariant();
-            rows = rows.Where(row => row.Connection.NormalizedName.Contains(term) || row.TenantName.ToLower().Contains(term));
-        }
-        var total = await rows.LongCountAsync(cancellationToken);
-        var items = await rows.OrderBy(row => row.TenantName).ThenBy(row => row.Connection.NormalizedName).ThenBy(row => row.Connection.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-        return new PagedResult<StorageConnectionRecord>(items.Select(ToRecord).ToList(), total, page, pageSize);
+        var page = await rows
+            .ApplySearch(query, row => row.Connection.Name, row => row.Connection.ProviderType, ProviderLabel, row => row.TenantName)
+            .ApplySort(ConnectionSorts, query, "createdAt", row => row.Connection.Id)
+            .ToPagedResultAsync(query, cancellationToken);
+        return new PagedResult<StorageConnectionRecord>(page.Items.Select(ToRecord).ToList(), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<StorageConnectionRecord?> FindAsync(Guid id, TenantId? tenantScope, CancellationToken cancellationToken)

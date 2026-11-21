@@ -86,6 +86,14 @@ public sealed class RestoreVerificationApiTests(PostgreSqlFixture fixture) : ICl
         Assert.Equal(restoreId, AgentWorld.ReadJson(verifications).GetProperty("items")[0].GetProperty("id").GetGuid());
         using var restores = await scenario.GetRawAsync("/restores");
         Assert.Equal(0, AgentWorld.ReadJson(restores).GetProperty("totalCount").GetInt32());
+        var execution = await scenario.StartAsync(backup.ArtifactId, scenario.Body("HistoryTarget"));
+        using var combined = await scenario.GetRawAsync("/restores?purpose=All&pageSize=1&page=2");
+        var combinedPage = AgentWorld.ReadJson(combined);
+        Assert.Equal(2, combinedPage.GetProperty("totalCount").GetInt32());
+        using var all = await scenario.GetRawAsync("/restores?purpose=All&pageSize=10");
+        var ids = AgentWorld.ReadJson(all).GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray();
+        Assert.Contains(restoreId, ids);
+        Assert.Contains(execution.GetProperty("id").GetGuid(), ids);
         using var unknown = await scenario.GetRawAsync("/restores?purpose=Precheck");
         Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
     }

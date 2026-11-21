@@ -197,7 +197,7 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
             .OrderBy(database => database.Name)
             .ToListAsync(cancellationToken);
         // The job configuration is a JSON value, so the match is decided in memory over the jobs of this one agent.
-        var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.AgentId == instance.AgentId).ToListAsync(cancellationToken);
+        var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.AgentId == instance.AgentId && job.ArchivedAt == null).ToListAsync(cancellationToken);
         var present = databases.Where(database => database.Presence == DiscoveryPresence.Present).ToList();
         var counts = new DiscoveryDatabaseCounts(
             present.Count, present.Count(database => !database.IsSystem),
@@ -246,6 +246,11 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
         else if (!state.Enabled)
         {
             return new RescanOutcome(RescanStatus.Disabled);
+        }
+        else if (instanceKey is null && state.RequestedInstanceKey is null && state.StateAt(now) != DiscoveryScanState.Idle)
+        {
+            // An agent-wide scan is already queued or running: asking again is not an error, the answer is the same.
+            return new RescanOutcome(RescanStatus.Requested, ToStatus(state, await InstanceCountAsync(context, tenantId, agentId, cancellationToken), now));
         }
         else if (!state.CanRequestManual(now))
         {

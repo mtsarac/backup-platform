@@ -18,7 +18,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         var configuration = task.Configuration;
         ValidateConfiguration(configuration);
         if (task.MaxArtifactBytes is < 0) throw new ArgumentException("The artifact byte limit is invalid.");
-        var staging = _staging ?? throw new ArgumentException("Default staging is not configured.");
+        var staging = _staging ?? throw new AgentNotConfiguredException();
         var connection = new DatabaseConnectionSettings(new DatabaseEndpoint(configuration.Host, configuration.Port),
             new DatabaseConnectionOptions(requireEncryption: configuration.Encrypt, trustServerCertificate: configuration.TrustServerCertificate));
         ArgumentNullException.ThrowIfNull(configuration.StoragePrefix);
@@ -36,9 +36,9 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         var targets = configuration.Destinations.Select(destination => new BackupPipelineDestination(
             new StorageProviderId(destination.StorageProvider),
             AgentStorageProviders.External(destination.StorageProvider)
-                ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task, destination)
+                ? (storageFactory ?? throw new AgentNotConfiguredException()).CreateBackup(task, destination)
                 : destination.StorageProvider == AgentStorageProviders.Local && destination.StorageTarget is { } volume
-                    ? volumes?.Resolve(volume) ?? throw new ArgumentException("The local storage volume is not configured on this agent.")
+                    ? volumes?.Resolve(volume) ?? throw new AgentNotConfiguredException()
                     : null,
             destination.StorageConnectionId,
             destination.IsPrimary)).ToArray();
@@ -217,6 +217,9 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         _ => throw new ArgumentException("The backup option policy is unsupported.")
     };
 }
+
+/// <summary>A piece of agent set-up the task needs (default staging, a local storage volume, relayed storage) is absent; not a fault of the job.</summary>
+internal sealed class AgentNotConfiguredException : Exception;
 
 internal sealed class BackupTaskCredentialException : Exception
 {

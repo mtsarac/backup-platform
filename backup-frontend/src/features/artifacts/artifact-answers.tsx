@@ -16,10 +16,10 @@ function intact(artifact: BackupArtifact): Answer {
   return { level: 'attention', label: tx('Doğrulanmadı'), text: tx('Bütünlüğü doğrulanmış bir kopya yok. Bu dosyaya güvenmeyin; yeni bir yedek almayı düşünün.') }
 }
 
-function restorable(artifact: BackupArtifact, canOperate: boolean): Answer {
+function restorable(artifact: BackupArtifact): Answer {
   const { level, label, reason } = artifactAvailability(artifact)
   if (level !== 'safe') return { level, label, text: reason }
-  return { level, label, text: canOperate ? tx('Sihirbaz hedefi seçtirir, ön kontrol yapar ve onayınızdan sonra başlatır.') : tx('Geri yüklemeyi başlatma yetkiniz yok. Yöneticinize danışın.') }
+  return { level, label, text: tx('Sihirbaz hedefi seçtirir, ön kontrol yapar ve onayınızdan sonra başlatır.') }
 }
 
 function deletion(artifact: BackupArtifact, now: number): Answer {
@@ -33,12 +33,12 @@ function deletion(artifact: BackupArtifact, now: number): Answer {
 }
 
 /** The three things a reader came for, before any data: integrity, restore availability and retention. */
-export function ArtifactAnswers({ artifact, canOperate, now }: { artifact: BackupArtifact; canOperate: boolean; now: number }) {
+export function ArtifactAnswers({ artifact, now }: { artifact: BackupArtifact; now: number }) {
   useLanguage()
   if (artifact.state === 'Deleted') return null
   const answers: [string, Answer][] = [
     [tx('Bütünlük'), intact(artifact)],
-    [tx('Geri yükleme'), restorable(artifact, canOperate)],
+    [tx('Geri yükleme'), restorable(artifact)],
   ]
   if (!deletionInProgress(artifact) && artifact.state !== 'DeletePending') answers.push([tx('Saklama ve silme'), deletion(artifact, now)])
   return <Section title={tx('Kısaca durum')}>

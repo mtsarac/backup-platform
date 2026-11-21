@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
@@ -19,8 +20,8 @@ internal sealed class ConnectionLockProbe(IStorageConnectionStore store) : IStor
     public Task<IReadOnlyList<StorageConnectionRecord>?> ListAsync(TenantId tenantId, CancellationToken cancellationToken) =>
         store.ListAsync(tenantId, cancellationToken);
 
-    public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, int page, int pageSize, CancellationToken cancellationToken) =>
-        store.SearchAsync(filter, page, pageSize, cancellationToken);
+    public Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken) =>
+        store.SearchAsync(filter, query, cancellationToken);
 
     public Task<StorageConnectionRecord?> FindAsync(Guid id, TenantId? tenantScope, CancellationToken cancellationToken) =>
         store.FindAsync(id, tenantScope, cancellationToken);

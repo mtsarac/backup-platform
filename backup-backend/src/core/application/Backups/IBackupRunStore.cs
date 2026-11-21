@@ -50,6 +50,7 @@ public enum BackupRetryOutcome
     /// <summary>A new attempt was queued on the same run.</summary>
     Started,
     NotFound,
+    JobArchived,
     Succeeded,
     Cancelled,
     /// <summary>An attempt is already queued or running.</summary>

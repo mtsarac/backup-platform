@@ -1,8 +1,10 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Infrastructure.Lists;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.Persistence.Configurations;
 using BackupPlatform.Notifications;
@@ -173,35 +175,49 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
 
     // ---- history ------------------------------------------------------------------------------------------------------------------------
 
-    public async Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, int page, int pageSize, CancellationToken cancellationToken)
+    private sealed class DeliveryRow
     {
-        await using var context = Open();
-        var query = from delivery in context.NotificationDeliveries.AsNoTracking()
-                    join notificationEvent in context.NotificationEvents.AsNoTracking() on new { delivery.EventId, delivery.TenantId } equals new { EventId = notificationEvent.Id, notificationEvent.TenantId }
-                    where delivery.TenantId == tenantId
-                    select new { delivery, notificationEvent };
-        if (filter.Status is { } status) query = query.Where(row => row.delivery.Status == status);
-        if (filter.Kind is { } kind) query = query.Where(row => row.delivery.ChannelKind == kind);
-        if (filter.EventType is { } eventType) query = query.Where(row => row.notificationEvent.Type == eventType);
-        var total = await query.LongCountAsync(cancellationToken);
-        var rows = await query.OrderByDescending(row => row.delivery.CreatedAt).ThenByDescending(row => row.delivery.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-        return new(rows.Select(row => new NotificationDeliveryRecord(row.delivery, row.notificationEvent.Type, row.notificationEvent.Phase, row.notificationEvent.Severity,
-            row.notificationEvent.SubjectKind, row.notificationEvent.SubjectName)).ToList(), total, page, pageSize);
+        public required NotificationDelivery Delivery { get; init; }
+        public required NotificationEvent Event { get; init; }
     }
 
-    public async Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(int page, int pageSize, CancellationToken cancellationToken)
+    private static readonly SortMap<DeliveryRow> DeliverySorts = SortMap<DeliveryRow>.Create()
+        .Date("createdAt", row => row.Delivery.CreatedAt)
+        // Status and kind sort by the Turkish label shown: Bastırıldı, Başarısız, Gönderildi, Gönderiliyor, İptal edildi, Sırada; E-posta, SMS, Webhook.
+        .Ordinal("status", row => row.Delivery.Status,
+            NotificationDeliveryStatus.Suppressed, NotificationDeliveryStatus.Failed, NotificationDeliveryStatus.Sent, NotificationDeliveryStatus.InProgress,
+            NotificationDeliveryStatus.Cancelled, NotificationDeliveryStatus.Pending)
+        .Ordinal("kind", row => row.Delivery.ChannelKind, NotificationChannelKind.Email, NotificationChannelKind.Sms, NotificationChannelKind.Webhook)
+        .Text("eventType", row => row.Event.Type)
+        .Text("channel", row => row.Delivery.ChannelName)
+        .Value("attempts", row => row.Delivery.AttemptCount);
+
+    public Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, ListQuery query, CancellationToken cancellationToken) =>
+        PageDeliveriesAsync(rows =>
+        {
+            rows = rows.Where(row => row.Delivery.TenantId == tenantId);
+            if (filter.Status is { } status) rows = rows.Where(row => row.Delivery.Status == status);
+            if (filter.Kind is { } kind) rows = rows.Where(row => row.Delivery.ChannelKind == kind);
+            if (filter.EventType is { } eventType) rows = rows.Where(row => row.Event.Type == eventType);
+            return rows;
+        }, query, cancellationToken);
+
+    public Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(ListQuery query, CancellationToken cancellationToken) =>
+        PageDeliveriesAsync(rows => rows.Where(row => row.Delivery.Status == NotificationDeliveryStatus.Failed), query, cancellationToken);
+
+    private async Task<PagedResult<NotificationDeliveryRecord>> PageDeliveriesAsync(
+        Func<IQueryable<DeliveryRow>, IQueryable<DeliveryRow>> scope, ListQuery query, CancellationToken cancellationToken)
     {
         await using var context = Open();
-        var query = from delivery in context.NotificationDeliveries.AsNoTracking()
-                    join notificationEvent in context.NotificationEvents.AsNoTracking() on new { delivery.EventId, delivery.TenantId } equals new { EventId = notificationEvent.Id, notificationEvent.TenantId }
-                    where delivery.Status == NotificationDeliveryStatus.Failed
-                    select new { delivery, notificationEvent };
-        var total = await query.LongCountAsync(cancellationToken);
-        var rows = await query.OrderByDescending(row => row.delivery.CreatedAt).ThenByDescending(row => row.delivery.Id)
-            .Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
-        return new(rows.Select(row => new NotificationDeliveryRecord(row.delivery, row.notificationEvent.Type, row.notificationEvent.Phase, row.notificationEvent.Severity,
-            row.notificationEvent.SubjectKind, row.notificationEvent.SubjectName)).ToList(), total, page, pageSize);
+        var rows = from delivery in context.NotificationDeliveries.AsNoTracking()
+                   join notificationEvent in context.NotificationEvents.AsNoTracking() on new { delivery.EventId, delivery.TenantId } equals new { EventId = notificationEvent.Id, notificationEvent.TenantId }
+                   select new DeliveryRow { Delivery = delivery, Event = notificationEvent };
+        var page = await scope(rows)
+            .ApplySearch(query, row => row.Delivery.ChannelName, row => row.Delivery.TargetDisplay, row => row.Event.Type, row => row.Event.SubjectName, row => row.Delivery.ErrorCode)
+            .ApplySort(DeliverySorts, query, "createdAt", row => row.Delivery.Id)
+            .ToPagedResultAsync(query, cancellationToken);
+        return new(page.Items.Select(row => new NotificationDeliveryRecord(row.Delivery, row.Event.Type, row.Event.Phase, row.Event.Severity,
+            row.Event.SubjectKind, row.Event.SubjectName)).ToList(), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<bool> RetryFailedDeliveryAsync(Guid id, NotificationActor actor, CancellationToken cancellationToken)

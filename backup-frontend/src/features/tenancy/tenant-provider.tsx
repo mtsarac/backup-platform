@@ -36,5 +36,5 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     if (!tenants.some(item => item.tenantId === id) && user?.role !== 'PlatformAdmin') return
     navigate(`/tenants/${encodeURIComponent(id)}`)
   }
-  return <TenantContext.Provider value={{ tenantId, tenant, canAdmin: true, canOperate: true, switchTenant }}><div key={tenantId}>{children}</div></TenantContext.Provider>
+  return <TenantContext.Provider value={{ tenantId, tenant, switchTenant }}><div key={tenantId}>{children}</div></TenantContext.Provider>
 }

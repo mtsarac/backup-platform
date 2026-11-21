@@ -1,19 +1,15 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { AccessDenied } from '@/components/auth/access-denied'
 import { QueryState } from '@/components/data/query-state'
-import { PageHeader } from '@/components/ui/page-header'
 import { useTenantEncryption } from '@/features/artifact-encryption/hooks'
 import { TenantKeysSection } from '@/features/artifact-encryption/tenant-recovery-key-section'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
 export function EncryptionPage() {
   useLanguage()
-  const { tenantId, tenant, canAdmin } = useTenant()
+  const { tenantId, tenant } = useTenant()
   return <div className="space-y-6">
-    <PageHeader title={tx("Şifreleme")} description={tx("Şifreli yedeklerinizin korumasını inceleyin.")} />
-    {canAdmin
-      ? <EncryptionContent key={tenantId} tenantId={tenantId} tenantName={tenant.name} />
-      : <AccessDenied what={tx("Şifreleme korumasını yalnızca çalışma alanı sahibi veya yöneticisi görüntüleyebilir.")} />}
+    <p className="text-body text-text-muted">{tx("Şifreli yedeklerinizin korumasını inceleyin.")}</p>
+    <EncryptionContent key={tenantId} tenantId={tenantId} tenantName={tenant.name} />
   </div>
 }
 

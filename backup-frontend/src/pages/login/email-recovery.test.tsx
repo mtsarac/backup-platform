@@ -47,7 +47,7 @@ describe('email recovery screens', () => {
     await userEvent.type(screen.getByLabelText('Yeni şifre'), 'a-long-passphrase-1')
     await userEvent.type(screen.getByLabelText('Yeni şifre (tekrar)'), 'different-passphrase-2')
     await userEvent.click(screen.getByRole('button', { name: 'Şifreyi sıfırla' }))
-    expect(await screen.findByText('Yeni şifreler eşleşmiyor.')).toBeInTheDocument()
+    expect(await screen.findByText(/Yeni şifreler eşleşmiyor\./)).toBeInTheDocument()
     expect(apiMock).not.toHaveBeenCalled()
 
     await userEvent.clear(screen.getByLabelText('Yeni şifre (tekrar)'))
@@ -63,7 +63,7 @@ describe('email recovery screens', () => {
     await userEvent.type(screen.getByLabelText('Yeni şifre'), 'a-long-passphrase-1')
     await userEvent.type(screen.getByLabelText('Yeni şifre (tekrar)'), 'a-long-passphrase-1')
     await userEvent.click(screen.getByRole('button', { name: 'Şifreyi sıfırla' }))
-    expect(await screen.findByText('Sıfırlama bağlantısı geçersiz veya süresi dolmuş.')).toBeInTheDocument()
+    expect(await screen.findByText(/Sıfırlama bağlantısı geçersiz veya süresi dolmuş\./)).toBeInTheDocument()
   })
 
   it('confirms an address only after the user presses the button', async () => {

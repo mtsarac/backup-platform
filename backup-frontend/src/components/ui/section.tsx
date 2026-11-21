@@ -9,7 +9,7 @@ export function Section({ title, description, actions, children, flush, classNam
   useLanguage()
   const id = useId()
   const Heading = headingLevel === 3 ? 'h3' : 'h2'
-  return <section aria-labelledby={title ? id : undefined} className={cn('min-w-0', tone === 'danger' && 'rounded-lg border border-error/40 p-4', className)}>
+  return <section aria-labelledby={title ? id : undefined} className={cn('min-w-0', tone === 'danger' && 'rounded-lg border border-error-border p-4', className)}>
     {(title || actions) && <div className={cn('flex flex-wrap items-end justify-between gap-3', !flush && 'border-b border-border pb-2')}>
       <div className="min-w-0 space-y-0.5">
         {title && <Heading id={id} className="text-base font-semibold text-text-heading">{title}</Heading>}

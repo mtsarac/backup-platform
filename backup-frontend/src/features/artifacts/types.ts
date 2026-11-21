@@ -1,4 +1,5 @@
 import type { ArtifactEncryption } from '@/features/artifact-encryption/types'
+import type { ListQueryParams } from '@/features/platform/types'
 import type { BackupMetadata } from './backup-metadata'
 
 export type ReplicationStatus = 'Healthy' | 'Degraded' | 'InsufficientReplicas' | 'Unavailable'
@@ -128,10 +129,5 @@ export interface ArtifactList {
   pageSize: number
 }
 
-export interface ArtifactFilters {
-  page: number
-  pageSize: number
-  state: ArtifactState | ''
-  from: string
-  to: string
-}
+/** The backup files list query: the shared list query (`toServerQuery`) plus the filters. `from` / `to` are `YYYY-MM-DD` days of the local time zone. Sort keys: `createdAt`, `size`, `status`, `jobName`, `databaseName`. */
+export type ArtifactFilters = ListQueryParams & { page: number; pageSize: number; state?: ArtifactState | ''; from?: string; to?: string }

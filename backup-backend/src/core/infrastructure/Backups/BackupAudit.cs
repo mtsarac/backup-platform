@@ -8,11 +8,11 @@ namespace BackupPlatform.Infrastructure.Backups;
 internal static class BackupAudit
 {
     internal readonly record struct JobState(string Name, AgentId AgentId, BackupConfiguration Configuration, BackupRetryPolicy Retry,
-        BackupOverlapPolicy Overlap, bool Enabled, BackupRetentionPolicy Retention,
+        BackupOverlapPolicy Overlap, bool Enabled, bool Archived, BackupRetentionPolicy Retention,
         (bool Enabled, string Cron, string Zone, TimeSpan Grace, DateTimeOffset Anchor)? Schedule);
 
     internal static JobState Capture(BackupJob job) => new(job.Name, job.AgentId, job.Configuration, job.RetryPolicy, job.OverlapPolicy,
-        job.Enabled, job.RetentionPolicy, job.Schedule is { } schedule
+        job.Enabled, job.IsArchived, job.RetentionPolicy, job.Schedule is { } schedule
             ? (schedule.Enabled, schedule.CronExpression, schedule.TimeZoneId, schedule.MissedRunGracePeriod, schedule.EffectiveFrom) : null);
 
     internal static void RecordJobChanges(PlatformDbContext context, BackupJob job, JobState before, UserId? actor, DateTimeOffset now)
@@ -20,7 +20,9 @@ internal static class BackupAudit
         var after = Capture(job);
         if (before.Name != after.Name || before.AgentId != after.AgentId || before.Configuration != after.Configuration || before.Retry != after.Retry || before.Overlap != after.Overlap)
             AddJobEvent(context, job, actor, now, AuditActions.BackupJobUpdated);
-        if (before.Enabled != after.Enabled)
+        if (!before.Archived && after.Archived)
+            AddJobEvent(context, job, actor, now, AuditActions.BackupJobArchived);
+        else if (before.Enabled != after.Enabled)
             AddJobEvent(context, job, actor, now, job.Enabled ? AuditActions.BackupJobEnabled : AuditActions.BackupJobDisabled);
         if (before.Retention != after.Retention)
             AddJobEvent(context, job, actor, now, AuditActions.BackupJobRetentionChanged);
@@ -41,6 +43,21 @@ internal static class BackupAudit
             }));
 
     internal static AuditActorKind ActorKind(UserId? actor) => actor is null || actor == UserId.System ? AuditActorKind.System : AuditActorKind.User;
+
+    /// <summary>
+    /// A run of an archived job that is queued, waiting for a retry or paused never runs again, so it ends Cancelled (its earlier attempts stay as they were).
+    /// Leased and running attempts are left alone; the run is cancelled when such an attempt ends without succeeding. The caller records the completion audit.
+    /// </summary>
+    internal static void CancelRunOfArchivedJob(PlatformDbContext context, BackupRun run, UserId? actor, DateTimeOffset now)
+    {
+        if (run.IsTerminal || run.Status is not (BackupStatus.Pending or BackupStatus.RetryPending or BackupStatus.Paused)) return;
+        run.RequestCancellation(now);
+        context.AuditEvents.Add(AuditEvent.Record(now, actor ?? UserId.System, ActorKind(actor), AuditActions.BackupRunCancelRequested, run.TenantId,
+            "backup_run", run.Id.ToString("D"), new Dictionary<string, object?>
+            {
+                ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["result"] = "requested", ["reason"] = "job_archived"
+            }));
+    }
 
     internal static void RecordCompletion(PlatformDbContext context, BackupRun run, bool wasTerminal, bool attemptWasTerminal, DateTimeOffset now)
     {

@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Lists;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
@@ -142,8 +143,8 @@ public interface INotificationStore
     Task<NotificationPolicy?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken);
     /// <summary>Null when the tenant does not exist. The row is created on the first change.</summary>
     Task<(NotificationPolicy Policy, bool Changed)?> UpdatePolicyAsync(TenantId tenantId, NotificationActor actor, Func<NotificationPolicy, bool> apply, CancellationToken cancellationToken);
-    Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, int page, int pageSize, CancellationToken cancellationToken);
-    Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(int page, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<NotificationDeliveryRecord>> ListDeliveriesAsync(TenantId tenantId, DeliveryFilter filter, ListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<NotificationDeliveryRecord>> ListFailedDeliveriesAsync(ListQuery query, CancellationToken cancellationToken);
     Task<bool> RetryFailedDeliveryAsync(Guid id, NotificationActor actor, CancellationToken cancellationToken);
     Task<int> GetHistoryRetentionDaysAsync(CancellationToken cancellationToken);
     Task SetHistoryRetentionDaysAsync(int days, NotificationActor actor, CancellationToken cancellationToken);

@@ -291,6 +291,7 @@ internal static class SqlServerRestoreChecks
         DatabaseFailureKind.Unreachable => SqlServerPreCheckReasons.ServerUnreachable,
         DatabaseFailureKind.Timeout => SqlServerPreCheckReasons.ConnectionTimeout,
         DatabaseFailureKind.InvalidConfiguration => SqlServerPreCheckReasons.ConnectionSettingsInvalid,
+        DatabaseFailureKind.ServerCertificateUntrusted => SqlServerPreCheckReasons.ServerCertificateUntrusted,
         _ => SqlServerPreCheckReasons.ConnectionFailed
     };
 }

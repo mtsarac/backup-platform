@@ -111,7 +111,7 @@ const dummyConnections: ConnectionView[] = [
   }
 ]
 
-  it.each([['tr', 'Çoğaltma Hedefleri', 'Toplam 1 hedef'], ['en', 'Replication Destinations', 'Total 1 destinations']] as const)('translates the collapsed replication summary (%s)', (language, title, count) => {
+  it.each([['tr', 'Başka hedef ekle', 'Toplam 1 hedef'], ['en', 'Add another destination', 'Total 1 destinations']] as const)('translates the collapsed replication summary (%s)', (language, title, count) => {
     changeLanguage(language)
     try {
       const configuration = {
@@ -139,7 +139,7 @@ const dummyConnections: ConnectionView[] = [
     } as BackupConfiguration
     const onChange = vi.fn()
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={existingTarget} onChange={onChange} onRefresh={() => {}} />)
-    const summary = screen.getByText('Çoğaltma Hedefleri', { exact: false }).closest('summary')!
+    const summary = screen.getByText('Başka hedef ekle', { exact: false }).closest('summary')!
     expect(summary.parentElement).not.toHaveAttribute('open')
     expect(summary).toHaveTextContent('Toplam 2 hedef')
     expect(screen.getByLabelText('Gerekli Doğrulanmış Kopya Sayısı')).not.toBeVisible()
@@ -160,7 +160,7 @@ const dummyConnections: ConnectionView[] = [
       requiredVerifiedReplicaCount: 1,
     } as BackupConfiguration
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={false} onChange={() => {}} onRefresh={() => {}} {...errors} />)
-    expect(screen.getByText('Çoğaltma Hedefleri', { exact: false }).closest('details')).toHaveAttribute('open')
+    expect(screen.getByText('Başka hedef ekle', { exact: false }).closest('details')).toHaveAttribute('open')
     expect(screen.getByRole('alert')).toHaveTextContent(Object.values(errors)[0])
   })
 
@@ -187,7 +187,7 @@ describe('MultiDestinationPicker', () => {
       const props = { connections, providers: dummyProviders, pending: false, error: null, existingTarget: true, onChange: () => {}, onRefresh: () => {} }
       const { container, rerender } = render(<MultiDestinationPicker {...props} configuration={configuration} />)
       const options = () => [...container.querySelectorAll<HTMLOptionElement>('#primary-storage-connection option')].map(option => option.textContent ?? '')
-      expect(options()).toHaveLength(2)
+      expect(options()).toHaveLength(1)
       expect(options().every(label => !label.includes(tenantLabel))).toBe(true)
       expect(container.textContent).toContain(`Managed (${platformLabel})`)
       rerender(<MultiDestinationPicker {...props} configuration={{ ...configuration, destinations: configuration.destinations.map(destination => ({ ...destination, isPrimary: !destination.isPrimary })) }} />)
@@ -232,9 +232,9 @@ describe('MultiDestinationPicker', () => {
     } as BackupConfiguration
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={() => {}} onRefresh={() => {}} />)
     const connection = screen.getByLabelText('Depolama bağlantısı')
-    expect(within(connection).getAllByRole('option').map(option => option.getAttribute('value'))).toEqual(['', 'conn-local'])
+    expect(within(connection).getAllByRole('option').map(option => option.getAttribute('value'))).toEqual([''])
     expect(within(screen.getByLabelText('Depolama Sağlayıcısı')).getByRole('option', { name: 'Yerel yedekleme bilgisayarı diski' })).toBeInTheDocument()
-    expect(within(connection).getByRole('option', { name: /Default Local · Yerel yedekleme bilgisayarı diski/ })).toBeInTheDocument()
+    expect(within(connection).getByRole('option', { name: 'Default Local · Kullanılabilir' })).toBeInTheDocument()
   })
 
   it('renders primary destination and allows adding a second destination', () => {
@@ -264,7 +264,7 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Çoğaltma Hedefleri', { exact: false }))
+    fireEvent.click(screen.getByText('Başka hedef ekle', { exact: false }))
     expect(screen.getByText("Birincil")).toBeInTheDocument()
     expect(screen.getByText(/Toplam 1 hedef/)).toBeInTheDocument()
 
@@ -311,7 +311,7 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Çoğaltma Hedefleri', { exact: false }))
+    fireEvent.click(screen.getByText('Başka hedef ekle', { exact: false }))
     expect(screen.getByText(/Toplam 2 hedef/)).toBeInTheDocument()
     const count = screen.getByRole('spinbutton', { name: 'Gerekli Doğrulanmış Kopya Sayısı' })
     expect(count).toHaveAttribute('min', '1')
@@ -412,7 +412,7 @@ describe('MultiDestinationPicker', () => {
     const props = { connections: dummyConnections, providers: dummyProviders, pending: false, error: null, existingTarget: true, compact: true, onChange, onRefresh: () => {} }
     const { rerender } = render(<MultiDestinationPicker {...props} configuration={config} />)
     const destination = screen.getByLabelText('Depolama hedefi')
-    expect(destination).toHaveValue(JSON.stringify(['local', 'conn-local']))
+    expect(destination).toHaveValue(JSON.stringify(['local', null]))
     const defaults = within(destination).getAllByRole('option').filter(option => (option as HTMLOptionElement).value.endsWith(',null]'))
     expect(new Set(defaults.map(option => option.textContent)).size).toBe(dummyProviders.length)
     expect(defaults.find(option => (option as HTMLOptionElement).value === JSON.stringify(['sftp', null]))).toHaveTextContent('SFTP')
@@ -446,8 +446,30 @@ describe('MultiDestinationPicker', () => {
     const onChange = vi.fn()
     render(<MultiDestinationPicker configuration={config} connections={[connection]} providers={dummyProviders} pending={false} error={null} existingTarget compact onChange={onChange} onRefresh={() => {}} />)
     const destination = screen.getByLabelText('Depolama hedefi')
-    expect(destination).toHaveValue(JSON.stringify(['central', 'managed']))
-    expect(within(destination).getByRole('option', { name: /^Managed · .* · Platform yönetimli · Devre dışı$/ })).toBeDisabled()
+    expect(destination).toHaveValue(JSON.stringify(['central', null]))
+    expect(within(destination).getByRole('option', { name: 'Managed · Platform yönetimli · Devre dışı' })).toBeDisabled()
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('lists the central default once in the compact picker and in the replication select', () => {
+    const central = { ...dummyConnections[0], id: 'conn-central', name: 'Managed Storage', providerType: 'central', providerDisplayName: 'Managed Storage (Central)', ownership: 'PlatformManaged', isDefault: true } as ConnectionView
+    const config = {
+      destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    render(<MultiDestinationPicker configuration={config} connections={[dummyConnections[0], central]} providers={dummyProviders} pending={false} error={null} existingTarget={false} compact onChange={() => {}} onRefresh={() => {}} />)
+    const names = (select: HTMLElement) => within(select).getAllByRole('option').map(option => option.textContent)
+    expect(names(screen.getByLabelText('Depolama hedefi')).filter(text => text?.includes('Merkezi depolama'))).toEqual(['Merkezi depolama · Platform yönetimli · Kullanılabilir'])
+    expect(names(screen.getByLabelText('Yeni Çoğaltma Hedefi Ekle')).filter(text => text?.includes('Merkezi depolama')).map(text => text?.trim())).toEqual(['Merkezi depolama'])
+  })
+
+  it('lists the central default once in the wizard connection select', () => {
+    const central = { ...dummyConnections[0], id: 'conn-central', name: 'Managed Storage', providerType: 'central', providerDisplayName: 'Managed Storage (Central)', ownership: 'PlatformManaged', isDefault: true } as ConnectionView
+    const config = {
+      destinations: [{ storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    render(<MultiDestinationPicker configuration={config} connections={[dummyConnections[0], central]} providers={dummyProviders} pending={false} error={null} existingTarget={false} onChange={() => {}} onRefresh={() => {}} />)
+    expect(within(screen.getByLabelText('Depolama bağlantısı')).getAllByRole('option').map(option => option.textContent)).toEqual(['Merkezi depolama · Platform yönetimli · Kullanılabilir'])
   })
 })

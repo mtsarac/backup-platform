@@ -105,6 +105,8 @@ Access the web interface at `http://localhost:3000` (or your configured `PUBLIC_
    curl -fsS https://backup.example.com/api/agent-dist/install.sh | sudo bash -s -- --interactive --language en
    ```
 
+   **Windows setup wizard (optional):** when the platform administrator has published `backup-agent-win-x64-setup.exe` (release asset `backup-agent-win-x64-setup-<version>.exe`, copied under that fixed name into the `AgentDistribution:PackagesDirectory`), the Add computer dialog offers it under *Other installation methods*. The wizard asks only for the one-time key and the computer name and runs the same `install.ps1`. If an agent is already installed (service, `%ProgramFiles%\BackupAgent` or `%ProgramData%\BackupAgent`), the wizard first asks, in its language, whether to remove it and reinstall (default No; nothing is changed on No). Silent runs (`/VERYSILENT`, `/SUPPRESSMSGBOXES`) never ask: they stop with a nonzero exit code and a `/LOG` entry unless `/REPLACEEXISTING=1` is passed, which removes the existing agent and its identity and enrolls again. The server address is appended by the backend when the file is downloaded, so the file must be downloaded from the backend. The wizard is not code-signed, so Windows SmartScreen warns.
+
 3. The agent registers its identity, reports discovered databases, and appears as **Online** on the dashboard.
 
 *For offline deployment, RPM/DEB packaging, and snapshot permission tuning, see [`scripts/README.md`](scripts/README.md).*
