@@ -56,16 +56,19 @@ export function ArtifactSharesSection({
     <Section
       title={tx('Paylaşımlar')}
       actions={
-        <Button
-          size="sm"
-          disabled={!canCreate}
-          onClick={() => {
-            createMutation.reset()
-            setDialogOpen(true)
-          }}
-        >
-          {tx('Paylaşım oluştur')}
-        </Button>
+        // Only a tenant UserAdmin may create a share (the API answers 403 to a PlatformAdmin); a PlatformAdmin creates shares on the platform shares page.
+        user?.role === 'PlatformAdmin' ? undefined : (
+          <Button
+            size="sm"
+            disabled={!canCreate}
+            onClick={() => {
+              createMutation.reset()
+              setDialogOpen(true)
+            }}
+          >
+            {tx('Paylaşım oluştur')}
+          </Button>
+        )
       }
     >
       <div className="space-y-4">

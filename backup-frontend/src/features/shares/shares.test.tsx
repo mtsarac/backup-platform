@@ -277,6 +277,21 @@ describe('BackupShare frontend', () => {
     })
   })
 
+  it('does not offer share creation to a PlatformAdmin on the backup detail page', async () => {
+    permissions.role = 'PlatformAdmin'
+    request.mockImplementation(async (path: string) => {
+      if (path.includes('backup-shares') || path.includes('/shares')) return []
+      if (path.includes('repairs')) return []
+      if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
+    })
+
+    await renderDetailPage()
+
+    await screen.findByText('Paylaşımlar')
+    expect(screen.queryByRole('button', { name: 'Paylaşım oluştur' })).not.toBeInTheDocument()
+  })
+
   it('creates a share from artifact detail with default duration', async () => {
     request.mockImplementation(async (path: string, options?: { method?: string; json?: unknown }) => {
       if (options?.method === 'POST') {
