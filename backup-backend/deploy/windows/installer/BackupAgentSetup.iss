@@ -3,6 +3,8 @@
 ;   ISCC.exe /DAppVersion=1.2.3 /DFileVersion=1.2.3.0 [/Fbackup-agent-win-x64-setup-1.2.3] BackupAgentSetup.iss
 ;
 ; The wizard asks only for the one-time enrollment key and the computer name, then runs the existing ..\install.ps1 non-interactively.
+; Command line: /Key=<key> /Name=<computer name> for silent runs, and /REPLACEEXISTING=1 to remove and replace an agent that is already
+; installed without asking. Without it a silent run stops (nonzero exit code, reason in the /LOG file) and an interactive run asks (default No).
 ; It writes no installation logic of its own. The server address is not asked: the backend appends it to the file when it serves it
 ; (see AgentDistributionEndpoints.SetupTrailerPrefix), and this wizard reads it back from its own file.
 #ifndef AppVersion
@@ -50,6 +52,8 @@ en.Installing=Installing the backup program and registering this computer...
 en.Failed=Setup could not finish:
 en.DoneHeading=This computer is added
 en.DoneText=The backup program is installed and running. This computer appears as Online in Computers after it connects, usually within a minute.
+en.ReplaceExisting=An existing agent installation was found. Remove it and reinstall?%n%nRemoving deletes the service, the program files and the agent identity (this computer is enrolled again with the new key). Backups already stored in backup storage locations are not deleted.
+en.ExistingKept=Setup was stopped and nothing was changed. The existing agent installation is still in place.
 tr.PageTitle=Bu bilgisayarı ekleyin
 tr.PageDescription=Yedekleme bilgisayarı ekle penceresindeki tek kullanımlık anahtarı girin.
 tr.KeyPrompt=Tek kullanımlık kayıt anahtarı:
@@ -61,6 +65,8 @@ tr.Installing=Yedekleme programı kuruluyor ve bu bilgisayar kaydediliyor...
 tr.Failed=Kurulum tamamlanamadı:
 tr.DoneHeading=Bu bilgisayar eklendi
 tr.DoneText=Yedekleme programı kuruldu ve çalışıyor. Bağlandıktan sonra, genellikle bir dakika içinde, bu bilgisayar Bilgisayarlar listesinde Çevrimiçi görünür.
+tr.ReplaceExisting=Mevcut ajan kurulumu bulundu. Kaldırılıp yeniden kurulsun mu?%n%nKaldırma; hizmeti, program dosyalarını ve ajan kimliğini siler (bu bilgisayar yeni anahtarla yeniden kaydedilir). Yedekleme depolama konumlarındaki mevcut yedekler silinmez.
+tr.ExistingKept=Kurulum durduruldu ve hiçbir şey değiştirilmedi. Mevcut ajan kurulumu olduğu gibi duruyor.
 
 [Messages]
 en.FinishedHeadingLabel=This computer is added
@@ -75,6 +81,7 @@ const
 var
   InputPage: TInputQueryWizardPage;
   ServerUrl: String;
+  ReplaceExisting: Boolean;
 
 // The backend appends "\nBackupPlatformServer=<https url>\n" to the file it serves; anything else means the file did not come from the server.
 function ReadEmbeddedServer(): String;
@@ -135,11 +142,32 @@ begin
   else if not IsName(Name) then Result := CustomMessage('BadName');
 end;
 
+// The same three signals install.ps1 uses: the BackupAgent service, %ProgramFiles%\BackupAgent and %ProgramData%\BackupAgent.
+function ExistingInstallation(): Boolean;
+begin
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\BackupAgent') or DirExists(ExpandConstant('{commonpf64}\BackupAgent')) or DirExists(ExpandConstant('{commonappdata}\BackupAgent'));
+end;
+
+// install.ps1 runs in a hidden console that looks like a terminal, so it must never be left to ask: the consent is decided here.
 function InitializeSetup(): Boolean;
 begin
   ServerUrl := ReadEmbeddedServer();
   Result := ServerUrl <> '';
-  if not Result then SuppressibleMsgBox(CustomMessage('NoServer'), mbError, MB_OK, IDOK);
+  if not Result then
+  begin
+    SuppressibleMsgBox(CustomMessage('NoServer'), mbError, MB_OK, IDOK);
+    Exit;
+  end;
+  ReplaceExisting := False;
+  if not ExistingInstallation() then Exit;
+  if ExpandConstant('{param:ReplaceExisting|0}') = '1' then ReplaceExisting := True
+  else if not WizardSilent then ReplaceExisting := SuppressibleMsgBox(CustomMessage('ReplaceExisting'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES;
+  if not ReplaceExisting then
+  begin
+    Log('An existing agent installation was found and replacing it was not confirmed; nothing was changed. Pass /REPLACEEXISTING=1 to remove and replace it without asking.');
+    if not WizardSilent then SuppressibleMsgBox(CustomMessage('ExistingKept'), mbInformation, MB_OK, IDOK);
+    Result := False;
+  end;
 end;
 
 procedure InitializeWizard();
@@ -176,7 +204,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  Key, Name, Message, Parameters, Language: String;
+  Key, Name, Message, Parameters, Language, Switch: String;
   ErrorLines: TArrayOfString;
   Code: Integer;
 begin
@@ -186,12 +214,13 @@ begin
   Message := InputError(Key, Name);
   if Message <> '' then Fail(Message);
   if ActiveLanguage = 'tr' then Language := 'tr' else Language := 'en';
+  if ReplaceExisting then Switch := '-ReplaceExisting' else Switch := '-NoPrompt';
   WizardForm.StatusLabel.Caption := CustomMessage('Installing');
   WizardForm.ProgressGauge.Style := npbstMarquee;
   ExtractTemporaryFile('install.ps1');
   DeleteFile(ExpandConstant('{tmp}\install-error.txt'));
   // The error text goes to a file relative to the working directory so no path has to be quoted into the command.
-  Parameters := '-NoProfile -ExecutionPolicy Bypass -Command "try { & ''.\install.ps1'' -NonInteractive -Server ''' + ServerUrl +
+  Parameters := '-NoProfile -ExecutionPolicy Bypass -Command "try { & ''.\install.ps1'' -NonInteractive ' + Switch + ' -Server ''' + ServerUrl +
     ''' -Token ''' + Key + ''' -AgentName ''' + Name + ''' -Language ' + Language +
     ' *> $null } catch { Set-Content -Path ''install-error.txt'' -Value $_.Exception.Message -Encoding UTF8 ; exit 1 } ; exit 0"';
   if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Parameters, ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, Code) then

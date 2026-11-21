@@ -6,7 +6,9 @@ Run in elevated Windows PowerShell. Use -Interactive for guided installation, or
 -NonInteractive -Server HTTPS_URL -Token TOKEN for unattended installation.
 An existing installation (BackupAgent service, %ProgramFiles%\BackupAgent, %ProgramData%\BackupAgent) is only replaced
 after the new package was downloaded and validated, and only with consent: with a terminal the script asks (default
-no); without one it refuses unless -ReplaceExisting (yes without asking) is given. Replacing removes the service,
+no); without one it refuses unless -ReplaceExisting (yes without asking) is given. -NoPrompt declares that nobody can answer
+(a hidden console, as in the setup wizard, looks like a terminal but is not one): the script never prompts and refuses
+instead, unless -ReplaceExisting is given. Replacing removes the service,
 binaries and the agent identity (a new token is enrolled); backups already stored in backup storage locations are not deleted.
 #>
 [CmdletBinding()]
@@ -17,6 +19,7 @@ param(
     [switch] $Interactive,
     [switch] $NonInteractive,
     [switch] $ReplaceExisting,
+    [switch] $NoPrompt,
     [ValidateSet('tr', 'en')] [string] $Language = 'en'
 )
 $ErrorActionPreference = 'Stop'
@@ -115,8 +118,8 @@ function Remove-ExistingAgent([string] $InstallPath, [string] $StorePath) {
     if (Test-Path -LiteralPath $InstallPath) { Remove-Item -LiteralPath $InstallPath -Recurse -Force }
 }
 if ($Interactive -and $NonInteractive) { Fail 'Choose only one interaction mode.' 'Yalnizca bir etkilesim kipi secin.' }
-# SSH/ConPTY has a real console even when Windows reports no interactive desktop session.
-$canPrompt = -not [Console]::IsInputRedirected
+# SSH/ConPTY has a real console even when Windows reports no interactive desktop session. A hidden console (setup wizard) also looks like one, hence -NoPrompt.
+$canPrompt = -not $NoPrompt -and -not [Console]::IsInputRedirected
 $guided = $Interactive -or (-not $NonInteractive -and $canPrompt -and ([string]::IsNullOrWhiteSpace($Server) -or [string]::IsNullOrWhiteSpace($Token)))
 if ($guided -and -not $canPrompt) { Fail 'Interactive mode requires a terminal.' 'Etkilesimli kip icin terminal gerekir.' }
 if ($guided) {
