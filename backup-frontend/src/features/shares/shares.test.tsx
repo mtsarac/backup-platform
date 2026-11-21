@@ -272,7 +272,7 @@ describe('BackupShare frontend', () => {
       expect(screen.getByText('Paylaşımlar')).toBeInTheDocument()
       expect(screen.getByText('Audit inspection')).toBeInTheDocument()
       expect(screen.getByText('Admin Alice')).toBeInTheDocument()
-      expect(screen.getByText('UserAdmin')).toBeInTheDocument()
+      expect(screen.getByText('Kullanıcı')).toBeInTheDocument()
       expect(screen.getByText('Aktif')).toBeInTheDocument()
     })
   })

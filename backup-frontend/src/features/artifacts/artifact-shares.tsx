@@ -9,6 +9,7 @@ import { TextInput } from '@/components/ui/text-input'
 import { StatusPill } from '@/components/data/status-pill'
 import { formatDateTime } from '@/lib/format'
 import { useAuth } from '@/features/auth/use-auth'
+import { accountRoleLabel } from '@/features/auth/role-label'
 import { useCreateShare, useShares } from '@/features/shares/hooks'
 import { canExtendShare, canManageShare, SHARE_DURATION_HOURS, type BackupShareView } from '@/features/shares/types'
 import { ShareDurationSelect } from '@/features/shares/share-duration-select'
@@ -105,7 +106,7 @@ export function ArtifactSharesSection({
                     <td className="py-2 pr-4 font-medium text-text">
                       {share.createdByDisplayName || share.createdByUserId}
                     </td>
-                    <td className="py-2 pr-4 text-text-muted">{share.createdByRole}</td>
+                    <td className="py-2 pr-4 text-text-muted">{accountRoleLabel(share.createdByRole)}</td>
                     <td className="py-2 pr-4 text-text-muted">{formatDateTime(share.createdAtUtc)}</td>
                     <td className="py-2 pr-4 text-text-muted">{formatDateTime(share.expiresAtUtc)}</td>
                     <td className="py-2 pr-4">
