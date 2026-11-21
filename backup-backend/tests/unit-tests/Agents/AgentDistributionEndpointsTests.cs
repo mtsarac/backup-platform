@@ -247,6 +247,84 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         Assert.True(preflight >= 0 && deletion > preflight, "the update staging directory must be validated before anything is deleted");
     }
 
+    // The Windows-only files below are not served by the backend, so they are read from the repository (deploy/windows) next to the build output.
+    private static string DeployWindowsFile(string relativePath)
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, "deploy", "windows", relativePath);
+            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+        }
+        throw new FileNotFoundException($"deploy/windows/{relativePath} was not found above {AppContext.BaseDirectory}.");
+    }
+
+    [Fact]
+    public async Task Windows_installer_can_be_told_that_nobody_can_answer_so_it_refuses_instead_of_prompting()
+    {
+        var text = await _client.GetStringAsync("/api/agent-dist/install.ps1");
+
+        Assert.Contains("[switch] $NoPrompt", text, StringComparison.Ordinal);
+        // A hidden console reports an input stream that is not redirected; only -NoPrompt makes the "no terminal" branch (refuse, never Read-Host) reachable there.
+        Assert.Contains("$canPrompt = -not $NoPrompt -and -not [Console]::IsInputRedirected", text, StringComparison.Ordinal);
+        Assert.Contains("if ($existing -and -not $ReplaceExisting -and -not $canPrompt) { Refuse-Existing }", text, StringComparison.Ordinal);
+        Assert.Contains("-NoPrompt", text[..text.IndexOf("[CmdletBinding()]", StringComparison.Ordinal)], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Setup_wizard_asks_before_replacing_an_existing_agent_and_never_leaves_install_ps1_able_to_prompt()
+    {
+        var wizard = DeployWindowsFile("installer/BackupAgentSetup.iss");
+        var initialize = wizard[wizard.IndexOf("function InitializeSetup", StringComparison.Ordinal)..wizard.IndexOf("procedure InitializeWizard", StringComparison.Ordinal)];
+
+        // Same three signals as install.ps1: the BackupAgent service, %ProgramFiles%\BackupAgent and %ProgramData%\BackupAgent.
+        Assert.Contains("RegKeyExists(HKLM, 'SYSTEM\\CurrentControlSet\\Services\\BackupAgent')", wizard, StringComparison.Ordinal);
+        Assert.Contains("DirExists(ExpandConstant('{commonpf64}\\BackupAgent'))", wizard, StringComparison.Ordinal);
+        Assert.Contains("DirExists(ExpandConstant('{commonappdata}\\BackupAgent'))", wizard, StringComparison.Ordinal);
+        // The question is asked in the wizard language, defaults to No, and runs before anything is entered or executed.
+        Assert.Contains("en.ReplaceExisting=An existing agent installation was found. Remove it and reinstall?", wizard, StringComparison.Ordinal);
+        Assert.Contains("tr.ReplaceExisting=Mevcut ajan kurulumu bulundu. Kald\u0131r\u0131l\u0131p yeniden kurulsun mu?", wizard, StringComparison.Ordinal);
+        Assert.Contains("SuppressibleMsgBox(CustomMessage('ReplaceExisting'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES", initialize, StringComparison.Ordinal);
+        Assert.Contains("ExistingInstallation()", initialize, StringComparison.Ordinal);
+        // Silent runs never ask: only the documented /REPLACEEXISTING=1 consents, otherwise the wizard stops with a log entry and a nonzero exit code.
+        Assert.Contains("{param:ReplaceExisting|0}", wizard, StringComparison.Ordinal);
+        Assert.Contains("/REPLACEEXISTING=1", wizard, StringComparison.Ordinal);
+        Assert.Contains("WizardSilent", initialize, StringComparison.Ordinal);
+        Assert.Contains("Log(", initialize, StringComparison.Ordinal);
+        Assert.Contains("Result := False", initialize, StringComparison.Ordinal);
+        // install.ps1 always gets either the consent or the "nobody can answer" switch.
+        Assert.Contains("if ReplaceExisting then Switch := '-ReplaceExisting' else Switch := '-NoPrompt'", wizard, StringComparison.Ordinal);
+        Assert.DoesNotContain("-NonInteractive -Server", wizard, StringComparison.Ordinal);
+        Assert.Contains("-NonInteractive ' + Switch + ' -Server", wizard, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Windows_uninstall_with_remove_identity_removes_the_install_directory_that_install_ps1_counts_as_an_existing_install()
+    {
+        var install = await _client.GetStringAsync("/api/agent-dist/install.ps1");
+        var uninstall = DeployWindowsFile("Uninstall-BackupAgentService.ps1");
+        const string installDirectory = "Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'BackupAgent'";
+        const string storeDirectory = "Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent'";
+
+        // Both scripts and the wizard must name the same places.
+        Assert.Contains(installDirectory, install, StringComparison.Ordinal);
+        Assert.Contains(storeDirectory, install, StringComparison.Ordinal);
+        Assert.Contains(installDirectory, uninstall, StringComparison.Ordinal);
+        Assert.Contains(storeDirectory, uninstall, StringComparison.Ordinal);
+        // Checked before the service is touched (like the store and like install.ps1's replace flow), removed only with -RemoveIdentity, after the service is gone.
+        var preflight = uninstall.IndexOf("$InstallDirectory = Assert-PurgeInstall", StringComparison.Ordinal);
+        var serviceDeletion = uninstall.IndexOf("& sc.exe delete", StringComparison.Ordinal);
+        var removal = uninstall.IndexOf("Remove-Item -LiteralPath $InstallDirectory -Recurse -Force", StringComparison.Ordinal);
+        Assert.True(preflight >= 0 && preflight < serviceDeletion, "the install directory must be validated before the service is removed");
+        Assert.True(removal > serviceDeletion, "the install directory must be removed only after the service is gone");
+        Assert.True(removal > uninstall.LastIndexOf("if ($RemoveIdentity)", StringComparison.Ordinal), "the install directory is purged with the identity, never by a plain uninstall");
+        var assert = uninstall[uninstall.IndexOf("function Assert-PurgeInstall", StringComparison.Ordinal)..];
+        assert = assert[..assert.IndexOf("\n}", StringComparison.Ordinal)];
+        Assert.Contains("ReparsePoint", assert, StringComparison.Ordinal);
+        Assert.Contains("-Recurse -Force", assert, StringComparison.Ordinal);
+        // A shell whose current directory is inside the install directory would block its removal.
+        Assert.Contains("Set-Location", uninstall, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("--non-interactive", "Server and enrollment token are required")]
     [InlineData("--non-interactive --server", "Missing option value")]

@@ -2,7 +2,9 @@
 .SYNOPSIS
 Stops and removes BackupAgent. Identity and its saved backend address are preserved by default for reinstall.
 .PARAMETER RemoveIdentity
-Explicitly purges the agent identity store. Alias: PurgeIdentity. Requires enrolling again.
+Explicitly purges the agent identity store and the installation directory install.ps1 created (%ProgramFiles%\BackupAgent), so
+nothing is left that install.ps1 counts as an existing installation. Alias: PurgeIdentity. Requires enrolling again.
+Without it the directory stays: it holds the binaries that Install-BackupAgentService.ps1 -BinaryDirectory .\bin reinstalls from.
 .PARAMETER StoreDirectory
 Identity store to purge. Defaults to the registered service's store, or %ProgramData%\BackupAgent.
 #>
@@ -41,8 +43,24 @@ function Assert-PurgeStore([string] $Path) {
     return $full
 }
 
+# The directory install.ps1 moves the package into; same checks as its replace flow: refuse reparse points, nothing is removed if one is found.
+function Assert-PurgeInstall {
+    $full = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'BackupAgent'))
+    for ($current = $full; $current; $current = [IO.Path]::GetDirectoryName($current)) {
+        if ((Test-Path -LiteralPath $current) -and ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Refusing installation removal through a reparse point.' }
+    }
+    if (Test-Path -LiteralPath $full) {
+        if (-not (Test-Path -LiteralPath $full -PathType Container)) { throw 'The installation path is not a directory; nothing was removed.' }
+        if (@(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw 'The installation contains reparse points; nothing was removed.' }
+    }
+    return $full
+}
+
 # Validate all purge targets before stopping/removing the service.
-if ($RemoveIdentity) { $StoreDirectory = Assert-PurgeStore $StoreDirectory }
+if ($RemoveIdentity) {
+    $StoreDirectory = Assert-PurgeStore $StoreDirectory
+    $InstallDirectory = Assert-PurgeInstall
+}
 if (Get-ScheduledTask -TaskName 'BackupAgentUpdate' -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName 'BackupAgentUpdate' -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName 'BackupAgentUpdate' -Confirm:$false
@@ -72,6 +90,12 @@ if ($RemoveIdentity) {
     if (Test-Path -LiteralPath $updateStage -PathType Container) {
         if (@(Get-ChildItem -LiteralPath $updateStage -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw 'Refusing removal of the update staging directory: it contains a reparse point.' }
         Remove-Item -LiteralPath $updateStage -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $InstallDirectory) {
+        # A shell whose current directory is inside it would keep Windows from removing the directory itself.
+        $here = (Get-Location).ProviderPath
+        if ($here.Equals($InstallDirectory, [StringComparison]::OrdinalIgnoreCase) -or $here.StartsWith($InstallDirectory + '\', [StringComparison]::OrdinalIgnoreCase)) { Set-Location -LiteralPath ([IO.Path]::GetDirectoryName($InstallDirectory)) }
+        Remove-Item -LiteralPath $InstallDirectory -Recurse -Force
     }
     Write-Host 'BackupAgent removed. Identity explicitly purged; a new enrollment token is required.'
 }

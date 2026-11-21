@@ -28,7 +28,9 @@ Existing identity and uninstall
   .\Install-BackupAgentService.ps1 -BinaryDirectory .\bin
     Reinstalls without a new token, verifies the saved credential as the service account and retains AgentId.
   .\Uninstall-BackupAgentService.ps1 -RemoveIdentity
-    Explicitly deletes local enrollment (alias -PurgeIdentity). Does not delete/revoke the backend Agent record.
+    Explicitly deletes local enrollment (alias -PurgeIdentity) and the installation directory C:\Program Files\BackupAgent, so the
+    platform installer (install.ps1) no longer finds an existing installation. Does not delete/revoke the backend Agent record.
+    A plain uninstall keeps that directory: it holds the binaries the reinstall above uses.
 
 Windows VSS snapshots (optional, off by default)
   A file source with SnapshotKind "Vss" reads a point-in-time shadow copy through the native VSS requester API. That needs two things:
