@@ -178,20 +178,21 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
             return Task.CompletedTask;
         }
     }
-    // The refusal sentence is the same on both platforms (documented in the root README) and is followed by a hint naming the consent switch.
+    // The refusal names how to proceed on each platform; Windows also names the uninstall script because a plain uninstall keeps the identity store, which still counts as an installation.
     // The Windows script cannot run here, so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
-    private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again. Alternatively run it in a terminal to be asked, or add ";
-    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin ";
+    private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. ";
+    private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. ";
 
     [Theory]
-    [InlineData("install.sh", "refuse_existing() { fail ", "--replace-existing")]
-    [InlineData("install.ps1", "function Refuse-Existing { Fail ", "-ReplaceExisting")]
-    public async Task Installers_refuse_an_existing_install_without_consent_with_the_same_message_and_name_the_switch(string script, string call, string option)
+    [InlineData("install.sh", "refuse_existing() { fail ", "Run it in a terminal to be asked, or add ", "Sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin ", "--replace-existing")]
+    [InlineData("install.ps1", "function Refuse-Existing { Fail ", "Run Uninstall-BackupAgentService.ps1 -RemoveIdentity first, then run this installer again. Alternatively run it in a terminal to be asked, or add ", "Once Uninstall-BackupAgentService.ps1 -RemoveIdentity calistirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin ", "-ReplaceExisting")]
+    public async Task Installers_refuse_an_existing_install_without_consent_with_platform_advice_and_name_the_switch(string script, string call, string englishAdvice, string turkishAdvice, string option)
     {
         var text = await _client.GetStringAsync($"/api/agent-dist/{script}");
 
-        Assert.Contains($"{call}'{ExistingInstallEnglish}{option} to remove", text, StringComparison.Ordinal);
-        Assert.Contains($"' '{ExistingInstallTurkish}{option} ekleyin.'", text, StringComparison.Ordinal);
+        Assert.Contains($"{call}'{ExistingInstallEnglish}{englishAdvice}{option} to remove", text, StringComparison.Ordinal);
+        Assert.Contains($"' '{ExistingInstallTurkish}{turkishAdvice}{option} ekleyin.'", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Uninstall the existing agent first", text, StringComparison.Ordinal);
         Assert.DoesNotContain("service is already registered", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Existing agent binaries", text, StringComparison.Ordinal);
     }

@@ -15,8 +15,8 @@ WORK=''
 declare -A SEEN=()
 text() { if [[ "$LANGUAGE" == tr ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 fail() { text "$1" "$2" >&2; printf '\n' >&2; exit 1; }
-# The same sentence as install.ps1 (a unit test compares them); declining or refusing an existing install ends here.
-refuse_existing() { fail 'An existing agent installation was found; nothing was replaced. Uninstall the existing agent first, then run this installer again. Alternatively run it in a terminal to be asked, or add --replace-existing to remove the existing agent and reinstall without asking.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Once mevcut ajani kaldirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin --replace-existing ekleyin.'; }
+# Linux has no uninstall script, so unlike install.ps1 the refusal names only the terminal prompt and --replace-existing (a unit test pins both texts).
+refuse_existing() { fail 'An existing agent installation was found; nothing was replaced. Run it in a terminal to be asked, or add --replace-existing to remove the existing agent and reinstall without asking.' 'Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. Sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin --replace-existing ekleyin.'; }
 # Only the agent's own fixed paths, service and account are touched; checked before anything is deleted.
 remove_existing() {
     local path
