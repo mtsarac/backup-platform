@@ -338,7 +338,7 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
     }
 
     [Fact]
-    public async Task An_all_zero_id_in_any_route_is_a_400_and_never_a_500()
+    public async Task An_all_zero_id_in_any_route_is_a_404_and_never_a_500()
     {
         var (actors, world) = await StartAsync();
         await using var _ = world;
@@ -352,7 +352,8 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
                 covered++;
                 var path = route.Fill(actors.Tenant.Tenant.Id.Value, parameter, Guid.Empty.ToString());
                 using var response = await actors.SendAsync(route, path, EmptyBodyFor(route));
-                if (response.StatusCode != HttpStatusCode.BadRequest) failures.Add($"{route.Method} {route.Pattern} [{parameter}]: {(int)response.StatusCode} {response.ReasonPhrase}");
+                // A zero tenant id is refused by tenant resolution before routing reaches a resource; every other id names a resource that cannot exist.
+                if (response.StatusCode != (parameter == "tenantId" && !route.Pattern.StartsWith("/api/platform/", StringComparison.Ordinal) ? HttpStatusCode.BadRequest : HttpStatusCode.NotFound)) failures.Add($"{route.Method} {route.Pattern} [{parameter}]: {(int)response.StatusCode} {response.ReasonPhrase}");
                 await AssertNoLeakAsync(response);
             }
         }

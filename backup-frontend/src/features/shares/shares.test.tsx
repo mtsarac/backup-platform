@@ -744,6 +744,7 @@ describe('BackupShare frontend', () => {
           decrypted: true,
         }
       }
+      if (path.endsWith('/downloads/session-123')) return { sessionId: 'session-123', state: 'Ready', transferredBytes: 0 }
       if (path.includes('platform/backup-shares')) return [platformShare, expiredShare]
       if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
       return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
@@ -761,6 +762,33 @@ describe('BackupShare frontend', () => {
       expect(click).toHaveBeenCalled()
       expect(screen.getByText('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.')).toBeInTheDocument()
     })
+    click.mockRestore()
+  })
+
+  it('does not navigate to the content link of an agent-direct share; it offers the direct save instead (#270)', async () => {
+    permissions.role = 'PlatformAdmin'
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.includes('/downloads')) {
+        return {
+          sessionId: 'session-123',
+          downloadUrl: '/api/tenants/tenant-b/backup-artifacts/art-123/downloads/session-123/content',
+          filename: 'backup-123.bak',
+          checksum: 'abc123',
+          sizeBytes: 4096,
+          decrypted: false,
+          direct: true,
+        }
+      }
+      if (path.endsWith('/downloads/session-123')) return { sessionId: 'session-123', state: 'Ready', transferredBytes: 0 }
+      if (path.includes('platform/backup-shares')) return [platformShare]
+      if (path.includes('platform/tenants')) return { items: [], totalCount: 0, pageSize: 100, page: 1 }
+      return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
+    })
+    renderPlatformSharesPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'İndir' }))
+    expect(await screen.findByRole('button', { name: 'Dosyayı kaydet' })).toBeInTheDocument()
+    expect(click).not.toHaveBeenCalled()
     click.mockRestore()
   })
 

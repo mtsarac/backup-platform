@@ -1,5 +1,4 @@
 import { useState, useContext, type ReactNode } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { Share2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
@@ -7,7 +6,7 @@ import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { FilterField } from '@/components/ui/filters'
 import { linkClass, rowLinkClass } from '@/components/ui/form-styles'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { Notice } from '@/components/ui/notice'
 import { Select } from '@/components/ui/text-input'
 import { compareDate, compareText } from '@/features/lists/compare'
 import { ListEmpty } from '@/features/lists/list-empty'
@@ -19,10 +18,9 @@ import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
-import { downloadAttemptsKey } from './hooks'
+import { ShareDownload } from './share-download'
 import { ShareActionDialogs } from './share-dialogs'
 import { canExtendShare, canManageShare, type BackupShareView } from './types'
-import { prepareDownload } from '@/features/artifacts/api'
 import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 
 const listConfig = {
@@ -62,7 +60,6 @@ export function SharesTable({
   useLanguage()
   const { user } = useAuth()
   const tenantContext = useContext(TenantContext)
-  const queryClient = useQueryClient()
   const state = useListState(listConfig)
   const list = useClientList(shares, state, {
     searchText: share => `${share.artifactName ?? ''} ${share.createdByDisplayName || share.createdByUserId} ${accountRoleLabel(share.createdByRole)} ${share.reason ?? ''} ${showTenant ? share.tenantName || share.tenantId : ''}`,
@@ -73,42 +70,6 @@ export function SharesTable({
   const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<BackupShareView | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [errorNotice, setErrorNotice] = useState<string | null>(null)
-  const [downloadingId, setDownloadingId] = useState<string | null>(null)
-
-  async function handleDownload(share: BackupShareView) {
-    setDownloadingId(share.id)
-    setErrorNotice(null)
-    setNotice(null)
-    try {
-      const prepared = await prepareDownload(share.tenantId, share.artifactId, undefined, undefined, share.id)
-      const anchor = document.createElement('a')
-      anchor.href = prepared.downloadUrl
-      anchor.download = prepared.filename
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      setNotice(tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.'))
-    } catch (err: unknown) {
-      let msg = tx('İndirme başlatılamadı.')
-      if (err && typeof err === 'object') {
-        const errorObj = err as { code?: string; reason?: string; error?: string; status?: number; message?: string }
-        const code = errorObj.code || errorObj.error || errorObj.reason || errorObj.message || ''
-        const status = errorObj.status
-        if (code === 'replica_unavailable' || code === 'no_downloadable_replica') {
-          msg = tx('Kopya şu anda indirme için kullanılamıyor.')
-        } else if (code === 'share_revoked') {
-          msg = tx('Paylaşım iptal edildiği için indirme yapılamaz.')
-        } else if (code === 'share_expired' || status === 403 || code.includes('403')) {
-          msg = tx('İndirme yetkisi reddedildi veya paylaşım süresi doldu.')
-        }
-      }
-      setErrorNotice(msg)
-    } finally {
-      setDownloadingId(null)
-      void queryClient.invalidateQueries({ queryKey: downloadAttemptsKey })
-    }
-  }
 
   const columns: Column<BackupShareView>[] = [
     ...(showTenant
@@ -187,14 +148,7 @@ export function SharesTable({
         return (
           <div className="flex gap-2 justify-end">
             {canDownload && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={downloadingId === share.id}
-                onClick={() => void handleDownload(share)}
-              >
-                {downloadingId === share.id ? tx('İndirme hazırlanıyor…') : tx('İndir')}
-              </Button>
+              <ShareDownload share={share} />
             )}
             {canManage && (
               <>
@@ -226,9 +180,6 @@ export function SharesTable({
   return (
     <div className="space-y-4">
       {notice && <Notice tone="success">{notice}</Notice>}
-      {errorNotice && (
-        <ErrorNotice what={errorNotice} />
-      )}
       <ListToolbar state={state} label={tx('Paylaşım filtreleri')} total={list.total} search={{ label: tx('Paylaşım ara') }}>
         {tenantFilter}
         <FilterField label={tx('Durum')}>

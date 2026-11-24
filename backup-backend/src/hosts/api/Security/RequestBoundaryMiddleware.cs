@@ -1,7 +1,7 @@
 namespace BackupPlatform.Api.Security;
 
 /// <summary>
-/// Refuses route and query values no endpoint can accept, after authentication, authorization and the agent gates so a caller who may not see a resource learns nothing about it.
+/// Refuses route and query values no endpoint can accept (an all-zero route id is a 404, like any unknown id; the rest is a 400), after authentication, authorization and the agent gates so a caller who may not see a resource learns nothing about it.
 /// The all-zero Guid is never issued and every typed id constructor throws on it; PostgreSQL text cannot store a NUL, so one reaching the database is an unhandled 500.
 /// Kestrel already refuses a NUL in the path; JSON bodies get the NUL rule from <see cref="NulFreeStringConverter"/> and their ids are validated by the handlers.
 /// </summary>
@@ -11,7 +11,12 @@ public sealed class RequestBoundaryMiddleware(RequestDelegate next)
     {
         foreach (var (name, value) in context.Request.RouteValues)
         {
-            if (value is string text && IsEmptyGuid(text)) return Refuse(context, name);
+            if (value is string text && IsEmptyGuid(text))
+            {
+                // A never-issued id names no resource: the same 404 as any unknown id, not a validation failure.
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return Task.CompletedTask;
+            }
         }
         foreach (var (name, values) in context.Request.Query)
         {
