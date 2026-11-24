@@ -23,7 +23,7 @@ public sealed class PlatformAdministrationService(IPlatformAdministrationStore s
     public const int MinimumPasswordLength = 12;
     public const int MaximumPasswordLength = 1024;
 
-    public Task<PlatformTenantItem> CreateTenantAsync(string? name, UserId actor, CancellationToken cancellationToken)
+    public Task<PlatformChange<PlatformTenantItem>> CreateTenantAsync(string? name, UserId actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(actor);
         return store.CreateTenantAsync(ValidName(name, "name"), actor, timeProvider.GetUtcNow(), cancellationToken);

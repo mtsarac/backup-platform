@@ -121,4 +121,14 @@ describe('platform tenants list', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Girilen değer geçersiz')
     expect(screen.getByLabelText("Çalışma alanı adı")).toBeInvalid()
   })
+
+  it('says the workspace name is taken when the server refuses a duplicate', async () => {
+    vi.mocked(api.createTenant).mockRejectedValue(new ApiError(409, { error: 'tenant_name_taken' }))
+    renderPlatform(<PlatformTenantsPage />)
+    await screen.findByRole('link', { name: 'Acme A.Ş.' })
+    await userEvent.click(screen.getByRole('button', { name: "Yeni çalışma alanı" }))
+    await userEvent.type(screen.getByLabelText("Çalışma alanı adı"), 'Acme A.Ş.')
+    await userEvent.click(screen.getByRole('button', { name: "Çalışma alanı oluştur" }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bu adla bir çalışma alanı zaten var')
+  })
 })

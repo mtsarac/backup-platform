@@ -451,12 +451,13 @@ describe('adım adım sihirbaz', () => {
     expect(screen.queryByLabelText('Yedekleme bilgisayarı')).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'Elle yapılandır' })).toBeInTheDocument()
   })
-  it('offers no port, encryption, certificate, Windows sign-in or job switch on the manual source', async () => {
+  it('offers no port, certificate or job switch, but the transport and SQL sign-in choices, on the manual source', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Elle yapılandır' }))
     for (const engine of ['Microsoft SQL Server', 'PostgreSQL']) {
       fireEvent.click(screen.getByRole('radio', { name: engine }))
-      for (const label of [/Bağlantı noktası/, /Bağlantıyı şifrele/, /sertifika/i, /Windows kimlik/, 'İş etkin']) expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
+      for (const label of [/Bağlantı noktası/, /sertifika/i, 'İş etkin']) expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
+      expect(screen.getByLabelText(/Bağlantıyı şifrele/)).toBeChecked()
     }
   })
   it('shows the pinned settings nowhere in the wizard, and never the server-certificate checkbox', async () => {

@@ -41,17 +41,25 @@ function FileSourceGroup({ configuration, errors, onChange }: GroupProps) {
   </FormGrid>
 }
 
-/** Which database server and how to connect (SQL Server / PostgreSQL); port, TLS and Windows sign-in are pinned, not asked. */
+/** Which database server and how to connect (SQL Server / PostgreSQL); port is pinned, not asked. */
 function DatabaseSourceGroup({ configuration, errors, onChange }: GroupProps) {
   useLanguage()
-  const { text } = fieldKit(errors)
+  const { text, check } = fieldKit(errors)
   const isPg = configuration.engine === 'postgres'
   return <FormGrid>
     {text('configuration.host', isPg ? tx('PostgreSQL host') : tx('SQL Server host / instance'), configuration.host, host => onChange({ ...configuration, host }))}
     {text('configuration.database', 'Database', configuration.database, database => onChange({ ...configuration, database }))}
+    {!isPg && <div role="group" aria-label={tx('Giriş yöntemi')} className="flex flex-wrap gap-4 md:col-span-2">
+      <RadioField name="configuration-auth" checked={configuration.integratedSecurity} onChange={() => onChange({ ...configuration, integratedSecurity: true })} label={tx('Windows hesabıyla giriş yap')} />
+      <RadioField name="configuration-auth" checked={!configuration.integratedSecurity} onChange={() => onChange({ ...configuration, integratedSecurity: false })} label={tx('SQL Server oturumu (kullanıcı adı ve parola)')} />
+    </div>}
     {!(!isPg && configuration.integratedSecurity) && <DatabaseLoginFields idPrefix="configuration-login" login={configuration.databaseLogin} hasStored={Boolean(configuration.databaseCredentialReference)}
       errors={{ userName: errors['configuration.databaseLogin.userName'], password: errors['configuration.databaseLogin.password'] }}
       onChange={databaseLogin => onChange({ ...configuration, databaseLogin })} />}
+    <div className="md:col-span-2">
+      {check('Bağlantıyı şifrele', configuration.encrypt, encrypt => onChange({ ...configuration, encrypt }))}
+      {!configuration.encrypt && <p className="text-sm text-text-muted">{tx('Kapatırsanız parola ağda korunmadan gidebilir; yalnızca TLS desteklemeyen sunucular için kapatın.')}</p>}
+    </div>
     <p className="text-sm text-text-muted md:col-span-2">{isPg ? tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır.") : tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır; aynı makinedeki diğer SQL Server sürümlerinin ve kullanıcıların girişleri birbirine karışmaz.")}</p>
     {isPg && <p className="text-sm text-text-muted md:col-span-2">{tx("Full Backup, pg_dump custom-format mantıksal arşividir; WAL/PITR veya fiziksel küme yedeği değildir. Database adı en fazla 63 UTF-8 byte olabilir. PostgreSQL kullanıcı adı ve parolası gerekir.")}</p>}
   </FormGrid>

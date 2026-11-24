@@ -200,6 +200,20 @@ public sealed class ReplicationComplianceUnitTests
     }
 
     [Fact]
+    public void An_artifact_lists_every_snapshot_destination_so_a_lost_copy_can_be_repaired()
+    {
+        var run = SucceededRun(2, "central", "sftp", "google-drive");
+        var replicas = run.CurrentAttempt.Artifacts.Single().Replicas.ToArray();
+        replicas.Single(replica => replica.StorageProvider == "sftp").MarkMissing();
+
+        var health = BackupReplicationEvaluator.ForArtifact(run.Configuration, replicas);
+
+        Assert.Equal(3, health.Destinations.Count);
+        Assert.Equal("Failed", health.Destinations.Single(d => d.StorageProvider == "sftp").State);
+        Assert.All(health.Destinations.Where(d => d.StorageProvider != "sftp"), d => Assert.Equal("Verified", d.State));
+    }
+
+    [Fact]
     public void An_unverified_orphan_is_never_usable_and_never_keeps_an_artifact_available()
     {
         var artifact = new BackupArtifact(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), 100, Source, Hash, "sha256", At, "{}", "{}");

@@ -121,7 +121,7 @@ public sealed record BackupDestinationHealth(
 /// <summary>
 /// Replication compliance of one artifact (or of the attempt that tried to create it), independent of the engine's outcome and of the run's status:
 /// <see cref="Status"/> says whether verified copies meet the admitted count, media diversity and off-site policy.
-/// <see cref="Destinations"/> is empty when only the replicas are known (an artifact listing).
+/// <see cref="Destinations"/> is empty when the snapshot is unknown (the replica-count overload).
 /// </summary>
 public sealed record BackupReplicationHealth(
     int RequiredVerifiedReplicas, int VerifiedReplicas, int DestinationCount, string Status, bool PolicySatisfied, IReadOnlyList<BackupDestinationHealth> Destinations);
@@ -153,9 +153,23 @@ public static class BackupReplicationEvaluator
     public static BackupReplicationHealth ForArtifact(BackupConfiguration snapshot, IEnumerable<BackupReplica> replicas)
     {
         var usable = replicas.Where(IsUsableVerified).ToArray();
-        var health = ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, usable);
+        var health = ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, usable) with
+        {
+            Destinations = [.. snapshot.Destinations.Select(destination => ArtifactDestination(destination, replicas))]
+        };
         return ApplyPolicy(snapshot, health, destination => usable.Any(replica => replica.StorageProvider == destination.StorageProvider
             && replica.StorageConnectionId == destination.StorageConnectionId));
+    }
+
+    /// <summary>One snapshot destination as the artifact stands: a usable verified copy, a copy that lost its verification (for example the object went missing), or no copy at all.</summary>
+    private static BackupDestinationHealth ArtifactDestination(BackupDestination destination, IEnumerable<BackupReplica> replicas)
+    {
+        var held = replicas.Where(replica => replica.StorageProvider == destination.StorageProvider
+            && (destination.StorageConnectionId is null || replica.StorageConnectionId == destination.StorageConnectionId)).ToArray();
+        var copy = held.FirstOrDefault(IsUsableVerified) ?? held.FirstOrDefault();
+        var state = copy is null ? BackupDestinationStates.NotAttempted : IsUsableVerified(copy) ? BackupDestinationStates.Verified
+            : copy.VerificationMethod == BackupReplica.MissingVerificationMethod ? BackupDestinationStates.Failed : "Deleted";
+        return new(destination.StorageProvider, destination.StorageConnectionId ?? copy?.StorageConnectionId, destination.IsPrimary, state, null, false, copy?.Id, copy?.Status.ToString());
     }
 
     private static BackupReplicationHealth ApplyPolicy(BackupConfiguration snapshot, BackupReplicationHealth health, Func<BackupDestination, bool> verified)

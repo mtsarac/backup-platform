@@ -85,8 +85,10 @@ public static class PlatformEndpoints
     {
         try
         {
-            var tenant = await service.CreateTenantAsync(request?.Name, currentUser.UserId!, cancellationToken);
-            return Results.Json(ToResponse(tenant), statusCode: StatusCodes.Status201Created);
+            var change = await service.CreateTenantAsync(request?.Name, currentUser.UserId!, cancellationToken);
+            return change.Outcome == PlatformChangeOutcome.TenantNameTaken
+                ? Results.Conflict(new { error = "tenant_name_taken" })
+                : Results.Json(ToResponse(change.Value!), statusCode: StatusCodes.Status201Created);
         }
         catch (InvalidPlatformRequestException exception)
         {
@@ -121,7 +123,12 @@ public static class PlatformEndpoints
         try
         {
             var change = await service.RenameTenantAsync(new TenantId(tenantId), request?.Name, currentUser.UserId!, cancellationToken);
-            return change.Outcome == PlatformChangeOutcome.TenantNotFound ? TenantNotFound() : Results.Ok(ToResponse(change.Value!));
+            return change.Outcome switch
+            {
+                PlatformChangeOutcome.TenantNotFound => TenantNotFound(),
+                PlatformChangeOutcome.TenantNameTaken => Results.Conflict(new { error = "tenant_name_taken" }),
+                _ => Results.Ok(ToResponse(change.Value!))
+            };
         }
         catch (InvalidPlatformRequestException exception)
         {

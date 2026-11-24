@@ -252,7 +252,8 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
             // An agent-wide scan is already queued or running: asking again is not an error, the answer is the same.
             return new RescanOutcome(RescanStatus.Requested, ToStatus(state, await InstanceCountAsync(context, tenantId, agentId, cancellationToken), now));
         }
-        else if (!state.CanRequestManual(now))
+        // A verification follows a credential the user just changed, so it must not wait out the throttle that guards agent-wide rescans.
+        else if (instanceKey is null && !state.CanRequestManual(now))
         {
             return new RescanOutcome(RescanStatus.TooSoon, RetryAfter: state.ManualRetryAfter(now));
         }

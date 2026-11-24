@@ -2,12 +2,12 @@ import { currentLocale, tx } from '@/lib/i18n'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import type { BackupJobHealth } from '@/features/backup-jobs/health'
 import { jobStatus, type JobStatus } from '@/features/backup-jobs/job-status'
-import { isActiveRun } from '@/features/backups/presentation'
+import { canRetryRun, isActiveRun } from '@/features/backups/presentation'
 
 export interface StripDay { date: string; status: string; attemptCount: number }
 
 /** Why a row needs the owner, most urgent first; the band names one of these. */
-export type Topic = 'stale' | 'firstFailed' | 'offline' | 'capacity' | 'replica' | 'restoreFailed'
+export type Topic = 'stale' | 'firstFailed' | 'offline' | 'capacity' | 'replica' | 'restoreFailed' | 'lastFailed'
 export type BandAction = 'runNow' | 'checkComputer' | 'manageStorage' | 'retryRestore' | null
 
 export interface RowInput {
@@ -59,6 +59,7 @@ export function buildRow({ job, health = noHealth, days, hasSucceeded, lastSucce
   const firstFailed = !hasSucceeded && failedRecently
   const topic: Topic | null = baseStatus !== 'attention' ? null
     : firstFailed ? 'firstFailed'
+    : !scheduled && job.lastRun != null && canRetryRun(job.lastRun.status) ? 'lastFailed'
     : scheduled && (reasons.includes('backup_stale') || reasons.includes('backup_missing')) ? 'stale'
     : offline ? 'offline'
     : reasons.includes('capacity_critical') ? 'capacity'
@@ -81,7 +82,7 @@ export function headerBadge(rows: readonly ProtectionRow[]): Badge {
 }
 
 // A failed first attempt ranks with a missed backup: both are "the backup was not taken".
-const rank: Record<Topic, number> = { stale: 0, firstFailed: 0, offline: 1, capacity: 2, replica: 3, restoreFailed: 4 }
+const rank: Record<Topic, number> = { stale: 0, firstFailed: 0, offline: 1, capacity: 2, replica: 3, restoreFailed: 4, lastFailed: 0 }
 
 
 export type Band =
@@ -92,6 +93,7 @@ function bandText(row: ProtectionRow, topic: Topic): string {
   const name = row.job.name
   switch (topic) {
     case 'firstFailed': return tx('{0}: ilk yedek alınamadı', { '0': name })
+    case 'lastFailed': return tx('{0}: son yedek alınamadı', { '0': name })
     case 'stale': return tx('{0}: yedek zamanında alınmadı', { '0': name })
     case 'offline': return tx('{0}: yedekleme bilgisayarı çevrimdışı', { '0': name })
     case 'capacity': return tx('{0}: depolama alanı dolmak üzere', { '0': name })
@@ -102,7 +104,7 @@ function bandText(row: ProtectionRow, topic: Topic): string {
 
 function bandAction(row: ProtectionRow, topic: Topic): BandAction {
   switch (topic) {
-    case 'firstFailed': case 'stale': return row.offline ? 'checkComputer' : 'runNow'
+    case 'firstFailed': case 'stale': case 'lastFailed': return row.offline ? 'checkComputer' : 'runNow'
     case 'offline': return 'checkComputer'
     case 'capacity': return 'manageStorage'
     case 'replica': return null
