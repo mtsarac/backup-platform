@@ -45,8 +45,10 @@ The architecture tests enforce the dependency direction between these layers, so
 
 The agent records an allowlist of structured operational events under its credential-store
 directory in `logs/`. Messages and exception text are never copied from arbitrary log
-arguments: the event code determines the safe message, level and component. Existing
-`Logging:LogLevel` settings control which events are recorded. Segments contain at most
+arguments: the event code determines the safe message, level and component. The runtime
+disables other logging providers so unfiltered exception text cannot bypass the allowlist
+through console or system-service logs. Existing `Logging:LogLevel` settings control which
+events are recorded. Segments contain at most
 100 events, are retried until the backend acknowledges them, and the latest ten
 acknowledged segments remain locally; unacknowledged segments remain until delivered.
 The log directory needs sufficient free space during a prolonged outage.

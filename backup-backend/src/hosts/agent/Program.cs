@@ -3,6 +3,7 @@ using BackupPlatform.Agent.Host;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 if (await AgentUpdateCommands.TryRunAsync(args)) return;
 
@@ -44,6 +45,7 @@ if (args.Length == 2 && args[0] == "--store-directory")
     args = [];
 }
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { Args = args, ContentRootPath = AppContext.BaseDirectory });
+builder.Logging.ClearProviders();
 AgentUpdateCommands.ConfigureRuntime(builder.Configuration);
 if (storeOverride is not null) { builder.Configuration["Agent:CredentialStoreDirectory"] = storeOverride; }
 FileStream? identityLease = null;

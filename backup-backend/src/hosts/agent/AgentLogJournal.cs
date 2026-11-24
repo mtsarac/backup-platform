@@ -16,6 +16,7 @@ internal sealed class AgentLogJournal : ILoggerProvider, ISupportExternalScope
     {
         _directory = Path.Combine(directory, "logs");
         Directory.CreateDirectory(_directory);
+        if ((File.GetAttributes(_directory) & FileAttributes.ReparsePoint) != 0) throw new IOException("The agent log directory must not be a link.");
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(_directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         lock (_gate) Seal();
     }

@@ -34,7 +34,8 @@ internal sealed class AgentLogSender(AgentLogJournal journal, IAgentCredentialSt
                     }
                 }
             }
-            catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException or AgentCredentialStoreException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException or AgentCredentialStoreException or UnauthorizedAccessException
+                || exception is OperationCanceledException && !stoppingToken.IsCancellationRequested)
             {
                 // The pending segment stays on disk and is retried on the next pass.
             }

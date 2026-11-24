@@ -15,9 +15,9 @@ export class Api {
     return api
   }
 
-  async call(method: string, url: string, data?: unknown, ok: number[] = [200, 201, 204]): Promise<any> {
+  async call(method: string, url: string, data?: unknown, ok: number[] = [200, 201, 204], headers: Record<string, string> = {}): Promise<any> {
     const t = await (await this.ctx.get('/api/auth/antiforgery')).json()
-    const r = await this.ctx.fetch(url, { method, data, headers: { [t.headerName]: t.requestToken } })
+    const r = await this.ctx.fetch(url, { method, data, headers: { ...headers, [t.headerName]: t.requestToken } })
     if (!ok.includes(r.status())) throw new Error(`${method} ${url} -> ${r.status()} ${(await r.text()).slice(0, 300)}`)
     return r.status() === 204 || !(r.headers()['content-type'] ?? '').includes('json') ? null : r.json()
   }
