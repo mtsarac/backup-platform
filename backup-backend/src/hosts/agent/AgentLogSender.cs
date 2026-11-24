@@ -23,14 +23,19 @@ internal sealed class AgentLogSender(AgentLogJournal journal, IAgentCredentialSt
                 {
                     foreach (var path in journal.Pending())
                     {
-                        var lines = await File.ReadAllLinesAsync(path, stoppingToken);
-                        var entries = lines.Select(line => JsonSerializer.Deserialize<AgentLogEntry>(line, JsonSerializerOptions.Web)!).ToArray();
-                        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(endpoint.BaseUri, "api/agent/logs"));
-                        request.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
-                        request.Content = JsonContent.Create(entries, options: JsonSerializerOptions.Web);
-                        using var response = await http.SendAsync(request, stoppingToken);
-                        if (!response.IsSuccessStatusCode) break;
-                        journal.Acknowledge(path);
+                        if (!journal.TryClaim(path)) continue;
+                        try
+                        {
+                            var lines = await File.ReadAllLinesAsync(path, stoppingToken);
+                            var entries = lines.Select(line => JsonSerializer.Deserialize<AgentLogEntry>(line, JsonSerializerOptions.Web)!).ToArray();
+                            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(endpoint.BaseUri, "api/agent/logs"));
+                            request.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
+                            request.Content = JsonContent.Create(entries, options: JsonSerializerOptions.Web);
+                            using var response = await http.SendAsync(request, stoppingToken);
+                            if (!response.IsSuccessStatusCode) break;
+                            journal.Acknowledge(path);
+                        }
+                        finally { journal.Release(path); }
                     }
                 }
             }

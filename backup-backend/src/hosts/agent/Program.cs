@@ -66,7 +66,8 @@ catch (Exception exception) when (exception is AgentEnrollmentException or Agent
 }
 using var runtimeLease = identityLease;
 builder.Services.AddAgentHost(builder.Configuration);
-builder.Services.AddSingleton(_ => new AgentLogJournal(AgentCredentialStoreFactory.ResolveDirectory(builder.Configuration["Agent:CredentialStoreDirectory"])));
+builder.Services.AddSingleton(_ => new AgentLogJournal(AgentCredentialStoreFactory.ResolveDirectory(builder.Configuration["Agent:CredentialStoreDirectory"]),
+    builder.Configuration.GetValue<int?>("Agent:Logging:MaxPendingSegments") ?? AgentLogJournal.DefaultMaxPendingSegments));
 builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<AgentLogJournal>());
 builder.Services.AddHttpClient<AgentLogSender>(client => client.Timeout = TimeSpan.FromSeconds(30))
     .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler);

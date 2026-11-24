@@ -48,10 +48,12 @@ directory in `logs/`. Messages and exception text are never copied from arbitrar
 arguments: the event code determines the safe message, level and component. The runtime
 disables other logging providers so unfiltered exception text cannot bypass the allowlist
 through console or system-service logs. Existing `Logging:LogLevel` settings control which
-events are recorded. Segments contain at most
-100 events, are retried until the backend acknowledges them, and the latest ten
-acknowledged segments remain locally; unacknowledged segments remain until delivered.
-The log directory needs sufficient free space during a prolonged outage.
+events are recorded. A segment holds at most 100 events. `Agent:Logging:MaxPendingSegments`
+limits the offline queue to 100 segments by default (minimum 2), plus the active segment
+of at most 100 events; set `Agent__Logging__MaxPendingSegments` to override it. When the
+limit is reached, the oldest queued segments are discarded to make room for one warning
+record containing the number of lost records. An in-flight segment is kept until its
+delivery completes. The latest ten acknowledged segments remain locally.
 
 The backend stores logs for 30 days after receipt by default; set
 `AgentLogs:RetentionDays` to a positive number to change this. Tenant members can query

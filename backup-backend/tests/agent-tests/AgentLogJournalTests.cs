@@ -54,6 +54,57 @@ public sealed class AgentLogJournalTests
         }
         finally { Directory.Delete(directory, true); }
     }
+    [Fact]
+    public void OfflineQueueDropsOldestSegmentsAndRecordsOneCumulativeWarning()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var journal = new AgentLogJournal(directory, maxPendingSegments: 2);
+            var ids = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+            for (var index = 0; index < 3; index++)
+            {
+                journal.Record("backup.started", jobId: ids[index]);
+                journal.Pending();
+            }
+            var entries = journal.Pending().SelectMany(File.ReadAllLines)
+                .Select(line => JsonSerializer.Deserialize<AgentLogEntry>(line, JsonSerializerOptions.Web)!).ToArray();
+            Assert.Equal(2, entries.Length);
+            Assert.Equal(ids[2], Assert.Single(entries, entry => entry.Code == "backup.started").JobId);
+            var warning = Assert.Single(entries, entry => entry.Code == "agent.logs_dropped");
+            Assert.Equal(2, warning.DroppedCount);
+            Assert.Equal("Warning", warning.Level);
+            Assert.Contains("2", warning.Message);
+
+            journal.Record("backup.started", jobId: ids[3]);
+            entries = journal.Pending().SelectMany(File.ReadAllLines)
+                .Select(line => JsonSerializer.Deserialize<AgentLogEntry>(line, JsonSerializerOptions.Web)!).ToArray();
+            Assert.Equal(ids[3], Assert.Single(entries, entry => entry.Code == "backup.started").JobId);
+            Assert.Equal(4, Assert.Single(entries, entry => entry.Code == "agent.logs_dropped").DroppedCount);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void QueueNeverEvictsAnInFlightSegment()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var journal = new AgentLogJournal(directory, maxPendingSegments: 2);
+            journal.Record("agent.started");
+            var inFlight = Assert.Single(journal.Pending());
+            Assert.True(journal.TryClaim(inFlight));
+            journal.Record("agent.started");
+            journal.Pending();
+            journal.Record("agent.started");
+            Assert.Contains(inFlight, journal.Pending());
+            journal.Acknowledge(inFlight);
+            journal.Release(inFlight);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
 
     [Fact]
     public async Task FailedBatchIsRetriedAfterRestartAndAcknowledged()

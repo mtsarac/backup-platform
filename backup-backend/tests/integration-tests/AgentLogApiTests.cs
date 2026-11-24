@@ -52,4 +52,20 @@ public sealed class AgentLogApiTests(PostgreSqlFixture fixture) : IClassFixture<
         using var rejected = await scenario.World.SendAgentAsync(HttpMethod.Post, "/api/agent/logs", agent.CredentialId, agent.Secret, body: new[] { new { id = Guid.NewGuid(), timestamp = DateTimeOffset.UtcNow, code = "password=hunter2", jobId = job, runId = (Guid?)null } });
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
     }
+
+    [Fact]
+    public async Task LossWarningShowsTheCountButRejectsUntrustedCountsOnOtherEvents()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var agent = scenario.Agent;
+        var warning = new { id = Guid.NewGuid(), timestamp = DateTimeOffset.UtcNow, code = "agent.logs_dropped", jobId = (Guid?)null, runId = (Guid?)null, droppedCount = 123 };
+        using var accepted = await scenario.World.SendAgentAsync(HttpMethod.Post, "/api/agent/logs", agent.CredentialId, agent.Secret, body: new[] { warning });
+        Assert.Equal(HttpStatusCode.NoContent, accepted.StatusCode);
+        using var response = await scenario.Admin.GetAsync(scenario.Root + $"/agent-logs?agentId={agent.AgentId}&level=Warning");
+        var row = Assert.Single(AgentWorld.ReadJson(response).EnumerateArray());
+        Assert.Equal("Agent dropped 123 buffered log records", row.GetProperty("message").GetString());
+        using var rejected = await scenario.World.SendAgentAsync(HttpMethod.Post, "/api/agent/logs", agent.CredentialId, agent.Secret,
+            body: new[] { warning with { id = Guid.NewGuid(), code = "agent.started" } });
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+    }
 }

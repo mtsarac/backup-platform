@@ -25,7 +25,8 @@ public static class AgentLogEndpoints
 
     private static async Task<IResult> IngestAsync(AgentLogEntry[] entries, ICurrentAgent current, PlatformDbContext db, CancellationToken cancellationToken)
     {
-        if (entries is null || entries.Length is < 1 or > 100 || entries.Any(e => e is null || e.Id == Guid.Empty || AgentLogEvents.Message(e.Code) is null || e.Timestamp == default))
+        if (entries is null || entries.Length is < 1 or > 100 || entries.Any(e => e is null || e.Id == Guid.Empty || AgentLogEvents.Message(e.Code) is null || e.Timestamp == default
+            || (e.Code == "agent.logs_dropped" ? e.DroppedCount <= 0 : e.DroppedCount != 0)))
             return Results.BadRequest();
         var identity = current.Identity!;
         var connection = (NpgsqlConnection)db.Database.GetDbConnection();
@@ -43,8 +44,8 @@ public static class AgentLogEndpoints
             command.Parameters.AddWithValue("agent", identity.AgentId.Value);
             command.Parameters.AddWithValue("at", entry.Timestamp.ToUniversalTime());
             command.Parameters.AddWithValue("code", entry.Code);
-            command.Parameters.AddWithValue("message", AgentLogEvents.Message(entry.Code)!);
-            command.Parameters.AddWithValue("level", entry.Code.Contains("failed", StringComparison.Ordinal) ? "Warning" : "Information");
+            command.Parameters.AddWithValue("message", entry.Message);
+            command.Parameters.AddWithValue("level", entry.Level);
             command.Parameters.Add(new NpgsqlParameter("job", NpgsqlDbType.Uuid) { Value = (object?)entry.JobId ?? DBNull.Value });
             command.Parameters.Add(new NpgsqlParameter("run", NpgsqlDbType.Uuid) { Value = (object?)entry.RunId ?? DBNull.Value });
             await command.ExecuteNonQueryAsync(cancellationToken);

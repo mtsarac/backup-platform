@@ -7,13 +7,18 @@ namespace BackupPlatform.Agent.Host;
 /// <summary>Records only explicitly admitted events; arbitrary messages, arguments and exceptions never reach disk.</summary>
 internal sealed class AgentLogJournal : ILoggerProvider, ISupportExternalScope
 {
+    internal const int DefaultMaxPendingSegments = 100;
     private readonly string _directory;
+    private readonly int _maxPendingSegments;
+    private string? _inFlight;
     private readonly object _gate = new();
     private IExternalScopeProvider _scopes = new LoggerExternalScopeProvider();
     private int _count;
 
-    public AgentLogJournal(string directory)
+    public AgentLogJournal(string directory, int maxPendingSegments = DefaultMaxPendingSegments)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxPendingSegments, 2);
+        _maxPendingSegments = maxPendingSegments;
         _directory = Path.Combine(directory, "logs");
         Directory.CreateDirectory(_directory);
         if ((File.GetAttributes(_directory) & FileAttributes.ReparsePoint) != 0) throw new IOException("The agent log directory must not be a link.");
@@ -33,6 +38,24 @@ internal sealed class AgentLogJournal : ILoggerProvider, ISupportExternalScope
             return Directory.GetFiles(_directory, "pending-*.jsonl").Order(StringComparer.Ordinal).ToArray();
         }
     }
+    internal bool TryClaim(string path)
+    {
+        lock (_gate)
+        {
+            if (_inFlight is not null || !File.Exists(path)) return false;
+            _inFlight = path;
+            return true;
+        }
+    }
+
+    internal void Release(string path)
+    {
+        lock (_gate)
+        {
+            if (string.Equals(_inFlight, path, StringComparison.Ordinal)) _inFlight = null;
+        }
+    }
+
 
     internal void Acknowledge(string path)
     {
@@ -45,7 +68,7 @@ internal sealed class AgentLogJournal : ILoggerProvider, ISupportExternalScope
 
     internal void Record(string code, Guid? jobId = null, Guid? runId = null)
     {
-        if (AgentLogEvents.Message(code) is null) return;
+        if (code == "agent.logs_dropped" || AgentLogEvents.Message(code) is null) return;
         var line = JsonSerializer.Serialize(new AgentLogEntry(Guid.NewGuid(), DateTimeOffset.UtcNow, code, jobId, runId), JsonSerializerOptions.Web);
         lock (_gate)
         {
@@ -57,9 +80,34 @@ internal sealed class AgentLogJournal : ILoggerProvider, ISupportExternalScope
     private void Seal()
     {
         var active = Path.Combine(_directory, "active.jsonl");
-        if (File.Exists(active)) File.Move(active, Path.Combine(_directory, $"pending-{DateTime.UtcNow:yyyyMMddHHmmssfffffff}-{Guid.NewGuid():N}.jsonl"));
+        if (File.Exists(active)) File.Move(active, NextSegmentPath());
         _count = 0;
+        var pending = Directory.GetFiles(_directory, "pending-*.jsonl").Order(StringComparer.Ordinal).ToArray();
+        if (pending.Length <= _maxPendingSegments) return;
+
+        long dropped = 0;
+        foreach (var path in pending.Where(path => !string.Equals(path, _inFlight, StringComparison.Ordinal)).Take(pending.Length - _maxPendingSegments + 1))
+        {
+            foreach (var line in File.ReadLines(path))
+            {
+                long count = 1;
+                try
+                {
+                    var entry = JsonSerializer.Deserialize<AgentLogEntry>(line, JsonSerializerOptions.Web);
+                    if (entry is { Code: "agent.logs_dropped", DroppedCount: > 0 })
+                        count = entry.DroppedCount == long.MaxValue ? long.MaxValue : entry.DroppedCount + 1;
+                }
+                catch (JsonException) { }
+                dropped = count > long.MaxValue - dropped ? long.MaxValue : dropped + count;
+            }
+            File.Delete(path);
+        }
+        if (dropped == 0) return;
+        var warning = new AgentLogEntry(Guid.NewGuid(), DateTimeOffset.UtcNow, "agent.logs_dropped", null, null) { DroppedCount = dropped };
+        File.WriteAllText(NextSegmentPath(), JsonSerializer.Serialize(warning, JsonSerializerOptions.Web) + "\n");
     }
+
+    private string NextSegmentPath() => Path.Combine(_directory, $"pending-{DateTime.UtcNow:yyyyMMddHHmmssfffffff}-{Guid.NewGuid():N}.jsonl");
 
     private sealed class JournalLogger(AgentLogJournal owner, string category) : ILogger
     {
