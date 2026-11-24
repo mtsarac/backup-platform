@@ -38,6 +38,7 @@ vi.mock('@/features/backup-jobs/api')
 vi.mock('@/features/agents/api')
 vi.mock('@/features/backups/api')
 vi.mock('@/features/storage-connections/api')
+vi.mock('@/lib/api/client', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api/client')>(), apiRequest: vi.fn().mockResolvedValue([]) }))
 
 const agent = (connectivity: Agent['connectivity']) => [{ agentId: 'agent-a', connectivity }] as Agent[]
 function mount(url: string | { pathname: string; state?: unknown } = '/tenants/tenant-a/backup-jobs/job-a') {
