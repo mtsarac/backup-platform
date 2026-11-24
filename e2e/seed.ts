@@ -19,6 +19,6 @@ await ensureUnlimitedPlan(platform, tenantId, 'E2E Unlimited')
 await enableAgentEnrollment(platform, tenantId)
 
 const state: State = { baseUrl, apiUrl, tenantId, tenantName: TENANT, accounts: { platformAdmin: admin, userAdmin } }
-writeFileSync(new URL('./.state.json', import.meta.url), JSON.stringify(state, null, 2), { mode: 0o600 })
+writeFileSync(new URL(`./${process.env.E2E_STATE_FILE ?? '.state.json'}`, import.meta.url), JSON.stringify(state, null, 2), { mode: 0o600 })
 console.log(`seeded tenant ${tenantId}; accounts: ${admin.login}, ${userAdmin.login}`)
 await platform.dispose()

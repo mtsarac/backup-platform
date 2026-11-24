@@ -9,4 +9,4 @@ export type State = {
   accounts: { platformAdmin: Account; userAdmin: Account }
 }
 
-export const state = (): State => JSON.parse(readFileSync(new URL('./.state.json', import.meta.url), 'utf8'))
+export const state = (): State => JSON.parse(readFileSync(new URL(`./${process.env.E2E_STATE_FILE ?? '.state.json'}`, import.meta.url), 'utf8'))
