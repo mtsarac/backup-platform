@@ -79,6 +79,7 @@ test('passkey sign-in: button without username and with username; sign-out betwe
   await expect(page).toHaveURL(/\/tenants\//)
   await page.goto('/account')
   await page.getByRole('button', { name: 'Çıkış' }).click()
+  await expect(page).toHaveURL(/\/login/)
 
   // with the username filled in
   await page.getByLabel('Kullanıcı adı').fill(fresh.login)
@@ -86,6 +87,7 @@ test('passkey sign-in: button without username and with username; sign-out betwe
   await expect(page).toHaveURL(/\/tenants\//)
   await page.goto('/account')
   await page.getByRole('button', { name: 'Çıkış' }).click()
+  await expect(page).toHaveURL(/\/login/)
 
   expect(w.unexpected()).toEqual([])
 })
@@ -130,6 +132,7 @@ test('a TOTP user can switch the code step to a passkey and complete sign-in wit
   await expect(page.getByText('E2E 2fa key')).toBeVisible()
   await page.goto('/account')
   await page.getByRole('button', { name: 'Çıkış' }).click()
+  await expect(page).toHaveURL(/\/login/)
   await signIn(page, fresh.login, fresh.password)
   await expect(page.getByRole('heading', { level: 1, name: 'İki faktörlü doğrulama' })).toBeVisible()
   await page.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' }).click()
@@ -146,6 +149,7 @@ test.fixme('password sign-in of a passkey-only user opens the passkey step, not 
   await registerViaUi(page, fresh, 'E2E passkey-only key')
   await page.goto('/account')
   await page.getByRole('button', { name: 'Çıkış' }).click()
+  await expect(page).toHaveURL(/\/login/)
   await signIn(page, fresh.login, fresh.password)
   await expect(page.getByRole('heading', { level: 1, name: 'İkinci faktör doğrulaması' })).toBeVisible()
   await expect(page.getByLabel('Doğrulama kodu')).toHaveCount(0)

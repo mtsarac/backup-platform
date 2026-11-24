@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Isolated auth-slice stack (compose project bps1, see docker-compose.e2e-auth.yml): passkeys (RP id localhost) and account e-mail via mailpit.
-# Run the S1 specs against it:  E2E_STATE_FILE=.state-auth.json E2E_BASE_URL=https://localhost:6273 E2E_API_URL=https://localhost:6352 E2E_MAILPIT_URL=http://127.0.0.1:8026 E2E_DB_CONTAINER=bps1-postgres bun run test tests/s1
+# Run the S1 specs against it:  E2E_STATE_FILE=.state-auth.json E2E_BASE_URL=https://localhost:6273 E2E_API_URL=https://localhost:6352 E2E_MAILPIT_URL=http://127.0.0.1:8026 bun run test tests/s1
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PUBLIC_HOST=localhost API_PORT=6352 FRONTEND_PORT=6273 FRONTEND_HTTP_PORT=6274 POSTGRES_PORT=5434 POSTGRES_PASSWORD=postgres
