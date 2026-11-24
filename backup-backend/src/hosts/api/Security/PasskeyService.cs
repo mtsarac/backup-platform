@@ -12,10 +12,24 @@ namespace BackupPlatform.Api.Security;
 /// <summary>Passkey relying party ID or origins are not configured: an operator state, not a server fault.</summary>
 public sealed class PasskeysNotConfiguredException() : InvalidOperationException("Passkey relying party ID and origins must be configured.");
 
+public sealed class PasskeyNotEnrolledException() : InvalidOperationException("User has no registered passkeys.");
+
+public enum PasskeyManagementStatus
+{
+    Succeeded,
+    InvalidPassword,
+    VerificationFailed
+}
+
+public sealed record PasskeyRegistrationResult(
+    PasskeyManagementStatus Status,
+    PasskeyCredential? Credential = null,
+    string[]? RecoveryCodes = null);
+
 public sealed class PasskeyService(
     IIdentityStore identityStore,
     PasswordHashService passwordHashService,
-    LoginThrottle throttle,
+    ILoginThrottle throttle,
     TimeProvider timeProvider,
     IConfiguration configuration)
 {
@@ -85,7 +99,7 @@ public sealed class PasskeyService(
         return (options, challengeId);
     }
 
-    public async Task<(PasskeyCredential Credential, string[] RecoveryCodes)?> RegisterPasskeyAsync(
+    public async Task<PasskeyRegistrationResult> RegisterPasskeyAsync(
         UserId userId,
         Guid challengeId,
         string name,
@@ -102,13 +116,14 @@ public sealed class PasskeyService(
 
         var now = timeProvider.GetUtcNow();
 
-        if (!await VerifyManagementAsync(userId, currentPassword, verificationChallengeId, verificationResponse, context, cancellationToken))
-            return null;
+        var verification = await VerifyManagementAsync(userId, currentPassword, verificationChallengeId, verificationResponse, context, cancellationToken);
+        if (verification != PasskeyManagementStatus.Succeeded)
+            return new PasskeyRegistrationResult(verification);
 
         var challenge = await identityStore.ConsumeChallengeAsync(challengeId, "registration", now, cancellationToken);
         if (!BrowserAuthentication.TryGetSession(context.User, out _, out var sessionId)
             || challenge is null || challenge.UserId != userId || challenge.SessionId != sessionId)
-            return null;
+            return new PasskeyRegistrationResult(PasskeyManagementStatus.VerificationFailed);
 
         var originalOptions = CredentialCreateOptions.FromJson(challenge.OptionsJson);
         var fido2 = CreateFido2(context);
@@ -133,7 +148,7 @@ public sealed class PasskeyService(
         var recoveryCodes = Totp.GenerateRecoveryCodes(10);
         var hashes = recoveryCodes.Select(code => Totp.HashRecoveryCode(userId, code)).ToArray();
         var issued = await identityStore.AddPasskeyAsync(passkey, hashes, now, cancellationToken);
-        return (passkey, issued ? recoveryCodes : []);
+        return new PasskeyRegistrationResult(PasskeyManagementStatus.Succeeded, passkey, issued ? recoveryCodes : []);
     }
 
     public async Task<(AssertionOptions Options, Guid ChallengeId)> CreateLoginOptionsAsync(
@@ -293,7 +308,7 @@ public sealed class PasskeyService(
         var now = timeProvider.GetUtcNow();
         var passkeys = await identityStore.ListPasskeysAsync(userId, cancellationToken);
         if (passkeys.Count == 0)
-            throw new InvalidOperationException("User has no registered passkeys.");
+            throw new PasskeyNotEnrolledException();
 
         var allowedCredentials = passkeys.Select(p => new PublicKeyCredentialDescriptor(p.CredentialId)).ToList();
         var fido2 = CreateFido2(context);
@@ -389,7 +404,7 @@ public sealed class PasskeyService(
         return true;
     }
 
-    public async Task<bool> RemovePasskeyAsync(
+    public async Task<PasskeyManagementStatus> RemovePasskeyAsync(
         UserId userId,
         Guid credentialId,
         string? currentPassword,
@@ -400,29 +415,36 @@ public sealed class PasskeyService(
     {
         var now = timeProvider.GetUtcNow();
 
-        if (!await VerifyManagementAsync(userId, currentPassword, verificationChallengeId, verificationResponse, context, cancellationToken))
-            return false;
+        var verification = await VerifyManagementAsync(userId, currentPassword, verificationChallengeId, verificationResponse, context, cancellationToken);
+        if (verification != PasskeyManagementStatus.Succeeded)
+            return verification;
 
-        return await identityStore.RemovePasskeyAsync(credentialId, userId, now, cancellationToken);
+        return await identityStore.RemovePasskeyAsync(credentialId, userId, now, cancellationToken)
+            ? PasskeyManagementStatus.Succeeded
+            : PasskeyManagementStatus.VerificationFailed;
     }
 
-    private async Task<bool> VerifyManagementAsync(UserId userId, string? password, Guid? verificationChallengeId, AuthenticatorAssertionRawResponse? verificationResponse, HttpContext context, CancellationToken cancellationToken)
+    private async Task<PasskeyManagementStatus> VerifyManagementAsync(UserId userId, string? password, Guid? verificationChallengeId, AuthenticatorAssertionRawResponse? verificationResponse, HttpContext context, CancellationToken cancellationToken)
     {
-        if (verificationChallengeId is { } challengeId && verificationResponse is not null
-            && BrowserAuthentication.TryGetSession(context.User, out _, out var sessionId))
-            return await VerifySecondFactorAsync(userId, sessionId, challengeId, verificationResponse, context, cancellationToken);
+        if (verificationChallengeId is { } challengeId && verificationResponse is not null)
+        {
+            return BrowserAuthentication.TryGetSession(context.User, out _, out var sessionId)
+                && await VerifySecondFactorAsync(userId, sessionId, challengeId, verificationResponse, context, cancellationToken)
+                ? PasskeyManagementStatus.Succeeded
+                : PasskeyManagementStatus.VerificationFailed;
+        }
         var credential = await identityStore.FindCredentialByUserIdAsync(userId, cancellationToken);
-        if (credential is null) return false;
+        if (credential is null) return PasskeyManagementStatus.InvalidPassword;
         var ip = context.Connection.RemoteIpAddress?.ToString();
         var account = credential.LoginIdentifier;
-        if (await throttle.RetryAfterAsync("login", account, ip, cancellationToken) is not null) return false;
+        if (await throttle.RetryAfterAsync("login", account, ip, cancellationToken) is not null) return PasskeyManagementStatus.InvalidPassword;
         if (string.IsNullOrEmpty(password) || passwordHashService.Verify(userId, credential.PasswordHash, password) == PasswordVerificationResult.Failed)
         {
             await throttle.FailedAsync("login", account, ip, cancellationToken);
-            return false;
+            return PasskeyManagementStatus.InvalidPassword;
         }
         await throttle.SucceededAsync("login", account, ip, cancellationToken);
-        return true;
+        return PasskeyManagementStatus.Succeeded;
     }
     private static Guid? GetClientFlowId(HttpContext context)
     {

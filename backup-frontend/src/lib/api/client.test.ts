@@ -47,6 +47,11 @@ describe('browser API contract', () => {
     handle = () => json({}, 401)
     await expect(apiRequest('me')).rejects.toMatchObject({ status: 401 })
     expect(expired).toHaveBeenCalledOnce()
+    for (const challengePath of ['auth/login', 'auth/passkeys/login', 'auth/second-factor/totp', 'auth/second-factor/recovery-code', 'auth/passkeys/second-factor']) {
+      handle = request => request.url.endsWith('/auth/antiforgery') ? json({ requestToken: 'csrf-identity', headerName: 'X-CSRF-TOKEN' }) : json({}, 401)
+      await expect(apiRequest(challengePath, { method: 'POST', json: {} })).rejects.toMatchObject({ status: 401 })
+    }
+    expect(expired).toHaveBeenCalledOnce()
     unsubscribe()
   })
   it('passes AbortSignal so old tenant requests can be cancelled', async () => {
@@ -71,5 +76,11 @@ describe('browser API contract', () => {
     handle = () => json({ error: 'invalid_schedule', field: 'cronExpression', code: 'invalid_cron', message: 'parser internals' }, 400)
     await expect(apiRequest('job')).rejects.toMatchObject({ fields: { cronExpression: 'invalid_cron' } })
     expect(() => tenantPath('../foreign', 'backup-runs')).toThrow()
+  })
+  it('exposes Retry-After seconds on 429 responses (#243)', async () => {
+    handle = request => request.url.endsWith('/auth/antiforgery')
+      ? json({ requestToken: 'csrf-identity', headerName: 'X-CSRF-TOKEN' })
+      : new Response(JSON.stringify({ error: 'Too many failed login attempts.' }), { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '45' } })
+    await expect(apiRequest('auth/login', { method: 'POST', json: {} })).rejects.toMatchObject({ status: 429, retryAfterSeconds: 45 })
   })
 })

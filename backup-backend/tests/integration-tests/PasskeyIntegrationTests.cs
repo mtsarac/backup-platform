@@ -339,7 +339,7 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         var authenticator = new VirtualAuthenticator();
         var attestation = authenticator.CreateAttestation(challengeBase64);
 
-        // Enrol with wrong password -> Refused (401)
+        // Enrol with wrong password -> Refused (400)
         using var wrongPassResponse = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
         {
             challengeId,
@@ -347,30 +347,30 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
             response = attestation,
             currentPassword = "Wrong-password-123!"
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, wrongPassResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, wrongPassResponse.StatusCode);
 
-        // Enrol with missing password -> Refused (401)
+        // Enrol with missing password -> Refused (400)
         using var missingPassResponse = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
         {
             challengeId,
             name = "Key",
             response = attestation
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, missingPassResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, missingPassResponse.StatusCode);
 
         // Enrol with correct password succeeds
         var (_, credId) = await EnrolPasskeyAsync(browser, account.Password);
 
-        // Remove with wrong password -> Refused (401)
+        // Remove with wrong password -> Refused (400)
         using var wrongRemove = await browser.SendAsync(HttpMethod.Delete, $"/api/auth/passkeys/{credId}", new
         {
             currentPassword = "Wrong-password-123!"
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, wrongRemove.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, wrongRemove.StatusCode);
 
-        // Remove with missing password -> Refused (401)
+        // Remove with missing password -> Refused (400)
         using var missingRemove = await browser.SendAsync(HttpMethod.Delete, $"/api/auth/passkeys/{credId}", new { });
-        Assert.Equal(HttpStatusCode.Unauthorized, missingRemove.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, missingRemove.StatusCode);
     }
 
     [Fact]
@@ -536,7 +536,7 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
             response = attestation,
             currentPassword = account.Password
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
         using var list = await second.GetAsync("/api/auth/passkeys");
         Assert.Empty(AgentWorld.ReadJson(list).EnumerateArray());
     }
@@ -572,7 +572,7 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
             verificationChallengeId = verification.GetProperty("challengeId").GetGuid(),
             verificationResponse = assertion
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
 
         using var nextOptions = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/second-factor/options");
         var next = AgentWorld.ReadJson(nextOptions);
@@ -604,13 +604,13 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
             {
                 challengeId, name = "Key", response = attestation, currentPassword = "wrong"
             });
-            Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, denied.StatusCode);
         }
         using var blocked = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
         {
             challengeId, name = "Key", response = attestation, currentPassword = account.Password
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, blocked.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
         world.Clock.Advance(TimeSpan.FromMinutes(1));
         using var allowed = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
         {

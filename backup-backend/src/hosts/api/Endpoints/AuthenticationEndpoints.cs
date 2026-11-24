@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using BackupPlatform.Api.Security;
+using BackupPlatform.Application.Identity;
+using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -88,6 +90,7 @@ public static class AuthenticationEndpoints
     {
         var auth = endpoints.MapGroup("/api/auth");
         auth.MapGet("/antiforgery", GetAntiforgeryToken).AllowAnonymous().WithMetadata(new RestrictedSessionAllowed());
+        auth.MapGet("/session", GetSessionAsync).AllowAnonymous().WithMetadata(new RestrictedSessionAllowed());
         auth.MapPost("/login", LoginAsync).AllowAnonymous();
         auth.MapPost("/logout", LogoutAsync).RequireAuthorization().WithMetadata(new RestrictedSessionAllowed());
         auth.MapGet("/sessions", ListSessionsAsync).RequireAuthorization();
@@ -127,7 +130,35 @@ public static class AuthenticationEndpoints
         return Results.Ok(new { requestToken = tokens.RequestToken, headerName = "X-CSRF-TOKEN" });
     }
 
-    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, IIdentityStore identityStore, LoginThrottle throttle, TimeProvider clock)
+    private static async Task<IResult> GetSessionAsync(HttpContext context, ICurrentUser currentUser, IUserAccessStore userAccessStore, CancellationToken cancellationToken)
+    {
+        if (context.Features.Get<BrowserSessionState>() is { Value: not SessionAuthenticationState.FullyAuthenticated })
+        {
+            return Results.Ok(new { authenticated = false, restricted = true });
+        }
+        if (currentUser.UserId is not { } userId)
+        {
+            return Results.Ok(new { authenticated = false });
+        }
+        var profile = await userAccessStore.GetUserAsync(userId, cancellationToken);
+        if (profile is null)
+        {
+            return Results.Ok(new { authenticated = false });
+        }
+        return Results.Ok(new
+        {
+            authenticated = true,
+            user = new
+            {
+                userId = profile.UserId.Value,
+                displayName = profile.DisplayName,
+                role = profile.Role.ToString(),
+                isPlatformAdmin = profile.Role == UserRole.PlatformAdmin
+            }
+        });
+    }
+
+    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, IIdentityStore identityStore, ILoginThrottle throttle, TimeProvider clock)
     {
         var ip = context.Connection.RemoteIpAddress?.ToString();
         if (await throttle.RetryAfterAsync("login", null, ip, context.RequestAborted) is { } wait)
@@ -175,9 +206,21 @@ public static class AuthenticationEndpoints
         }
         if (session.SecondFactorRequired)
         {
-            return Results.Ok(new { secondFactorRequired = true, requiresSecondFactor = true });
+            var methods = await GetSecondFactorMethodsAsync(identityStore, session.UserId, context.RequestAborted);
+            return Results.Ok(new { secondFactorRequired = true, requiresSecondFactor = true, methods });
         }
         return Results.NoContent();
+    }
+
+    private static async Task<string[]> GetSecondFactorMethodsAsync(IIdentityStore identityStore, BackupPlatform.Domain.Identity.UserId userId, CancellationToken cancellationToken)
+    {
+        var hasTotp = await identityStore.FindTotpCredentialAsync(userId, cancellationToken) is not null;
+        var hasPasskeys = await identityStore.HasPasskeysAsync(userId, cancellationToken);
+        var methods = new List<string>(3);
+        if (hasTotp) methods.Add("totp");
+        if (hasPasskeys) methods.Add("passkey");
+        if (hasTotp || hasPasskeys) methods.Add("recovery");
+        return methods.ToArray();
     }
 
     private static async Task<IResult> LogoutAsync(HttpContext context, IIdentityStore identityStore, TimeProvider clock)
@@ -218,7 +261,7 @@ public static class AuthenticationEndpoints
         TotpVerificationRequest request,
         HttpContext context,
         IIdentityStore identityStore,
-        LoginThrottle throttle,
+        ILoginThrottle throttle,
         IDataProtectionProvider dataProtection,
         TimeProvider clock)
     {
@@ -278,7 +321,7 @@ public static class AuthenticationEndpoints
         RecoveryCodeVerificationRequest request,
         HttpContext context,
         IIdentityStore identityStore,
-        LoginThrottle throttle,
+        ILoginThrottle throttle,
         TimeProvider clock)
     {
         if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out var sessionId))
@@ -326,7 +369,7 @@ public static class AuthenticationEndpoints
         Results.Ok(new { available = await service.IsAvailableAsync(cancellationToken) });
 
     /// <summary>Answers the same way for known, unverified and unknown accounts; every request counts against the account and IP limits.</summary>
-    private static async Task<IResult> RequestPasswordResetAsync(PasswordResetRequest? request, HttpContext context, AccountEmailService service, LoginThrottle throttle)
+    private static async Task<IResult> RequestPasswordResetAsync(PasswordResetRequest? request, HttpContext context, AccountEmailService service, ILoginThrottle throttle)
     {
         if (!await service.IsAvailableAsync(context.RequestAborted)) return EmailRecoveryUnavailable;
         var ip = context.Connection.RemoteIpAddress?.ToString();
@@ -396,10 +439,11 @@ public static class AuthenticationEndpoints
         var newHash = passwordHasher.Hash(userId!, request.NewPassword);
         var now = clock.GetUtcNow();
         await identityStore.ChangePasswordAsync(userId!, newHash, now, context.RequestAborted);
-        var hasSecondFactor = await identityStore.HasSecondFactorAsync(userId!, context.RequestAborted);
+        var methods = await GetSecondFactorMethodsAsync(identityStore, userId!, context.RequestAborted);
+        var hasSecondFactor = methods.Length > 0;
         var nextState = hasSecondFactor ? SessionAuthenticationState.SecondFactorPending : SessionAuthenticationState.FullyAuthenticated;
         await identityStore.SetSessionStateAsync(sessionId, userId!, nextState, context.RequestAborted);
-        return Results.Ok(new { requiresSecondFactor = hasSecondFactor, secondFactorRequired = hasSecondFactor });
+        return Results.Ok(new { requiresSecondFactor = hasSecondFactor, secondFactorRequired = hasSecondFactor, methods });
     }
     private static async Task<IResult> GetSecurityStatusAsync(
         HttpContext context,
@@ -454,7 +498,7 @@ public static class AuthenticationEndpoints
         EnrollTotpRequest request,
         HttpContext context,
         IIdentityStore identityStore,
-        LoginThrottle throttle,
+        ILoginThrottle throttle,
         PasswordHashService passwordHasher,
         IDataProtectionProvider dataProtection,
         TimeProvider clock)
@@ -551,7 +595,7 @@ public static class AuthenticationEndpoints
         RemoveTotpRequest request,
         HttpContext context,
         IIdentityStore identityStore,
-        LoginThrottle throttle,
+        ILoginThrottle throttle,
         PasswordHashService passwordHasher,
         IDataProtectionProvider dataProtection,
         TimeProvider clock)
@@ -629,7 +673,7 @@ public static class AuthenticationEndpoints
         RegenerateRecoveryCodesRequest request,
         HttpContext context,
         IIdentityStore identityStore,
-        LoginThrottle throttle,
+        ILoginThrottle throttle,
         PasswordHashService passwordHasher,
         IDataProtectionProvider dataProtection,
         TimeProvider clock)
@@ -736,7 +780,7 @@ public static class AuthenticationEndpoints
         if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
         try
         {
-            var passkey = await passkeyService.RegisterPasskeyAsync(
+            var result = await passkeyService.RegisterPasskeyAsync(
                 userId!,
                 request.ChallengeId,
                 request.Name,
@@ -747,12 +791,15 @@ public static class AuthenticationEndpoints
                 context,
                 context.RequestAborted);
 
-            if (passkey is null)
+            return result.Status switch
             {
-                return Results.Json(new { error = "Security verification failed or invalid challenge." }, statusCode: StatusCodes.Status401Unauthorized);
-            }
-
-            return Results.Json(new { id = passkey.Value.Credential.Id, name = passkey.Value.Credential.Name, createdAt = passkey.Value.Credential.CreatedAt, recoveryCodes = passkey.Value.RecoveryCodes }, statusCode: StatusCodes.Status201Created);
+                PasskeyManagementStatus.Succeeded when result.Credential is { } credential =>
+                    Results.Json(new { id = credential.Id, name = credential.Name, createdAt = credential.CreatedAt, recoveryCodes = result.RecoveryCodes ?? [] }, statusCode: StatusCodes.Status201Created),
+                PasskeyManagementStatus.InvalidPassword =>
+                    Results.BadRequest(new { error = "invalid_password", message = "Current password is incorrect." }),
+                _ =>
+                    Results.BadRequest(new { error = "authentication_failed", message = "Security verification failed or invalid challenge." })
+            };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -766,12 +813,13 @@ public static class AuthenticationEndpoints
         var existing = await store.FindPasskeyByIdAsync(id, userId!, context.RequestAborted);
         if (existing is null) return Results.NotFound();
 
-        var success = await passkeyService.RemovePasskeyAsync(userId!, id, request.CurrentPassword, request.VerificationChallengeId, request.VerificationResponse, context, context.RequestAborted);
-        if (!success)
+        var status = await passkeyService.RemovePasskeyAsync(userId!, id, request.CurrentPassword, request.VerificationChallengeId, request.VerificationResponse, context, context.RequestAborted);
+        return status switch
         {
-            return Results.Json(new { error = "Security verification failed." }, statusCode: StatusCodes.Status401Unauthorized);
-        }
-        return Results.NoContent();
+            PasskeyManagementStatus.Succeeded => Results.NoContent(),
+            PasskeyManagementStatus.InvalidPassword => Results.BadRequest(new { error = "invalid_password", message = "Current password is incorrect." }),
+            _ => Results.BadRequest(new { error = "authentication_failed", message = "Security verification failed." })
+        };
     }
 
     private static async Task<IResult> CreatePasskeyLoginOptionsAsync(PasskeyLoginOptionsRequest? request, HttpContext context, PasskeyService passkeyService)
@@ -784,7 +832,7 @@ public static class AuthenticationEndpoints
         catch (PasskeysNotConfiguredException) { return PasskeysNotConfigured; }
     }
 
-    private static async Task<IResult> PasskeyLoginAsync(PasskeyLoginRequest request, HttpContext context, PasskeyService passkeyService, LoginThrottle throttle)
+    private static async Task<IResult> PasskeyLoginAsync(PasskeyLoginRequest request, HttpContext context, PasskeyService passkeyService, ILoginThrottle throttle)
     {
         var ip = context.Connection.RemoteIpAddress?.ToString();
         if (await throttle.RetryAfterAsync("passkey_assertion", null, ip, context.RequestAborted) is { } wait)
@@ -819,13 +867,14 @@ public static class AuthenticationEndpoints
             return Results.Ok(new { options, challengeId });
         }
         catch (PasskeysNotConfiguredException) { return PasskeysNotConfigured; }
+        catch (PasskeyNotEnrolledException ex) { return Results.BadRequest(new { error = "passkey_not_enrolled", message = ex.Message }); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
         }
     }
 
-    private static async Task<IResult> VerifySecondFactorAsync(SecondFactorVerifyRequest request, HttpContext context, PasskeyService passkeyService, LoginThrottle throttle)
+    private static async Task<IResult> VerifySecondFactorAsync(SecondFactorVerifyRequest request, HttpContext context, PasskeyService passkeyService, ILoginThrottle throttle)
     {
         if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out var sessionId)) return Results.Unauthorized();
         var ip = context.Connection.RemoteIpAddress?.ToString();

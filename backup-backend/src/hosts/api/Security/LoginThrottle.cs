@@ -5,7 +5,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Api.Security;
 
-public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, TimeProvider time)
+public interface ILoginThrottle
+{
+    Task<TimeSpan?> RetryAfterAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken);
+    Task FailedAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken);
+    Task SucceededAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken);
+}
+
+public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, TimeProvider time) : ILoginThrottle
 {
     public const int MaxFailures = 5;
     public static readonly TimeSpan Window = TimeSpan.FromSeconds(5);

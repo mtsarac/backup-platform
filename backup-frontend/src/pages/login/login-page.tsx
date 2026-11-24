@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Key } from 'lucide-react'
@@ -15,6 +15,14 @@ import { apiRequest, ApiError } from '@/lib/api/client'
 import { type ErrorDescription, describeError, describePasskeyError } from '@/lib/api/failure-messages'
 import { LanguageSwitcher } from '@/components/layout/language-switcher'
 import { usePageTitle } from '@/hooks/use-page-title'
+
+function initialFactorMode(result: { secondFactorRequired?: boolean; requiresSecondFactor?: boolean; methods?: readonly string[] }): 'totp' | 'passkey' {
+  if (Array.isArray(result.methods)) {
+    if (result.methods.includes('totp')) return 'totp'
+    if (result.methods.includes('passkey')) return 'passkey'
+  }
+  return result.requiresSecondFactor && !result.secondFactorRequired ? 'passkey' : 'totp'
+}
 
 export function LoginPage() {
   useLanguage()
@@ -35,7 +43,26 @@ export function LoginPage() {
   const [recoveryCode, setRecoveryCode] = useState('')
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [loading, setLoading] = useState(false)
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? ROUTES.DASHBOARD
+  const stepFocusRef = useRef<HTMLInputElement | HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (passwordChangePending || secondFactorPending) {
+      stepFocusRef.current?.focus()
+    }
+  }, [passwordChangePending, secondFactorPending, factorMode])
+  const fromLocation = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+  const from = fromLocation?.pathname && fromLocation.pathname.startsWith('/') && fromLocation.pathname !== ROUTES.LOGIN
+    ? `${fromLocation.pathname}${fromLocation.search ?? ''}${fromLocation.hash ?? ''}`
+    : ROUTES.DASHBOARD
+
+  const describeLockout = (err: ApiError): ErrorDescription => ({
+    what: tx('Çok fazla başarısız deneme.'),
+    dataImpact: tx('Giriş geçici olarak kilitlendi.'),
+    action: err.retryAfterSeconds
+      ? tx('{0} saniye sonra tekrar deneyin.', { '0': err.retryAfterSeconds })
+      : tx('Lütfen daha sonra tekrar deneyin.'),
+    technical: [],
+  })
 
   if (isAuthenticated) {
     return <Navigate to={from} replace />
@@ -55,18 +82,20 @@ export function LoginPage() {
       }
       if (result && (result.secondFactorRequired || result.requiresSecondFactor)) {
         setSecondFactorPending(true)
-        if (result.requiresSecondFactor && !result.secondFactorRequired) {
-          setFactorMode('passkey')
-        } else {
-          setFactorMode('totp')
-        }
+        setFactorMode(initialFactorMode(result))
         setPassword('')
         return
       }
       setPassword('')
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Kullanıcı adı veya şifre hatalı.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describeError(error))
+      if (error instanceof ApiError && error.status === 429) {
+        setError(describeLockout(error))
+      } else if (error instanceof ApiError && error.status === 401) {
+        setError({ what: tx('Kullanıcı adı veya şifre hatalı.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] })
+      } else {
+        setError(describeError(error))
+      }
     } finally {
       setLoading(false)
     }
@@ -88,14 +117,14 @@ export function LoginPage() {
     }
     setLoading(true)
     try {
-      const changeResult = await apiRequest<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean }>('auth/change-password', {
+      const changeResult = await apiRequest<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean; methods?: string[] }>('auth/change-password', {
         method: 'POST',
         json: { currentPassword: currentPasswordForChange, newPassword }
       })
       if (changeResult && (changeResult.secondFactorRequired || changeResult.requiresSecondFactor)) {
         setPasswordChangePending(false)
         setSecondFactorPending(true)
-        setFactorMode('totp')
+        setFactorMode(initialFactorMode(changeResult))
         return
       }
       await completeSecondFactor()
@@ -143,7 +172,7 @@ export function LoginPage() {
       navigate(from, { replace: true })
     } catch (error) {
       if (error instanceof ApiError && error.status === 429) {
-        setError({ what: tx('Çok fazla başarısız deneme.'), dataImpact: tx('Giriş geçici olarak kilitlendi.'), action: tx('Lütfen daha sonra tekrar deneyin.'), technical: [] })
+        setError(describeLockout(error))
       } else if (error instanceof ApiError && (error.status === 401 || error.status === 400)) {
         setError({ what: factorMode === 'totp' ? tx('Doğrulama kodu hatalı veya süresi dolmuş.') : tx('Kurtarma kodu geçersiz veya daha önce kullanılmış.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] })
       } else {
@@ -161,7 +190,13 @@ export function LoginPage() {
       await loginWithPasskey?.(rememberMe, loginIdentifier.trim() || undefined)
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('Geçiş anahtarı doğrulaması başarısız oldu.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : describePasskeyError(error))
+      if (error instanceof ApiError && error.status === 429) {
+        setError(describeLockout(error))
+      } else if (error instanceof ApiError && error.status === 401) {
+        setError({ what: tx('Geçiş anahtarı doğrulaması başarısız oldu.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] })
+      } else {
+        setError(describePasskeyError(error))
+      }
     } finally {
       setLoading(false)
     }
@@ -175,7 +210,13 @@ export function LoginPage() {
       setPassword('')
       navigate(from, { replace: true })
     } catch (error) {
-      setError(error instanceof ApiError && error.status === 401 ? { what: tx('İkinci faktör doğrulaması başarısız oldu.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] } : factorMode === 'passkey' ? describePasskeyError(error) : describeError(error))
+      if (error instanceof ApiError && error.status === 429) {
+        setError(describeLockout(error))
+      } else if (error instanceof ApiError && error.status === 401) {
+        setError({ what: tx('İkinci faktör doğrulaması başarısız oldu.'), action: tx('Bilgilerinizi kontrol edip tekrar deneyin.'), technical: [] })
+      } else {
+        setError(factorMode === 'passkey' ? describePasskeyError(error) : describeError(error))
+      }
     } finally {
       setLoading(false)
     }
@@ -203,7 +244,7 @@ export function LoginPage() {
             {secondFactorPending ? (factorMode === 'passkey' ? tx('İkinci faktör doğrulaması') : tx('İki faktörlü doğrulama')) : tx('Giriş yapın')}
           </h1>
           {passwordChangePending ? (
-            <Card as="form" padding="lg" onSubmit={handlePasswordChangeSubmit} className="space-y-4">
+            <Card key="password-change" as="form" padding="lg" onSubmit={handlePasswordChangeSubmit} className="space-y-4">
               <div>
                 <h2 className="text-lg font-semibold text-text-heading">{tx('Şifrenizi değiştirin')}</h2>
                 <p className="text-sm text-text-muted">{tx('İlk girişinizde veya geçici şifre atandığında şifrenizi değiştirmeniz zorunludur.')}</p>
@@ -212,6 +253,7 @@ export function LoginPage() {
                 {(control) => (
                   <TextInput
                     {...control}
+                    ref={(el) => { stepFocusRef.current = el }}
                     type="password"
                     autoComplete="current-password"
                     value={currentPasswordForChange}
@@ -254,9 +296,9 @@ export function LoginPage() {
             </Card>
           ) : secondFactorPending ? (
             factorMode === 'passkey' ? (
-              <Card padding="lg" className="space-y-4">
+              <Card key="2fa-passkey" padding="lg" className="space-y-4">
                 <Notice tone="info">{tx('Girişinizi tamamlamak için kayıtlı geçiş anahtarınızı kullanın.')}</Notice>
-                <Button type="button" className="w-full" disabled={loading} onClick={handleSecondFactor}>
+                <Button ref={(el) => { stepFocusRef.current = el }} type="button" className="w-full" disabled={loading} onClick={handleSecondFactor}>
                   {loading ? tx('Doğrulanıyor...') : tx('Geçiş anahtarı ile doğrula')}
                 </Button>
                 <div className="flex flex-col gap-2 text-center">
@@ -275,16 +317,18 @@ export function LoginPage() {
                     {tx('Kurtarma kodu kullan')}
                   </button>
                 </div>
+                {error && <ErrorNotice {...error} />}
                 <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
                   {tx('Geri dön')}
                 </Button>
               </Card>
             ) : factorMode === 'totp' ? (
-              <Card as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
+              <Card key="2fa-totp" as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
                 <Field label={tx('Doğrulama kodu')}>
                   {(control) => (
                     <TextInput
                       {...control}
+                      ref={(el) => { stepFocusRef.current = el }}
                       autoFocus
                       autoComplete="one-time-code"
                       inputMode="numeric"
@@ -320,11 +364,12 @@ export function LoginPage() {
                 </Button>
               </Card>
             ) : (
-              <Card as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
+              <Card key="2fa-recovery" as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
                 <Field label={tx('Kurtarma kodu')}>
                   {(control) => (
                     <TextInput
                       {...control}
+                      ref={(el) => { stepFocusRef.current = el }}
                       autoFocus
                       placeholder="0000-0000-0000"
                       value={recoveryCode}
@@ -359,7 +404,7 @@ export function LoginPage() {
               </Card>
             )
           ) : (
-            <Card as="form" padding="lg" onSubmit={handlePasswordSubmit} className="space-y-4">
+            <Card key="password-login" as="form" padding="lg" onSubmit={handlePasswordSubmit} className="space-y-4">
               <Field label={tx('Kullanıcı adı')} hint={tx('E-posta adresinizle de giriş yapabilirsiniz.')}>
                 {(control) => <TextInput {...control} autoComplete="username" value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} required />}
               </Field>

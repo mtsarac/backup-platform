@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Dialog } from '@base-ui/react/dialog'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
@@ -269,27 +270,30 @@ export function SecurityPage() {
 
       {/* Issued Recovery Codes Modal */}
       {codesModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4">
-          <div className="w-full max-w-md space-y-4 rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
-            <h2 className="text-lg font-semibold text-text-heading">{tx('Kurtarma kodlarınız')}</h2>
-            <Notice tone="warning">
-              {tx('Bu kodlar yalnızca bir kez gösterilir. Kimlik doğrulama cihazınıza erişiminizi kaybederseniz hesabınıza erişmek için bu kodları kullanabilirsiniz.')}
-            </Notice>
-            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-surface-2 p-4 font-mono text-sm">
-              {issuedCodes.map((code) => (
-                <span key={code} className="select-all text-text-heading">
-                  {code}
-                </span>
-              ))}
-            </div>
-            <div className="flex flex-wrap justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={copyRecoveryCodes}>
-                {copied ? tx('Kopyalandı!') : tx('Kodları kopyala')}
-              </Button>
-              <Button onClick={() => setCodesModalOpen(false)}>{tx('Tamam')}</Button>
-            </div>
-          </div>
-        </div>
+        <Dialog.Root open onOpenChange={(next) => { if (!next) setCodesModalOpen(false) }}>
+          <Dialog.Portal>
+            <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+            <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
+              <Dialog.Title className="text-lg font-semibold text-text-heading">{tx('Kurtarma kodlarınız')}</Dialog.Title>
+              <Notice tone="warning">
+                {tx('Bu kodlar yalnızca bir kez gösterilir. Kimlik doğrulama cihazınıza erişiminizi kaybederseniz hesabınıza erişmek için bu kodları kullanabilirsiniz.')}
+              </Notice>
+              <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-surface-2 p-4 font-mono text-sm">
+                {issuedCodes.map((code) => (
+                  <span key={code} className="select-all text-text-heading">
+                    {code}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={copyRecoveryCodes}>
+                  {copied ? tx('Kopyalandı!') : tx('Kodları kopyala')}
+                </Button>
+                <Dialog.Close render={<Button />}>{tx('Tamam')}</Dialog.Close>
+              </div>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
       )}
 
       {/* Remove TOTP Dialog */}
