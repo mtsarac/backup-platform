@@ -7,7 +7,7 @@ import { formatBytes } from '@/lib/format'
 export function SizeAnomalyBadge({ run }: { run: BackupRun }) {
   useLanguage()
   if (!isFeatureEnabled('sizeAnomaly')) return null
-  if (run.sizeAnomalyStatus === 'SizeAnomalyWarning') return <StatusPill level="attention">{tx('Boyut Anomalisi')}</StatusPill>
+  if (run.sizeAnomalyStatus === 'SizeAnomalyWarning') return <StatusPill level="attention">{tx('Boyut anomalisi')}</StatusPill>
   if (run.sizeAnomalyStatus === 'BaselinePending') return <StatusPill level="pending">{tx('Boyut baz çizgisi bekleniyor')}</StatusPill>
   return null
 }

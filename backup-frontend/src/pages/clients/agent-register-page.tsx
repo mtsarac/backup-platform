@@ -47,7 +47,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
   const columns: Column<EnrollmentToken>[] = [
     { key: 'createdAt', header: tx('Oluşturuldu'), render: (token) => <RelativeTime value={token.createdAt} /> },
     { key: 'expiresAt', header: tx('Süresi dolacak'), render: (token) => <RelativeTime value={token.expiresAt} /> },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("{0} tarihinde oluşturulan kayıt anahtarını iptal et", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("İptal et — {0} tarihinde oluşturulan kayıt anahtarı", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
   ]
   return <div className="space-y-6">
     <PageHeader title={tx("Yeni bilgisayar kaydı")} />

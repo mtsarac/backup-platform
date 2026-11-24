@@ -52,8 +52,8 @@ export function PlatformSharesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        crumbs={[platformCrumb, { label: tx('Paylaşılan Yedekler') }]}
-        title={tx('Paylaşılan Yedekler')}
+        crumbs={[platformCrumb, { label: tx('Paylaşılan yedekler') }]}
+        title={tx('Paylaşılan yedekler')}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             {tx('Paylaşım oluştur')}

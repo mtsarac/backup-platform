@@ -142,10 +142,10 @@ const dummyConnections: ConnectionView[] = [
     const summary = screen.getByText('Başka hedef ekle', { exact: false }).closest('summary')!
     expect(summary.parentElement).not.toHaveAttribute('open')
     expect(summary).toHaveTextContent('Toplam 2 hedef')
-    expect(screen.getByLabelText('Gerekli Doğrulanmış Kopya Sayısı')).not.toBeVisible()
+    expect(screen.getByLabelText('Gerekli doğrulanmış kopya sayısı')).not.toBeVisible()
     fireEvent.click(summary)
-    expect(screen.getByRole('spinbutton', { name: 'Gerekli Doğrulanmış Kopya Sayısı' })).toHaveValue(2)
-    fireEvent.change(screen.getByLabelText('Depolama Sağlayıcısı'), { target: { value: 'central' } })
+    expect(screen.getByRole('spinbutton', { name: 'Gerekli doğrulanmış kopya sayısı' })).toHaveValue(2)
+    fireEvent.change(screen.getByLabelText('Depolama sağlayıcısı'), { target: { value: 'central' } })
     expect(onChange.mock.lastCall?.[0]).toMatchObject({
       destinations: [{ ...configuration.destinations[0], storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend' }, configuration.destinations[1]],
       requiredVerifiedReplicaCount: 2,
@@ -213,9 +213,9 @@ describe('MultiDestinationPicker', () => {
     } as BackupConfiguration
     const onChange = vi.fn()
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={onChange} onRefresh={() => {}} />)
-    expect(screen.getByLabelText("Depolama Sağlayıcısı")).toHaveValue('sftp')
+    expect(screen.getByLabelText("Depolama sağlayıcısı")).toHaveValue('sftp')
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('conn-sftp-1')
-    fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'local' } })
+    fireEvent.change(screen.getByLabelText("Depolama sağlayıcısı"), { target: { value: 'local' } })
     expect(onChange.mock.calls[0][0].destinations[0]).toEqual(configuration.destinations![0])
     expect(onChange.mock.calls[0][0].destinations[1]).toMatchObject({ storageProvider: 'local', storageConnectionId: null, isPrimary: true })
     expect(onChange.mock.calls[0][0]).not.toHaveProperty('storageProvider')
@@ -233,7 +233,7 @@ describe('MultiDestinationPicker', () => {
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={() => {}} onRefresh={() => {}} />)
     const connection = screen.getByLabelText('Depolama bağlantısı')
     expect(within(connection).getAllByRole('option').map(option => option.getAttribute('value'))).toEqual([''])
-    expect(within(screen.getByLabelText('Depolama Sağlayıcısı')).getByRole('option', { name: 'Yerel yedekleme bilgisayarı diski' })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Depolama sağlayıcısı')).getByRole('option', { name: 'Yerel yedekleme bilgisayarı diski' })).toBeInTheDocument()
     expect(within(connection).getByRole('option', { name: 'Default Local · Kullanılabilir' })).toBeInTheDocument()
   })
 
@@ -269,7 +269,7 @@ describe('MultiDestinationPicker', () => {
     expect(screen.getByText(/Toplam 1 hedef/)).toBeInTheDocument()
 
     // Add secondary SFTP
-    const select = screen.getByLabelText("Yeni Çoğaltma Hedefi Ekle")
+    const select = screen.getByLabelText("Yeni çoğaltma hedefi ekle")
     fireEvent.change(select, { target: { value: 'conn-sftp-1' } })
 
     expect(onChange).toHaveBeenCalled()
@@ -313,7 +313,7 @@ describe('MultiDestinationPicker', () => {
 
     fireEvent.click(screen.getByText('Başka hedef ekle', { exact: false }))
     expect(screen.getByText(/Toplam 2 hedef/)).toBeInTheDocument()
-    const count = screen.getByRole('spinbutton', { name: 'Gerekli Doğrulanmış Kopya Sayısı' })
+    const count = screen.getByRole('spinbutton', { name: 'Gerekli doğrulanmış kopya sayısı' })
     expect(count).toHaveAttribute('min', '1')
     expect(count).toHaveAttribute('max', '2')
     fireEvent.change(count, { target: { value: '0' } })
@@ -323,7 +323,7 @@ describe('MultiDestinationPicker', () => {
     onChange.mockClear()
 
     // Change primary to SFTP
-    const makePrimaryBtn = screen.getByRole('button', { name: "Birincil Yap" })
+    const makePrimaryBtn = screen.getByRole('button', { name: "Birincil yap" })
     fireEvent.click(makePrimaryBtn)
 
     expect(onChange).toHaveBeenCalled()
@@ -362,7 +362,7 @@ describe('MultiDestinationPicker', () => {
     render(<MultiDestinationPicker configuration={config} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={onChange} onRefresh={() => {}} />)
 
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('conn-sftp-1')
-    fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
+    fireEvent.change(screen.getByLabelText("Depolama sağlayıcısı"), { target: { value: 'central' } })
 
     const updated = onChange.mock.calls[0][0] as BackupConfiguration
     expect(updated.destinations).toEqual([
@@ -460,7 +460,7 @@ describe('MultiDestinationPicker', () => {
     render(<MultiDestinationPicker configuration={config} connections={[dummyConnections[0], central]} providers={dummyProviders} pending={false} error={null} existingTarget={false} compact onChange={() => {}} onRefresh={() => {}} />)
     const names = (select: HTMLElement) => within(select).getAllByRole('option').map(option => option.textContent)
     expect(names(screen.getByLabelText('Depolama hedefi')).filter(text => text?.includes('Merkezi depolama'))).toEqual(['Merkezi depolama · Platform yönetimli · Kullanılabilir'])
-    expect(names(screen.getByLabelText('Yeni Çoğaltma Hedefi Ekle')).filter(text => text?.includes('Merkezi depolama')).map(text => text?.trim())).toEqual(['Merkezi depolama'])
+    expect(names(screen.getByLabelText('Yeni çoğaltma hedefi ekle')).filter(text => text?.includes('Merkezi depolama')).map(text => text?.trim())).toEqual(['Merkezi depolama'])
   })
 
   it('lists the central default once in the wizard connection select', () => {

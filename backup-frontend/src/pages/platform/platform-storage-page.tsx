@@ -156,8 +156,8 @@ export function PlatformStoragePage() {
         { label: tx("Politika kimliği"), value: row.policy.policyId },
         { label: tx("Politika anahtarı"), value: row.policy.key },
         { label: tx("Politika sürümü"), value: String(row.policy.version) },
-        { label: tx("Hesaplama Modu"), value: row.accountingMode },
-        { label: tx("Uygulama Modu"), value: row.enforcementMode },
+        { label: tx("Hesaplama modu"), value: row.accountingMode },
+        { label: tx("Uygulama modu"), value: row.enforcementMode },
         { label: tx("Uyarı eşiği (%)"), value: String(row.warningThreshold) },
         { label: tx("Kritik eşik (%)"), value: String(row.criticalThreshold) },
         { label: tx("Kullanılan (bayt)"), value: row.usedBytes === null ? '—' : String(row.usedBytes) },
@@ -165,7 +165,7 @@ export function PlatformStoragePage() {
         { label: tx("Limit (bayt)"), value: row.limitBytes === null ? '—' : String(row.limitBytes) },
         { label: tx("Kalan (bayt)"), value: row.remainingBytes === null ? '—' : String(row.remainingBytes) },
         { label: tx("Red kodu"), value: row.denialCode ?? '—' },
-        { label: tx("Son Hesaplama"), value: formatDateTime(row.calculatedAt, tx('Henüz hesaplanmadı')) },
+        { label: tx("Son hesaplama"), value: formatDateTime(row.calculatedAt, tx('Henüz hesaplanmadı')) },
       ]} />,
     },
     {
@@ -236,7 +236,7 @@ export function PlatformStoragePage() {
           who: tx("Yalnızca bu çalışma alanının kota hesabı etkilenir; yedekler değişmez."),
           reversible: tx("Evet. İşlem yalnızca sayıları günceller; istediğiniz zaman yeniden çalıştırabilirsiniz."),
         }}
-        confirmLabel={tx("Uzlaştırmayı Çalıştır")}
+        confirmLabel={tx("Uzlaştırmayı çalıştır")}
         pending={reconcile.isPending}
         error={reconcile.error}
         onConfirm={runReconcile}
@@ -252,7 +252,7 @@ export function PlatformStoragePage() {
           who: tx("Yalnızca bu çalışma alanının kota hesabı etkilenir; yedekler değişmez."),
           reversible: tx("Evet. Hesabı istediğiniz zaman yeniden çalıştırabilirsiniz."),
         }}
-        confirmLabel={tx("Yeniden Hesaplamayı Çalıştır")}
+        confirmLabel={tx("Yeniden hesaplamayı çalıştır")}
         pending={rebuild.isPending}
         error={rebuild.error}
         onConfirm={runRebuild}

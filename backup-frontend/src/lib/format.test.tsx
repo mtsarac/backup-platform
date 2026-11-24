@@ -7,10 +7,12 @@ import { formatBytes, formatDateTime, formatDuration, formatRelativeTime, format
 const now = new Date('2026-10-06T12:00:00Z')
 
 describe('formatBytes', () => {
-  it('shows one friendly unit: GB, falling back to MB, never KB or bytes', () => {
+  it('shows GB, then MB, and KB or bytes only for a non-empty size under 0.01 MB', () => {
     expect(formatBytes(5_500_000_000)).toBe('5,5 GB')
     expect(formatBytes(500_000_000)).toBe('500 MB')
     expect(formatBytes(250_000)).toBe('0,25 MB')
+    expect(formatBytes(4868)).toBe('4,87 KB')
+    expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(0)).toBe('0 MB')
     expect(formatBytes(-5)).toBe('0 MB')
   })

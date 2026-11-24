@@ -415,7 +415,7 @@ export function LoginPage() {
               {sessionExpired && <Notice tone="warning">{tx('Oturumunuz sona erdi. Yeniden giriş yapın.')}</Notice>}
               {error && <ErrorNotice {...error} />}
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? tx('Giriş yapılıyor...') : tx('Giriş Yap')}
+                {loading ? tx('Giriş yapılıyor...') : tx('Giriş yap')}
               </Button>
               <div className="relative my-2 text-center text-xs text-text-muted after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
                 <span className="relative z-10 bg-surface px-2 text-text-muted">{tx('veya')}</span>

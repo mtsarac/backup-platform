@@ -258,7 +258,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
               }}
             >
               <option value="">{tx("+ Replikasyon hedefi seçin…")}</option>
-              <optgroup label={tx("Varsayılan Sağlayıcı Hedefleri")}>
+              <optgroup label={tx("Varsayılan sağlayıcı hedefleri")}>
                 {providers.filter(p => p.availability === 'Available' && p.executionLocation).map(p => {
                   const defaultConnection = connections.find(c => c.providerType === p.providerType && c.isDefault)
                   const alreadyAdded = destinations.some(d => d.storageProvider === p.providerType && (!d.storageConnectionId || d.storageConnectionId === defaultConnection?.id))
@@ -268,7 +268,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                   )
                 })}
               </optgroup>
-              <optgroup label={tx("Özel Depolama Bağlantıları")}>
+              <optgroup label={tx("Özel depolama bağlantıları")}>
                 {connections.filter(c => !c.isDefault).map(c => {
                   const descriptor = providers.find(p => p.providerType === c.providerType)
                   const unavail = connectionUnavailableReason(c, descriptor)
@@ -283,7 +283,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
           </div>
 
           <div>
-            <label htmlFor="required-replica-count" className="block text-xs font-medium text-text-muted mb-1">{tx("Gerekli Doğrulanmış Kopya Sayısı (Required Verified Replicas)")}</label>
+            <label htmlFor="required-replica-count" className="block text-xs font-medium text-text-muted mb-1">{tx("Gerekli doğrulanmış kopya sayısı")}</label>
             <TextInput
               id="required-replica-count"
               type="number"

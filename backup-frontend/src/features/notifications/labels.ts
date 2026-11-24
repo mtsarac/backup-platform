@@ -11,7 +11,7 @@ export const eventTypeLabels: Record<EventType | 'test' | 'recipient_verificatio
   get quota_critical() { return tx("Kota kritik") },
   get replica_degraded() { return tx("Replica bozuldu") },
   get storage_capacity_critical() { return tx("Depolama kapasitesi kritik") },
-  get backup_size_anomaly() { return tx("Boyut Anomalisi") },
+  get backup_size_anomaly() { return tx("Boyut anomalisi") },
   get test() { return tx("Test bildirimi") },
   get recipient_verification() { return tx("E-posta onay isteği") },
   get backup_share_created() { return tx("Paylaşım oluşturuldu") },

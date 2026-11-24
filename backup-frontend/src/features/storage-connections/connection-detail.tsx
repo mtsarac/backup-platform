@@ -77,7 +77,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
           disabled={probe.isPending || awaitingAgent || notMeasurable}
           onClick={() => probe.mutate()}
         >
-          {probe.isPending || awaitingAgent ? tx("Sorgulanıyor…") : tx("Kapasiteyi Sorgula")}
+          {probe.isPending || awaitingAgent ? tx("Sorgulanıyor…") : tx("Kapasiteyi sorgula")}
         </Button>
       }
     >
@@ -99,17 +99,17 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
         <div className="space-y-4">
           <p className="text-sm text-text-heading">{verdict}</p>
           <Facts columns={3}>
-            <Fact label={tx("Boş Alan")}>
+            <Fact label={tx("Boş alan")}>
               <span className="text-lg font-semibold text-text-heading">{capacity.freeBytes != null ? formatBytes(capacity.freeBytes) : '—'}</span>
             </Fact>
           </Facts>
 
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-text-muted">
-              <span>{tx("Doluluk Oranı")}</span>
+              <span>{tx("Doluluk oranı")}</span>
               <span>{percentUsed}%</span>
             </div>
-            <ProgressBar label={tx("Doluluk Oranı")} value={percentUsed} tone={isCritical ? 'error' : isWarning ? 'warning' : 'primary'} />
+            <ProgressBar label={tx("Doluluk oranı")} value={percentUsed} tone={isCritical ? 'error' : isWarning ? 'warning' : 'primary'} />
           </div>
 
           <p className="text-xs text-text-muted">
@@ -138,7 +138,7 @@ function OverviewTechnical({ connection, total }: { connection: ConnectionView; 
   const measured = capacity && capacity.status !== 'Pending' && capacity.totalBytes != null
   const history = capacity?.history ?? []
   const items = [
-    ...(measured ? [{ label: tx("Toplam Alan"), value: formatBytes(capacity.totalBytes!) }, ...(capacity.usedBytes != null ? [{ label: tx("Kullanılan Alan"), value: formatBytes(capacity.usedBytes) }] : [])] : []),
+    ...(measured ? [{ label: tx("Toplam alan"), value: formatBytes(capacity.totalBytes!) }, ...(capacity.usedBytes != null ? [{ label: tx("Kullanılan alan"), value: formatBytes(capacity.usedBytes) }] : [])] : []),
     ...footprintItems(connection, total),
     { label: tx("Kota kapsamı"), value: connection.quotaScope },
     { label: tx("Oluşturulma"), value: formatDateTime(connection.createdAt, tx('Henüz bildirilmedi')) },
@@ -151,9 +151,9 @@ function OverviewTechnical({ connection, total }: { connection: ConnectionView; 
       <p aria-hidden="true" className="text-sm font-medium text-text-heading">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })}</p>
       <DataList caption={tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })} emptyMessage={tx("Bu depolama için henüz kapasite ölçümü yok.")} rows={history} keyExtractor={measurement => `${measurement.reportedAt}-${history.indexOf(measurement)}`} columns={[
         { key: 'at', header: tx('Tarih'), render: measurement => formatDateTime(measurement.reportedAt, tx('Henüz bildirilmedi')) },
-        { key: 'total', header: tx('Toplam Alan'), card: 'hidden', render: measurement => measurement.totalBytes == null ? '—' : formatBytes(measurement.totalBytes) },
-        { key: 'used', header: tx('Kullanılan Alan'), render: measurement => measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes) },
-        { key: 'free', header: tx('Boş Alan'), render: measurement => measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes) },
+        { key: 'total', header: tx('Toplam alan'), card: 'hidden', render: measurement => measurement.totalBytes == null ? '—' : formatBytes(measurement.totalBytes) },
+        { key: 'used', header: tx('Kullanılan alan'), render: measurement => measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes) },
+        { key: 'free', header: tx('Boş alan'), render: measurement => measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes) },
         { key: 'state', header: tx('Durum'), card: 'status', render: measurement => measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı") },
         { key: 'copy', header: tx('Ölçüm'), card: 'actions', render: measurement => <CopyButton label={tx("Kopyala: {0}", { "0": tx("Ölçüm") })} value={JSON.stringify(measurement)} /> },
       ]} />

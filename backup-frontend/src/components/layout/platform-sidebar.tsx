@@ -17,11 +17,11 @@ export function PlatformSidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
     { heading: tx("Altyapı"), items: [
       { label: tx("Yedekleme bilgisayarları"), to: platformPaths.agents(), icon: Monitor },
       { label: tx("Depolama"), to: platformPaths.storage, icon: HardDrive },
-      { label: tx("Kota ilkeleri"), to: platformPaths.quotaPolicies, icon: Sliders },
+      { label: tx("Kota politikaları"), to: platformPaths.quotaPolicies, icon: Sliders },
     ] },
     { heading: tx("Güvenlik ve destek"), items: [
       { label: tx("Denetim kaydı"), to: platformPaths.audit(), icon: ScrollText },
-      { label: tx("Paylaşılan Yedekler"), to: platformPaths.shares, icon: Share2 },
+      { label: tx("Paylaşılan yedekler"), to: platformPaths.shares, icon: Share2 },
     ] },
     { heading: tx("Ayarlar"), items: [
       { label: tx("Bildirim altyapısı"), to: platformPaths.notificationTransports, icon: Bell },
@@ -29,5 +29,5 @@ export function PlatformSidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
     ] },
     { items: [{ label: tx("Çalışma alanı arayüzüne dön"), to: '/', icon: ArrowLeft, end: true }] },
   ]
-  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Platform menüsü")} label={tx("Platform gezinme menüsü")} brand={{ icon: ShieldCheck, title: tx("Platform Yönetimi"), caption: tx("Tüm müşteriler") }} groups={groups} footer={<div className="space-y-2"><div className="px-3"><Badge tone="warning">{tx("PlatformAdmin")}</Badge></div><AccountLink /></div>} />
+  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Platform menüsü")} label={tx("Platform gezinme menüsü")} brand={{ icon: ShieldCheck, title: tx("Platform yönetimi"), caption: tx("Tüm müşteriler") }} groups={groups} footer={<div className="space-y-2"><div className="px-3"><Badge tone="warning">{tx("PlatformAdmin")}</Badge></div><AccountLink /></div>} />
 }

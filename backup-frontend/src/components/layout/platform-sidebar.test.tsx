@@ -18,7 +18,7 @@ describe('Platform sidebar', () => {
   it('groups every platform page under plain-language headings with unchanged URLs', () => {
     renderPlatform(<PlatformSidebar />)
     expect(links('Genel bakış')).toEqual([['Platform özeti', '/platform']])
-    expect(within(nav().closest('aside')!).getByText('Platform Yöneticisi')).toBeInTheDocument()
+    expect(within(nav().closest('aside')!).getByText('Platform yöneticisi')).toBeInTheDocument()
     expect(links('Müşteriler')).toEqual([
       ['Çalışma alanları', '/platform/tenants'],
       ['Kullanıcılar', '/platform/users'],
@@ -27,11 +27,11 @@ describe('Platform sidebar', () => {
     expect(links('Altyapı')).toEqual([
       ['Yedekleme bilgisayarları', '/platform/agents'],
       ['Depolama', '/platform/storage'],
-      ['Kota ilkeleri', '/platform/quota-policies'],
+      ['Kota politikaları', '/platform/quota-policies'],
     ])
     expect(links('Güvenlik ve destek')).toEqual([
       ['Denetim kaydı', '/platform/audit'],
-      ['Paylaşılan Yedekler', '/platform/shares'],
+      ['Paylaşılan yedekler', '/platform/shares'],
     ])
     expect(links('Ayarlar')).toEqual([['Bildirim altyapısı', '/platform/notification-transports'], ['Yedekleme bilgisayarı ayarları', '/platform/agent-settings']])
     expect(within(nav()).getByRole('link', { name: 'Çalışma alanı arayüzüne dön' })).toHaveAttribute('href', '/')

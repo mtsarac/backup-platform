@@ -28,7 +28,7 @@ describe('download of an encrypted Backup', () => {
     mount()
     expect(await screen.findByRole('radio', { name: /Şifreli dosya \(\.bpe\)/ })).toBeChecked()
     expect(screen.getByText('Şifreli dosyanın SHA256 sağlama toplamı')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Yedeklemeyi İndir' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yedeklemeyi indir' }))
     await waitFor(() => expect(click).toHaveBeenCalledOnce())
     expect(prepareDownload).toHaveBeenCalledWith('tenant-a', 'artifact-a', undefined)
     expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe('backup-1.bak.bpe')
@@ -49,7 +49,7 @@ describe('download of an encrypted Backup', () => {
   it('offers no choice for a plain artifact', async () => {
     vi.mocked(getDownloadAvailability).mockResolvedValue({ ...availability, format: 'v1-plain' })
     mount()
-    await screen.findByRole('button', { name: 'Yedeklemeyi İndir' })
+    await screen.findByRole('button', { name: 'Yedeklemeyi indir' })
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
   })
 

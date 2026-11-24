@@ -167,7 +167,7 @@ describe('Platform Storage Usage Page states and operations', () => {
 
     expect(await screen.findByText("Depolama eşitlemesi çalıştırılsın mı?")).toBeInTheDocument()
 
-    const confirmBtn = screen.getByRole('button', { name: "Uzlaştırmayı Çalıştır" })
+    const confirmBtn = screen.getByRole('button', { name: "Uzlaştırmayı çalıştır" })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
@@ -200,7 +200,7 @@ describe('Platform Storage Usage Page states and operations', () => {
 
     expect(await screen.findByText("Depolama baştan hesaplansın mı?")).toBeInTheDocument()
 
-    const confirmBtn = screen.getByRole('button', { name: "Yeniden Hesaplamayı Çalıştır" })
+    const confirmBtn = screen.getByRole('button', { name: "Yeniden hesaplamayı çalıştır" })
     expect(confirmBtn).toBeDisabled()
     const confirmationName = screen.getByRole('textbox')
     await userEvent.type(confirmationName, 'acme corp')
@@ -262,8 +262,8 @@ describe('Platform Quota Policies Page and Dialog', () => {
     vi.mocked(storageApi.getQuotaPolicies).mockResolvedValue({ items: [] })
     renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
     await screen.findByText('Tanımlı kota politikası bulunamadı.')
-    await userEvent.click(screen.getByRole('button', { name: 'Yeni Politika' }))
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Yeni Kota Politikası')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni politika' }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Yeni kota politikası')
   })
 
   it('renders policies list and handles create dialog with ProviderType scope', async () => {
@@ -278,16 +278,16 @@ describe('Platform Quota Policies Page and Dialog', () => {
     renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
     expect(await screen.findByText('Default Policy')).toBeInTheDocument()
 
-    const newBtn = screen.getByRole('button', { name: /Yeni Politika/i })
+    const newBtn = screen.getByRole('button', { name: /Yeni politika/i })
     await user.click(newBtn)
 
-    expect(await screen.findByText('Yeni Kota Politikası')).toBeInTheDocument()
+    expect(await screen.findByText('Yeni kota politikası')).toBeInTheDocument()
 
     await user.type(screen.getByRole('textbox', { name: /Politika Anahtarı/i }), 'provider-policy')
-    await user.type(screen.getByRole('textbox', { name: /Politika Adı/i }), 'Provider Policy')
+    await user.type(screen.getByRole('textbox', { name: /Politika adı/i }), 'Provider Policy')
 
     // Change scope to ProviderType
-    const scopeSelect = screen.getByLabelText(/Depolama Kapsamı/i)
+    const scopeSelect = screen.getByLabelText(/Depolama kapsamı/i)
     await user.selectOptions(scopeSelect, 'providerType')
 
     expect(screen.getAllByText(/(?:Provider|Sağlayıcı) Anahtarları/i)[0]).toBeInTheDocument()
@@ -321,7 +321,7 @@ describe('Platform Quota Policies Page and Dialog', () => {
 
     expect(await screen.findByText(/Politikayı düzenle: Default Policy/i)).toBeInTheDocument()
 
-    const scopeSelect = screen.getByLabelText(/Depolama Kapsamı/i)
+    const scopeSelect = screen.getByLabelText(/Depolama kapsamı/i)
     await user.selectOptions(scopeSelect, 'ownershipType')
 
     expect(screen.getByText(/Dahil edilecek sahiplik türleri/i)).toBeInTheDocument()
@@ -378,10 +378,10 @@ describe('Platform Quota Policies Page and Dialog', () => {
     vi.mocked(storageApi.createQuotaPolicy).mockResolvedValue({ ...samplePolicy, policyId: 'qs', key: 'managed-only', name: 'Managed only' })
     renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
     await screen.findByText('Default Policy')
-    await user.click(screen.getByRole('button', { name: /Yeni Politika/i }))
+    await user.click(screen.getByRole('button', { name: /Yeni politika/i }))
     await user.type(await screen.findByRole('textbox', { name: /Politika Anahtarı/i }), 'managed-only')
-    await user.type(screen.getByRole('textbox', { name: /Politika Adı/i }), 'Managed only')
-    await user.selectOptions(screen.getByLabelText(/Depolama Kapsamı/i), 'quotaScope')
+    await user.type(screen.getByRole('textbox', { name: /Politika adı/i }), 'Managed only')
+    await user.selectOptions(screen.getByLabelText(/Depolama kapsamı/i), 'quotaScope')
     const labels = screen.getByLabelText(/Kota kapsamı etiketleri/)
     expect(labels).toHaveValue('managed')
 
@@ -411,7 +411,7 @@ describe('Platform Quota Policies Page and Dialog', () => {
     renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
     await screen.findByText('Default Policy')
     await user.click(screen.getByRole('button', { name: 'Düzenle' }))
-    await user.selectOptions(await screen.findByLabelText(/Depolama Kapsamı/i), 'storageConnection')
+    await user.selectOptions(await screen.findByLabelText(/Depolama kapsamı/i), 'storageConnection')
     const ids = screen.getByLabelText(/Depolama bağlantısı kimlikleri/)
 
     await user.click(screen.getByRole('button', { name: 'Kaydet' }))
@@ -447,7 +447,7 @@ describe('Platform Quota Policies Page and Dialog', () => {
     expect(within(first).getByRole('button', { name: 'Kopyala' })).toBeInTheDocument()
     expect(within(second).getByText('Depolama bağlantısı: 3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c')).toBeInTheDocument()
     await user.click(screen.getAllByRole('button', { name: 'Düzenle' })[0])
-    expect(await screen.findByLabelText(/Depolama Kapsamı/i)).toHaveValue('quotaScope')
+    expect(await screen.findByLabelText(/Depolama kapsamı/i)).toHaveValue('quotaScope')
     expect(screen.getByLabelText(/Kota kapsamı etiketleri/)).toHaveValue('managed, tenant')
   })
 })

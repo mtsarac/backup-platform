@@ -74,7 +74,7 @@ describe('session management', () => {
     await userEvent.type(screen.getByLabelText('Kullanıcı adı'), 'owner')
     await userEvent.type(screen.getByLabelText('Şifre'), 'password')
     await userEvent.click(screen.getByLabelText('Beni hatırla'))
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
     await waitFor(() => expect(login).toHaveBeenCalledWith('owner', 'password', true))
   })
 })

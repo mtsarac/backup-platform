@@ -6,11 +6,12 @@ function localeNumber(value: number) {
   return value.toLocaleString(currentLocale(), { maximumFractionDigits: 2 })
 }
 
-/** One friendly size unit: decimal GB, falling back to MB as the smallest unit (never KB or bytes). Exact byte counts belong in technical details. */
+/** One friendly size unit: decimal GB, then MB; only a non-empty size under 0.01 MB drops to KB or B so it never reads as empty. */
 export function formatBytes(bytes: number): string {
   const value = Math.max(0, bytes)
   if (value >= 1_000_000_000) return `${localeNumber(Math.round(value / 10_000_000) / 100)} GB`
   const roundedMb = Math.round(value / 10_000) / 100
+  if (value > 0 && roundedMb === 0) return value < 1000 ? `${value} B` : `${localeNumber(Math.round(value / 10) / 100)} KB`
   return roundedMb >= 1000 ? `${localeNumber(1)} GB` : `${localeNumber(roundedMb)} MB`
 }
 

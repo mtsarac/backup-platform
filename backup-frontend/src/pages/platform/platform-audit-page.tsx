@@ -25,7 +25,7 @@ export function PlatformAuditPage() {
   const query = usePlatformAudit(toServerQuery(state))
   const data = query.data
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title={tx("Audit")} description={tx("Kim, ne zaman, hangi çalışma alanında ne yaptı. Ham kodlar ve ayrıntı çiftleri “Teknik ayrıntılar” altındadır.")} />
+    <PageHeader crumbs={[platformCrumb]} title={tx("Denetim kaydı")} description={tx("Kim, ne zaman, hangi çalışma alanında ne yaptı. Ham kodlar ve ayrıntı çiftleri “Teknik ayrıntılar” altındadır.")} />
     <ListToolbar state={state} label={tx("Audit filtreleri")} search={{ label: tx('Ara') }} total={data?.totalCount}>
       <TenantPicker value={state.filters.tenantId} onChange={(value) => state.setFilter('tenantId', value)} />
     </ListToolbar>

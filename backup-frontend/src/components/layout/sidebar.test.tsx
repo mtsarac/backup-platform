@@ -32,14 +32,14 @@ describe('Tenant sidebar', () => {
       ['Depolama', `${base}/storage`],
       ['Ayarlar', `${base}/settings`],
     ])
-    expect(within(nav().closest('aside')!).queryByRole('link', { name: 'Platform Yönetimi' })).not.toBeInTheDocument()
+    expect(within(nav().closest('aside')!).queryByRole('link', { name: 'Platform yönetimi' })).not.toBeInTheDocument()
   })
 
   it('pins Platform Yönetimi below the menu, only for platform administrators', () => {
     access.isPlatformAdmin = true
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     expect(within(nav()).getAllByRole('link')).toHaveLength(5)
-    expect(within(nav().closest('aside')!).getByRole('link', { name: 'Platform Yönetimi' })).toHaveAttribute('href', '/platform')
+    expect(within(nav().closest('aside')!).getByRole('link', { name: 'Platform yönetimi' })).toHaveAttribute('href', '/platform')
   })
 
   it('never links to a page that has no route', () => {

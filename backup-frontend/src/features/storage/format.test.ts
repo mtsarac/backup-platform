@@ -3,13 +3,13 @@ import { allocatedPercent } from './format'
 import { formatBytes } from '@/lib/format'
 
 describe('storage formatting rules', () => {
-  it('converts bytes to decimal GB and MB, with MB as smallest unit', () => {
+  it('converts bytes to decimal GB and MB; a non-empty size under 0.01 MB keeps a smaller unit', () => {
     expect(formatBytes(1_000_000_000)).toBe('1 GB')
     expect(formatBytes(5_500_000_000)).toBe('5,5 GB')
     expect(formatBytes(10_000_000_000)).toBe('10 GB')
     expect(formatBytes(500_000_000)).toBe('500 MB')
     expect(formatBytes(250_000)).toBe('0,25 MB')
-    expect(formatBytes(500)).toBe('0 MB')
+    expect(formatBytes(500)).toBe('500 B')
     expect(formatBytes(0)).toBe('0 MB')
   })
 

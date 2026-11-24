@@ -181,7 +181,7 @@ describe('backend codes that had no mapping', () => {
     'download_integrity_mismatch', 'download_agent_unavailable', 'download_cancelled', 'download_internal_error', 'cancelled_by_revocation',
     'storage_target_unknown', 'invalid_location', 'delete_not_supported', 'delete_not_verified',
     'LeaseLost', 'DestinationNotConfigured', 'repair_not_found',
-    'CapacityUnavailable', 'TargetNotFound', 'ConnectionFailed', 'capacity_not_found',
+    'CapacityUnavailable', 'TargetNotFound', 'ConnectionFailed',
     'protocol_incompatible', 'protocol_missing', 'rate_limited', 'lease_conflict', 'destination_not_authorized', 'destination_unavailable', 'source_unavailable', 'source_inaccessible', 'unsupported_provider', 'agent_direct_required', 'attempt_not_terminal',
     'share_not_found', 'share_expired', 'share_revoked', 'already_revoked', 'cannot_shorten', 'duration_exceeded', 'invalid_duration', 'missing_expiry', 'no_downloadable_replica', 'invalid_artifact',
     'invalid_cursor', 'invalid_limit', 'invalid_status', 'invalid_result', 'invalid_tenant', 'invalid_date_range', 'invalid_report_period',

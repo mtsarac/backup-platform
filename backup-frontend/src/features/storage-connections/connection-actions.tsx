@@ -51,7 +51,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
       {!show.includes('credentials') ? null : connection.providerType === 'google-drive' ? (
         permissions.canManageSecret && <>
           <Button variant="outline" size="sm" aria-label={label(connection.hasSecret ? tx('yeniden bağla') : tx('google hesabını bağla'))} disabled={connectGoogle.isPending} onClick={() => startGoogleOAuth(connection)}>
-            {connectGoogle.isPending ? tx('Yönlendiriliyor…') : connection.hasSecret ? tx('Yeniden bağla') : tx('Google Hesabını Bağla')}
+            {connectGoogle.isPending ? tx('Yönlendiriliyor…') : connection.hasSecret ? tx('Yeniden bağla') : tx('Google hesabını bağla')}
           </Button>
           {connection.hasSecret && <Button variant="outline" size="sm" aria-label={label(tx('bağlantıyı kes'))} onClick={() => open('disconnectGoogle', disconnectGoogle.reset)}>{tx("Bağlantıyı kes")}</Button>}
         </>

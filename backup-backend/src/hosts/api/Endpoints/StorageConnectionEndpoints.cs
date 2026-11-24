@@ -417,10 +417,12 @@ public static class StorageConnectionEndpoints
             : "window.location.origin";
 
     private static async Task<IResult> GetCapacityForTenantAsync(
-        Guid id, ITenantContext tenant, StorageCapacityProbeService service, CancellationToken cancellationToken)
+        Guid id, ITenantContext tenant, IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
     {
+        if (await store.FindAsync(id, tenant.TenantId!, cancellationToken) is null) return Results.NotFound(new { error = "storage_connection_not_found" });
         var capacity = await service.GetCapacityAsync(tenant.TenantId!, id, cancellationToken);
-        return capacity is null ? Results.NotFound(new { error = "capacity_not_found" }) : Results.Ok(capacity);
+        // No measurement yet is an expected state, not an error: 204 keeps the browser console clean.
+        return capacity is null ? Results.NoContent() : Results.Ok(capacity);
     }
 
     private static async Task<IResult> ProbeForTenantAsync(
@@ -437,7 +439,7 @@ public static class StorageConnectionEndpoints
         var record = await store.FindAsync(id, null, cancellationToken);
         if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
         var capacity = await service.GetCapacityAsync(record.Connection.TenantId, id, cancellationToken);
-        return capacity is null ? Results.NotFound(new { error = "capacity_not_found" }) : Results.Ok(capacity);
+        return capacity is null ? Results.NoContent() : Results.Ok(capacity);
     }
 
     private static async Task<IResult> ProbeForPlatformAsync(
@@ -465,7 +467,7 @@ public static class StorageConnectionEndpoints
         if (SmbOff(flags, record.Connection.ProviderType)) return FeatureDisabled;
 
         var capacity = await service.GetCapacityAsync(record.Connection.TenantId, id, cancellationToken);
-        return capacity is null ? Results.NotFound(new { error = "capacity_not_found" }) : Results.Ok(capacity);
+        return capacity is null ? Results.NoContent() : Results.Ok(capacity);
     }
 
     private static async Task<IResult> ProbeV1Async(

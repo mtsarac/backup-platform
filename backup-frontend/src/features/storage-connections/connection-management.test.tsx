@@ -163,9 +163,9 @@ describe('Storage connections list and detail', () => {
     await userEvent.click(within(history).getByRole('button', { name: 'Kopyala: Ölçüm' }))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"totalBytes":500000000000'))
     await userEvent.click(dialog.getByRole('button', { name: 'Kopyala' }))
-    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('Toplam Alan: 500 GB\nKullanılan Alan: 300 GB'))
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('Toplam alan: 500 GB\nKullanılan alan: 300 GB'))
 
-    const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })
+    const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi sorgula' })
     await userEvent.click(probeBtn)
     expect(api.probeTenantConnectionCapacity).toHaveBeenCalledWith('tenant-a', 'conn-local')
   })
@@ -183,12 +183,12 @@ describe('Storage connections list and detail', () => {
       status: 'Pending', reportedAt: '2026-10-21T10:04:00Z',
     })
     mount(detail('conn-local'))
-    await userEvent.click(await screen.findByRole('button', { name: 'Kapasiteyi Sorgula' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Kapasiteyi sorgula' }))
     expect(await screen.findByText(/yedekleme bilgisayarı yanıtı bekleniyor/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sorgulanıyor…' })).toBeDisabled()
     expect(screen.queryByText('100 kB')).not.toBeInTheDocument()
     expect(await screen.findByText('Alan dolmak üzere', {}, { timeout: 4_000 })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Kapasiteyi sorgula' })).toBeEnabled()
   })
 
   it('explains that S3 and SMB capacity cannot be measured instead of asking for an Agent', async () => {
@@ -199,8 +199,8 @@ describe('Storage connections list and detail', () => {
     mount(detail('conn-local'))
     expect(await screen.findByText('Kapasite ölçülemiyor')).toBeInTheDocument()
     expect(screen.queryByText('Kapasite bilgisi alınamadı')).not.toBeInTheDocument()
-    expect(screen.queryByText('Doluluk Oranı')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeDisabled()
+    expect(screen.queryByText('Doluluk oranı')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kapasiteyi sorgula' })).toBeDisabled()
   })
 
   it.each([
@@ -214,7 +214,7 @@ describe('Storage connections list and detail', () => {
       status, reportedAt: '2026-10-21T10:00:00Z',
     })
     mount(detail('conn-local'))
-    const label = await screen.findByText('Doluluk Oranı')
+    const label = await screen.findByText('Doluluk oranı')
     expect(label.parentElement?.nextElementSibling?.firstElementChild).toHaveClass(tone)
   })
 

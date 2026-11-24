@@ -64,7 +64,7 @@ export function FileRestoreTargetStep({ instancePrefix, originalAgent, original,
       <div className="flex flex-wrap justify-between gap-3">
         <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button>
         <Button disabled={!canCheck || precheckStarting || restoreStarting} onClick={() => onContinue()}>
-          {precheckStarting ? tx('Ön kontrol çalışıyor…') : precheckRetryable ? tx('Tekrar Dene') : tx('Devam et →')}
+          {precheckStarting ? tx('Ön kontrol çalışıyor…') : precheckRetryable ? tx('Tekrar dene') : tx('Devam et →')}
         </Button>
       </div>
     </div>

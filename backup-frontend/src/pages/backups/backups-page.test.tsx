@@ -34,10 +34,10 @@ describe('run history filters and pagination', () => {
       makeRun({ id: 'normal-run', status: 'Succeeded', sizeAnomalyStatus: 'Normal', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: 0.05 })], totalCount: 2, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
     const [warningRow, normalRow] = screen.getAllByRole('row').slice(1)
-    expect(within(warningRow).getByText('Boyut Anomalisi')).toBeInTheDocument()
+    expect(within(warningRow).getByText('Boyut anomalisi')).toBeInTheDocument()
     expect(within(warningRow).getByText('Başarılı')).toBeInTheDocument()
     expect(within(normalRow).getByText('Başarılı')).toBeInTheDocument()
-    expect(within(normalRow).queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
+    expect(within(normalRow).queryByText('Boyut anomalisi')).not.toBeInTheDocument()
     expect(within(warningRow).getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('+%200')
     expect(within(normalRow).getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('+%5')
   })
@@ -138,7 +138,7 @@ describe('size anomaly feature off', () => {
     setFeatureFlags({})
     state.page = { items: [makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: 2 })], totalCount: 1, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    expect(screen.queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
+    expect(screen.queryByText('Boyut anomalisi')).not.toBeInTheDocument()
     expect(screen.queryByText(/Geçmiş ortalama/)).not.toBeInTheDocument()
   })
 })

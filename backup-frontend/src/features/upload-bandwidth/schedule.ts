@@ -33,5 +33,5 @@ export function describeSchedule(windows: readonly TransferScheduleWindowDto[]):
   }
   return [...groups.values()]
     .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end) || a.bytesPerSecond - b.bytesPerSecond)
-    .map(group => `${dayLabel(group.days)} ${clock(group.start)}–${clock(group.end)}: ${group.bytesPerSecond === 0 ? tx('Aktarımı Duraklat') : formatBandwidth(group.bytesPerSecond)}`)
+    .map(group => `${dayLabel(group.days)} ${clock(group.start)}–${clock(group.end)}: ${group.bytesPerSecond === 0 ? tx('Aktarımı duraklat') : formatBandwidth(group.bytesPerSecond)}`)
 }

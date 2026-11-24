@@ -119,7 +119,7 @@ describe('policy', () => {
     mount()
     await screen.findByLabelText('Bildirimler etkin')
     expect(screen.getByLabelText('Düzelme bildirimleri gönder')).toBeInTheDocument()
-    for (const hidden of ['SMS', 'Boyut Anomalisi', /güncel değil eşiği/, /Asgari önem/, /Hatırlatma aralığı/]) expect(screen.queryByLabelText(hidden)).not.toBeInTheDocument()
+    for (const hidden of ['SMS', 'Boyut anomalisi', /güncel değil eşiği/, /Asgari önem/, /Hatırlatma aralığı/]) expect(screen.queryByLabelText(hidden)).not.toBeInTheDocument()
     expect(screen.queryByText('Teknik ayrıntılar')).not.toBeInTheDocument()
   })
 })

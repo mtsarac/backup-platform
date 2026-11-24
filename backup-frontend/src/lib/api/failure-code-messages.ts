@@ -80,7 +80,6 @@ export const codeMessages: Record<string, string> = {
   get CapacityUnavailable() { return tx("Depolamanın boş alanı ölçülemedi.") },
   get TargetNotFound() { return tx("Ölçülecek depolama bağlantısı bulunamadı.") },
   get ConnectionFailed() { return tx("Depolama sunucusuna bağlanılamadı.") },
-  get capacity_not_found() { return tx("Bu depolama için henüz kapasite ölçümü yok.") },
   get protocol_incompatible() { return tx("Yedekleme bilgisayarındaki program sürümü bu sunucuyla uyumlu değil. Programı güncelleyin.") },
   get protocol_missing() { return tx("Yedekleme bilgisayarı sürüm bilgisini göndermedi. Programı güncelleyin.") },
   get rate_limited() { return tx("Çok fazla istek gönderildi. Biraz bekleyip yeniden deneyin.") },

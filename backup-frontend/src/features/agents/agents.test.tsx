@@ -332,7 +332,9 @@ describe('Adding a computer from the new-computer page', () => {
   it('revokes an active token only after confirmation', async () => {
     const { client } = mount(<AgentRegisterPage />)
     const invalidate = vi.spyOn(client, 'invalidateQueries')
-    fireEvent.click(await screen.findByRole('button', { name: /tarihinde oluşturulan kayıt anahtarını iptal et/ }))
+    const revoke = await screen.findByRole('button', { name: /^İptal et — .* tarihinde oluşturulan kayıt anahtarı$/ })
+    expect(revoke.getAttribute('aria-label')!.startsWith(revoke.textContent!)).toBe(true) // WCAG 2.5.3: the visible label opens the name
+    fireEvent.click(revoke)
     const dialog = await screen.findByRole('dialog')
     expect(api.revokeEnrollmentToken).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button', { name: 'İptali onayla' }))

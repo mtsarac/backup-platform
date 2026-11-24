@@ -114,7 +114,7 @@ describe('run detail controls and attention', () => {
   it('shows a yellow advisory and historical comparison without treating a successful backup as failed', () => {
     state.query.data = makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: -0.5 })
     renderDetail()
-    expect(screen.queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
+    expect(screen.queryByText('Boyut anomalisi')).not.toBeInTheDocument()
     expect(screen.getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('-%50')
     expect(screen.getByText('Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.')).toBeInTheDocument()
     expect(screen.getByText('Başarılı')).toBeInTheDocument()
@@ -126,7 +126,7 @@ describe('run detail controls and attention', () => {
     state.query.data = makeRun({ status: 'Succeeded', sizeAnomalyStatus: 'BaselinePending' })
     renderDetail()
     expect(screen.getByText('Karşılaştırma için en az 3 önceki başarılı yedek gerekir.')).toBeInTheDocument()
-    expect(screen.queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
+    expect(screen.queryByText('Boyut anomalisi')).not.toBeInTheDocument()
     expect(screen.queryByText(/Geçmiş ortalama:/)).not.toBeInTheDocument()
   })
 
@@ -175,6 +175,14 @@ describe('run detail controls and attention', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
     await screen.findByText('Yeni deneme sıraya alındı.')
     expect(state.retry.mutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides manual retry once the retry policy has used every attempt', () => {
+    const exhausted = makeRun({ status: 'Failed' })
+    exhausted.currentAttemptNumber = exhausted.retry.maxAttempts
+    state.query.data = exhausted
+    renderDetail()
+    expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
   })
 
   it('uses centrally mapped 409 reason instead of raw backend errors', () => {
@@ -263,7 +271,7 @@ describe('run detail controls and attention', () => {
     expect(state.resume.mutateAsync).not.toHaveBeenCalled()
     state.query.data = makeRun({ status: 'CancellationRequested' })
     view.rerender(<MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter>)
-    expect(screen.queryByRole('button', { name: 'Devam Et' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Devam et' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Duraklat' })).not.toBeInTheDocument()
   })
 
@@ -271,7 +279,7 @@ describe('run detail controls and attention', () => {
     state.query.data = makeRun({ status: 'Paused', pauseReason: 'Operator' })
     state.resume.mutateAsync.mockResolvedValue(makeRun({ status: 'Pending' }))
     renderDetail()
-    fireEvent.click(screen.getByRole('button', { name: 'Devam Et' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Devam et' }))
     await waitFor(() => expect(state.resume.mutateAsync).toHaveBeenCalledTimes(1))
     expect(state.cancel.mutateAsync).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'İptal et' })).toBeEnabled()

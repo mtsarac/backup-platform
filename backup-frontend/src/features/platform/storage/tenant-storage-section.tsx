@@ -89,8 +89,8 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               { label: tx("Politika kimliği"), value: quota.policy.policyId },
               { label: tx("Politika anahtarı"), value: quota.policy.key },
               { label: tx("Politika sürümü"), value: String(quota.policy.version) },
-              { label: tx("Hesaplama Modu"), value: accountingModeLabels[quota.accountingMode] },
-              { label: tx("Uygulama Modu"), value: enforcementModeLabels[quota.enforcementMode] },
+              { label: tx("Hesaplama modu"), value: accountingModeLabels[quota.accountingMode] },
+              { label: tx("Uygulama modu"), value: enforcementModeLabels[quota.enforcementMode] },
               { label: tx("Kapsam"), value: scopeLabels(quota.includedStorageScopes).join('; ') },
             ]} />
 

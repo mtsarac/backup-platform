@@ -12,7 +12,7 @@ import { auditActionLabel } from '@/features/audit/action-labels'
 import { auditDetailItems } from '@/features/audit/audit-details'
 
 const actorLabels: Record<PlatformAuditEntry['actorKind'], string> = {
-  get PlatformAdmin() { return tx("Platform Yöneticisi") },
+  get PlatformAdmin() { return tx("Platform yöneticisi") },
   get UserAdmin() { return tx("UserAdmin") },
   get System() { return tx("Sistem") },
   get User() { return tx("Kullanıcı") },

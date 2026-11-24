@@ -55,7 +55,7 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-2"><span className="font-medium text-text-heading">{tx("Durum:")}</span><StatusPill status={data.status} /></div>
-      <Button variant="outline" size="sm" onClick={onRecheck} disabled={recheckDisabled}><RotateCcw aria-hidden="true" className="size-4" />{tx("Yeniden Kontrol Et")}</Button>
+      <Button variant="outline" size="sm" onClick={onRecheck} disabled={recheckDisabled}><RotateCcw aria-hidden="true" className="size-4" />{tx("Yeniden kontrol et")}</Button>
     </div>
     {failed && <ErrorNotice title={tx("Ön kontrol başarısız oldu! Restore başlatılamaz.")} {...(failure ?? { what: tx('Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.'), dataImpact: fileArchive ? tx('Geri yükleme başlamadı; hedefteki dosyalar değişmedi.') : tx('Geri yükleme başlamadı; hedef veritabanı değişmedi.'), action: tx('Başarısız kontrolleri giderip ön kontrolü yeniden çalıştırın.'), technical: [] })} control={destination && failure?.actionKind ? <Link className={buttonVariants({ variant: 'outline' })} to={destination}>{actionLabel(failure.actionKind)}</Link> : undefined} onRetry={!recheckDisabled && (!failure || failure.actionKind === 'retry') ? onRecheck : undefined} trust={trust} />}
     {passed && warnings.length > 0 && <Notice tone="warning" title={tx("Ön kontrol uyarılarla geçti.")}>{tx("Aşağıdaki uyarıları inceleyerek devam edebilirsiniz.")}</Notice>}

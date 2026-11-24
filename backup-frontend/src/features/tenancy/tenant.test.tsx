@@ -37,7 +37,8 @@ describe('tenant switching and permissions', () => {
     vi.mocked(apiRequest).mockClear()
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     setup(cache, 'UserAdmin', '/tenants/tenant-c')
-    expect(screen.getByText('Sayfa bulunamadı.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sayfa bulunamadı.' })).toBeInTheDocument()
+    expect(screen.getByRole('main')).toContainElement(screen.getByRole('link', { name: 'Ana sayfaya dön' }))
     expect(apiRequest).not.toHaveBeenCalled()
     cache.clear()
   })
@@ -96,7 +97,7 @@ describe('top-bar tenant selector and role navigation', () => {
         </AuthContext.Provider>
       </QueryClientProvider>
     )
-    expect(screen.getByRole('link', { name: 'Platform Yönetimi' })).toHaveAttribute('href', '/platform')
+    expect(screen.getByRole('link', { name: 'Platform yönetimi' })).toHaveAttribute('href', '/platform')
     cache.clear()
   })
 })

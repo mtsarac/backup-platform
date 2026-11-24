@@ -5,7 +5,7 @@ describe('restore presentation', () => {
   it('names a reported database state and keeps unknown ones unknown', () => {
     expect(databaseStateLabel('ONLINE')).toBe('Çevrimiçi')
     expect(databaseStateLabel('online')).toBe('Çevrimiçi')
-    expect(databaseStateLabel('RECOVERY_PENDING')).toBe('Kurtarma Bekleniyor')
+    expect(databaseStateLabel('RECOVERY_PENDING')).toBe('Kurtarma bekleniyor')
     expect(databaseStateLabel('SOMETHING_ELSE')).toBe('Bilinmiyor')
     expect(databaseStateLabel(null)).toBe('Bilinmiyor')
   })

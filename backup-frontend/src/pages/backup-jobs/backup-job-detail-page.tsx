@@ -43,7 +43,8 @@ function JobDetail({ job }: { job: BackupJob }) {
   const run = useRunBackupJob()
   const toggle = useToggleBackupJob()
   const archive = useMutation({ mutationFn: () => archiveBackupJob(tenantId, job.id), onSuccess: async () => {
-    await Promise.all(['backup-jobs', 'dashboard', 'backup-runs'].map(key => client.invalidateQueries({ queryKey: ['tenant', tenantId, key] })))
+    // Mark stale without refetching: this page's own health query would hit the archived job and 404; the list page refetches on mount.
+    await Promise.all(['backup-jobs', 'dashboard', 'backup-runs'].map(key => client.invalidateQueries({ queryKey: ['tenant', tenantId, key], refetchType: 'none' })))
     navigate(`${base}/backup-jobs`)
   } })
   const days = timeline.data?.jobs.find(item => item.jobId === job.id)?.days ?? []
