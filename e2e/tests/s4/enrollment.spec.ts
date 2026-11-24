@@ -1,0 +1,64 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { expect, test } from '@playwright/test'
+import { Api, enableAgentEnrollment, ensureTenant, ensureTenantUser, ensureUnlimitedPlan } from '../../api'
+import { state } from '../../state'
+
+const run = promisify(execFile)
+const suffix = `${Date.now()}`
+const account = { login: `e2e.s4.${suffix}`, password: 'E2e-S4-Passw0rd!2026' }
+let tenantId: string
+
+test.beforeAll(async () => {
+  const platform = await Api.signIn(state().accounts.platformAdmin)
+  try {
+    tenantId = await ensureTenant(platform, `e2e-s4-${suffix}`)
+    const userId = await ensureTenantUser(platform, [tenantId], account)
+    await platform.call('POST', `/api/platform/tenants/${tenantId}/memberships`, { userId }, [200, 201, 409])
+    await ensureUnlimitedPlan(platform, tenantId, 'E2E Unlimited')
+    await enableAgentEnrollment(platform, tenantId)
+  } finally { await platform.dispose() }
+})
+
+test.fixme('signed-out login has no console errors (#239)', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  await page.goto('/login')
+  await expect(page.locator('input[type="password"]')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('Windows enrollment command connects the service', async ({ page }) => {
+  test.setTimeout(240_000)
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.goto('/login')
+  await page.locator('input[autocomplete="username"], input[type="text"]').first().fill(account.login)
+  await page.locator('input[type="password"]').fill(account.password)
+  await page.locator('button[type="submit"]').click()
+  await page.waitForURL(new RegExp(`/tenants/${tenantId}`))
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  page.on('requestfailed', request => { if (request.failure()?.errorText !== 'net::ERR_ABORTED') errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`) })
+  page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`) })
+  await page.goto(`/tenants/${tenantId}/agents`)
+  await page.getByRole('button', { name: /Yedekleme bilgisayarı ekle|Add a backup computer/ }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('button', { name: /İleri|Next/ })).toBeDisabled()
+  await dialog.getByLabel(/Bilgisayarın adı|Computer name/).fill(`e2e-s4-${suffix}`)
+  await dialog.getByLabel(/İşletim sistemi|Operating system/).selectOption('Windows')
+  await dialog.getByRole('button', { name: /İleri|Next/ }).click()
+  await dialog.getByRole('button', { name: /Kayıt anahtarı oluştur|Create enrollment key/ }).click()
+  const command = await dialog.getByLabel(/Tek kullanımlık kurulum komutu|One-time installation command/).inputValue()
+  expect(command).toContain('/api/agent-dist/install.ps1')
+  const encoded = Buffer.from(command, 'utf16le').toString('base64')
+  try {
+    await run('ssh', ['-o', 'BatchMode=yes', 'virtual-win11', 'powershell', '-NoProfile', '-EncodedCommand', encoded], { timeout: 180_000, maxBuffer: 2_000_000 })
+  } catch {
+    throw new Error('Windows installation failed; inspect the Windows agent service and installer logs without exposing the enrollment token')
+  }
+  await expect(dialog.getByRole('status')).toContainText(/Çevrimiçi|Online/, { timeout: 90_000 })
+  await expect(dialog.getByLabel(/Tek kullanımlık kurulum komutu|One-time installation command/)).toHaveCount(0)
+  const service = await run('ssh', ['-o', 'BatchMode=yes', 'virtual-win11', 'powershell', '-NoProfile', '-Command', '(Get-Service BackupAgent).Status'])
+  expect(service.stdout.trim()).toBe('Running')
+  expect(errors).toEqual([])
+})
