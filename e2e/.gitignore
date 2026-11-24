@@ -6,3 +6,4 @@ playwright-report/
 .s2-certs/
 .state-s5.json
 .s5-certs/
+.state-auth.json
