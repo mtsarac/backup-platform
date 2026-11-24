@@ -37,4 +37,21 @@ public sealed class PlatformDataIntegrityIntegrationTests(PostgreSqlFixture fixt
         using var rename = await admin.SendAsync(HttpMethod.Put, $"/api/platform/tenants/{otherId}", new { name });
         Assert.Equal(HttpStatusCode.Conflict, rename.StatusCode);
     }
+
+    [Fact]
+    public async Task ConcurrentCreatesOfOneTenantName_YieldOneWinnerAndConflicts()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var admin = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
+        var name = $"Race {Guid.NewGuid():N}";
+
+        var codes = await Task.WhenAll(Enumerable.Range(0, 6).Select(async _ =>
+        {
+            using var response = await admin.SendAsync(HttpMethod.Post, "/api/platform/tenants", new { name });
+            return response.StatusCode;
+        }));
+
+        Assert.Equal(1, codes.Count(code => code == HttpStatusCode.Created));
+        Assert.Equal(5, codes.Count(code => code == HttpStatusCode.Conflict));
+    }
 }

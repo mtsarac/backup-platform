@@ -75,13 +75,14 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             policy?.IsEnabled ?? false, policy?.ChangedAt);
     }
 
-    private static async Task<bool> NameTakenAsync(PlatformDbContext context, string name, TenantId? except, CancellationToken cancellationToken)
+    private static Task<bool> NameTakenAsync(PlatformDbContext context, string name, TenantId? except, CancellationToken cancellationToken)
     {
-        // Serializes concurrent create/rename so the check below cannot race; shortcut: no unique index, so legacy duplicates are tolerated.
-        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext('tenant_name_guard'))", cancellationToken);
         var normalized = name.Trim().ToLower();
-        return await context.Tenants.AnyAsync(row => row.Name.ToLower() == normalized && row.Id != except, cancellationToken);
+        return context.Tenants.AnyAsync(row => row.Name.ToLower() == normalized && row.Id != except, cancellationToken);
     }
+
+    private static bool IsNameConflict(DbUpdateException exception) =>
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ux_tenants_name" };
 
     public async Task<PlatformChange<PlatformTenantItem>> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -92,7 +93,8 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         context.Tenants.Add(tenant);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantCreated, tenant.Id,
             "tenant", Id(tenant.Id), new Dictionary<string, object?> { ["name"] = tenant.Name }));
-        await context.SaveChangesAsync(cancellationToken);
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException exception) when (IsNameConflict(exception)) { return new(PlatformChangeOutcome.TenantNameTaken); }
         await transaction.CommitAsync(cancellationToken);
         return new(PlatformChangeOutcome.Changed, new PlatformTenantItem(tenant.Id, tenant.Name, 0, 0, false));
     }
@@ -115,7 +117,8 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         {
             context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantRenamed, tenantId,
                 "tenant", Id(tenantId), new Dictionary<string, object?> { ["previousName"] = previous, ["name"] = tenant.Name }));
-            await context.SaveChangesAsync(cancellationToken);
+            try { await context.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateException exception) when (IsNameConflict(exception)) { return new(PlatformChangeOutcome.TenantNameTaken); }
             outcome = PlatformChangeOutcome.Changed;
         }
         await transaction.CommitAsync(cancellationToken);
