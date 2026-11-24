@@ -48,6 +48,19 @@ test('backup source wizard validates Windows file and database fields', async ({
   await expect(page.getByText('Veritabanı adını girin.')).toBeVisible()
 })
 
+test('file backup wizard explains snapshot sources when VSS is enabled', async ({ page }) => {
+  test.fixme(true, "windowsVss stack'te kapalı")
+  await page.goto('/login')
+  await page.locator('input[autocomplete="username"], input[type="text"]').first().fill(account.login)
+  await page.locator('input[type="password"]').fill(account.password)
+  await page.locator('button[type="submit"]').click()
+  await page.waitForURL(new RegExp(`/tenants/${tenantId}`))
+  await page.goto(`/tenants/${tenantId}/backup-jobs/new`)
+  await page.getByRole('button', { name: 'Elle yapılandır' }).click()
+  await page.getByRole('radio', { name: 'Dosya / Klasör' }).check()
+  await expect(page.getByText(/Noktasal görünüm için yapılandırılmış anlık görüntü kaynağı kullanın/)).toBeVisible()
+})
+
 test('Windows enrollment command connects the service', async ({ page }) => {
   test.setTimeout(240_000)
   const errors: string[] = []
