@@ -1,0 +1,14 @@
+{
+  "name": "backup-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "up": "bash up.sh",
+    "seed": "bun seed.ts",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/bun": "latest"
+  }
+}
