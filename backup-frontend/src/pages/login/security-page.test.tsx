@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
@@ -174,9 +174,9 @@ describe('SecurityPage', () => {
 
     const codesDialog = await screen.findByRole('dialog', { name: 'Kurtarma kodlarınız' })
     expect(codesDialog).toBeInTheDocument()
-    expect(codesDialog.contains(document.activeElement)).toBe(true)
+    await waitFor(() => expect(codesDialog.contains(document.activeElement)).toBe(true))
 
     await userEvent.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog', { name: 'Kurtarma kodlarınız' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Kurtarma kodlarınız' })).not.toBeInTheDocument())
   })
 })

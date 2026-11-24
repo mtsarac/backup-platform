@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
@@ -50,6 +50,7 @@ export function SecurityPage() {
   const [codesModalOpen, setCodesModalOpen] = useState(false)
   const [issuedCodes, setIssuedCodes] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
+  const codesDoneRef = useRef<HTMLButtonElement>(null)
 
   // Remove modal state
   const [removeOpen, setRemoveOpen] = useState(false)
@@ -273,7 +274,7 @@ export function SecurityPage() {
         <Dialog.Root open onOpenChange={(next) => { if (!next) setCodesModalOpen(false) }}>
           <Dialog.Portal>
             <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
-            <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
+            <Dialog.Popup initialFocus={codesDoneRef} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
               <Dialog.Title className="text-lg font-semibold text-text-heading">{tx('Kurtarma kodlarınız')}</Dialog.Title>
               <Notice tone="warning">
                 {tx('Bu kodlar yalnızca bir kez gösterilir. Kimlik doğrulama cihazınıza erişiminizi kaybederseniz hesabınıza erişmek için bu kodları kullanabilirsiniz.')}
@@ -289,7 +290,7 @@ export function SecurityPage() {
                 <Button variant="outline" onClick={copyRecoveryCodes}>
                   {copied ? tx('Kopyalandı!') : tx('Kodları kopyala')}
                 </Button>
-                <Dialog.Close render={<Button />}>{tx('Tamam')}</Dialog.Close>
+                <Dialog.Close render={<Button ref={codesDoneRef} />}>{tx('Tamam')}</Dialog.Close>
               </div>
             </Dialog.Popup>
           </Dialog.Portal>
