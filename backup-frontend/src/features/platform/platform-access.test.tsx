@@ -29,22 +29,22 @@ beforeEach(() => {
 describe('Platform Administration entry points', () => {
   it('tenant sidebar shows the Platform Administration link to a PlatformAdmin', () => {
     renderPlatform(<Sidebar />, { user: platformAdmin })
-    for (const link of screen.getAllByText(/Platform Administration|Platform Yönetimi/)) expect(link.closest('a')).toHaveAttribute('href', '/platform')
+    for (const link of screen.getAllByText(/Platform Administration|Platform yönetimi/)) expect(link.closest('a')).toHaveAttribute('href', '/platform')
   })
 
   it('tenant sidebar hides it from a user who is only a tenant user', () => {
     renderPlatform(<Sidebar />, { user: tenantOwner })
-    expect(screen.queryByText(/Platform Administration|Platform Yönetimi/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Platform Administration|Platform yönetimi/)).not.toBeInTheDocument()
     expect(screen.getAllByText(/Yedeklemeler/).length).toBeGreaterThan(0)
   })
 
   it('tenant picker links PlatformAdmin users and hides it for others', () => {
     const tenants = [{ tenantId: 't1', name: 'Bir' }, { tenantId: 't2', name: 'İki' }]
     const { unmount } = renderPlatform(<TenantSelectPage />, { user: platformAdmin, tenants })
-    expect(screen.getByRole('link', { name: /Platform Administration|Platform Yönetimi/ })).toHaveAttribute('href', '/platform')
+    expect(screen.getByRole('link', { name: /Platform Administration|Platform yönetimi/ })).toHaveAttribute('href', '/platform')
     unmount()
     renderPlatform(<TenantSelectPage />, { user: tenantOwner, tenants })
-    expect(screen.queryByRole('link', { name: /Platform Administration|Platform Yönetimi/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Platform Administration|Platform yönetimi/ })).not.toBeInTheDocument()
   })
 })
 
@@ -69,8 +69,8 @@ describe('PlatformAdminRoute guard', () => {
     for (const name of ['Platform özeti', 'Çalışma alanları', 'Kullanıcılar', 'Yedekleme bilgisayarları', 'Denetim kaydı']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: "Depolama" })).toHaveAttribute('href', '/platform/storage')
     expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
-    expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
-    expect(within(nav.closest('aside')!).getByText("Platform Yöneticisi")).toBeInTheDocument()
+    expect(screen.getAllByText("Platform yönetimi").length).toBeGreaterThan(0)
+    expect(within(nav.closest('aside')!).getByText("Platform yöneticisi")).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Platform Operatörü/ })).toHaveAttribute('href', '/account')
     expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()

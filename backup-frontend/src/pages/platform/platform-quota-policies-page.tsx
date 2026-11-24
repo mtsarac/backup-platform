@@ -53,7 +53,7 @@ export function PlatformQuotaPoliciesPage() {
       { label: tx("Politika kimliği"), value: policy.policyId },
       { label: tx("Politika anahtarı"), value: policy.key },
       { label: tx("Politika sürümü"), value: String(policy.version) },
-      { label: tx("Hesaplama Modu"), value: accountingModeLabels[policy.accountingMode] },
+      { label: tx("Hesaplama modu"), value: accountingModeLabels[policy.accountingMode] },
       { label: tx("Uyarı eşiği (%)"), value: String(policy.warningThresholdPercent) },
       { label: tx("Kritik eşik (%)"), value: String(policy.criticalThresholdPercent) },
       { label: tx("Kapsam"), value: scopeLabels(policy.includedStorageScopes).join('; ') },
@@ -65,7 +65,7 @@ export function PlatformQuotaPoliciesPage() {
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Kota politikaları")} description={tx("Tenant'ların depolama hesaplama yöntemlerini, eşiklerini ve engelleme kurallarını yönetin.")} actions={<>
       <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />{tx("Yenile")}</Button>
-      <Button onClick={() => setIsCreating(true)}><Plus aria-hidden="true" className="size-4" />{tx("Yeni Politika")}</Button>
+      <Button onClick={() => setIsCreating(true)}><Plus aria-hidden="true" className="size-4" />{tx("Yeni politika")}</Button>
     </>} />
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && (policies.length === 0

@@ -61,16 +61,16 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
       onClose={onClose}
     >
       <div className="space-y-4">
-        <Field label={tx("Profil Adı")}>
+        <Field label={tx("Profil adı")}>
           {control => <TextInput {...control}  value={name} onChange={e => setName(e.target.value)} placeholder={tx("Örn. Mesai Saatleri")} maxLength={200} required />}
         </Field>
 
         <div className="rounded-lg border border-border p-3 space-y-3 bg-surface-2">
-          <h4 className="text-sm font-semibold text-text-heading">{tx("Pencere Ekle")}</h4>
-          <Field label={tx("Pencere Davranışı")}>
+          <h4 className="text-sm font-semibold text-text-heading">{tx("Pencere ekle")}</h4>
+          <Field label={tx("Pencere davranışı")}>
             {control => <Select {...control} value={pause ? 'pause' : 'limit'} onChange={e => setPause(e.target.value === 'pause')}>
-              <option value="limit">{tx("Hız Limiti")}</option>
-              <option value="pause">{tx("Aktarımı Duraklat")}</option>
+              <option value="limit">{tx("Hız limiti")}</option>
+              <option value="pause">{tx("Aktarımı duraklat")}</option>
             </Select>}
           </Field>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -87,7 +87,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
             <Field label={tx("Bitiş")}>
               {control => <TextInput {...control} type="time"  value={endTime} onChange={e => setEndTime(e.target.value)} />}
             </Field>
-            <Field label={tx("Hız Limiti")}>
+            <Field label={tx("Hız limiti")}>
               {control => (
                 <div className="flex gap-1">
                   <TextInput {...control}  value={rateText} disabled={pause} onChange={e => setRateText(e.target.value)} />
@@ -97,7 +97,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
             </Field>
           </div>
           <Button variant="link" size="sm" type="button" onClick={addWindow} disabled={!isRateValid || !startTime || !endTime || startTime === endTime}>
-            + {tx("Pencereyi Listeye Ekle")}
+            + {tx("Pencereyi listeye ekle")}
           </Button>
         </div>
 
@@ -108,7 +108,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
               {windows.map((w, idx) => (
                 <div key={idx} className="flex items-center justify-between rounded-sm border border-border px-3 py-1.5 text-xs">
                   <span>
-                    <strong>{DAYS.find(d => d.value === w.dayOfWeek)?.label()}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {w.bytesPerSecond === 0 ? tx("Aktarımı Duraklat") : formatBandwidth(w.bytesPerSecond)}
+                    <strong>{DAYS.find(d => d.value === w.dayOfWeek)?.label()}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {w.bytesPerSecond === 0 ? tx("Aktarımı duraklat") : formatBandwidth(w.bytesPerSecond)}
                   </span>
                   <Button variant="destructive" size="sm" onClick={() => removeWindow(idx)}>{tx("Kaldır")}</Button>
                 </div>

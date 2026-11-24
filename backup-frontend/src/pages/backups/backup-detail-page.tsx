@@ -123,15 +123,17 @@ function BackupDetail({ id }: { id: string }) {
 
   const failureCode = run && (run.reasonCode ?? run.retry.lastFailureCode ?? (run.status === 'AgentLost' ? 'AgentLost' : null))
   const failure = describeFailure(failureCode)
+  // The API refuses a manual retry (409 attempts_exhausted) once the policy's attempts are used.
+  const retryable = (run: BackupRun) => canRetryRun(run.status) && run.currentAttemptNumber < run.retry.maxAttempts
   const failureNotice = (run: BackupRun) => ({
     title: tx("Yedekleme denemesi başarısız oldu"), ...failure,
-    onAction: failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || canRetryRun(run.status)) ? () => {
+    onAction: failure.actionKind && failure.actionKind !== 'retry' && (failure.actionKind !== 'backupNow' || retryable(run)) ? () => {
       if (failure.actionKind === 'checkComputer') navigate(`/tenants/${tenantId}/agents/${run.agentId}`)
       else if (failure.actionKind === 'fixCredentials') navigate(`/tenants/${tenantId}/backup-jobs/${run.jobId}`)
       else if (failure.actionKind === 'manageStorage') navigate(`/tenants/${tenantId}/storage`)
-      else if (failure.actionKind === 'backupNow' && canRetryRun(run.status)) void perform('retry')
+      else if (failure.actionKind === 'backupNow' && retryable(run)) void perform('retry')
     } : undefined,
-    onRetry: canRetryRun(run.status) ? () => void perform('retry') : undefined,
+    onRetry: retryable(run) ? () => void perform('retry') : undefined,
   })
 
   return (
@@ -144,9 +146,9 @@ function BackupDetail({ id }: { id: string }) {
         </div>
         {run && <div className="flex flex-wrap items-center gap-2">
           {run.status === 'Succeeded' && artifact && artifactState(artifact) !== 'DeleteFailed' && !restoreIneligibility(artifact) && <Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs/${run.id}/restore`}>{tx('Geri yükle')}</Link>}
-          {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
+          {retryable(run) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
-          {run.status === 'Paused' && <Button disabled={busy} onClick={() => void perform('resume')}>{actions.resume.isPending ? tx('Sıraya alınıyor…') : tx('Devam Et')}</Button>}
+          {run.status === 'Paused' && <Button disabled={busy} onClick={() => void perform('resume')}>{actions.resume.isPending ? tx('Sıraya alınıyor…') : tx('Devam et')}</Button>}
           {canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => { actions.cancel.reset(); setConfirmCancel(true) }}>{actions.cancel.isPending ? tx('İletiliyor…') : tx('İptal et')}</Button>}
         </div>}
       </div>

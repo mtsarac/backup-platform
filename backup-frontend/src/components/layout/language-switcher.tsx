@@ -14,7 +14,7 @@ export function LanguageSwitcher() {
       size="sm"
       className="flex min-h-control items-center gap-1.5 px-2.5 font-medium text-xs text-text-muted hover:text-text"
       onClick={() => setLanguage(language === 'tr' ? 'en' : 'tr')}
-      aria-label={`${tx("Dili değiştir")}: TR / EN`}
+      aria-label={`TR / EN: ${tx("Dili değiştir")}`}
       title={tx("Dili değiştir")}
     >
       <Languages className="size-4" />

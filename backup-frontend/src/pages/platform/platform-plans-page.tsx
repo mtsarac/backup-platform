@@ -22,6 +22,7 @@ import { StatusPill } from '@/components/data/status-pill'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
 import { Select } from '@/components/ui/text-input'
+import { actionName } from '@/lib/accessible-name'
 
 const planListConfig = {
   search: true,
@@ -56,8 +57,8 @@ export function PlatformPlansPage() {
     { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: (plan) => plan.isSystem
       ? <span className="text-sm text-text-muted">{tx("Sistem planı; salt okunur.")}</span>
       : <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" aria-label={tx("{0} planını düzenle", { "0": plan.name })} onClick={() => setEditing(plan)}>{tx("Düzenle")}</Button>
-        <Button variant="outline" size="sm" aria-label={tx("{0} planını {1}", { "0": plan.name, "1": plan.enabled ? tx('devre dışı bırak') : tx('etkinleştir') })} onClick={() => { setEnabled.reset(); setToggling(plan) }}>{plan.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
+        <Button variant="outline" size="sm" aria-label={actionName(tx("Düzenle"), plan.name)} onClick={() => setEditing(plan)}>{tx("Düzenle")}</Button>
+        <Button variant="outline" size="sm" aria-label={actionName(plan.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir'), plan.name)} onClick={() => { setEnabled.reset(); setToggling(plan) }}>{plan.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
       </div> },
   ]
   return <div className="space-y-6">

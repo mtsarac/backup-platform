@@ -410,14 +410,14 @@ describe('BackupShare frontend', () => {
       expect(screen.getByText('AnalyticsDb')).toBeInTheDocument()
       expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
       expect(screen.getByText('Super Admin')).toBeInTheDocument()
-      expect(screen.getByText('Platform Yöneticisi')).toBeInTheDocument()
+      expect(screen.getByText('Platform yöneticisi')).toBeInTheDocument()
       expect(within(screen.getByRole('table', { name: 'Paylaşımlarım' })).getByText('Aktif')).toBeInTheDocument()
       // Ensure tenant view is read-only (no extend or revoke buttons exist)
       expect(screen.queryByRole('button', { name: /uzat|iptal/i })).not.toBeInTheDocument()
     })
   })
 
-  it('renders Paylaşılan Yedekler page with cross-tenant shares, tenant column, and status filter', async () => {
+  it('renders Paylaşılan yedekler page with cross-tenant shares, tenant column, and status filter', async () => {
     permissions.role = 'PlatformAdmin'
     request.mockImplementation(async (path: string) => {
       if (path.includes('platform/backup-shares')) return [platformShare, testShare]
@@ -438,11 +438,11 @@ describe('BackupShare frontend', () => {
     renderPlatformSharesPage()
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Paylaşılan Yedekler' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Paylaşılan yedekler' })).toBeInTheDocument()
       expect(screen.getByText('Acme Corp')).toBeInTheDocument()
       expect(screen.getByText('Platform incident investigation')).toBeInTheDocument()
       expect(screen.getByText('Super Admin')).toBeInTheDocument()
-      expect(screen.getByText('Platform Yöneticisi')).toBeInTheDocument()
+      expect(screen.getByText('Platform yöneticisi')).toBeInTheDocument()
       expect(screen.getByRole('region', { name: 'Paylaşım filtreleri' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Paylaşım oluştur' })).toBeInTheDocument()
     })
@@ -495,7 +495,7 @@ describe('BackupShare frontend', () => {
     expect(screen.getAllByRole('heading', { level: 2 })[0]).toHaveTextContent('ProductionDb')
   })
 
-  it('creates a share from Paylaşılan Yedekler screen via CreatePlatformShareDialog', async () => {
+  it('creates a share from Paylaşılan yedekler screen via CreatePlatformShareDialog', async () => {
     permissions.role = 'PlatformAdmin'
     request.mockImplementation(async (path: string, options?: { method?: string; json?: unknown }) => {
       if (options?.method === 'POST') {
@@ -730,7 +730,7 @@ describe('BackupShare frontend', () => {
     })
   })
 
-  it('renders download button on Paylaşılan Yedekler for active shares and triggers download', async () => {
+  it('renders download button on Paylaşılan yedekler for active shares and triggers download', async () => {
     permissions.role = 'PlatformAdmin'
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     request.mockImplementation(async (path: string, options?: { method?: string }) => {
@@ -792,7 +792,7 @@ describe('BackupShare frontend', () => {
     click.mockRestore()
   })
 
-  it('displays refusal states when download is refused or fails on Paylaşılan Yedekler', async () => {
+  it('displays refusal states when download is refused or fails on Paylaşılan yedekler', async () => {
     permissions.role = 'PlatformAdmin'
     request.mockImplementation(async (path: string, options?: { method?: string }) => {
       if (options?.method === 'POST' && path.includes('/downloads')) {
@@ -967,7 +967,7 @@ describe('BackupShare frontend', () => {
     expect(screen.getByText('İndirme girişimleri', { selector: 'summary' }).closest('details')).toHaveAttribute('open')
   })
 
-  it('renders download attempt history with filters and configurable 365-day retention in Paylaşılan Yedekler for PlatformAdmin', async () => {
+  it('renders download attempt history with filters and configurable 365-day retention in Paylaşılan yedekler for PlatformAdmin', async () => {
     permissions.role = 'PlatformAdmin'
     request.mockImplementation(async (path: string, options?: { method?: string; json?: unknown }) => {
       if (path.includes('platform/settings/audit-retention')) {

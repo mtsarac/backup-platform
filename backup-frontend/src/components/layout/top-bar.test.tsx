@@ -43,15 +43,15 @@ describe('Top bar', () => {
     expect(screen.getByLabelText('Çalışma alanı')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Bildirimler' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Temayı değiştir' })).toBeInTheDocument()
-    expect(screen.getByText('Platform Yöneticisi')).toBeInTheDocument()
+    expect(screen.getByText('Platform yöneticisi')).toBeInTheDocument()
     for (const name of ['Oturumlarım', 'Güvenlik', 'Geçiş anahtarları']) expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()
     expect(screen.queryByText('Platform Operatörü')).not.toBeInTheDocument()
   })
 
-  it('names a tenant user "Kullanıcı", not "Kullanıcı Yöneticisi"', () => {
+  it('names a tenant user "Kullanıcı", not "Kullanıcı yöneticisi"', () => {
     renderPlatform(<ThemeProvider><TopBar onMenuToggle={vi.fn()} /></ThemeProvider>, { user: { ...platformAdmin, role: 'UserAdmin' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' } as never] })
     expect(screen.getByText('Kullanıcı')).toBeInTheDocument()
-    expect(screen.queryByText('Kullanıcı Yöneticisi')).not.toBeInTheDocument()
+    expect(screen.queryByText('Kullanıcı yöneticisi')).not.toBeInTheDocument()
   })
 })

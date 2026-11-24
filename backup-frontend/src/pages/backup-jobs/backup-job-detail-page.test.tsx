@@ -171,10 +171,12 @@ it('archives only after the name is typed, then the job leaves the list', async 
   vi.mocked(getBackupJobs).mockResolvedValue([other])
   await userEvent.type(dialog.getByLabelText(/Onaylamak için adı yazın/), 'Muhasebe')
   expect(confirm).toBeEnabled()
+  const healthReads = vi.mocked(getBackupJobHealth).mock.calls.length
   fireEvent.click(confirm)
   await waitFor(() => expect(archiveBackupJob).toHaveBeenCalledWith('tenant-a', 'job-a'))
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/tenants\/tenant-a\/backup-jobs$/))
   expect(screen.getByText('jobs list')).toBeInTheDocument()
+  expect(vi.mocked(getBackupJobHealth).mock.calls).toHaveLength(healthReads) // the archived job's /health would 404
 })
 
 it('shows no score breakdown or change summary', async () => {

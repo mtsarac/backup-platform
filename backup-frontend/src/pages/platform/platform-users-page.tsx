@@ -25,6 +25,7 @@ import type { AccountRole, PlatformUser } from '@/features/platform/types'
 import { ApiError } from '@/lib/api/client'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { actionName } from '@/lib/accessible-name'
 
 // The workspaces a new user can be added to, paged inside the dialog; the page is reset when the dialog closes.
 const tenantPickerConfig = { pageKey: 'tenants-page', sort: { first: { name: 'asc' }, default: { key: 'name', dir: 'asc' } } } as const
@@ -117,12 +118,12 @@ export function PlatformUsersPage() {
     { key: 'membershipCount', sortable: true, header: tx('Çalışma alanı üyelikleri'), render: (user) => user.membershipCount },
     { key: 'email', sortable: true, header: tx('E-posta'), wrap: true, render: (user) => user.email },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="min-w-28 space-y-1">
-      <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını düzenle', { '0': user.displayName })} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
+      <Button size="sm" variant="outline" aria-label={actionName(tx("Düzenle"), user.displayName)} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
       <Disclosure key={menuEpoch} title={<>{tx('İşlemler')} <span className="sr-only">{user.displayName} ({user.username})</span></>}>
       <div className="flex flex-wrap gap-2">
-      <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısına geçici şifre ata', { '0': user.displayName })} onClick={() => { setSaved(null); setAssigningTemp(user) }}>{tx('Geçici şifre ata')}</Button>
+      <Button size="sm" variant="outline" aria-label={actionName(tx("Geçici şifre ata"), user.displayName)} onClick={() => { setSaved(null); setAssigningTemp(user) }}>{tx('Geçici şifre ata')}</Button>
       {user.isManuallyDisabled ? (
-        <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını etkinleştir', { '0': user.displayName })} onClick={async () => {
+        <Button size="sm" variant="outline" aria-label={actionName(tx("Etkinleştir"), user.displayName)} onClick={async () => {
           setSaved(null); setActionError(null);
           try {
             await enableUser(user.userId)
@@ -131,7 +132,7 @@ export function PlatformUsersPage() {
           } catch (e) { setActionError(e) }
         }}>{tx('Etkinleştir')}</Button>
       ) : (
-        <Button size="sm" variant="outline" aria-label={tx('{0} kullanıcısını devre dışı bırak', { '0': user.displayName })} onClick={() => { setSaved(null); setActionError(null); setDisableReason(''); setDisablingUser(user) }}>{tx('Devre dışı bırak')}</Button>
+        <Button size="sm" variant="outline" aria-label={actionName(tx("Devre dışı bırak"), user.displayName)} onClick={() => { setSaved(null); setActionError(null); setDisableReason(''); setDisablingUser(user) }}>{tx('Devre dışı bırak')}</Button>
       )}
       </div>
       </Disclosure>

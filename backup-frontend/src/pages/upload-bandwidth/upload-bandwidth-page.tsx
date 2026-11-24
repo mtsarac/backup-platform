@@ -29,6 +29,7 @@ import { useBandwidthProfiles, useDeleteBandwidthProfile, useUploadBandwidth } f
 import type { BandwidthProfile, BandwidthTarget } from '@/features/upload-bandwidth/types'
 import { DAYS, describeSchedule } from '@/features/upload-bandwidth/schedule'
 import { formatBandwidth, formatExactRate } from '@/features/upload-bandwidth/units'
+import { actionName } from '@/lib/accessible-name'
 
 const tabs = ['tenant', 'agents', 'jobs', 'profiles'] as const
 type Tab = typeof tabs[number]
@@ -99,7 +100,7 @@ export function UploadBandwidthPage() {
     tieBreak: (a, b) => compareText(a.name, b.name) || compareText(a.id, b.id),
     pageSize: jobState.pageSize,
   })
-  const edit = (target: BandwidthTarget, name: string, current: number | null | undefined) => <Button variant="outline" size="sm" aria-label={tx("{0} yükleme hız sınırını düzenle", { "0": name })} onClick={() => setEditing({ target, name, current: current ?? null })}>{tx("Düzenle")}</Button>
+  const edit = (target: BandwidthTarget, name: string, current: number | null | undefined) => <Button variant="outline" size="sm" aria-label={actionName(tx("Düzenle"), name)} onClick={() => setEditing({ target, name, current: current ?? null })}>{tx("Düzenle")}</Button>
   const agentColumns: Column<Agent>[] = [
     { key: 'name', header: tx('Yedekleme bilgisayarı'), sortable: true, wrap: true, render: agent => agent.hostName || agent.agentId },
     { key: 'limit', header: tx('Hız sınırı'), sortable: true, wrap: true, render: agent => <Limit value={agentLimits.get(agent.agentId)} /> },

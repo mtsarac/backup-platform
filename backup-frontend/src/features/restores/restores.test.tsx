@@ -684,7 +684,7 @@ describe('RestoreWizardPage', () => {
     expect(screen.getByRole('radio', { name: /Yedeğin alındığı sunucu \(localhost:1433\)/ })).toBeChecked()
     expect(screen.queryByLabelText('Ana Makine / Veritabanı Sunucusu')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Yeni veritabanı/ })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByLabelText('Yeni Veritabanı Adı')).toHaveValue('SalesDB_restored')
+    expect(screen.getByLabelText('Yeni veritabanı adı')).toHaveValue('SalesDB_restored')
     expect(screen.getByRole('button', { name: /Yerine geç.*riskli/ })).toHaveAttribute('aria-pressed', 'false')
   })
 
@@ -748,9 +748,9 @@ describe('RestoreWizardPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Girişi kaydet' }))
     await waitFor(() => expect(RestoreApi.storeDatabaseLogin).toHaveBeenCalledWith('tenant-a', expect.any(String), { userName: 'pg_user', password: 'pg-secret' }))
     await waitFor(() => expect(run).toBeEnabled())
-    fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: '数'.repeat(22) } })
+    fireEvent.change(screen.getByLabelText('Yeni veritabanı adı'), { target: { value: '数'.repeat(22) } })
     expect(run).toBeDisabled()
-    fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: '数'.repeat(21) } })
+    fireEvent.change(screen.getByLabelText('Yeni veritabanı adı'), { target: { value: '数'.repeat(21) } })
     fireEvent.click(run)
     await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(1))
     expect(sentPrecheck()).toEqual(expect.objectContaining({
@@ -943,7 +943,7 @@ describe('RestoreWizardPage', () => {
     renderWithClient(wizardRoutes, wizardUrl)
     await reachConfirmStep()
     fireEvent.click(screen.getByRole('button', { name: /^← Geri/i }))
-    fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: 'CorrectedDB' } })
+    fireEvent.change(screen.getByLabelText('Yeni veritabanı adı'), { target: { value: 'CorrectedDB' } })
     fireEvent.click(screen.getByRole('button', { name: /Devam et/i }))
     await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(2))
     const calls = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
@@ -1001,7 +1001,7 @@ describe('RestoreWizardPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /^← Geri/i }))
 
     // Changing a setting discards the check: continuing runs it again.
-    fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: 'CorrectedDB' } })
+    fireEvent.change(screen.getByLabelText('Yeni veritabanı adı'), { target: { value: 'CorrectedDB' } })
     expect(screen.queryByRole('button', { name: /Geri yüklemeyi başlat/i })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Devam et/i }))
     fireEvent.click(await startButton())
@@ -1267,7 +1267,7 @@ describe('file archive restore', () => {
     renderWithClient(fileWizard, wizardUrl)
     fireEvent.click(await screen.findByRole('button', { name: /Devam et/ }))
     next()
-    const retry = await screen.findByRole('button', { name: /Tekrar Dene/ })
+    const retry = await screen.findByRole('button', { name: /Tekrar dene/ })
     await waitFor(() => expect(retry).toBeEnabled())
     fireEvent.click(retry)
     await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(2))
@@ -1281,7 +1281,7 @@ describe('file archive restore', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Devam et/ }))
     next()
     await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(1))
-    await screen.findByRole('button', { name: /Tekrar Dene/ })
+    await screen.findByRole('button', { name: /Tekrar dene/ })
     fireEvent.click(screen.getByRole('button', { name: /^← Geri/ }))
     fireEvent.click(screen.getByRole('radio', { name: 'Seçili dosya ve klasörler' }))
     fireEvent.change(field('Geri yüklenecek göreli yollar'), { target: { value: 'notes.txt' } })

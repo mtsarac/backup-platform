@@ -286,6 +286,28 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
     }
 
     [Fact]
+    public async Task CapacityRead_BeforeAnyMeasurement_IsNoContentNotAnError()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var connectionId = Guid.NewGuid();
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.StorageConnections.Add(new StorageConnection(connectionId, setup.Tenant.Id, "Unmeasured", StorageProviderTypes.Local,
+                StorageOwnership.TenantManaged, StorageQuotaScopes.Tenant, new Dictionary<string, string>(), false, DateTimeOffset.UtcNow));
+            await context.SaveChangesAsync();
+        }
+
+        using var unmeasured = await setup.Admin.GetAsync($"/api/v1/storage/connections/{connectionId}/capacity");
+        using var tenantRoute = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/storage-connections/{connectionId}/capacity");
+        using var missing = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/storage-connections/{Guid.NewGuid()}/capacity");
+
+        Assert.Equal(HttpStatusCode.NoContent, unmeasured.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, tenantRoute.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
     public async Task CapacityProbe_EnforcesTenantIsolation()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);

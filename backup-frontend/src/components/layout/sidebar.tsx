@@ -20,7 +20,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
     { label: tx("Ayarlar"), to: `${base}/settings`, icon: SlidersHorizontal, activeFor: under('settings') },
   ] }]
   const footer = <div className="space-y-1">
-    {user?.role === 'PlatformAdmin' && <Link to="/platform" className="flex min-h-control items-center gap-3 rounded-lg px-3 text-body text-text transition-colors hover:bg-border"><ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-text-muted" />{tx("Platform Yönetimi")}</Link>}
+    {user?.role === 'PlatformAdmin' && <Link to="/platform" className="flex min-h-control items-center gap-3 rounded-lg px-3 text-body text-text transition-colors hover:bg-border"><ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-text-muted" />{tx("Platform yönetimi")}</Link>}
     <AccountLink />
   </div>
   return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Ana menü")} label={tx("Ana gezinme")} brand={{ icon: DatabaseBackup, title: tx("Yedekleme Platformu"), caption: tx("Yönetim Konsolu") }} groups={groups} footer={footer} />

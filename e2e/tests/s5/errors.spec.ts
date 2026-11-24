@@ -22,7 +22,6 @@ test.describe('403 / 404 / session', () => {
   })
 
   test('404 page has a main landmark and a way back', async ({ page }) => {
-    test.fail(true, 'https://github.com/mtsarac/backup-platform/issues/248')
     await signIn(page, w.populated.account)
     await page.goto(tenantUrl(w.empty))
     await expect(page.getByRole('main')).toBeVisible()

@@ -129,7 +129,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
 
   return (
     <FormDialog
-      title={isEditing ? tx("Politikayı düzenle: {0}", { "0": policy?.name }) : tx('Yeni Kota Politikası')}
+      title={isEditing ? tx("Politikayı düzenle: {0}", { "0": policy?.name }) : tx('Yeni kota politikası')}
       description={isEditing ? tx('Değişiklikler bu politikayı kullanan tenant’ların kullanımını yeniden hesaplatabilir. Ek kapsam seçicileri korunur.') : tx('Kotaya dahil edilen depolama alanlarını, kullanım eşiklerini ve yeni Backup davranışını tanımlayın.')}
       submitLabel={isEditing ? tx('Kaydet') : tx('Oluştur')}
       pendingLabel={isEditing ? tx('Kaydediliyor…') : tx('Oluşturuluyor…')}
@@ -142,19 +142,19 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       {scopeError && <p role="alert" className="text-sm text-error">{scopeError}</p>}
       <fieldset className="space-y-4">
         <legend className="mb-3 text-sm font-semibold text-text-heading">{tx("Kimlik ve durum")}</legend>
-        {!isEditing && <Field label={tx("Politika Anahtarı (Key)")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")}>
+        {!isEditing && <Field label={tx("Politika anahtarı")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")}>
           {(control) => <TextInput {...control} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder={tx('ornek-politika-key')} />}
         </Field>}
-        <Field label={tx("Politika Adı")}>{(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
+        <Field label={tx("Politika adı")}>{(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
         <CheckField label={tx("Etkin politika (planlarda seçilebilir)")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">
         <legend className="pt-4 text-sm font-semibold text-text-heading">{tx("Hesaplama ve eşikler")}</legend>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={tx("Hesaplama Modu (Accounting)")}>{(control) => <Select {...control} value={accountingMode} onChange={(event) => setAccountingMode(event.target.value as AccountingMode)}>
+          <Field label={tx("Hesaplama modu")}>{(control) => <Select {...control} value={accountingMode} onChange={(event) => setAccountingMode(event.target.value as AccountingMode)}>
             <option value="LogicalArtifactBytes">{tx("Logical (Artifact boyutu)")}</option><option value="PhysicalReplicaBytes">{tx("Physical (Replika kopyaları dahil)")}</option>
           </Select>}</Field>
-          <Field label={tx("Uygulama Modu (Enforcement)")}>{(control) => <Select {...control} value={enforcementMode} onChange={(event) => setEnforcementMode(event.target.value as EnforcementMode)}>
+          <Field label={tx("Uygulama modu")}>{(control) => <Select {...control} value={enforcementMode} onChange={(event) => setEnforcementMode(event.target.value as EnforcementMode)}>
             <option value="BlockNewBackups">{tx("BlockNewBackups (Yeni backup engellenir)")}</option><option value="WarnOnly">{tx("WarnOnly (Yalnızca uyar)")}</option><option value="None">{tx("None (Uygulanmaz)")}</option>
           </Select>}</Field>
           <Field label={tx("Warning Eşiği (%)")}>{(control) => <TextInput {...control} type="number" min={1} max={99} value={warningThreshold} required onChange={(event) => setWarningThreshold(Number(event.target.value))} />}</Field>
@@ -163,8 +163,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">
         <legend className="pt-4 text-sm font-semibold text-text-heading">{tx("Depolama kapsamı")}</legend>
-        <Field label={tx("Depolama Kapsamı")}>{(control) => <Select {...control} value={scopeKind} onChange={(event) => { setScopeKind(event.target.value as ScopeKind); setScopeError(null) }}>
-          <option value="all">{tx("Tüm depolama alanları (All)")}</option><option value="providerType">{tx("Provider Türü (ProviderType - örn. central, local)")}</option><option value="ownershipType">{tx("Sahiplik Türü (OwnershipType - PlatformManaged / TenantManaged)")}</option><option value="quotaScope">{tx("Kota Kapsamı (QuotaScope - örn. managed, tenant)")}</option><option value="storageConnection">{tx("Depolama Bağlantısı (StorageConnection)")}</option>
+        <Field label={tx("Depolama kapsamı")}>{(control) => <Select {...control} value={scopeKind} onChange={(event) => { setScopeKind(event.target.value as ScopeKind); setScopeError(null) }}>
+          <option value="all">{tx("Tüm depolama alanları (All)")}</option><option value="providerType">{tx("Provider Türü (ProviderType - örn. central, local)")}</option><option value="ownershipType">{tx("Sahiplik Türü (OwnershipType - PlatformManaged / TenantManaged)")}</option><option value="quotaScope">{tx("Kota Kapsamı (QuotaScope - örn. managed, tenant)")}</option><option value="storageConnection">{tx("Depolama bağlantısı")}</option>
         </Select>}</Field>
         {scopeKind === 'all' && <p className="text-sm text-text-muted">{tx("Tüm replikalar ve depolama sağlayıcıları kotaya dahil edilir.")}</p>}
         {scopeKind === 'providerType' && <Field label={tx("Provider Anahtarları (virgülle ayırın):")} hint={<>{tx("Desteklenen sistem provider anahtarları:")}{' '}<code>central</code>, <code>local</code>.</>}>

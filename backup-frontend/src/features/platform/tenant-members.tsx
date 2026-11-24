@@ -19,6 +19,7 @@ import { SearchForm } from './search-form'
 import type { PlatformMembership } from './types'
 import { QueryState } from '@/components/data/query-state'
 import { Select } from '@/components/ui/text-input'
+import { actionName } from '@/lib/accessible-name'
 
 
 function AddMemberForm({ tenantId, formRef }: { tenantId: string; formRef: RefObject<HTMLDivElement | null> }) {
@@ -70,7 +71,7 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
   const columns: Column<PlatformMembership>[] = [
     { key: 'displayName', sortable: true, header: tx('Ad'), wrap: true, render: (member) => <span className="font-medium">{member.displayName}</span> },
     { key: 'username', sortable: true, header: tx('Kullanıcı adı'), wrap: true, render: (member) => member.loginIdentifier ?? '—' },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={tx("{0} üyeliğini kaldır", { "0": member.displayName })} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={actionName(tx("Kaldır"), member.displayName)} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
   ]
   return <div className="space-y-6">
     <AddMemberForm tenantId={tenantId} formRef={formRef} />

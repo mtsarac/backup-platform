@@ -57,7 +57,7 @@ const actionLabels: Record<string, string> = {
   get 'backup_run.pause_requested'() { return tx("Yedekleme duraklatma istendi") },
   get 'backup_run.resumed'() { return tx("Yedekleme devam ettirildi") },
   get 'backup_run.completed'() { return tx("Yedekleme tamamlandı") },
-  get 'backup_run.size_anomaly'() { return tx("Boyut Anomalisi") },
+  get 'backup_run.size_anomaly'() { return tx("Boyut anomalisi") },
   get 'backup_artifact.delete_requested'() { return tx("Yedekleme silme talebi oluşturuldu") },
   get 'backup_artifact.delete_cancelled'() { return tx("Yedekleme silme talebi iptal edildi") },
   get 'backup_replica.physical_delete_completed'() { return tx("Yedekleme kopyası fiziksel olarak silindi") },

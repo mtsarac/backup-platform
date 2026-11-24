@@ -210,7 +210,7 @@ describe('cookie session UI', () => {
 
     await userEvent.type(userField, 'owner')
     await userEvent.type(screen.getByLabelText('Şifre'), 'typed-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/tenants/tenant-a/settings?tab=general'))
 
@@ -220,7 +220,7 @@ describe('cookie session UI', () => {
 
     await userEvent.type(await screen.findByRole('textbox', { name: 'Kullanıcı adı' }), 'owner')
     await userEvent.type(screen.getByLabelText('Şifre'), 'typed-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/tenants/tenant-a'))
     expect(screen.getByTestId('loc')).not.toHaveTextContent('/account')

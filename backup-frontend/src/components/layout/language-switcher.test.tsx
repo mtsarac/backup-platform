@@ -9,7 +9,7 @@ function TestConsumer() {
   return (
     <div>
       <span data-testid="current-lang">{language}</span>
-      <span data-testid="translated-title">{tx("Ana Sayfa")}</span>
+      <span data-testid="translated-title">{tx("Ana sayfa")}</span>
       <span data-testid="translated-backup">{tx("Yedekleme işleri")}</span>
       <LanguageSwitcher />
     </div>
@@ -20,7 +20,7 @@ describe('LanguageSwitcher', () => {
   it('switches the whole UI between Turkish and English and remembers the choice', () => {
     render(<TestConsumer />)
     expect(screen.getByTestId('current-lang')).toHaveTextContent('tr')
-    expect(screen.getByTestId('translated-title')).toHaveTextContent('Ana Sayfa')
+    expect(screen.getByTestId('translated-title')).toHaveTextContent('Ana sayfa')
     expect(screen.getByTestId('translated-backup')).toHaveTextContent('Yedekleme işleri')
 
     fireEvent.click(screen.getByRole('button', { name: /Dili değiştir/ }))
@@ -46,7 +46,7 @@ describe('LanguageSwitcher', () => {
     expect(en).not.toHaveClass('underline')
 
     fireEvent.click(button)
-    expect(screen.getByTitle('Change language')).toHaveAccessibleName('Change language: TR / EN')
+    expect(screen.getByTitle('Change language')).toHaveAccessibleName('TR / EN: Change language')
     expect(screen.getByText('EN')).toHaveAttribute('aria-current', 'true')
     expect(screen.getByText('TR')).not.toHaveAttribute('aria-current')
     // opacity would dim the text below 4.5:1 on top of the muted token

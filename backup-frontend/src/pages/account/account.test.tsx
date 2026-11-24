@@ -31,7 +31,7 @@ describe('Account settings', () => {
     renderPlatform(null, { path: '/account', routes: tree, user: tenantOwner })
     expect(await screen.findByRole('heading', { name: 'Hesap', level: 1 })).toBeInTheDocument()
     expect(screen.queryByText('Rol')).not.toBeInTheDocument()
-    expect(screen.queryByText('Kullanıcı Yöneticisi')).not.toBeInTheDocument()
+    expect(screen.queryByText('Kullanıcı yöneticisi')).not.toBeInTheDocument()
   })
 
   it('marks the open sub-page current in the sub-navigation and the settings entry in the sidebar', async () => {

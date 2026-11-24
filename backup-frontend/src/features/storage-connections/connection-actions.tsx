@@ -9,6 +9,7 @@ import { useGoogleOAuth } from './use-google-oauth'
 import { connectionDisplayName, disableEffects, enableEffect } from './labels'
 import type { ConnectionView, ProviderDescriptor, SecretField } from './types'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { actionName } from '@/lib/accessible-name'
 
 export type ActionGroup = 'edit' | 'test' | 'credentials' | 'toggle' | 'delete'
 type Dialog = 'edit' | 'secret' | 'clearSecret' | 'toggle' | 'delete' | 'disconnectGoogle'
@@ -30,7 +31,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
   const testing = ops.test.isPending && ops.test.variables?.id === connection.id
   const testError = ops.test.error && ops.test.variables?.id === connection.id ? errorMessage(ops.test.error, 'storageConnection') : undefined
   const close = () => setDialog(null)
-  const label = (text: string) => tx("{0} bağlantısı: {1}", { "0": connectionDisplayName(connection), "1": text })
+  const label = (text: string) => actionName(text, connectionDisplayName(connection))
   // The platform controls only the lock; tenants control only their own preference.
   const toggledOn = ops.scope === 'platform' ? !connection.administrativelyDisabled : connection.enabled
   const toggleLabel = ops.scope === 'platform' ? (toggledOn ? tx('Platform kilidi koy') : tx('Platform kilidini kaldır')) : (toggledOn ? tx('Devre dışı bırak') : tx('Etkinleştir'))
@@ -51,7 +52,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
       {!show.includes('credentials') ? null : connection.providerType === 'google-drive' ? (
         permissions.canManageSecret && <>
           <Button variant="outline" size="sm" aria-label={label(connection.hasSecret ? tx('yeniden bağla') : tx('google hesabını bağla'))} disabled={connectGoogle.isPending} onClick={() => startGoogleOAuth(connection)}>
-            {connectGoogle.isPending ? tx('Yönlendiriliyor…') : connection.hasSecret ? tx('Yeniden bağla') : tx('Google Hesabını Bağla')}
+            {connectGoogle.isPending ? tx('Yönlendiriliyor…') : connection.hasSecret ? tx('Yeniden bağla') : tx('Google hesabını bağla')}
           </Button>
           {connection.hasSecret && <Button variant="outline" size="sm" aria-label={label(tx('bağlantıyı kes'))} onClick={() => open('disconnectGoogle', disconnectGoogle.reset)}>{tx("Bağlantıyı kes")}</Button>}
         </>

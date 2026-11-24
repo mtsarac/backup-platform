@@ -30,7 +30,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   if (!membership && user?.role === 'PlatformAdmin' && context.isFetching) {
     return <QueryState isPending error={null} />
   }
-  if (!tenant) return <NotFound />
+  if (!tenant) return <NotFound standalone />
   async function switchTenant(id: string) {
     if (id === tenantId) return
     if (!tenants.some(item => item.tenantId === id) && user?.role !== 'PlatformAdmin') return

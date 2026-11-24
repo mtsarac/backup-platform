@@ -125,7 +125,7 @@ describe('Passkeys management page', () => {
   it('verifies removal with an existing passkey instead of a password', async () => {
     mount(<PasskeysPage />)
     await screen.findByText('Work YubiKey')
-    await userEvent.click(screen.getByRole('button', { name: 'Work YubiKey geçiş anahtarını kaldır' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Kaldır — Work YubiKey' }))
     await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarıyla doğrula' }))
     await userEvent.click(screen.getByRole('button', { name: 'Kaldır' }))
     await waitFor(() => expect(api).toHaveBeenCalledWith('auth/passkeys/cred-1', {
@@ -138,7 +138,7 @@ describe('Passkeys management page', () => {
     mount(<PasskeysPage />)
     expect(await screen.findByText('Work YubiKey')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Work YubiKey geçiş anahtarını kaldır' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Kaldır — Work YubiKey' }))
 
     expect(screen.getByText(/Bu geçiş anahtarını kaldırmak istediğinizden emin misiniz\?/)).toBeInTheDocument()
 
@@ -177,7 +177,7 @@ describe('Passkeys management page', () => {
     expect(auth.clearAuth).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Vazgeç' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Work YubiKey geçiş anahtarını kaldır' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Kaldır — Work YubiKey' }))
     await userEvent.type(screen.getByLabelText('Mevcut şifreniz'), 'wrong-password')
     await userEvent.click(screen.getByRole('button', { name: 'Kaldır' }))
 

@@ -59,15 +59,15 @@ describe('discovery page', () => {
   })
   it('has one rescan per computer and explains why an unsupported computer cannot be scanned', async () => {
     mount()
-    expect(await screen.findByRole('button', { name: 'Old Agent yeniden tara' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Yeniden tara — Old Agent' })).toBeDisabled()
     expect(screen.getByText(/Programı güncelledikten sonra/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /yeniden tara/ })).toHaveLength(2)
-    expect(screen.getByRole('button', { name: 'SQL Agent yeniden tara' })).toBeEnabled()
+    expect(screen.getAllByRole('button', { name: /Yeniden tara — / })).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Yeniden tara — SQL Agent' })).toBeEnabled()
   })
   it.each(['Requested', 'Running'] as const)('does not queue another scan while %s', async scanState => {
     vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState })] })
     mount()
-    expect(await screen.findByRole('button', { name: 'SQL Agent yeniden tara' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Yeniden tara — SQL Agent' })).toBeDisabled()
     expect(screen.getByRole('status', { name: 'Tarama durumu' })).toHaveTextContent(scanState === 'Requested' ? 'Tarama istendi' : 'Taranıyor')
   })
   it('explains a failed scan without claiming backups were damaged or exposing a raw code', async () => {
@@ -91,7 +91,7 @@ describe('discovery page', () => {
     mount()
     expect(await screen.findByText('Henüz taranmadı')).toBeInTheDocument()
     expect(screen.queryByText('Liste güncel')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'SQL Agent yeniden tara' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Yeniden tara — SQL Agent' })).toBeEnabled()
   })
   it('shows a load failure rather than an invented empty computer list', async () => {
     vi.mocked(getAgents).mockRejectedValue(new ApiError(500))
@@ -103,7 +103,7 @@ describe('discovery page', () => {
     const rescan = async () => {
       vi.mocked(rescanDiscoveryAgent).mockRejectedValue(new ApiError(429, { error: 'rescan_too_soon' }))
       mount()
-      fireEvent.click(await screen.findByRole('button', { name: 'SQL Agent yeniden tara' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Yeniden tara — SQL Agent' }))
       await waitFor(() => expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a'))
       return (await screen.findByText(/Az önce tarama istendi/)).closest('[role]') as HTMLElement
     }
@@ -154,7 +154,7 @@ describe('discovery page', () => {
     vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
     mount()
     expect(await screen.findByText(/henüz veritabanı bulunamadı/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'SQL Agent yeniden tara' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Yeniden tara — SQL Agent' })).toHaveLength(1)
   })
   it('renders a permission state on 403', async () => {
     vi.mocked(getDiscoveryInstances).mockRejectedValue(new ApiError(403))

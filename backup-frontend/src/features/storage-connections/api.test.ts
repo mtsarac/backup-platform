@@ -71,6 +71,13 @@ describe('tenant storage connection API', () => {
   })
 })
 
+describe('tenant capacity before any measurement', () => {
+  it('reads 204 as null instead of an error', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }))
+    await expect(api.getTenantConnectionCapacity('tenant-a', 'conn-1')).resolves.toBeNull()
+  })
+})
+
 describe('platform storage connection API', () => {
   it('sends only set filters of the paged list', async () => {
     await api.getPlatformConnections({ ownership: 'PlatformManaged', providerType: '', tenantId: undefined, enabled: false, search: 'acme', page: 2, pageSize: 25 })

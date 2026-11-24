@@ -43,7 +43,7 @@ describe('Sign-in page', () => {
     expect(screen.getByText('E-posta adresinizle de giriş yapabilirsiniz.')).toBeInTheDocument()
     await userEvent.type(field, 'alice@example.com')
     await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
     expect(loginMock).toHaveBeenCalledWith('alice@example.com', 'correct-password', false)
   })
 
@@ -54,7 +54,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
     await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     expect(await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })).toBeInTheDocument()
     const codeInput = screen.getByRole('textbox', { name: 'Doğrulama kodu' })
@@ -77,7 +77,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
     await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
     await userEvent.click(screen.getByRole('button', { name: 'Kurtarma kodu kullan' }))
@@ -102,7 +102,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
     await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
     await userEvent.click(screen.getByRole('button', { name: 'Girişe dön' }))
@@ -140,7 +140,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByLabelText('Kullanıcı adı'), 'testuser')
     await userEvent.type(screen.getByLabelText('Şifre'), 'password123!')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await waitFor(() => {
       expect(screen.getByText('İkinci faktör doğrulaması')).toBeInTheDocument()
@@ -158,7 +158,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
     await userEvent.type(screen.getByLabelText('Şifre'), 'wrong-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Çok fazla başarısız deneme.')
@@ -172,7 +172,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'passkey-only')
     await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     expect(await screen.findByRole('heading', { level: 1, name: 'İkinci faktör doğrulaması' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Doğrulama kodu')).toBeNull()
@@ -186,7 +186,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
     await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
     await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' }))
@@ -202,7 +202,7 @@ describe('Sign-in page', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
     await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     const totpInput = await screen.findByRole('textbox', { name: 'Doğrulama kodu' })
     await waitFor(() => expect(totpInput).toHaveFocus())
@@ -217,7 +217,7 @@ describe('Sign-in page', () => {
     loginMock.mockResolvedValueOnce({ passwordChangeRequired: true, requiresPasswordChange: true })
     await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
     await userEvent.type(screen.getByLabelText('Şifre'), 'temp-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     const firstPwdField = await screen.findByLabelText('Mevcut şifre')
     await waitFor(() => expect(firstPwdField).toHaveFocus())

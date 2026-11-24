@@ -19,6 +19,7 @@ import { connectionPath } from '@/lib/routes'
 import type { ConnectionView } from './types'
 import { formatBytes } from '@/lib/format'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { actionName } from '@/lib/accessible-name'
 
 function ConnectionCard({ connection, total, tenantId, onTest, testing, testError }: { connection: ConnectionView; total: number; tenantId: string; onTest: () => void; testing: boolean; testError?: string }) {
   useLanguage()
@@ -44,10 +45,10 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3">
       <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Sağlayıcı")}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-x-2 text-body text-text">{tx(connection.providerDisplayName)}<StatusPill domain="ownership" status={connection.ownership} /></dd></div>
       {!['untested', 'platform-tested'].includes(connectionHealth(connection).key) && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Son test")}</dt><dd className="mt-0.5 text-body text-text">{connection.lastTest ? <RelativeTime value={connection.lastTest.testedAt} /> : tx('Henüz test edilmedi')}</dd></div>}
-      {capacity && capacity.status !== 'Pending' && capacity.freeBytes != null && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Boş Alan")}</dt><dd className="mt-0.5 text-body text-text">{formatBytes(capacity.freeBytes)}</dd></div>}
+      {capacity && capacity.status !== 'Pending' && capacity.freeBytes != null && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Boş alan")}</dt><dd className="mt-0.5 text-body text-text">{formatBytes(capacity.freeBytes)}</dd></div>}
     </dl>
     {connection.administrativelyDisabled && <p className="text-sm font-medium text-warning">{tx(platformLockState)}</p>}
-    {connection.permissions.canTest && <div><Button variant="outline" size="sm" aria-label={tx("{0} bağlantısı: test et", { "0": name })} disabled={testing} onClick={onTest}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button></div>}
+    {connection.permissions.canTest && <div><Button variant="outline" size="sm" aria-label={actionName(tx("Test et"), name)} disabled={testing} onClick={onTest}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button></div>}
     {testError && <p role="alert" className="text-sm text-error">{testError}</p>}
     <TechnicalDetails items={[...footprintItems(connection, total), { label: tx("Bağlantı kimliği"), value: connection.id }]} />
   </article></li>

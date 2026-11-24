@@ -14,6 +14,7 @@ import { ProtectionStep } from '@/features/backup-jobs/steps/protection-step'
 import { ReviewStep } from '@/features/backup-jobs/steps/summary-step'
 import { LiveSummary } from '@/features/backup-jobs/live-summary'
 import { useJobForm } from '@/features/backup-jobs/use-job-form'
+import { actionName } from '@/lib/accessible-name'
 
 /** Creates backup jobs one question group at a time; existing jobs are edited on a single page instead (`JobEditForm`). */
 export function JobWizard({ prefill, draft, storageConnectionId }: { prefill?: JobPrefill; draft?: JobDraft; storageConnectionId?: string }) {
@@ -77,7 +78,7 @@ export function JobWizard({ prefill, draft, storageConnectionId }: { prefill?: J
         </>}
         {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} onAddStorage={() => setAddingStorage(true)} />}
         {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
-          control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{[...new Set(errorSteps.map(wizardStepOf))].map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": stepLabel(item) })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
+          control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{[...new Set(errorSteps.map(wizardStepOf))].map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={actionName(tx("Adıma git"), stepLabel(item))} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button type="button" variant="outline" disabled={index === 0 || save.isPending} onClick={() => go(jobSteps[index - 1])}>{tx("Geri")}</Button>
           <div className="flex flex-wrap items-center gap-3">

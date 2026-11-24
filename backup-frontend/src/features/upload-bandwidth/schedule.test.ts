@@ -22,7 +22,7 @@ describe('bandwidth profile schedule text', () => {
   })
 
   it('says a zero-rate window pauses the transfer instead of showing a rate', () => {
-    expect(describeSchedule(days([1], '12:00:00', '13:00:00', 0))).toEqual(['Pazartesi 12:00–13:00: Aktarımı Duraklat'])
+    expect(describeSchedule(days([1], '12:00:00', '13:00:00', 0))).toEqual(['Pazartesi 12:00–13:00: Aktarımı duraklat'])
   })
 
   it('keeps windows with different hours or rates on separate lines in time order', () => {

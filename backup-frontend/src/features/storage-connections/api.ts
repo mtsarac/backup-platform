@@ -53,7 +53,8 @@ export function disconnectGoogleDrive(tenantId: string, id: string) {
 }
 
 export function getTenantConnectionCapacity(tenantId: string, id: string, signal?: AbortSignal) {
-  return apiRequest<StorageCapacitySnapshot>(connection(tenantId, id, '/capacity'), { signal })
+  // 204: nothing measured yet.
+  return apiRequest<StorageCapacitySnapshot | undefined>(connection(tenantId, id, '/capacity'), { signal }).then(snapshot => snapshot ?? null)
 }
 
 export function probeTenantConnectionCapacity(tenantId: string, id: string) {

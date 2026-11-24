@@ -13,6 +13,7 @@ import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { deviceName } from './device-name'
+import { actionName } from '@/lib/accessible-name'
 
 type Session = { id: string; device: string | null; ipAddress: string | null; lastActivityAt: string; isCurrent: boolean }
 
@@ -48,7 +49,7 @@ export function SessionsPage() {
         <div className="min-w-0 space-y-1"><p className="break-words font-semibold text-text-heading">{deviceName(session.device)} {session.isCurrent && <span className="text-sm font-normal text-text-muted">· {tx('Bu oturum')}</span>}</p>
           <p className="break-words text-sm text-text-muted">{tx('IP adresi')}: {session.ipAddress || tx('Bilinmiyor')}</p><p className="text-sm text-text-muted">{tx('Son etkinlik')}: {formatDateTime(session.lastActivityAt)}</p>
           <TechnicalDetails items={session.device ? [{ label: 'User agent', value: session.device }] : []} /></div>
-        <Button variant="outline" size="sm" disabled={pending} aria-label={tx('{0} oturumunu sonlandır', { '0': deviceName(session.device) })} onClick={() => { setError(null); setSelected(session) }}>{tx('Oturumu sonlandır')}</Button>
+        <Button variant="outline" size="sm" disabled={pending} aria-label={actionName(tx("Oturumu sonlandır"), deviceName(session.device))} onClick={() => { setError(null); setSelected(session) }}>{tx('Oturumu sonlandır')}</Button>
       </li>)}</ul></Card>
     </QueryState>
     <ConfirmDialog open={selected !== null} onClose={() => setSelected(null)} title={all ? tx('Tüm oturumlar sonlandırılsın mı?') : tx('Oturum sonlandırılsın mı?')} consequence={{ what: all ? tx('Tüm oturumlarınız sonlandırılır.') : tx('Seçilen oturum sonlandırılır.'), who: all ? tx('Bu cihaz dahil tüm cihazlarda çıkış yapılır.') : selected?.isCurrent ? tx('Bu cihazda çıkış yapılır.') : tx('Seçilen cihazda çıkış yapılır.'), reversible: tx('Yeniden giriş yapabilirsiniz.') }} pending={pending} error={error} onConfirm={() => { void revoke() }} confirmLabel={all ? tx('Tüm oturumları sonlandır') : tx('Oturumu sonlandır')} />
