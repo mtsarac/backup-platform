@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
@@ -153,5 +153,30 @@ describe('SecurityPage', () => {
     expect(await screen.findByRole('heading', { name: 'Kurtarma kodlarınız' })).toBeInTheDocument()
     expect(screen.getByText('NEW-1111-2222')).toBeInTheDocument()
     expect(screen.getByText('NEW-3333-4444')).toBeInTheDocument()
+  })
+
+  it('renders issued recovery codes inside an accessible dialog that moves focus in, closes on Escape, and restores focus (#244)', async () => {
+    apiMock.mockImplementation(async (path, options) => {
+      if (path === 'auth/security') return { hasTotp: true, remainingRecoveryCodes: 5 }
+      if (path === 'auth/security/recovery-codes/regenerate' && options?.method === 'POST') {
+        return { recoveryCodes: ['ESC-1111-2222', 'ESC-3333-4444'] }
+      }
+      return {}
+    })
+
+    mount()
+    const regenTrigger = await screen.findByRole('button', { name: 'Kurtarma kodlarını yeniden oluştur' })
+    await userEvent.click(regenTrigger)
+
+    const regenDialog = await screen.findByRole('dialog', { name: 'Kurtarma kodlarını yeniden oluştur' })
+    await userEvent.type(within(regenDialog).getByLabelText('Doğrulama kodu (TOTP)'), '112233')
+    await userEvent.click(within(regenDialog).getByRole('button', { name: 'Yeniden oluştur' }))
+
+    const codesDialog = await screen.findByRole('dialog', { name: 'Kurtarma kodlarınız' })
+    expect(codesDialog).toBeInTheDocument()
+    await waitFor(() => expect(codesDialog.contains(document.activeElement)).toBe(true))
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Kurtarma kodlarınız' })).not.toBeInTheDocument())
   })
 })

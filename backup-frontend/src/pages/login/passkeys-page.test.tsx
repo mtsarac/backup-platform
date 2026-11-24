@@ -154,4 +154,34 @@ describe('Passkeys management page', () => {
       })
     })
   })
+
+  it('keeps the session and shows an error alert when adding or removing a passkey with a wrong password (#257)', async () => {
+    api.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (path === 'auth/passkeys' && (!options?.method || options.method === 'GET')) return mockPasskeys
+      if (path === 'auth/passkeys/register/options') return { options: { challenge: 'test-challenge' }, challengeId: 'test-cid' }
+      if (path === 'auth/passkeys/register') throw new client.ApiError(400, { error: 'invalid_password' })
+      if (path.startsWith('auth/passkeys/') && options?.method === 'DELETE') throw new client.ApiError(400, { error: 'invalid_password' })
+      return undefined
+    })
+
+    mount(<PasskeysPage />)
+    await screen.findByText('Work YubiKey')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ekle' }))
+    await userEvent.type(screen.getByLabelText('Geçiş anahtarı adı'), 'Wrong Pwd Key')
+    await userEvent.type(screen.getByLabelText('Mevcut şifreniz'), 'wrong-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Parola geçersiz.')
+    expect(screen.getByLabelText('Geçiş anahtarı adı')).toBeInTheDocument()
+    expect(auth.clearAuth).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Vazgeç' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Work YubiKey geçiş anahtarını kaldır' }))
+    await userEvent.type(screen.getByLabelText('Mevcut şifreniz'), 'wrong-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Kaldır' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Parola geçersiz.')
+    expect(auth.clearAuth).not.toHaveBeenCalled()
+  })
 })

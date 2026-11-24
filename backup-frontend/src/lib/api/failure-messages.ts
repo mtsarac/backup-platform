@@ -338,6 +338,9 @@ export function describePasskeyError(error: unknown): ErrorDescription {
     if (error.status === 503 && error.code === 'passkeys_not_configured') {
       return { what: tx("Geçiş anahtarları bu sunucuda henüz yapılandırılmamış."), action: tx("Şifrenizle giriş yapın veya platform yöneticisine başvurun."), technical: technicalItems(error) }
     }
+    if (error.status === 400 && error.code === 'passkey_not_enrolled') {
+      return { what: tx("Hesabınızda kayıtlı bir geçiş anahtarı yok."), action: tx("Doğrulama kodu veya kurtarma kodu kullanın."), technical: technicalItems(error) }
+    }
     return describeError(error)
   }
   const name = error instanceof Error ? error.name : ''

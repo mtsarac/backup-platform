@@ -129,7 +129,7 @@ public sealed class ApiBoundaryIntegrationTests(PostgreSqlFixture fixture) : ICl
 
         var anonymous = new HashSet<(string Method, string Pattern)>
         {
-            ("GET", "/api/auth/antiforgery"), ("POST", "/api/auth/login"),
+            ("GET", "/api/auth/antiforgery"), ("GET", "/api/auth/session"), ("POST", "/api/auth/login"),
             ("POST", "/api/agent/enroll"), ("GET", "/api/features"),
             ("GET", "/api/agent-dist/install.ps1"), ("HEAD", "/api/agent-dist/install.ps1"),
             ("GET", "/api/agent-dist/install.sh"), ("HEAD", "/api/agent-dist/install.sh"),

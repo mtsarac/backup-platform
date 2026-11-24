@@ -38,7 +38,6 @@ test.describe('403 / 404 / session', () => {
   })
 
   test('signed-out visit to a tenant page redirects to login, and login returns there', async ({ page }) => {
-    test.fail(true, 'https://github.com/mtsarac/backup-platform/issues/241')
     const target = tenantUrl(w.populated, '/backup-shares')
     await page.goto(target)
     await expect(page).toHaveURL(/\/login/)

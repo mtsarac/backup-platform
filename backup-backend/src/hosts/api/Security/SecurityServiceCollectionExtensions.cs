@@ -79,6 +79,7 @@ public static class SecurityServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<AuditSealKeys>();
         services.AddSingleton<LoginThrottle>();
+        services.AddSingleton<ILoginThrottle>(provider => provider.GetRequiredService<LoginThrottle>());
         services.AddSingleton<DbContextOptions<PlatformDbContext>>(CreateDatabaseOptions);
         services.AddSingleton<BackupPlatform.Infrastructure.Backups.BackupTransferLeaseService>();
         services.AddScoped<ITenantContext>(ResolveTenantContext);

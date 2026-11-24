@@ -8,6 +8,7 @@ export const isForbidden = (error: unknown): error is ApiError => error instance
 
 export class ApiError extends Error {
   readonly status: number
+  readonly retryAfterSeconds?: number
   readonly code?: string
   readonly reason?: string
   readonly field?: string
@@ -16,10 +17,11 @@ export class ApiError extends Error {
   readonly activeRunId?: string
   readonly sessionId?: string
   readonly permission?: string
-  constructor(status: number, body: ErrorBody = {}) {
+  constructor(status: number, body: ErrorBody = {}, retryAfterSeconds?: number) {
     super(tx("API request failed ({0})", { "0": status }))
     this.name = 'ApiError'
     this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
     this.code = body.code ?? body.error
     this.reason = body.reason
     this.field = body.field
@@ -59,6 +61,7 @@ async function getAntiforgery() {
   }
   return csrfRequest
 }
+const signInChallengePaths = new Set(['auth/login', 'auth/passkeys/login', 'auth/second-factor/totp', 'auth/second-factor/recovery-code', 'auth/passkeys/second-factor'])
 export interface RequestOptions { method?: string; json?: unknown; signal?: AbortSignal; headers?: Record<string, string> }
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   if (path.startsWith('/') || path.includes('://') || path.includes('..')) throw new Error(tx('API path must be relative'))
@@ -72,11 +75,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const response = await http(`${API_BASE_URL}/${path}`, { ...options, method, headers })
   if (!response.ok) {
     const body: ErrorBody = await response.json<ErrorBody>().catch(() => ({}))
-    if (response.status === 401 && path !== 'auth/login') {
+    const retryHeader = response.headers.get('Retry-After')
+    const parsedRetry = retryHeader ? Number.parseInt(retryHeader, 10) : NaN
+    const retryAfterSeconds = Number.isFinite(parsedRetry) && parsedRetry > 0 ? parsedRetry : undefined
+    if (response.status === 401 && !signInChallengePaths.has(path)) {
       resetAntiforgery()
       expiredListeners.forEach(listener => listener())
     }
-    throw new ApiError(response.status, body)
+    throw new ApiError(response.status, body, retryAfterSeconds)
   }
   if (response.status === 204) return undefined as T
   return response.json<T>()

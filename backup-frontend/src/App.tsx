@@ -21,13 +21,13 @@ import { PasskeysPage } from './pages/login/passkeys-page'
 import { Button } from './components/ui/button'
 import { platformRoutes, tenantRoutes } from './route-tables'
 
-function AppRoutes() {
+export function AppRoutes() {
   useLanguage()
   const { isAuthenticated, isLoading, error, refresh } = useAuth()
   if (isLoading) return <div className="mx-auto max-w-lg p-6"><QueryState isPending error={null} /></div>
   if (error) return <div className="mx-auto max-w-lg space-y-4 p-6"><QueryState isPending={false} error={error} /><Button onClick={refresh}>{tx("Tekrar dene")}</Button></div>
   return <Routes>
-    <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+    <Route path="/login" element={<LoginPage />} />
     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
     <Route path="/reset-password" element={<ResetPasswordPage />} />
     <Route path="/verify-email" element={<VerifyEmailPage />} />

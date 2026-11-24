@@ -1,6 +1,16 @@
 import { createContext } from 'react'
 import type { TenantMembership, UserProfile } from './types'
 
+export type SecondFactorMethod = 'totp' | 'passkey' | 'recovery'
+
+export interface LoginChallengeResult {
+  secondFactorRequired?: boolean
+  requiresSecondFactor?: boolean
+  passwordChangeRequired?: boolean
+  requiresPasswordChange?: boolean
+  methods?: SecondFactorMethod[]
+}
+
 export interface AuthContextValue {
   user: UserProfile | null
   tenants: TenantMembership[]
@@ -8,7 +18,8 @@ export interface AuthContextValue {
   isLoading: boolean
   error: unknown
   sessionExpired: boolean
-  login: (identifier: string, password: string, rememberMe: boolean) => Promise<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean; passwordChangeRequired?: boolean; requiresPasswordChange?: boolean } | void>
+  loggedOut?: boolean
+  login: (identifier: string, password: string, rememberMe: boolean) => Promise<LoginChallengeResult | void>
   completeSecondFactor: () => Promise<void>
   establishSession?: () => Promise<void>
   loginWithPasskey?: (rememberMe: boolean, identifier?: string) => Promise<void>

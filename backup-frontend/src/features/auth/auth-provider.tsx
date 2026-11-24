@@ -1,29 +1,28 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiRequest, ApiError, resetAntiforgery, subscribeSessionExpired } from '@/lib/api/client'
-import { AuthContext } from './auth-context'
+import { apiRequest, resetAntiforgery, subscribeSessionExpired } from '@/lib/api/client'
+import { AuthContext, type LoginChallengeResult } from './auth-context'
 import type { TenantMembership, UserProfile } from './types'
 import { getAssertion } from './webauthn'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const cache = useQueryClient()
   const [sessionExpired, setSessionExpired] = useState(false)
+  const [loggedOut, setLoggedOut] = useState(false)
   const me = useQuery({ queryKey: ['auth', 'me'], queryFn: async ({ signal }) => {
-    try { return await apiRequest<UserProfile>('me', { signal }) }
-    catch (error) {
-      if (error instanceof ApiError && error.status === 401) return null
-      // A restricted session (password change pending) answers 403 and blocks login too; ending it is the only way back to the login form.
-      if (error instanceof ApiError && error.status === 403) {
-        await apiRequest<void>('auth/logout', { method: 'POST' }).catch(() => undefined)
-        resetAntiforgery()
-        return null
-      }
-      throw error
+    const session = await apiRequest<{ authenticated: boolean; restricted?: boolean; user?: UserProfile }>('auth/session', { signal })
+    // A restricted session (password change or second factor pending) blocks protected routes and login; ending it returns cleanly to the login form.
+    if (session.restricted) {
+      await apiRequest<void>('auth/logout', { method: 'POST' }).catch(() => undefined)
+      resetAntiforgery()
+      return null
     }
+    return session.authenticated ? (session.user ?? null) : null
   }, retry: false })
   const memberships = useQuery({ queryKey: ['auth', 'tenants'], queryFn: ({ signal }) => apiRequest<TenantMembership[]>('me/tenants', { signal }), enabled: !!me.data, staleTime: 1_000, retry: false })
   useEffect(() => subscribeSessionExpired(() => {
     if (cache.getQueryData(['auth', 'me'])) setSessionExpired(true)
+    setLoggedOut(false)
     void cache.cancelQueries()
     cache.setQueryData(['auth', 'me'], null)
     cache.removeQueries({ queryKey: ['tenant'] })
@@ -44,18 +43,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await apiRequest<UserProfile>('me')
     const tenants = await apiRequest<TenantMembership[]>('me/tenants')
     setSessionExpired(false)
+    setLoggedOut(false)
     cache.setQueryData(['auth', 'me'], profile)
     cache.setQueryData(['auth', 'tenants'], tenants)
   }
   const establishSession = completeSecondFactor
-  async function login(loginIdentifier: string, password: string, rememberMe: boolean) {
-    const result = await apiRequest<{ secondFactorRequired?: boolean; requiresSecondFactor?: boolean; passwordChangeRequired?: boolean; requiresPasswordChange?: boolean } | void>('auth/login', { method: 'POST', json: { loginIdentifier, password, rememberMe } })
+  async function login(loginIdentifier: string, password: string, rememberMe: boolean): Promise<LoginChallengeResult> {
+    const result = await apiRequest<LoginChallengeResult | void>('auth/login', { method: 'POST', json: { loginIdentifier, password, rememberMe } })
     resetAntiforgery()
     if (result && typeof result === 'object' && (result.passwordChangeRequired || result.requiresPasswordChange)) {
       return { passwordChangeRequired: true, requiresPasswordChange: true }
     }
     if (result && typeof result === 'object' && (result.secondFactorRequired || result.requiresSecondFactor)) {
-      return { secondFactorRequired: true, requiresSecondFactor: true }
+      return { secondFactorRequired: true, requiresSecondFactor: true, methods: result.methods }
     }
     await completeSecondFactor()
     return { secondFactorRequired: false, requiresSecondFactor: false }
@@ -97,9 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   async function logout() {
     await apiRequest<void>('auth/logout', { method: 'POST' })
+    setLoggedOut(true)
     await clearAuth()
   }
   return <AuthContext.Provider value={{ user: me.data ?? null, tenants: memberships.data ?? [], isAuthenticated: !!me.data,
-    isLoading: me.isPending || (!!me.data && memberships.isPending), error: me.error ?? memberships.error, sessionExpired,
+    isLoading: me.isPending || (!!me.data && memberships.isPending), error: me.error ?? memberships.error, sessionExpired, loggedOut,
     login, completeSecondFactor, establishSession, loginWithPasskey, verifySecondFactor, logout, clearAuth, refresh: () => { void me.refetch(); if (me.data) void memberships.refetch() } }}>{children}</AuthContext.Provider>
 }

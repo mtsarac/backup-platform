@@ -152,4 +152,74 @@ describe('Sign-in page', () => {
     await userEvent.click(verifyBtn)
     await waitFor(() => expect(verifySecondFactorMock).toHaveBeenCalled())
   })
+
+  it('shows lockout message and Retry-After wait time on 429 instead of unexpected error (#243)', async () => {
+    loginMock.mockRejectedValueOnce(new client.ApiError(429, { error: 'Too many failed login attempts.' }, 45))
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'wrong-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Çok fazla başarısız deneme.')
+    expect(alert).toHaveTextContent('Giriş geçici olarak kilitlendi.')
+    expect(alert).toHaveTextContent('45 saniye sonra tekrar deneyin.')
+    expect(alert).not.toHaveTextContent('Beklenmeyen bir sorun oluştu.')
+  })
+
+  it('opens the passkey step instead of TOTP prompt for a passkey-only user (#260)', async () => {
+    loginMock.mockResolvedValueOnce({ secondFactorRequired: true, requiresSecondFactor: true, methods: ['passkey', 'recovery'] })
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'passkey-only')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'İkinci faktör doğrulaması' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Doğrulama kodu')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' })).toBeInTheDocument()
+  })
+
+  it('shows an error alert when passkey second factor verification fails (#250)', async () => {
+    loginMock.mockResolvedValueOnce({ secondFactorRequired: true, requiresSecondFactor: true, methods: ['totp', 'recovery'] })
+    verifySecondFactorMock.mockRejectedValueOnce(new DOMException('cancelled', 'NotAllowedError'))
+
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Geçiş anahtarı işlemi iptal edildi veya zaman aşımına uğradı.')
+  })
+
+  it('moves focus to the active field on 2FA, recovery code, and forced password change steps (#245)', async () => {
+    loginMock.mockResolvedValueOnce({ secondFactorRequired: true, requiresSecondFactor: true, methods: ['totp', 'recovery'] })
+    logoutMock.mockResolvedValueOnce(undefined)
+
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    const totpInput = await screen.findByRole('textbox', { name: 'Doğrulama kodu' })
+    await waitFor(() => expect(totpInput).toHaveFocus())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Kurtarma kodu kullan' }))
+    const recoveryInput = await screen.findByRole('textbox', { name: 'Kurtarma kodu' })
+    await waitFor(() => expect(recoveryInput).toHaveFocus())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Girişe dön' }))
+    await screen.findByRole('heading', { name: 'Giriş yapın' })
+
+    loginMock.mockResolvedValueOnce({ passwordChangeRequired: true, requiresPasswordChange: true })
+    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'temp-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    const firstPwdField = await screen.findByLabelText('Mevcut şifre')
+    await waitFor(() => expect(firstPwdField).toHaveFocus())
+  })
 })

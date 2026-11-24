@@ -3,6 +3,9 @@ import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { AppRoutes } from '@/App'
+import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from './auth-provider'
 import { useAuth } from './use-auth'
 import { ApiError, apiRequest, resetAntiforgery } from '@/lib/api/client'
@@ -42,14 +45,29 @@ beforeEach(() => {
       return new Response(null, { status: 204 })
     }
     if (path === '/api/auth/logout') { authenticated = false; halfSession = false; return new Response(null, { status: 204 }) }
+    if (path === '/api/auth/session') {
+      if (halfSession) return json({ authenticated: false, restricted: true })
+      if (!authenticated) return json({ authenticated: false })
+      return json({ authenticated: true, user: { userId: 'owner', displayName: 'Real Owner', role: 'UserAdmin', isPlatformAdmin: false } })
+    }
     if (halfSession) return json({}, 403)
     if (!authenticated) return json({}, 401)
     if (path === '/api/me/tenants') return json([{ tenantId: 'tenant-a', name: 'Tenant A' }])
+    if (path.startsWith('/api/notifications/in-app')) return json([])
     return json({ userId: 'owner', displayName: 'Real Owner', role: 'UserAdmin', isPlatformAdmin: false })
   }))
 })
 afterEach(() => vi.unstubAllGlobals())
 describe('cookie session UI', () => {
+  it('probes /api/auth/session with 200 instead of hitting /api/me with 401 when signed out', async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={cache}><AuthProvider><AuthProbe /></AuthProvider></QueryClientProvider>)
+    expect(await screen.findByText('Anonymous')).toBeInTheDocument()
+    const paths = requests.map(request => new URL(request.url).pathname)
+    expect(paths).toContain('/api/auth/session')
+    expect(paths).not.toContain('/api/me')
+    cache.clear()
+  })
   it.each([
     { mode: 'passwordless with username', button: 'Passkey with username', optionsPath: '/api/auth/passkeys/login/options', assertionPath: '/api/auth/passkeys/login', optionsBody: { loginIdentifier: 'owner' }, rememberMe: true, secondFactor: false },
     { mode: 'passwordless without username', button: 'Passkey without username', optionsPath: '/api/auth/passkeys/login/options', assertionPath: '/api/auth/passkeys/login', optionsBody: {}, rememberMe: false, secondFactor: false },
@@ -166,6 +184,46 @@ describe('cookie session UI', () => {
     expect(screen.getByText('Session expired')).toBeInTheDocument()
     expect(cache.getQueryData(['tenant', 'tenant-a', 'backup-runs'])).toBeUndefined()
     expect(cache.getQueryData(['platform', 'summary'])).toBeUndefined()
+    cache.clear()
+  })
+  it('returns to the requested protected deep link after sign-in, and clears it on explicit logout (#241)', async () => {
+    const LocationEcho = () => {
+      const loc = useLocation()
+      const navigate = useNavigate()
+      return <><output data-testid="loc">{loc.pathname}{loc.search}</output><button type="button" onClick={() => navigate('/account')}>Go Account</button></>
+    }
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={cache}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/tenants/tenant-a/settings?tab=general']}>
+            <AuthProvider>
+              <LocationEcho />
+              <AppRoutes />
+            </AuthProvider>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    )
+    const userField = await screen.findByRole('textbox', { name: 'Kullanıcı adı' })
+    expect(screen.getByTestId('loc')).toHaveTextContent('/login')
+
+    await userEvent.type(userField, 'owner')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'typed-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/tenants/tenant-a/settings?tab=general'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go Account' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Çıkış' }))
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/login'))
+
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Kullanıcı adı' }), 'owner')
+    await userEvent.type(screen.getByLabelText('Şifre'), 'typed-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş Yap' }))
+
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/tenants/tenant-a'))
+    expect(screen.getByTestId('loc')).not.toHaveTextContent('/account')
     cache.clear()
   })
 })
