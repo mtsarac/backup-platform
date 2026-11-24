@@ -78,7 +78,6 @@ test.describe('dashboard, populated', () => {
   })
 
   test('latest run failed: banner does not claim "All up to date"', async ({ page }) => {
-    test.fail(true, 'https://github.com/mtsarac/backup-platform/issues/253')
     await signIn(page, w.populated.account)
     await page.goto(tenantUrl(w.populated))
     await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible()

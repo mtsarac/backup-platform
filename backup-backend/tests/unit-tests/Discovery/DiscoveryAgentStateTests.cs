@@ -22,6 +22,21 @@ public sealed class DiscoveryAgentStateTests
         Assert.Null(state.DueReason(T0.AddSeconds(5), "periodic"));
     }
 
+    [Theory]
+    [InlineData("a", "a", "a")]
+    [InlineData("a", "b", null)]
+    [InlineData(null, "b", null)]
+    [InlineData("a", null, null)]
+    public void A_pending_verification_is_never_narrowed_to_another_instance_by_a_later_request(string? pending, string? next, string? expected)
+    {
+        var state = NewState();
+        state.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
+        state.RequestScan("manual", pending, T0.AddMinutes(1));
+        state.RequestScan("manual", next, T0.AddMinutes(1));
+
+        Assert.Equal(expected, state.RequestedInstanceKey);
+    }
+
     [Fact]
     public void A_claimed_scan_that_never_reports_can_be_claimed_again_after_the_running_timeout()
     {

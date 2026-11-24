@@ -1,6 +1,7 @@
 import { tx } from '@/lib/i18n'
 import type { BackupJob } from './types'
 import type { BackupJobHealth } from './health'
+import { canRetryRun } from '@/features/backups/presentation'
 
 export type JobStatus = 'revoked' | 'attention' | 'running' | 'first' | 'manual' | 'paused' | 'current'
 
@@ -25,7 +26,9 @@ export function jobStatus({ job, health, failedRecently, hasSucceeded, offline, 
   const manual = !job.schedule
   const lostPoints = Object.values(health.factors).filter(factor => factor.score < factor.maxScore).map(factor => factor.reason)
   const problem = health.state !== 'Healthy' && (paused || manual ? lostPoints.some(reason => !scheduleReasons.includes(reason)) : true)
-  if (offline || (!first && problem)) return 'attention'
+  // A manual job has no schedule to go stale, so its newest failed run is the only signal that the last backup was not taken.
+  const lastFailed = manual && job.lastRun != null && canRetryRun(job.lastRun.status)
+  if (offline || (!first && (problem || lastFailed))) return 'attention'
   if (running) return 'running'
   if (first) return 'first'
   if (paused) return 'paused'

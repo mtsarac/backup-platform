@@ -82,8 +82,7 @@ test.describe('replica repair', () => {
     return a
   }
 
-  test.fixme('lost copy: run shows partial replication, and the repair button is offered on the artifact', async ({ page }) => {
-    // https://github.com/mtsarac/backup-platform/issues/262: artifact replication has no destinations, so the repair button is absent.
+  test('lost copy: run shows partial replication, and the repair button is offered on the artifact', async ({ page }) => {
     const a = await loseReplica()
     await signIn(page, w.t.account)
     await page.goto(runUrl(a.runId))

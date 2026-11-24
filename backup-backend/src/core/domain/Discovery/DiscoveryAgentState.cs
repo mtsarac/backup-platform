@@ -92,9 +92,11 @@ public sealed class DiscoveryAgentState : ITenantOwned
 
     public void RequestScan(string reason, string? instanceKey, DateTimeOffset now)
     {
+        var pending = ScanRequestedAt is not null;
         ScanRequestedAt = now;
         ScanRequestReason = reason;
-        RequestedInstanceKey = instanceKey;
+        // A pending request for another instance would be lost if overwritten; one agent-wide scan verifies every instance, so widen to that.
+        RequestedInstanceKey = pending && RequestedInstanceKey != instanceKey ? null : instanceKey;
     }
 
     /// <summary>

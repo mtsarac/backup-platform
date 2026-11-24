@@ -36,7 +36,8 @@ public enum PlatformChangeOutcome
     LoginTaken = 7,
     PlatformAdminCannotBeMember = 8,
     UserAdminMembershipRequired = 9,
-    LastPlatformAdmin = 10
+    LastPlatformAdmin = 10,
+    TenantNameTaken = 11
 }
 public sealed record PlatformChange<T>(PlatformChangeOutcome Outcome, T? Value = default) where T : class;
 
@@ -51,7 +52,7 @@ public interface IPlatformAdministrationStore
 
     Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(ListQuery query, CancellationToken cancellationToken);
     Task<PlatformTenantDetail?> GetTenantAsync(TenantId tenantId, CancellationToken cancellationToken);
-    Task<PlatformTenantItem> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<PlatformChange<PlatformTenantItem>> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
     Task<PlatformChange<PlatformTenantItem>> RenameTenantAsync(TenantId tenantId, string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
     Task<PagedResult<PlatformUserItem>> ListUsersAsync(ListQuery query, CancellationToken cancellationToken);

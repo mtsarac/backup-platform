@@ -75,26 +75,41 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             policy?.IsEnabled ?? false, policy?.ChangedAt);
     }
 
-    public async Task<PlatformTenantItem> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+    private static Task<bool> NameTakenAsync(PlatformDbContext context, string name, TenantId? except, CancellationToken cancellationToken)
+    {
+        var normalized = name.Trim().ToLower();
+        return context.Tenants.AnyAsync(row => row.Name.ToLower() == normalized && row.Id != except, cancellationToken);
+    }
+
+    private static bool IsNameConflict(DbUpdateException exception) =>
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ux_tenants_name" };
+
+    public async Task<PlatformChange<PlatformTenantItem>> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (await NameTakenAsync(context, name, null, cancellationToken)) return new(PlatformChangeOutcome.TenantNameTaken);
         var tenant = new Tenant(TenantId.New(), name);
         context.Tenants.Add(tenant);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantCreated, tenant.Id,
             "tenant", Id(tenant.Id), new Dictionary<string, object?> { ["name"] = tenant.Name }));
-        await context.SaveChangesAsync(cancellationToken);
-        return new PlatformTenantItem(tenant.Id, tenant.Name, 0, 0, false);
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException exception) when (IsNameConflict(exception)) { return new(PlatformChangeOutcome.TenantNameTaken); }
+        await transaction.CommitAsync(cancellationToken);
+        return new(PlatformChangeOutcome.Changed, new PlatformTenantItem(tenant.Id, tenant.Name, 0, 0, false));
     }
 
     public async Task<PlatformChange<PlatformTenantItem>> RenameTenantAsync(
         TenantId tenantId, string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var tenant = await context.Tenants.SingleOrDefaultAsync(row => row.Id == tenantId, cancellationToken);
         if (tenant is null)
         {
             return new(PlatformChangeOutcome.TenantNotFound);
         }
+        if (await NameTakenAsync(context, name, tenantId, cancellationToken)) return new(PlatformChangeOutcome.TenantNameTaken);
         var previous = tenant.Name;
         tenant.Rename(name);
         var outcome = PlatformChangeOutcome.Unchanged;
@@ -102,9 +117,11 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         {
             context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantRenamed, tenantId,
                 "tenant", Id(tenantId), new Dictionary<string, object?> { ["previousName"] = previous, ["name"] = tenant.Name }));
-            await context.SaveChangesAsync(cancellationToken);
+            try { await context.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateException exception) when (IsNameConflict(exception)) { return new(PlatformChangeOutcome.TenantNameTaken); }
             outcome = PlatformChangeOutcome.Changed;
         }
+        await transaction.CommitAsync(cancellationToken);
         var row = await TenantRows(context, context.Tenants.AsNoTracking().Where(row => row.Id == tenantId)).SingleAsync(cancellationToken);
         return new(outcome, ToItem(row));
     }
@@ -195,6 +212,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         if (user.DisplayName == displayName && user.Role == role && credential.LoginIdentifier == username && credential.Email == email)
             return new(PlatformChangeOutcome.Unchanged, new PlatformUserItem(userId, displayName, username, email, role, count, user.IsDisabled, user.IsManuallyDisabled, user.IsSecurityDisabled, user.IsNoMembershipDisabled, user.ManualDisableReason));
         var emailChanged = credential.NormalizedEmail != LoginIdentifierNormalizer.NormalizeEmail(email);
+        user.Rename(displayName);
         user.ChangeRole(role);
         credential.UpdateIdentity(username, email);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.UserUpdated, null,

@@ -175,6 +175,9 @@ public sealed class DiscoveryApiIntegrationTests(PostgreSqlFixture fixture) : IC
             Assert.Equal(HttpStatusCode.Accepted, verify.StatusCode);
         using (var tooSoon = await setup.Admin.SendAsync(HttpMethod.Post, $"{Root(setup)}/agents/{agent.AgentId}/rescan"))
             Assert.Equal(HttpStatusCode.TooManyRequests, tooSoon.StatusCode);
+        // A corrected credential is verified at once, not refused by the rescan throttle.
+        using (var again = await setup.Admin.SendAsync(HttpMethod.Post, $"{Root(setup)}/instances/{instanceId}/verify"))
+            Assert.Equal(HttpStatusCode.Accepted, again.StatusCode);
 
         Assert.Equal(DiscoveryScanReasons.Manual, await ScanReasonAsync(world, agent));
         var manual = (await ClaimAsync(world, agent))!.Value;

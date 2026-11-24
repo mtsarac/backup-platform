@@ -6,6 +6,7 @@ import { codeMessages } from './failure-code-messages'
 
 const messages: Record<string, string> = {
   get identity_taken() { return tx('Kullanıcı adı veya e-posta zaten kullanılıyor.') },
+  get tenant_name_taken() { return tx('Bu adla bir çalışma alanı zaten var. Farklı bir ad girin.') },
   get platform_admin_membership_not_allowed() { return tx('Platform yöneticisinin çalışma alanı üyeliği olamaz.') },
   get user_admin_membership_required() { return tx('Kullanıcı yöneticisi için en az bir çalışma alanı seçin.') },
   get DirectPathUnavailable() { return tx('DirectPathUnavailable: Doğrudan Agent bağlantısı veya güvenli diske yazma desteği kullanılamıyor. Backend aktarımına geçilmez.') },
@@ -27,6 +28,7 @@ const messages: Record<string, string> = {
   get verification_failed() { return tx("Fiziksel dosyanın silindiği doğrulanamadı.") },
   get PermissionDenied() { return tx("İşlem için gerekli izinler bulunmuyor.") },
   get AuthenticationFailed() { return tx("Database kimlik doğrulaması başarısız oldu. Credential referansını kontrol edin.") },
+  get 'restore-role-privilege'() { return tx('Girilen PostgreSQL kullanıcısı bu geri yüklemeye yetmiyor: nesne sahipliklerini, erişim izinlerini ve eklentileri korumak için süper kullanıcı (superuser) gerekir. Doğrulama amaçlı geri yüklemede CREATEDB yetkisi yeterlidir.') },
   get server_tls_unavailable() { return tx('Sunucu şifreli bağlantıyı desteklemiyor. Sunucuya TLS ekleyin ya da "Bağlantıyı şifrele"yi kapatın (parolanız ağda açık gidebilir).') },
   get ServerCertificateUntrusted() { return tx("Sunucunun sertifikası doğrulanamadı.") },
   get StorageAuthenticationFailed() { return tx("Storage kullanıcı adı veya parola/anahtar reddedildi. Bağlantının kimlik bilgilerini kontrol edin.") },
@@ -231,7 +233,7 @@ const actionSentence = (action: FailureAction): string => ({
 
 const codeClasses: Record<Exclude<FailureAction, 'retry'>, readonly string[]> = {
   checkComputer: ['DatabaseUnavailable', 'OperationTimedOut', 'AgentLost', 'agent_unavailable', 'StorageUnavailable', 'storage_unavailable', 'timeout', 'network_unavailable', 'network_denied', 'ConnectionFailed', 'connection_failed', 'unreachable', 'scan_timeout', 'download_agent_unavailable', 'LeaseLost', 'dns_failed', 'connect_failed', 'smtp_unavailable'],
-  fixCredentials: ['AuthenticationFailed', 'PermissionDenied', 'StorageAuthenticationFailed', 'StorageHostKeyMismatch', 'authentication_failed', 'permission_denied', 'host_key_mismatch', 'access_denied', 'secret_unavailable', 'secret_missing', 'smtp_auth_failed', 'credentials_required', 'credential_unavailable', 'rotation_test_failed', 'InvalidConfiguration', 'invalid_configuration', 'DatabaseNotFound'],
+  fixCredentials: ['AuthenticationFailed', 'PermissionDenied', 'StorageAuthenticationFailed', 'StorageHostKeyMismatch', 'authentication_failed', 'permission_denied', 'host_key_mismatch', 'access_denied', 'secret_unavailable', 'secret_missing', 'smtp_auth_failed', 'credentials_required', 'credential_unavailable', 'rotation_test_failed', 'InvalidConfiguration', 'invalid_configuration', 'DatabaseNotFound', 'restore-role-privilege'],
   manageStorage: ['quota_exceeded', 'QuotaExceeded', 'quota_size_unknown', 'insufficient_space'],
   backupNow: ['ScheduleGraceExpired'],
 }
@@ -258,6 +260,7 @@ const isCertificateCode = (code: string | null | undefined) => code === 'ServerC
 const guidance: Record<string, { dataImpact?: () => string; action?: () => string }> = {
   ServerCertificateUntrusted: certificateGuidance,
   server_certificate_untrusted: certificateGuidance,
+  'restore-role-privilege': { action: () => tx('Süper kullanıcı yetkisi olan bir PostgreSQL girişiyle yeniden deneyin.') },
   quota_exceeded: { action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
   quota_size_unknown: { action: () => tx("Bu işlem yapılamadı.") },
   QuotaExceeded: { action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },

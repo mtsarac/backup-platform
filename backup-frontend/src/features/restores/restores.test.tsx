@@ -914,6 +914,13 @@ describe('RestoreWizardPage', () => {
       expect(screen.queryByText(/Bilgisayarın açık ve ağa bağlı olduğundan emin olun/)).not.toBeInTheDocument()
     })
 
+    it('states the missing superuser privilege in the precheck table instead of an unexpected-failure text', async () => {
+      await runFailed(failedWith('PermissionDenied', 'restore-role-privilege'))
+      await screen.findByText(/Ön kontrol başarısız oldu/)
+      expect(screen.getAllByText(/süper kullanıcı \(superuser\) gerekir/).length).toBeGreaterThan(0)
+      expect(screen.queryByText(/Beklenmeyen bir sorun oluştu/)).not.toBeInTheDocument()
+    })
+
     it('shows the generic unexpected-failure text, never "geçici olarak kullanılamıyor", for an unmapped reason', async () => {
       await runFailed(failedWith('DatabaseUnavailable', 'some-new-reason'))
       await screen.findByText(/Ön kontrol başarısız oldu/)

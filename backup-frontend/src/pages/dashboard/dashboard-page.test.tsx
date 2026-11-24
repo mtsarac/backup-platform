@@ -144,6 +144,15 @@ describe('rows', () => {
     expect(screen.queryByText('Hepsi güncel')).not.toBeInTheDocument()
   })
 
+  it('does not call a manual job up to date when its latest run failed', async () => {
+    jobs = [makeJob('job-a', 'Muhasebe', { schedule: null, lastRun: { id: 'run-1', status: 'Failed' } as BackupRun })]
+    mount()
+    expect(await screen.findByText('Muhasebe: son yedek alınamadı')).toBeVisible()
+    const header = screen.getByRole('heading', { level: 1, name: 'Ana sayfa' }).closest('header')!
+    expect(within(header).getByText('Dikkat gerekiyor')).toBeVisible()
+    expect(screen.queryByText('Hepsi güncel')).not.toBeInTheDocument()
+  })
+
   it('names only the waiting jobs when none has a backup yet', async () => {
     healths = [health('job-a', 'backup_missing')]
     noSuccess.add('job-a')
