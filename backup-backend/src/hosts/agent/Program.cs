@@ -1,5 +1,6 @@
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Host;
+using BackupPlatform.Agent.Transport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -65,6 +66,11 @@ catch (Exception exception) when (exception is AgentEnrollmentException or Agent
 }
 using var runtimeLease = identityLease;
 builder.Services.AddAgentHost(builder.Configuration);
+builder.Services.AddSingleton(_ => new AgentLogJournal(AgentCredentialStoreFactory.ResolveDirectory(builder.Configuration["Agent:CredentialStoreDirectory"])));
+builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<AgentLogJournal>());
+builder.Services.AddHttpClient<AgentLogSender>(client => client.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler);
+builder.Services.AddHostedService(provider => provider.GetRequiredService<AgentLogSender>());
 builder.Services.AddAgentPlatformHosting();
 using var host = builder.Build();
 await host.RunAsync();
