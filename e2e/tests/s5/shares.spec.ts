@@ -117,3 +117,48 @@ test.describe('platform shares', () => {
     await expect(page.getByText('You do not have permission to access this area')).toBeVisible()
   })
 })
+
+test.describe('expired share', () => {
+  // A short real lifetime exercises expiry without changing the server clock.
+  async function expiredShare(tag: string) {
+    const share = await w.populated.tenant.call('POST', `/api/tenants/${w.populated.tenantId}/backup-artifacts/${w.artifacts.share}/shares`, { duration: '00:00:03', reason: reason(tag) })
+    await expect.poll(async () => (await w.populated.tenant.call('GET', `/api/tenants/${w.populated.tenantId}/backup-shares/${share.id}`)).status, { timeout: 15_000 }).toBe('Expired')
+    return share
+  }
+
+  test('tenant list shows Expired without Revoke and filters by status', async ({ page }) => {
+    await expiredShare('expired-tenant')
+    const health = watch(page)
+    await signIn(page, w.populated.account)
+    await page.goto(sharesUrl())
+    const row = page.getByRole('row', { name: new RegExp(reason('expired-tenant')) })
+    await expect(row.getByText('Expired', { exact: true })).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Revoke' })).toHaveCount(0)
+    await page.getByLabel('Status').selectOption({ label: 'Expired' })
+    await expect(row).toBeVisible()
+    await page.getByLabel('Status').selectOption({ label: 'Active' })
+    await expect(row).toHaveCount(0)
+    health.expectClean()
+  })
+
+  test('platform admin cannot download with an expired share; the refusal is recorded and shown', async ({ page }) => {
+    const share = await expiredShare('expired-platform')
+    await signIn(page, state().accounts.platformAdmin)
+    await page.goto('/platform/shares')
+    const row = page.getByRole('row', { name: new RegExp(reason('expired-platform')) })
+    await expect(row.getByText('Expired', { exact: true })).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Download' }).or(row.getByRole('link', { name: 'Download' }))).toHaveCount(0)
+
+    // What the person holding the share can still do directly: ask the download API. It must refuse, and say why.
+    const admin = await (await import('../../api')).Api.signIn(state().accounts.platformAdmin)
+    await expect(admin.call('POST', `/api/tenants/${w.populated.tenantId}/backup-artifacts/${w.artifacts.share}/downloads`, { shareId: share.id })).rejects.toThrow(/403.*share_expired/)
+    await admin.dispose()
+
+    await page.reload()
+    await page.locator('summary', { hasText: 'Download attempts' }).click()
+    const attempt = page.getByRole('table', { name: 'Download attempts' }).getByRole('row').filter({ hasText: w.populated.tenantName }).filter({ hasText: 'Refused' })
+    await expect(attempt.first()).toBeVisible()
+    await expect(attempt.first()).toContainText(/expired/i)
+    await expect(attempt.first()).not.toContainText('share_expired')
+  })
+})

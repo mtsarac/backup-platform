@@ -1,0 +1,44 @@
+# Isolated stack for S5 (project bps5): the shared lab API has no backend-readable storage and denies private S3 endpoints, so real artifact bytes (download SHA-256,
+# missing replica, repair) need their own backend with a MinIO next to it. Only ports, subnet, names and the S3 wiring differ from docker-compose.yml.
+#   bash e2e/s5-stack.sh   # up + bootstrap admin + seed; prints the E2E_* variables to run the specs against it
+services:
+  postgres:
+    container_name: bps5-postgres
+    ports: !override
+      - "127.0.0.1:5435:5432"
+  api:
+    container_name: bps5-api
+    environment:
+      Authentication__TrustedProxies__0: 172.35.0.10
+      SSL_CERT_FILE: /etc/ssl/s5-minio.crt
+      Backups__S3__AllowedPrivateNetworks__0: 172.35.0.0/24
+      Features__replicaRepair: "true"
+    volumes:
+      - api_dp_keys:/app/dp-keys
+      - api_gdrive_staging:/app/gdrive-staging
+      - ./e2e/.s5-certs/public.crt:/etc/ssl/s5-minio.crt:ro
+  frontend:
+    container_name: bps5-frontend
+    ports: !override
+      - "7273:443"
+      - "7274:80"
+      - "7352:5252"
+    networks:
+      default:
+        ipv4_address: 172.35.0.10
+  minio:
+    image: bitnamilegacy/minio:latest
+    container_name: bps5-minio
+    restart: unless-stopped
+    entrypoint: ["/opt/bitnami/minio/bin/minio"]
+    command: ["server", "/bitnami/minio/data", "--address", ":9000", "--certs-dir", "/certs"]
+    environment:
+      MINIO_ROOT_USER: s5minio
+      MINIO_ROOT_PASSWORD: S5-minio-pass-1
+    volumes:
+      - ./e2e/.s5-certs:/certs:ro
+networks:
+  default:
+    ipam: !override
+      config:
+        - subnet: 172.35.0.0/24
