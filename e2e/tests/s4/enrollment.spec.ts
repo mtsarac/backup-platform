@@ -20,12 +20,32 @@ test.beforeAll(async () => {
   } finally { await platform.dispose() }
 })
 
-test.fixme('signed-out login has no console errors (#239)', async ({ page }) => {
+test('signed-out login has no console errors (#239)', async ({ page }) => {
+  test.fail(true, 'https://github.com/mtsarac/backup-platform/issues/239')
   const errors: string[] = []
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   await page.goto('/login')
   await expect(page.locator('input[type="password"]')).toBeVisible()
   expect(errors).toEqual([])
+})
+
+test('backup source wizard validates Windows file and database fields', async ({ page }) => {
+  await page.goto('/login')
+  await page.locator('input[autocomplete="username"], input[type="text"]').first().fill(account.login)
+  await page.locator('input[type="password"]').fill(account.password)
+  await page.locator('button[type="submit"]').click()
+  await page.waitForURL(new RegExp(`/tenants/${tenantId}`))
+  await page.goto(`/tenants/${tenantId}/backup-jobs/new`)
+  await page.getByRole('button', { name: 'Elle yapılandır' }).click()
+  await page.getByRole('radio', { name: 'Dosya / Klasör' }).check()
+  await page.getByRole('button', { name: 'İleri' }).click()
+  await expect(page.getByText('Geçerli bir dosya kaynağı referansı girin.')).toBeVisible()
+  await page.getByRole('radio', { name: 'PostgreSQL' }).check()
+  await page.getByRole('button', { name: 'İleri' }).click()
+  await expect(page.getByText('Veritabanı sunucusunun ana bilgisayar adını girin.')).toBeVisible()
+  await page.getByRole('radio', { name: 'Microsoft SQL Server' }).check()
+  await page.getByRole('button', { name: 'İleri' }).click()
+  await expect(page.getByText('Veritabanı adını girin.')).toBeVisible()
 })
 
 test('Windows enrollment command connects the service', async ({ page }) => {
@@ -59,6 +79,22 @@ test('Windows enrollment command connects the service', async ({ page }) => {
   await expect(dialog.getByRole('status')).toContainText(/Çevrimiçi|Online/, { timeout: 90_000 })
   await expect(dialog.getByLabel(/Tek kullanımlık kurulum komutu|One-time installation command/)).toHaveCount(0)
   const service = await run('ssh', ['-o', 'BatchMode=yes', 'virtual-win11', 'powershell', '-NoProfile', '-Command', '(Get-Service BackupAgent).Status'])
+  await dialog.getByRole('button', { name: /Tamam|Done/ }).click()
+  const agent = page.getByRole('link', { name: `e2e-s4-${suffix}` })
+  await expect(agent).toBeVisible()
+  const agentUrl = await agent.getAttribute('href')
+  await agent.click()
+  await expect(page).toHaveURL(new RegExp(`${agentUrl}$`))
+  await page.reload()
+  await expect(page).toHaveURL(new RegExp(`${agentUrl}$`))
+  await page.goBack()
+  await expect(page.getByRole('link', { name: `e2e-s4-${suffix}` })).toBeVisible()
+  await page.goForward()
+  await expect(page).toHaveURL(new RegExp(`${agentUrl}$`))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('main')).toBeVisible()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(page.getByRole('main')).toBeVisible()
   expect(service.stdout.trim()).toBe('Running')
   expect(errors).toEqual([])
 })
