@@ -28,6 +28,8 @@ services:
       BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform_dev;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
       AgentDistribution__PackagesDirectory: /app/agent-dist
       AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:-192.168.122.1}:${API_PORT:-5252}
+      # nginx terminates TLS; the API only honours X-Forwarded-Proto from this address (antiforgery cookies are Secure-only).
+      Authentication__TrustedProxies__0: 172.29.0.10
       Secrets__DataProtection__KeysDirectory: /app/dp-keys
       GoogleDrive__ClientId: ${GOOGLE_CLIENT_ID:-}
       GoogleDrive__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
@@ -56,8 +58,17 @@ services:
       - "${API_PORT:-5252}:5252"
     depends_on:
       - api
+    networks:
+      default:
+        ipv4_address: 172.29.0.10
     volumes:
       - frontend_certs:/etc/nginx/certs
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
 
 volumes:
   postgres_data:
