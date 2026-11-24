@@ -16,6 +16,7 @@ import type { EnrollmentToken } from '@/features/agents/types'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
 import { formatDateTime } from '@/lib/format'
+import { actionName } from '@/lib/accessible-name'
 
 export function AgentRegisterPage() {
   const { tenantId } = useTenant()
@@ -47,7 +48,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
   const columns: Column<EnrollmentToken>[] = [
     { key: 'createdAt', header: tx('Oluşturuldu'), render: (token) => <RelativeTime value={token.createdAt} /> },
     { key: 'expiresAt', header: tx('Süresi dolacak'), render: (token) => <RelativeTime value={token.expiresAt} /> },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("İptal et — {0} tarihinde oluşturulan kayıt anahtarı", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={actionName(tx("İptal et"), tx("{0} tarihinde oluşturulan kayıt anahtarı", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) }))} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
   ]
   return <div className="space-y-6">
     <PageHeader title={tx("Yeni bilgisayar kaydı")} />

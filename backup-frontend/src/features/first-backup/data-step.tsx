@@ -18,6 +18,7 @@ import { foldSearch } from '@/features/lists/fold-search'
 import { canCreateJob, databaseSelectable, engineLabels, isRescanThrottled, isScanActive, supportsDiscovery } from '@/features/discovery/status'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { autoJobName, awaitingCapabilities, itemKey, type FirstBackupItem } from './first-backup-model'
+import { actionName } from '@/lib/accessible-name'
 
 /** "Ne yedeklensin": scans the chosen computer on arrival and lists what it found, nothing ticked; jobs are named automatically and only renamed on request. */
 export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
@@ -89,7 +90,7 @@ export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
             <CheckField label={<span><span className="font-medium text-text-heading">{item.database}</span> <span className="text-text-muted">· {engineLabels[item.instance.engine]} · {item.instance.displayName}</span></span>} checked={isPicked(item.key)} onChange={event => toggle(item.key, event.target.checked)} />
             {isPicked(item.key) && (renaming === item.key
               ? <Field label={tx('İş adı')}>{control => <TextInput {...control} value={name} maxLength={200} onChange={event => onNames({ ...names, [item.key]: event.target.value })} onBlur={() => setRenaming(null)} autoFocus />}</Field>
-              : <p className="pl-8 text-sm text-text-muted">{name} · <button type="button" className={linkClass} aria-label={tx('{0}: Adı değiştir', { '0': item.database })} onClick={() => setRenaming(item.key)}>{tx('Adı değiştir')}</button></p>)}
+              : <p className="pl-8 text-sm text-text-muted">{name} · <button type="button" className={linkClass} aria-label={actionName(tx("Adı değiştir"), item.database)} onClick={() => setRenaming(item.key)}>{tx('Adı değiştir')}</button></p>)}
           </li>
         })}</ul>}
         </>}

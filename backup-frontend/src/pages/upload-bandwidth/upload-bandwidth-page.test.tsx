@@ -93,7 +93,7 @@ describe('upload bandwidth page', () => {
   it('shows what will be saved in the limit dialog only as an exact value under technical details', async () => {
     mount()
     await openTab(/^Yedekleme bilgisayarları$/)
-    fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Düzenle — SQL-01' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).queryByText('1.250.000 B/sn')).not.toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Teknik ayrıntılar' }))
@@ -107,7 +107,7 @@ describe('upload bandwidth page', () => {
   it('saves an agent limit in bytes per second after unit conversion', async () => {
     mount()
     await openTab(/^Yedekleme bilgisayarları$/)
-    fireEvent.click(await screen.findByRole('button', { name: 'SQL-02 yükleme hız sınırını düzenle' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Düzenle — SQL-02' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByLabelText("Sınırsız (sınır yok)"))
     fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '20' } })
@@ -119,7 +119,7 @@ describe('upload bandwidth page', () => {
   it('opens an existing limit in its clean unit and removes it with Unlimited (null)', async () => {
     mount()
     await openTab(/^Yedekleme bilgisayarları$/)
-    fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Düzenle — SQL-01' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('Hız sınırı')).toHaveValue('10')
     expect(within(dialog).queryByLabelText('Birim')).not.toBeInTheDocument()
@@ -132,7 +132,7 @@ describe('upload bandwidth page', () => {
   it('blocks out-of-range values client-side', async () => {
     mount()
     await openTab(/^Yedekleme işleri$/)
-    fireEvent.click(await screen.findByRole('button', { name: 'Günlük ERP yükleme hız sınırını düzenle' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Düzenle — Günlük ERP' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '0,1' } })
     expect(within(dialog).getByText(/arasında olmalıdır/)).toBeInTheDocument()
@@ -143,7 +143,7 @@ describe('upload bandwidth page', () => {
   it('keeps the dialog open and shows the server error', async () => {
     vi.mocked(setUploadBandwidth).mockRejectedValue(new ApiError(400, { error: 'invalid_request', field: 'bytesPerSecond', code: 'out_of_range' }))
     mount()
-    fireEvent.click(await screen.findByRole('button', { name: 'Acme A.Ş. yükleme hız sınırını düzenle' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Düzenle — Acme A.Ş.' }))
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kaydet' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('izin verilen aralığın dışında')
     expect(screen.getByRole('dialog')).toBeInTheDocument()

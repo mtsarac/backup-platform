@@ -12,6 +12,7 @@ import { EncryptionSwitch } from '@/features/artifact-encryption/encryption-swit
 import { encryptionStateLabel } from '@/features/artifact-encryption/labels'
 import { useDestinationLabel } from './use-destination-label'
 import { autoJobName, type FirstBackupItem, type FirstBackupSettings } from './first-backup-model'
+import { actionName } from '@/lib/accessible-name'
 
 export type ItemResult = { jobId?: string; runId?: string; error?: unknown }
 type Row = 'where' | 'when' | 'keep' | 'encryption'
@@ -34,7 +35,7 @@ export function SummaryStep({ items, names, settings, onSettings, results, pendi
   const row = (id: Row, label: string, value: string, editor: React.ReactNode) => <div key={id} className="space-y-2 px-4 py-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><dt className="text-sm text-text-muted">{label}</dt><dd className="font-medium text-text-heading">{value}</dd></div>
-      <Button type="button" variant="outline" size="sm" aria-label={tx('{0}: Değiştir', { '0': label })} aria-expanded={editing === id} onClick={() => setEditing(editing === id ? null : id)}>{tx('Değiştir')}</Button>
+      <Button type="button" variant="outline" size="sm" aria-label={actionName(tx("Değiştir"), label)} aria-expanded={editing === id} onClick={() => setEditing(editing === id ? null : id)}>{tx('Değiştir')}</Button>
     </div>
     {editing === id && editor}
   </div>

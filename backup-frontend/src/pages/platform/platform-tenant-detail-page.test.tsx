@@ -281,7 +281,7 @@ describe('platform tenant detail', () => {
     vi.mocked(api.removeMembership).mockResolvedValue(undefined)
     mount('people')
     await screen.findByText('Can Demir')
-    await userEvent.click(screen.getByRole('button', { name: 'Can Demir üyeliğini kaldır' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Kaldır — Can Demir' }))
     const dialog = await screen.findByRole('dialog')
     expect(api.removeMembership).not.toHaveBeenCalled()
     vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse]))

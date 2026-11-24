@@ -15,6 +15,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { createCredential, getAssertion } from '@/features/auth/webauthn'
 import { Key, Plus, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
+import { actionName } from '@/lib/accessible-name'
 
 export type PasskeyItem = {
   id: string
@@ -260,7 +261,7 @@ export function PasskeysPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  aria-label={tx('{0} geçiş anahtarını kaldır', { '0': passkey.name })}
+                  aria-label={actionName(tx("Kaldır"), passkey.name)}
                   onClick={() => {
                     setDeleteTarget(passkey)
                     setDeleteError(null)

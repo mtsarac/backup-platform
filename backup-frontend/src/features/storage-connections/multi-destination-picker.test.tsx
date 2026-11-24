@@ -333,14 +333,14 @@ describe('MultiDestinationPicker', () => {
     expect(updatedPrimary.destinations[0].isPrimary).toBe(false)
 
     // Remove SFTP destination
-    const removeBtn = screen.getByRole('button', { name: /SFTP hedefini kaldır/i })
+    const removeBtn = screen.getByRole('button', { name: /Kaldır — SFTP/i })
     fireEvent.click(removeBtn)
 
     const updatedRemoved = onChange.mock.calls[1][0] as BackupConfiguration
     expect(updatedRemoved.destinations).toHaveLength(1)
     expect(updatedRemoved.requiredVerifiedReplicaCount).toBe(1)
 
-    fireEvent.click(screen.getByRole('button', { name: /Yerel yedekleme bilgisayarı diski hedefini kaldır/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Kaldır — Yerel yedekleme bilgisayarı diski/i }))
     const withoutPrimary = onChange.mock.calls[2][0] as BackupConfiguration
     expect(withoutPrimary.destinations).toEqual([{ ...config.destinations[1], isPrimary: true }])
   })

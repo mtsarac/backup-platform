@@ -46,7 +46,7 @@ describe('LanguageSwitcher', () => {
     expect(en).not.toHaveClass('underline')
 
     fireEvent.click(button)
-    expect(screen.getByTitle('Change language')).toHaveAccessibleName('Change language: TR / EN')
+    expect(screen.getByTitle('Change language')).toHaveAccessibleName('TR / EN: Change language')
     expect(screen.getByText('EN')).toHaveAttribute('aria-current', 'true')
     expect(screen.getByText('TR')).not.toHaveAttribute('aria-current')
     // opacity would dim the text below 4.5:1 on top of the muted token

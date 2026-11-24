@@ -15,6 +15,7 @@ import type { NotificationChannel } from './types'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
+import { actionName } from '@/lib/accessible-name'
 
 type Dialog = 'edit' | 'clearSecret' | 'delete'
 
@@ -26,7 +27,7 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
   const clearSecret = useClearChannelSecret()
   const remove = useDeleteChannel()
   const close = () => setDialog(null)
-  const label = (text: string) => tx("{0} kanalı: {1}", { "0": channel.name, "1": text })
+  const label = (text: string) => actionName(text, channel.name)
   const usesSecret = channel.kind === 'webhook' && channel.authentication !== 'none'
   const last = channel.lastDelivery
   const unconfirmed = channel.kind === 'email' && channel.recipientVerified === false

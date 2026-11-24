@@ -286,7 +286,7 @@ describe('band', () => {
 describe('restore actions', () => {
   it('opens the restore of the newest successful attempt of the row, and the successful filter of the history from the header', async () => {
     mount()
-    expect(within(await row('Muhasebe')).getByRole('link', { name: 'Muhasebe için geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-job-a/restore')
+    expect(within(await row('Muhasebe')).getByRole('link', { name: 'Geri yükle — Muhasebe' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-job-a/restore')
     expect(getBackups).toHaveBeenCalledWith('tenant-a', { status: 'Succeeded', jobId: 'job-a', page: 1, pageSize: 1 }, expect.anything())
     expect(screen.getByRole('link', { name: 'Geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
   })
@@ -295,7 +295,7 @@ describe('restore actions', () => {
     noSuccess.add('job-a')
     mount()
     const item = await row('Muhasebe')
-    expect(within(item).getByRole('button', { name: 'Muhasebe için geri yükle' })).toBeDisabled()
+    expect(within(item).getByRole('button', { name: 'Geri yükle — Muhasebe' })).toBeDisabled()
     expect(within(item).getByText('henüz yedek yok')).toBeVisible()
   })
 })

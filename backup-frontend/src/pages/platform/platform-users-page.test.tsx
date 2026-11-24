@@ -40,9 +40,9 @@ describe('platform users', () => {
   it('keeps sensitive actions behind the selected account while retaining their warnings', async () => {
     renderPlatform(<PlatformUsersPage />)
     await screen.findByText('Ayşe Yılmaz')
-    expect(screen.getByLabelText('Ayşe Yılmaz kullanıcısına geçici şifre ata')).not.toBeVisible()
+    expect(screen.getByLabelText('Geçici şifre ata — Ayşe Yılmaz')).not.toBeVisible()
     await userEvent.click(screen.getAllByText('İşlemler', { selector: 'summary' }).find((summary) => summary.textContent?.includes('Ayşe Yılmaz (ayse)'))!)
-    await userEvent.click(screen.getByRole('button', { name: 'Ayşe Yılmaz kullanıcısına geçici şifre ata' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Geçici şifre ata — Ayşe Yılmaz' }))
     expect(screen.getByText(/tüm açık oturumları sonlandırılır/)).toBeInTheDocument()
   })
 
@@ -52,7 +52,7 @@ describe('platform users', () => {
     await screen.findByText('Ayşe Yılmaz')
     const summary = screen.getAllByText('İşlemler', { selector: 'summary' }).find((item) => item.textContent?.includes('Ayşe Yılmaz (ayse)'))!
     await userEvent.click(summary)
-    await userEvent.click(screen.getByRole('button', { name: 'Ayşe Yılmaz kullanıcısına geçici şifre ata' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Geçici şifre ata — Ayşe Yılmaz' }))
     await userEvent.type(within(screen.getByRole('dialog')).getByLabelText(/^Geçici şifre/), 'temporary-password')
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Geçici şifre ata' }))
     await screen.findByText(/geçici şifre atandı/)
@@ -111,7 +111,7 @@ describe('platform users', () => {
   it('edits an existing account and refreshes the list', async () => {
     vi.mocked(api.updateUser).mockResolvedValue({ ...member, displayName: 'Ayşe Yeni' })
     renderPlatform(<PlatformUsersPage />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Ayşe Yılmaz kullanıcısını düzenle' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Düzenle — Ayşe Yılmaz' }))
     const dialog = screen.getByRole('dialog')
     await userEvent.clear(within(dialog).getByLabelText('Görünen ad'))
     await userEvent.type(within(dialog).getByLabelText('Görünen ad'), 'Ayşe Yeni')
@@ -150,7 +150,7 @@ describe('platform users', () => {
   it('allows editing accounts without a password credential', async () => {
     vi.mocked(api.getUsers).mockResolvedValue(paged([{ ...member, username: null, email: null }]))
     renderPlatform(<PlatformUsersPage />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Ayşe Yılmaz kullanıcısını düzenle' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Düzenle — Ayşe Yılmaz' }))
     expect(screen.getByLabelText('Kullanıcı adı')).toHaveValue('')
     expect(screen.getByLabelText('E-posta')).toHaveValue('')
   })
@@ -158,7 +158,7 @@ describe('platform users', () => {
   it('shows update errors and keeps the dialog open', async () => {
     vi.mocked(api.updateUser).mockRejectedValue(new ApiError(400, { error: 'platform_admin_membership_not_allowed' }))
     renderPlatform(<PlatformUsersPage />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Ayşe Yılmaz kullanıcısını düzenle' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Düzenle — Ayşe Yılmaz' }))
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Rol' }), 'PlatformAdmin')
     await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     expect(await screen.findByText('Platform yöneticisinin çalışma alanı üyeliği olamaz.')).toBeInTheDocument()

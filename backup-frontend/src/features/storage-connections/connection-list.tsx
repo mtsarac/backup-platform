@@ -19,6 +19,7 @@ import { connectionPath } from '@/lib/routes'
 import type { ConnectionView } from './types'
 import { formatBytes } from '@/lib/format'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { actionName } from '@/lib/accessible-name'
 
 function ConnectionCard({ connection, total, tenantId, onTest, testing, testError }: { connection: ConnectionView; total: number; tenantId: string; onTest: () => void; testing: boolean; testError?: string }) {
   useLanguage()
@@ -47,7 +48,7 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
       {capacity && capacity.status !== 'Pending' && capacity.freeBytes != null && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Boş alan")}</dt><dd className="mt-0.5 text-body text-text">{formatBytes(capacity.freeBytes)}</dd></div>}
     </dl>
     {connection.administrativelyDisabled && <p className="text-sm font-medium text-warning">{tx(platformLockState)}</p>}
-    {connection.permissions.canTest && <div><Button variant="outline" size="sm" aria-label={tx("{0} bağlantısı: test et", { "0": name })} disabled={testing} onClick={onTest}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button></div>}
+    {connection.permissions.canTest && <div><Button variant="outline" size="sm" aria-label={actionName(tx("Test et"), name)} disabled={testing} onClick={onTest}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button></div>}
     {testError && <p role="alert" className="text-sm text-error">{testError}</p>}
     <TechnicalDetails items={[...footprintItems(connection, total), { label: tx("Bağlantı kimliği"), value: connection.id }]} />
   </article></li>

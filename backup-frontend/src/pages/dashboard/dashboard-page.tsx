@@ -21,6 +21,7 @@ import { formatBytes, formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
 import { ProtectionStrip } from './protection-strip'
 import { useProtection } from './use-protection'
+import { actionName } from '@/lib/accessible-name'
 
 type Protection = ReturnType<typeof useProtection>
 
@@ -81,8 +82,8 @@ function Row({ row, base }: { row: ProtectionRow; base: string }) {
     </div>
     <div className="flex flex-wrap items-center gap-2">
       {row.lastSuccessId
-        ? <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-runs/${row.lastSuccessId}/restore`} aria-label={tx('{0} için geri yükle', { '0': job.name })}>{tx('Geri yükle')}</Link>
-        : <><Button variant="outline" disabled aria-label={tx('{0} için geri yükle', { '0': job.name })}>{tx('Geri yükle')}</Button><span className="text-sm text-text-muted">{tx('henüz yedek yok')}</span></>}
+        ? <Link className={buttonVariants({ variant: 'outline' })} to={`${base}/backup-runs/${row.lastSuccessId}/restore`} aria-label={actionName(tx("Geri yükle"), job.name)}>{tx('Geri yükle')}</Link>
+        : <><Button variant="outline" disabled aria-label={actionName(tx("Geri yükle"), job.name)}>{tx('Geri yükle')}</Button><span className="text-sm text-text-muted">{tx('henüz yedek yok')}</span></>}
     </div>
   </li>
 }

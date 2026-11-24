@@ -10,6 +10,7 @@ import { connectionDisplayName, executionLocationLabel } from './labels'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Disclosure } from '@/components/ui/disclosure'
+import { actionName } from '@/lib/accessible-name'
 
 interface Props {
   configuration: BackupConfiguration
@@ -226,7 +227,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                   {destinations.length > 1 && (
                     <Button variant="destructive" size="sm"
                       type="button"
-                      aria-label={tx("{0} hedefini kaldır", { "0": tx(destProv?.displayName ?? dest.storageProvider) })}
+                      aria-label={actionName(tx("Kaldır"), tx(destProv?.displayName ?? dest.storageProvider))}
                       disabled={Boolean(configuration.enforceThreeTwoOne) && destinations.length <= 3}
                       onClick={() => handleRemove(index)}
                     >{tx("Kaldır")}</Button>
