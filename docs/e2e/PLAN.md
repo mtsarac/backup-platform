@@ -136,19 +136,50 @@ Legend: **UI** = doable fully in UI; **API** = needs API/CLI for part; **VM** = 
 ### I. Error states
 Backend down banner, session expired mid-action, 403/404 pages (`NotFound`), offline agent warnings, failed run/restore messaging, validation messages on every form.
 
-## Slices for parallel workers
+## Rules (owner decisions, tracked in #228)
 
-Each slice uses its own spec files (`e2e/tests/<slice>/*.spec.ts`) and unique object names, so they can share the one stack. Slices needing VMs must not run the same VM operations at once: S3 owns Fedora, S4 owns Windows.
+1. **Seed through the API, test through the UI.** Users, tenants, plans, agent enrollments, storage connections, jobs and runs the test merely needs are created with the helpers in `e2e/api.ts` (`Api.signIn`, `ensureTenantUser`, `createEnrollmentToken`, ...; add more there, do not inline `fetch` in specs). The flow under test is driven and asserted in the real browser.
+2. **Every screen gets the full checklist**, goal is zero open problems including the login screen:
+   happy path; validation and error messages; empty / loading / error states; permission and role limits; session expiry and logout; reload and back/forward; responsive (mobile 390 px and desktop 1440 px); keyboard and accessibility (axe, focus order, labels); no browser console errors or warnings; failed network requests (4xx/5xx, offline); text, translation (TR/EN) and UX consistency.
+   Helper expectation: each spec file asserts console cleanliness and no unexpected failed requests (`page.on('console' | 'requestfailed' | 'response')`).
+3. **Every defect found becomes its own GitHub issue**, linked to #228 (`gh issue create -R mtsarac/backup-platform`, body `Refs #228`). Specs for a known defect use `test.fixme` with the issue number.
+4. Agent logging and the log viewer UI (#230) is in scope: its tests are added to the Linux/Windows agent slices (S3/S4) and S5 once the feature lands.
 
-| # | Slice | Scope (flows) | Environment | Depends on |
-|---|---|---|---|---|
-| S1 | **Auth, account, platform admin** | A, B (except storage/agents/shares needing data), I (guards, 403/404), language | docker only (mail sink container for reset/verify) | Phase 1 harness |
-| S2 | **Tenant settings, storage, notifications** | D (local/central/SFTP/S3/SMB-flag; Drive only up to consent URL), H, platform storage & transports, quota/plans effects | docker + target containers (sftp, minio, samba, mailpit, webhook sink) | S1 seed only |
-| S3 | **Linux agent: enrollment → backup → restore** | C (Linux), discovery, E and F, G for PostgreSQL + file sources on Fedora; schedules, multi-destination, pause/cancel/retry, replica repair | Fedora VM (+ S2 storage targets: use local/central connection to stay independent) | C first, then E, F, G |
-| S4 | **Windows agent: enrollment → backup → restore** | C (Windows install.ps1, service), MSSQL + PostgreSQL + file/VSS sources, E, F, G on Windows | Windows VM | independent of S3; use unique job names |
-| S5 | **Dashboard, artifacts, shares, platform agent views, error states** | `/` dashboard, artifacts list/detail/delete/cancel-delete, shares, platform agents/shares/audit with real data, I (agent offline, failed run) | docker; needs ≥1 completed backup — seed through a protocol-only fixture (`scripts/frontend/quota-smoke-fixture.py`) or wait for S3/S4 | S3 or fixture |
+## Slices for parallel workers (Phase 2 sub-issues)
 
-Order: S1, S2, S3, S4 in parallel; S5 after S3/S4 produce artifacts (or on the fixture).
+Each slice has its own `e2e/tests/<slice>/` directory and unique object names (`e2e-<slice>-<rand>`) so slices share the one stack. S3 owns the Fedora VM, S4 the Windows VM. Every slice applies the checklist in Rules and files defects separately.
+
+### S1. Auth, account, platform administration
+- **Scope:** flows A and B without agent/storage data: login (all states, remember me, logout, expiry), forced password change, forgot/reset password, email verification, TOTP + recovery codes, passkeys (CDP virtual authenticator), sessions, account page, route guards and tenant isolation, language switcher; platform tenants, users (create/edit/disable/enable/temporary password, last-admin rule), plans/subscriptions, quota policies, audit, feature flags.
+- **Environment:** docker only + mail sink container (mailpit) wired to a platform notification transport.
+- **Depends on:** harness (this PR).
+- **Acceptance:** specs for every listed flow pass; checklist items covered for `/login`, `/forgot-password`, `/reset-password`, `/verify-email`, `/account/*`, `/platform/{tenants,users,plans,quota-policies,audit}`; no console errors; defects filed and linked.
+
+### S2. Tenant settings, storage connections, notifications
+- **Scope:** flows D and H: storage wizard and detail per provider (local, central, SFTP, S3, SMB behind flag, Google Drive up to the consent URL), test/capacity/enable/disable/secret rotation/delete, quota view; platform storage and notification transports; notification channels (email, webhook, sms behind flag), policy, test send, deliveries and retry; in-app notifications; recovery key; upload bandwidth; audit/history retention.
+- **Environment:** docker + target containers (`atmoz/sftp`, MinIO and Samba from `docker-compose.e2e-targets.yml`, mailpit, a webhook sink).
+- **Depends on:** harness; S1 only for shared seed.
+- **Acceptance:** each provider creates, tests, edits and deletes through the UI against a real target; notification test sends arrive at the sinks; validation and error states per form; checklist covered for `/storage*`, `/settings*`, `/platform/storage*`, `/platform/notification-transports`.
+
+### S3. Linux agent: enrollment, backup, restore, sharing
+- **Scope:** flow C (Linux), discovery, E, F, G with PostgreSQL and file sources on Fedora: Add computer dialog and one-line `install.sh`, Online state, restart keeps AgentId, token errors, agent detail/rename/rescan/revoke; job wizard, run now, pause/resume/cancel/retry, schedule occurrence, retention, multi-destination, artifacts; DB and file restore, restore verification, cleanup retry; share + download with SHA-256 check; agent logs in the UI (#230).
+- **Environment:** Fedora VM (PG18 present; install no other DB), stack from this PR, central or local storage connection.
+- **Depends on:** harness; `createEnrollmentToken` helper.
+- **Acceptance:** from empty state a UI-driven run enrolls the Fedora agent, backs up a PostgreSQL database and a directory, restores both into new targets with matching data/hash, downloads an artifact; failure paths (revoked agent, stopped DB, bad credential) show clear UI errors; checklist covered for `/agents*`, `/enrollment`, `/first-backup`, `/backup-jobs*`, `/backup-runs*`, `/restores*`.
+
+### S4. Windows agent: enrollment, backup, restore
+- **Scope:** same as S3 for Windows: `install.ps1` (elevated PowerShell over SSH, helpers in `scripts/windows/`), service state, MSSQL and PostgreSQL sources, file backup with VSS, restore, share/download, agent logs in the UI (#230).
+- **Environment:** Windows VM (MSSQL + PG18 present, no agent). Trust the stack certificate on the VM (`/cert.crt`). Interactive-session caveats in `scripts/README.md` apply.
+- **Depends on:** harness; independent of S3 (distinct job and agent names).
+- **Acceptance:** as S3 for MSSQL, PostgreSQL and files on Windows; uninstall/reinstall preserves identity; the agent is removed or left documented at the end.
+
+### S5. Dashboard, artifacts, shares, platform agent views, error states
+- **Scope:** dashboard and protection strip, artifacts list/detail/delete/cancel-delete/repair, shares and download attempts, platform agents/shares/audit with real data, offline agent and failed run/restore messaging, backend-down banner, 403/404 pages.
+- **Environment:** docker; needs completed backups from S3/S4 or protocol-only fixture data (`scripts/frontend/quota-smoke-fixture.py`).
+- **Depends on:** S3 or S4 (or the fixture).
+- **Acceptance:** every listed screen passes the checklist with populated and empty data; defects filed.
+
+Order: S1, S2, S3, S4 in parallel; S5 after artifacts exist.
 
 ## Known problems found while building the harness
 
