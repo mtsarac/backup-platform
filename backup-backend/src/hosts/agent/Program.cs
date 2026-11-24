@@ -1,8 +1,10 @@
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Host;
+using BackupPlatform.Agent.Transport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 if (await AgentUpdateCommands.TryRunAsync(args)) return;
 
@@ -44,6 +46,7 @@ if (args.Length == 2 && args[0] == "--store-directory")
     args = [];
 }
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { Args = args, ContentRootPath = AppContext.BaseDirectory });
+builder.Logging.ClearProviders();
 AgentUpdateCommands.ConfigureRuntime(builder.Configuration);
 if (storeOverride is not null) { builder.Configuration["Agent:CredentialStoreDirectory"] = storeOverride; }
 FileStream? identityLease = null;
@@ -63,6 +66,12 @@ catch (Exception exception) when (exception is AgentEnrollmentException or Agent
 }
 using var runtimeLease = identityLease;
 builder.Services.AddAgentHost(builder.Configuration);
+builder.Services.AddSingleton(_ => new AgentLogJournal(AgentCredentialStoreFactory.ResolveDirectory(builder.Configuration["Agent:CredentialStoreDirectory"]),
+    builder.Configuration.GetValue<int?>("Agent:Logging:MaxPendingSegments") ?? AgentLogJournal.DefaultMaxPendingSegments));
+builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<AgentLogJournal>());
+builder.Services.AddHttpClient<AgentLogSender>(client => client.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler);
+builder.Services.AddHostedService(provider => provider.GetRequiredService<AgentLogSender>());
 builder.Services.AddAgentPlatformHosting();
 using var host = builder.Build();
 await host.RunAsync();

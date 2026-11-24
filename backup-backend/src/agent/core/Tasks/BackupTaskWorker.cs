@@ -100,6 +100,8 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                     continue;
                 }
                 var task = envelope.Backup!;
+                using var logScope = _logger.BeginScope(new Dictionary<string, object> { ["JobId"] = task.JobId, ["RunId"] = task.RunId });
+                _logger.LogInformation(new EventId(900), "Backup attempt started.");
                 lock (_gate)
                 {
                     _activeLease = task.LeaseToken;
@@ -115,7 +117,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                 catch (Exception exception)
                 {
                     // Type only: provider/credential diagnostics must not leak into task logs.
-                    _logger.LogWarning("Backup attempt {AttemptId} stopped ({ExceptionType}).", task.AttemptId, exception.GetType().Name);
+                    _logger.LogWarning(new EventId(901), "Backup attempt stopped ({ExceptionType}).", exception.GetType().Name);
                 }
                 finally
                 {

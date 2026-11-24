@@ -12,6 +12,7 @@ var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => 
 // Hosting's request-start messages include the query string: OAuth callback credentials and the one-click unsubscribe token (NotificationRecipientApiIntegrationTests pins this).
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddPlatformSecurity();
+builder.Services.AddHostedService<AgentLogRetentionWorker>();
 var featureFlags = new FeatureFlags(key => builder.Configuration.GetValue<bool?>($"Features:{key}"));
 builder.Services.AddSingleton(featureFlags);
 builder.Services.AddExternalSecrets(builder.Configuration, featureFlags);
@@ -51,6 +52,7 @@ app.MapFeatureEndpoints();
 app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
 app.MapAgentEndpoints();
+app.MapAgentLogEndpoints();
 app.MapAgentUpdateEndpoints();
 app.MapAuditReportingEndpoints();
 app.MapAgentAdministrationEndpoints();

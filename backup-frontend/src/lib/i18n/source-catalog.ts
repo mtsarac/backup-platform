@@ -1,5 +1,13 @@
 // UI source copy only. Stable wire values and customer-entered names are never catalog lookups.
 export const sourceCatalog: Record<string, { tr: string; en: string }> = {
+  "Bilgisayar günlükleri": { tr: "Bilgisayar günlükleri", en: "Computer logs" },
+  "En fazla son 1000 kayıt gösterilir.": { tr: "En fazla son 1000 kayıt gösterilir.", en: "Up to the latest 1,000 records are shown." },
+  "Canlı takip": { tr: "Canlı takip", en: "Live tail" },
+  "Seviye": { tr: "Seviye", en: "Level" },
+  "Metin": { tr: "Metin", en: "Text" },
+  "Bileşen": { tr: "Bileşen", en: "Component" },
+  "Mesaj": { tr: "Mesaj", en: "Message" },
+  "Bu filtrelerle günlük kaydı bulunamadı.": { tr: "Bu filtrelerle günlük kaydı bulunamadı.", en: "No log records match these filters." },
   // computer-flow: add-computer step and the computer shown on "Ne yedeklensin"
   "Bilgisayar hazırlanıyor…": { tr: "Bilgisayar hazırlanıyor…", en: "Preparing the computer…" },
   "Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.": { tr: "Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.", en: "Computer added. Scanning for databases takes a few seconds." },

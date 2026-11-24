@@ -1,5 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReplicationHealth } from '@/features/artifacts/types'
@@ -15,6 +16,7 @@ const state = vi.hoisted(() => ({
   page: undefined as BackupRunPage | undefined,
 }))
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
+vi.mock('@/lib/api/client', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api/client')>(), apiRequest: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/backups/hooks', () => ({
   useBackup: () => ({ data: state.run, isPending: false, error: null }),
@@ -39,7 +41,7 @@ const healthOf = (status: ReplicationHealth['status'], verified: number, require
 ]): ReplicationHealth => ({ requiredVerifiedReplicas: required, verifiedReplicas: verified, destinationCount: 3, status, policySatisfied: verified >= required, destinations })
 
 function renderDetail() {
-  return render(<MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter>)
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>)
 }
 
 beforeEach(() => {

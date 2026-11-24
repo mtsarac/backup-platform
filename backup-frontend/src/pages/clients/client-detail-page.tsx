@@ -14,6 +14,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { useAgent, agentQueryKeys } from '@/features/agents/hooks'
 import { revokeAgent } from '@/features/agents/api'
 import { AgentTechnicalDetails } from '@/features/agents/agent-technical-details'
+import { AgentLogs } from '@/features/agent-logs/agent-logs'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { backupJobQueryKeys, useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
@@ -62,6 +63,7 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
         {agent.status !== 'Revoked' && supportsDiscovery(agent.capabilities) && <AgentDatabases agentId={id} />}
         <AgentJobs agentId={id} />
         <AgentTechnicalDetails agent={agent} />
+        <AgentLogs tenantId={tenantId} agentId={id} />
       </>}
     </QueryState>}
     <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={tx("Bilgisayar kaydı iptal edilsin mi?")}
