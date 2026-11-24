@@ -169,7 +169,7 @@ test('UserAdmin creates, extends, and revokes a BackupShare; PlatformAdmin sees 
   w.expectClean()
 })
 
-test.fixme('PlatformAdmin downloading an agent-direct BackupShare from /platform/shares transfers the real backup instead of {"sdp":null} (#270)', async ({ browser }) => {
+test('PlatformAdmin downloading an agent-direct BackupShare from /platform/shares transfers the real backup instead of {"sdp":null} (#270)', async ({ browser }) => {
   const runDetail = await tenant.call('GET', `/api/tenants/${tenantId}/backup-runs/${runId}`)
   const artifact = runDetail.attempts.flatMap((a: any) => a.artifacts).at(-1)
   await tenant.call('POST', `/api/tenants/${tenantId}/backup-shares`, {

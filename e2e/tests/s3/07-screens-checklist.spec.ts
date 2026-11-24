@@ -286,7 +286,7 @@ test('TR / EN language switcher translates headings and tabs consistently across
   w.expectClean([/rescan/])
 })
 
-test.fixme('empty GUID detail URLs show the same not-found state as any unknown id instead of 400 "Girilen değer geçersiz" (#274)', async ({ page }) => {
+test('empty GUID detail URLs show the same not-found state as any unknown id instead of 400 "Girilen değer geçersiz" (#274)', async ({ page }) => {
   await signIn(page)
   for (const sub of ['agents', 'restores', 'backup-runs']) {
     await page.goto(tenantPath(tenantId, `${sub}/00000000-0000-0000-0000-000000000000`))
