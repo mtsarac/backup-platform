@@ -17,6 +17,7 @@ import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-
 import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
+import { AgentLogs } from '@/features/agent-logs/agent-logs'
 import { TrustJobCertificate } from '@/features/backups/trust-job-certificate'
 import { canCancelRun, canRetryRun, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
@@ -164,6 +165,7 @@ function BackupDetail({ id }: { id: string }) {
           {actions.pause.error && <ErrorNotice error={actions.pause.error} />}
           {actions.resume.error && <ErrorNotice error={actions.resume.error} />}
           <Tabs label={tx("Yedekleme denemesi bölümleri")} idPrefix="run" value={tab} onChange={setTab} items={tabs} />
+          <AgentLogs tenantId={tenantId} runId={run.id} />
           <div role="tabpanel" id={`run-panel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="space-y-6">
             {tab === 'summary' && <>
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}

@@ -51,6 +51,12 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<BackupPlatform.StorageProviders.Abstractions.IWindowsNetworkSession, BackupPlatform.Agent.Platform.Windows.WindowsNetworkSession>();
 #endif
         services.AddAgentTransport();
+        services.AddSingleton(static provider => new AgentLogJournal(
+            AgentCredentialStoreFactory.ResolveDirectory(provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.CredentialStoreDirectory)));
+        services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(static provider => provider.GetRequiredService<AgentLogJournal>());
+        services.AddHttpClient<AgentLogSender>(client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler);
+        services.AddHostedService(static provider => provider.GetRequiredService<AgentLogSender>());
         services.AddAgentBackupExecution(configuration);
         services.TryAddSingleton<IBackupTaskCredentialResolver, BackupTaskCredentialResolver>();
         services.AddSingleton(provider => new BackupTaskRequestFactory(

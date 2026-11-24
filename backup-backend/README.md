@@ -41,6 +41,21 @@ The architecture tests enforce the dependency direction between these layers, so
 - Secrets are stored encrypted with ASP.NET Data Protection and are not logged or returned by the API.
 - Successful runs also record advisory size metadata (`sizeAnomalyStatus`, `sizeAnomalyDeviationRatio`, `sizeAnomalyBaselineBytes`, and derived `isSizeAnomaly`) in run list/detail responses. The first three successes establish a baseline; later runs compare against the last ten successful runs of that tenant/job. Only deviations greater than both 30% and two standard deviations raise `SizeAnomalyWarning`. Artifacts, checksums, and success status are unchanged. The warning audit entry and policy-admitted `backup_size_anomaly` event/deliveries commit with completion; email/webhook delivery stays asynchronous through the existing N1 outbox.
 
+### Agent logs
+
+The agent records an allowlist of structured operational events under its credential-store
+directory in `logs/`. Messages and exception text are never copied from arbitrary log
+arguments: the event code determines the safe message, level and component. Existing
+`Logging:LogLevel` settings control which events are recorded. Segments contain at most
+100 events, are retried until the backend acknowledges them, and the latest ten
+acknowledged segments remain locally; unacknowledged segments remain until delivered.
+The log directory needs sufficient free space during a prolonged outage.
+
+The backend stores logs for 30 days after receipt by default; set
+`AgentLogs:RetentionDays` to a positive number to change this. Tenant members can query
+their own agent logs by agent, job, run, level, time and text. The UI can refresh
+periodically and download the displayed (up to 1,000) records as JSON.
+
 ### Advisory backup health
 
 Tenant members and platform administrators can read `GET /api/tenants/{tenantId}/backup-jobs/{jobId}/health`
