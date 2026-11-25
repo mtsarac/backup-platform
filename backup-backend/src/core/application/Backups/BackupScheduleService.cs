@@ -19,7 +19,7 @@ public sealed record BackupSweepReport(int JobsEvaluated, int RunsCreated, int R
 /// the same concurrency limits, retry policy and overlap rules.
 /// </summary>
 public sealed class BackupScheduleService(
-    IBackupScheduleStore schedules, IBackupRunStore runs, IBackupScheduleCoordinator coordinator, IBackupWorkSignal signal,
+    IBackupScheduleStore schedules, IBackupSchedulePlatformStore platformSchedules, IBackupRunStore runs, IBackupRunPlatformStore platformRuns, IBackupScheduleCoordinator coordinator, IBackupWorkSignal signal,
     TimeProvider time, BackupSchedulingOptions options, ILogger<BackupScheduleService> logger)
 {
     /// <summary>
@@ -28,7 +28,7 @@ public sealed class BackupScheduleService(
     /// </summary>
     public async Task<BackupScheduleEvaluation> EvaluateAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken)
     {
-        var evaluation = await schedules.EvaluateAsync(tenantId, jobId, time.GetUtcNow(), cancellationToken);
+        var evaluation = await platformSchedules.EvaluateAsync(tenantId, jobId, time.GetUtcNow(), cancellationToken);
         if (evaluation.AgentToNotify is { } agent) await NotifyAsync(agent);
         await TrySynchronizeAsync(tenantId, jobId, cancellationToken);
         return evaluation;
@@ -37,7 +37,7 @@ public sealed class BackupScheduleService(
     /// <summary>Re-reads the job from the database and makes its wake-up match. Throws if the scheduler store is unreachable.</summary>
     public async Task SynchronizeAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken)
     {
-        var job = await runs.GetJobAsync(tenantId, jobId, cancellationToken);
+        var job = await platformRuns.GetJobAsync(tenantId, jobId, cancellationToken);
         await coordinator.SynchronizeAsync(jobId, job is null ? null : TargetFor(job, time.GetUtcNow()), cancellationToken);
     }
 
@@ -67,11 +67,11 @@ public sealed class BackupScheduleService(
         var evaluated = 0;
         var created = 0;
         var expired = 0;
-        try { expired = await schedules.ExpireUnclaimedRunsAsync(time.GetUtcNow(), options.SweepBatchSize, cancellationToken); }
+        try { expired = await platformSchedules.ExpireUnclaimedRunsAsync(time.GetUtcNow(), options.SweepBatchSize, cancellationToken); }
         catch (Exception exception) when (exception is not OperationCanceledException) { errors.Add(exception); }
         try
         {
-            foreach (var due in await schedules.FindDueJobsAsync(time.GetUtcNow(), options.SweepBatchSize, cancellationToken))
+            foreach (var due in await platformSchedules.FindDueJobsAsync(time.GetUtcNow(), options.SweepBatchSize, cancellationToken))
             {
                 try
                 {
@@ -93,7 +93,7 @@ public sealed class BackupScheduleService(
     public async Task<BackupScheduleReconciliation> ReconcileAsync(CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
-        var desired = (await schedules.ListScheduledJobsAsync(cancellationToken)).Select(job => TargetFor(job, now)).OfType<BackupScheduleTarget>().ToArray();
+        var desired = (await platformSchedules.ListScheduledJobsAsync(cancellationToken)).Select(job => TargetFor(job, now)).OfType<BackupScheduleTarget>().ToArray();
         return await coordinator.ReconcileAsync(desired, cancellationToken);
     }
 

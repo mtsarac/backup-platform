@@ -1041,8 +1041,8 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
             return new Env(isolated, true);
         }
         public ValueTask DisposeAsync() => owned ? new ValueTask(database.DisposeAsync()) : default;
-        public PostgreSqlBackupRunStore Store(Func<double>? jitter = null) => StoreFor(database.ConnectionString, jitter);
-        public static PostgreSqlBackupRunStore StoreFor(string connectionString, Func<double>? jitter = null) =>
+        public RunStoreFacade Store(Func<double>? jitter = null) => StoreFor(database.ConnectionString, jitter);
+        public static RunStoreFacade StoreFor(string connectionString, Func<double>? jitter = null) =>
             new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options, AdmitAllBackupAdmission.Instance, Limits, jitter ?? (() => 0));
 
         public async Task<World> SeedAsync(BackupRetryPolicy? policy = null, BackupOverlapPolicy overlap = BackupOverlapPolicy.Queue)
@@ -1086,35 +1086,35 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
         }
     }
 
-    private static async Task<BackupRun> StartAsync(IBackupRunStore store, World world, string key = "run", DateTimeOffset? now = null)
+    private static async Task<BackupRun> StartAsync(RunStoreFacade store, World world, string key = "run", DateTimeOffset? now = null)
     {
         var result = await store.StartRunAsync(world.TenantId, world.JobId, key, now ?? Now, default);
         Assert.Equal(BackupStartOutcome.Started, result.Outcome);
         return result.Run!;
     }
 
-    private static async Task<BackupClaim> ClaimAsync(IBackupRunStore store, World world, DateTimeOffset now)
+    private static async Task<BackupClaim> ClaimAsync(RunStoreFacade store, World world, DateTimeOffset now)
     {
         var claim = await store.ClaimNextAsync(world.TenantId, world.AgentId, now, Lease, default);
         Assert.NotNull(claim);
         return claim;
     }
 
-    private static async Task<BackupLeaseCommand> StartAttemptAsync(IBackupRunStore store, BackupClaim claim, DateTimeOffset now)
+    private static async Task<BackupLeaseCommand> StartAttemptAsync(RunStoreFacade store, BackupClaim claim, DateTimeOffset now)
     {
         var command = Command(claim, now);
         Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(command, default));
         return command;
     }
 
-    private static async Task FailAsync(IBackupRunStore store, BackupClaim claim, string code, DateTimeOffset at)
+    private static async Task FailAsync(RunStoreFacade store, BackupClaim claim, string code, DateTimeOffset at)
     {
         var command = await StartAttemptAsync(store, claim, at);
         Assert.Equal(BackupMutationResult.Accepted, await store.CompleteAttemptAsync(command, new Completion("Failed", code, null), default));
     }
 
     /// <summary>Starts a run, runs attempt 1 and fails it retryably at <paramref name="failedAt"/> so the run waits for its backoff.</summary>
-    private static async Task<Scheduled> ScheduleRetryAsync(IBackupRunStore store, World world, string key = "scheduled", DateTimeOffset? failedAt = null)
+    private static async Task<Scheduled> ScheduleRetryAsync(RunStoreFacade store, World world, string key = "scheduled", DateTimeOffset? failedAt = null)
     {
         var at = failedAt ?? FailedAt;
         var run = await StartAsync(store, world, key);
@@ -1124,7 +1124,7 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
         return new Scheduled(run, at + Delay);
     }
 
-    private static async Task<BackupRun> FailedTerminallyAsync(IBackupRunStore store, World world)
+    private static async Task<BackupRun> FailedTerminallyAsync(RunStoreFacade store, World world)
     {
         var run = await StartAsync(store, world);
         await FailAsync(store, await ClaimAsync(store, world, Now), "PreCheckFailed", FailedAt);
@@ -1163,7 +1163,7 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
     }
 
     /// <summary>Every callback an attempt can make; each must be refused with the same result and none may have an effect.</summary>
-    private static async Task AssertRejectedAsync(IBackupRunStore store, BackupLeaseCommand command, BackupMutationResult expected = BackupMutationResult.Conflict)
+    private static async Task AssertRejectedAsync(RunStoreFacade store, BackupLeaseCommand command, BackupMutationResult expected = BackupMutationResult.Conflict)
     {
         Assert.Equal(expected, await store.StartAttemptAsync(command with { SoftwareVersion = "1.0", ProtocolVersion = "1.0", Platform = "Linux" }, default));
         Assert.Equal(expected, await store.ReportProgressAsync(command, new BackupProgress("Uploading", 99), default));

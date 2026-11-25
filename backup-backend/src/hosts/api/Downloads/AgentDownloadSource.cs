@@ -12,7 +12,7 @@ using BackupPlatform.Domain.Identity;
 
 namespace BackupPlatform.Api.Downloads;
 
-public sealed class AgentDownloadSource(IDownloadStore store, AgentConnectivityQueryService agents, DirectDownloadSignals signals, IReplicaMissingReporter missing, TimeProvider time) : IAgentDownloadSource
+public sealed class AgentDownloadSource(IDownloadPlatformStore store, AgentConnectivityQueryService agents, DirectDownloadSignals signals, IReplicaMissingReporter missing, TimeProvider time) : IAgentDownloadSource
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
 

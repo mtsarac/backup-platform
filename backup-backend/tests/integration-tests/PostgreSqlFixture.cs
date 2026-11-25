@@ -66,7 +66,10 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
 
     public PlatformDbContext CreateContext(ITenantContext tenantContext) => new(Options, tenantContext);
 
-    public PlatformDbContext CreatePlatformContext() => PlatformDbContext.CreateForPlatformOperations(Options);
+    public PlatformDbContext CreatePlatformContext() => PlatformOperationsDbContext.Create(Options);
+
+    /// <summary>Migrations belong to <see cref="PlatformDbContext"/> itself, not to the platform-operations subclass.</summary>
+    public PlatformDbContext CreateMigrationContext() => CreateContext((TenantId?)null);
 
     public async Task ExecuteAsync(string sql)
     {
@@ -139,7 +142,7 @@ internal sealed class PostgreSqlTemplateDatabase : IDisposable
             }
             var builder = new NpgsqlConnectionStringBuilder(AdministrativeConnectionString) { Database = _databaseName };
             var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(builder.ConnectionString).Options;
-            await using (var context = PlatformDbContext.CreateForPlatformOperations(options))
+            await using (var context = new PlatformDbContext(options, new MutableTenantContext(null)))
                 await context.Database.MigrateAsync();
             // No source sessions may remain during cloning, and no test may connect to mutate the template.
             await using (var connection = new NpgsqlConnection(AdministrativeConnectionString))

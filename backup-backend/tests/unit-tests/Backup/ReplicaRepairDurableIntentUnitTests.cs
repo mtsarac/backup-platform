@@ -59,7 +59,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         };
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -102,7 +102,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
                 Size,
                 new ContentChecksum(ChecksumAlgorithm.Sha256, new string('a', 64))));
         }
-        var service = new ReplicaRepairService(store, new FakeStorageResolver(provider),
+        var service = new ReplicaRepairService(store, store, new FakeStorageResolver(provider),
             new FakeTimeProvider(T0), NullLogger<ReplicaRepairService>.Instance);
         var claimedOp = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0, maxAttempts: 1);
         claimedOp.Claim(Guid.NewGuid(), "worker-1", T0, TimeSpan.FromMinutes(10));
@@ -140,7 +140,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         };
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -180,7 +180,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         };
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -216,7 +216,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         };
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -271,7 +271,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         admission = admission with { CandidateSources = [source, external] };
         var store = new FakeRepairStore();
         var provider = new FakeStorageProvider(ArtifactData, Checksum) { OpenReadThrows = new StorageException(StorageFailureKind.NotFound, "Unavailable central source.") };
-        var service = new ReplicaRepairService(store, new FakeStorageResolver(provider), new FakeTimeProvider(T0), NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, new FakeStorageResolver(provider), new FakeTimeProvider(T0), NullLogger<ReplicaRepairService>.Instance);
         var operation = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, artifact.Id, targetId, "sftp", source.Id, T0);
         operation.Claim(Guid.NewGuid(), "backend-node", T0, TimeSpan.FromMinutes(10));
 
@@ -349,7 +349,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         public IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class FakeRepairStore : IReplicaRepairStore
+    private sealed class FakeRepairStore : IReplicaRepairStore, IReplicaRepairPlatformStore
     {
         public string? PinnedTargetKey;
         public bool CanCleanupChecked;

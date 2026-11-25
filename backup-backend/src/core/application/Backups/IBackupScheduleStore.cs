@@ -17,11 +17,24 @@ public sealed record BackupScheduleEvaluation(
     public static BackupScheduleEvaluation Missing { get; } = new([], null, null, false, false);
 }
 
+/// <summary>Job edits, archiving and occurrence history of the request's tenant (filtered tenant context).</summary>
+public interface IBackupScheduleStore
+{
+    Task<IReadOnlyList<BackupScheduleOccurrence>> ListOccurrencesAsync(TenantId tenantId, Guid jobId, int limit, CancellationToken cancellationToken);
+    /// <summary>Applies <paramref name="change"/> to the job under the agent lock and saves it. Null when the job does not exist.</summary>
+    Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null);
+    /// <summary>
+    /// Archives the job and, in the same transaction under the agent lock, cancels every run of it that is queued, waiting for a retry or paused: their earlier
+    /// attempts stay as history and nothing of the job is ever dispatched again. Null when the job does not exist; throws <see cref="BackupJobArchivedException"/> when it already is archived.
+    /// </summary>
+    Task<BackupJob?> ArchiveJobAsync(TenantId tenantId, Guid jobId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Durable scheduling decisions. Every method is atomic and serialised per agent with the same row lock that guards manual starts,
 /// claims and retries, so a scheduled run can never race another way of creating or finishing a run of the same job.
 /// </summary>
-public interface IBackupScheduleStore
+public interface IBackupSchedulePlatformStore
 {
     /// <summary>
     /// Decides every occurrence of the job that became due and acts on the latest eligible one (see <see cref="BackupScheduleEvaluator"/>).
@@ -29,26 +42,12 @@ public interface IBackupScheduleStore
     /// multi-node call a no-op.
     /// </summary>
     Task<BackupScheduleEvaluation> EvaluateAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken);
-
     /// <summary>Enabled, scheduled jobs that have at least one undecided due occurrence at <paramref name="now"/>.</summary>
     Task<IReadOnlyList<ScheduledJobReference>> FindDueJobsAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken);
-
     /// <summary>Every job whose job and schedule are both enabled: the set the scheduler's triggers must mirror.</summary>
     Task<IReadOnlyList<BackupJob>> ListScheduledJobsAsync(CancellationToken cancellationToken);
-
     /// <summary>Ends scheduled runs whose first attempt was not claimed before their deadline. Returns the number ended.</summary>
     Task<int> ExpireUnclaimedRunsAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken);
-
-    Task<IReadOnlyList<BackupScheduleOccurrence>> ListOccurrencesAsync(TenantId tenantId, Guid jobId, int limit, CancellationToken cancellationToken);
-
-    /// <summary>Applies <paramref name="change"/> to the job under the agent lock and saves it. Null when the job does not exist.</summary>
-    Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null);
-
-    /// <summary>
-    /// Archives the job and, in the same transaction under the agent lock, cancels every run of it that is queued, waiting for a retry or paused: their earlier
-    /// attempts stay as history and nothing of the job is ever dispatched again. Null when the job does not exist; throws <see cref="BackupJobArchivedException"/> when it already is archived.
-    /// </summary>
-    Task<BackupJob?> ArchiveJobAsync(TenantId tenantId, Guid jobId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 }
 
 /// <summary>A one-shot wake-up the scheduler should hold for a job.</summary>

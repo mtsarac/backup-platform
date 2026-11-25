@@ -19,7 +19,7 @@ namespace BackupPlatform.IntegrationTests.Backup;
 public sealed class AgentReplicaRepairIntegrationTests
 {
     private static readonly TimeSpan RepairLease = TimeSpan.FromMinutes(10);
-    private static PostgreSqlReplicaRepairStore Store(BackupStoreHarness kit) => new(new QuotaWorld(kit.Database).Options());
+    private static ReplicaRepairStoreFacade Store(BackupStoreHarness kit) => new(new QuotaWorld(kit.Database).Options());
     private static AgentIdentity Identity(StoreAgent agent) => new(agent.AgentId, agent.TenantId, Guid.NewGuid(), 1);
 
     [Fact]
@@ -113,6 +113,7 @@ public sealed class AgentReplicaRepairIntegrationTests
         var (agent, operations) = await SeedAsync(kit, "sftp", "google-drive");
         var services = new ServiceCollection();
         services.AddSingleton<IReplicaRepairStore>(Store(kit));
+        services.AddSingleton<IReplicaRepairPlatformStore>(Store(kit));
         await using var provider = services.BuildServiceProvider();
         using var worker = new AutomaticReplicaRepairWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             new MutableClock(T0), NullLogger<AutomaticReplicaRepairWorker>.Instance);

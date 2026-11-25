@@ -242,7 +242,7 @@ public sealed class AuditTrailCompletionIntegrationTests(PostgreSqlFixture fixtu
         using var deleteAgainResp = await scenario.Admin.SendAsync(HttpMethod.Delete, scenario.Root + $"/backup-artifacts/{artifactId}");
         Assert.Equal(HttpStatusCode.Accepted, deleteAgainResp.StatusCode);
 
-        var retentionStore = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(fixture.Options);
+        var retentionStore = new RetentionStoreFacade(fixture.Options);
         var claimed = await retentionStore.ClaimDueDeletionsAsync("test-worker", DateTimeOffset.UtcNow.AddYears(1), TimeSpan.FromMinutes(5), 10, CancellationToken.None);
         var replicaClaim = Assert.Single(claimed, c => c.ReplicaId == replicaId);
 

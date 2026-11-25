@@ -20,7 +20,7 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
     private readonly QuotaWorld _world = new(fixture);
 
     /// <summary>A tenant (5 GB unless told) whose job already has one finished backup, so the job's next run estimates that artifact's size.</summary>
-    private sealed record Seed(StoreAgent Agent, BackupJob Job, PostgreSqlBackupRunStore Store, BackupRun HistoryRun);
+    private sealed record Seed(StoreAgent Agent, BackupJob Job, RunStoreFacade Store, BackupRun HistoryRun);
 
     private async Task<Seed> SeedAsync(QuotaWorld? world = null, long previousBytes = Gb, long limitBytes = 5 * Gb, BackupRetryPolicy? retry = null)
     {

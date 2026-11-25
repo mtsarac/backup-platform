@@ -17,14 +17,14 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
 {
     public async Task<bool> CanUseSnapshotAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         var connection = await db.StorageConnections.AsNoTracking().SingleOrDefaultAsync(c => c.TenantId == tenantId && c.Id == connectionId, cancellationToken);
         return connection is not null && await StorageCapacityAgentRouting.CanUseSnapshotAsync(db, connection, now, connectivity, cancellationToken);
     }
 
     public async Task<StorageCapacityResponse> EnqueueAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockAsync(db, tenantId, connectionId, cancellationToken);
         var pending = await PendingAsync(db, tenantId, connectionId, now, cancellationToken);
@@ -58,7 +58,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
 
     public async Task<StorageCapacityResponse?> RefreshPendingAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await LockAsync(db, tenantId, connectionId, cancellationToken);
         var tasks = await PendingAsync(db, tenantId, connectionId, now, cancellationToken);
@@ -69,7 +69,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
 
     public async Task<StorageCapacityResponse?> GetPendingAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         var tasks = await db.StorageCapacityTasks.AsNoTracking().Where(t => t.TenantId == tenantId && t.ConnectionId == connectionId && t.CompletedAt == null)
             .OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).ToListAsync(cancellationToken);
         if (tasks.Count == 0) return null;
@@ -84,7 +84,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
 
     public async Task<CapacityProbeTaskRequest?> ClaimAsync(AgentIdentity identity, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         var connectionIds = await db.StorageCapacityTasks.AsNoTracking()
             .Where(t => t.TenantId == identity.TenantId && t.AgentId == identity.AgentId.Value && t.CompletedAt == null)
             .OrderBy(t => t.CreatedAt).Select(t => t.ConnectionId).Take(32).ToListAsync(cancellationToken);
@@ -115,7 +115,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
 
     public async Task<bool> IsLiveAsync(AgentIdentity identity, Guid taskId, Guid token, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         var task = await db.StorageCapacityTasks.AsNoTracking().SingleOrDefaultAsync(t => t.Id == taskId && t.TenantId == identity.TenantId, cancellationToken);
         return task is not null && await IsLiveAsync(db, identity, task, token, now, cancellationToken);
     }
@@ -123,7 +123,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
     public async Task<BackupMutationResult> CompleteAsync(AgentIdentity identity, Guid taskId, CapacityProbeCompletionRequest request,
         DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         var connectionId = await db.StorageCapacityTasks.Where(t => t.Id == taskId && t.TenantId == identity.TenantId)
             .Select(t => (Guid?)t.ConnectionId).SingleOrDefaultAsync(cancellationToken);
         if (connectionId is null) return BackupMutationResult.NotFound;

@@ -59,7 +59,7 @@ public sealed class PostgreSqlNotificationObservationSource(
     public async Task<IReadOnlySet<Guid>> RetiredSubjectsAsync(TenantId tenantId, string type, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken)
     {
         if (subjectIds.Count == 0) return new HashSet<Guid>();
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         // The same definitions the detectors observe with: an agent counts while it is Active, a job while it is Enabled. Anything else (or gone) was taken out of service.
         HashSet<Guid> inService;
         switch (type)
@@ -85,7 +85,7 @@ public sealed class PostgreSqlNotificationObservationSource(
 
     private async Task<IReadOnlyList<NotificationObservation>> FailedRunsAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         // Only failures after the policy was switched on (and within the lookback) are news; older ones are history.
         var since = new[] { policy.ActiveSince ?? policy.UpdatedAt, now - FailureLookback }.Max();
         var failures = await context.BackupRuns.AsNoTracking()
@@ -101,7 +101,7 @@ public sealed class PostgreSqlNotificationObservationSource(
 
     private async Task<IReadOnlyList<NotificationObservation>> SizeAnomaliesAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var since = new[] { policy.ActiveSince ?? policy.UpdatedAt, now - FailureLookback }.Max();
         var runs = await context.BackupRuns.AsNoTracking()
             .Where(run => run.TenantId == policy.TenantId && run.Status == BackupStatus.Succeeded &&
@@ -127,7 +127,7 @@ public sealed class PostgreSqlNotificationObservationSource(
 
     private async Task<IReadOnlyList<NotificationObservation>> StaleJobsAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var threshold = TimeSpan.FromHours(policy.StaleAfterHours);
         var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == policy.TenantId && job.Enabled)
             .Select(job => new { job.Id, job.Name, job.CreatedAt }).ToListAsync(cancellationToken);
@@ -147,7 +147,7 @@ public sealed class PostgreSqlNotificationObservationSource(
 
     private async Task<IReadOnlyList<NotificationObservation>> OfflineAgentsAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         // Never earlier than the platform's own offline timeout, so "offline" here always agrees with what the console shows.
         var threshold = TimeSpan.FromMinutes(policy.AgentOfflineAfterMinutes) is var configured && configured > connectivity.OfflineTimeout ? configured : connectivity.OfflineTimeout;
         var cutoff = now - threshold;
@@ -175,13 +175,13 @@ public sealed class PostgreSqlNotificationObservationSource(
 
     private async Task<IReadOnlyList<NotificationObservation>> DegradedReplicasAsync(NotificationPolicy policy, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == policy.TenantId && job.Enabled).Select(job => new { job.Id, job.Name }).ToListAsync(cancellationToken);
         if (jobs.Count == 0) return [];
         var jobIds = jobs.Select(job => job.Id).ToList();
         var latest = await context.BackupRuns.AsNoTracking().Where(run => run.TenantId == policy.TenantId && run.Status == BackupStatus.Succeeded && jobIds.Contains(run.JobId))
             .GroupBy(run => run.JobId).Select(group => group.OrderByDescending(run => run.CompletedAt).ThenByDescending(run => run.Id).Select(run => run.Id).First()).ToListAsync(cancellationToken);
-        var runs = await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().Where(run => run.TenantId == policy.TenantId && latest.Contains(run.Id)).ToListAsync(cancellationToken);
+        var runs = await BackupRunQueries.Runs(context).AsNoTracking().Where(run => run.TenantId == policy.TenantId && latest.Contains(run.Id)).ToListAsync(cancellationToken);
         var names = jobs.ToDictionary(job => job.Id, job => job.Name);
         var result = new List<NotificationObservation>();
         foreach (var run in runs)
@@ -203,7 +203,7 @@ public sealed class PostgreSqlNotificationObservationSource(
 
     private async Task<IReadOnlyList<NotificationObservation>> StorageCapacityAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await CollectStorageCapacityAsync(context, policy.TenantId, cancellationToken);
     }
 

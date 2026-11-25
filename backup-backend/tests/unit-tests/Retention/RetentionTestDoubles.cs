@@ -65,7 +65,7 @@ internal sealed class CapturingLog<T> : ILogger<T>
 }
 
 /// <summary>An in-memory <see cref="IBackupRetentionStore"/>: every answer is scripted by the test, every call is recorded.</summary>
-internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupRetentionStore
+internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupRetentionStore, IBackupRetentionPlatformStore
 {
     private readonly CallJournal _journal = journal ?? new CallJournal();
     private int _referenceQueries;

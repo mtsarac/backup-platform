@@ -463,7 +463,7 @@ public sealed class GoogleDriveOAuthHardeningTests(PostgreSqlFixture fixture) : 
         new(http, PlatformOptions, DbOptions, secrets, TimeProvider.System, NullLogger<GoogleDriveOAuthService>.Instance);
 
     private StorageConnectionService Service(ISecretStore secrets, IEnumerable<IStorageConnectionTester> testers) =>
-        new(new PostgreSqlStorageConnectionStore(DbOptions, TimeProvider.System, NullLogger<PostgreSqlStorageConnectionStore>.Instance),
+        new(new StorageConnectionStoreFacade(DbOptions, TimeProvider.System), new StorageConnectionStoreFacade(DbOptions, TimeProvider.System),
             StorageProviderCatalog.BuiltIn(), secrets, testers, TimeProvider.System, NullLogger<StorageConnectionService>.Instance);
 
     private sealed class MemorySecrets : ISecretStore

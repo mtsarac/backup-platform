@@ -68,14 +68,14 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
             .ApplySort(RunSorts, filter.List, "createdAt", row => row.Id)
             .ToPagedResultAsync(filter.List, cancellationToken);
         var ids = page.Items.Select(row => row.Id).ToArray();
-        var loaded = (await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().Where(run => run.TenantId == tenantId && ids.Contains(run.Id)).ToListAsync(cancellationToken)).ToDictionary(run => run.Id);
+        var loaded = (await BackupRunQueries.Runs(context).AsNoTracking().Where(run => run.TenantId == tenantId && ids.Contains(run.Id)).ToListAsync(cancellationToken)).ToDictionary(run => run.Id);
         return new(await RunViewsAsync(context, tenantId, [.. ids.Select(id => loaded[id])], cancellationToken), page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<BackupRunView?> GetRunAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken)
     {
         await using var context = new PlatformDbContext(options, tenant);
-        var run = await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().SingleOrDefaultAsync(run => run.TenantId == tenantId && run.Id == runId, cancellationToken);
+        var run = await BackupRunQueries.Runs(context).AsNoTracking().SingleOrDefaultAsync(run => run.TenantId == tenantId && run.Id == runId, cancellationToken);
         return run is null ? null : (await RunViewsAsync(context, tenantId, [run], cancellationToken)).Single();
     }
 
@@ -108,7 +108,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         var size = await artifacts.Where(artifact => artifact.Replicas.Any(replica => replica.Status != BackupReplicaStatus.Deleted)).SumAsync(artifact => (long?)artifact.SizeBytes, cancellationToken) ?? 0;
         var pending = await artifacts.CountAsync(artifact => artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending || replica.Status == BackupReplicaStatus.Deleting), cancellationToken);
         var deleteFailed = await artifacts.CountAsync(artifact => artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeleteFailed), cancellationToken);
-        var recent = await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().Where(run => run.TenantId == tenantId)
+        var recent = await BackupRunQueries.Runs(context).AsNoTracking().Where(run => run.TenantId == tenantId)
             .OrderByDescending(run => run.CreatedAt).ThenBy(run => run.Id).Take(8).ToListAsync(cancellationToken);
         return new(new(jobs.Count, jobs.Count(job => job.Enabled), jobs.Count(job => job.Enabled && job.Schedule is { Enabled: true })),
             new(active, failed, successful.Count, running, retryPending, cancellationRequested, storageFailed, replicationInsufficient), new(total, size, pending, deleteFailed), await RunViewsAsync(context, tenantId, recent, cancellationToken),

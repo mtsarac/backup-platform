@@ -15,12 +15,12 @@ public sealed record RetentionCycleResult(int ArtifactsExamined, int ReplicasMar
 
 /// <summary>
 /// The backend-owned half of retention: it expires backups, dispatches agent-owned removals and physically deletes only backend-owned replicas.
-/// Every decision is made by <see cref="IBackupRetentionStore"/> in the database, so any number of nodes may run this at once; this class
+/// Every decision is made by <see cref="IBackupRetentionPlatformStore"/> in the database, so any number of nodes may run this at once; this class
 /// talks to the storage. A replica is recorded Deleted only after the provider proved the object absent,
 /// never before; any failure is recorded with a stable code and retried at a bounded cadence.
 /// </summary>
 public sealed class BackupRetentionService(
-    IBackupRetentionStore store, IBackupStorageResolver storages, BackupRetentionOptions options, BackupNodeIdentity node, TimeProvider time,
+    IBackupRetentionPlatformStore store, IBackupStorageResolver storages, BackupRetentionOptions options, BackupNodeIdentity node, TimeProvider time,
     ILogger<BackupRetentionService> logger)
 {
     /// <summary>Expires what is due, then deletes what is due. Batches repeat while they come back full, up to <see cref="BackupRetentionOptions.MaxBatchesPerCycle"/>.</summary>

@@ -64,14 +64,14 @@ internal sealed class ConnectionWorld(PostgreSqlFixture database)
     public PostgreSqlFixture Database { get; } = database;
     private readonly IDataProtectionProvider _protection = new EphemeralDataProtectionProvider();
 
-    public PostgreSqlStorageConnectionStore Store() => new(Quota.Options(), TimeProvider.System, NullLogger<PostgreSqlStorageConnectionStore>.Instance);
+    public StorageConnectionStoreFacade Store() => new(Quota.Options(), TimeProvider.System);
 
     public PostgreSqlSecretCiphertextRepository Ciphertexts() => new(Quota.Options(), TimeProvider.System);
 
     public DataProtectionSecretStore Secrets(IDataProtectionProvider? protection = null) => new(protection ?? _protection, Ciphertexts());
 
     public StorageConnectionService Service(ISecretStore? secrets = null) => new(
-        Store(), VaultProvider.Catalog(), secrets ?? Secrets(), [new AgentSideConnectionTester(StorageProviderTypes.Local), new VaultTester()], TimeProvider.System,
+        Store(), Store(), VaultProvider.Catalog(), secrets ?? Secrets(), [new AgentSideConnectionTester(StorageProviderTypes.Local), new VaultTester()], TimeProvider.System,
         NullLogger<StorageConnectionService>.Instance);
 
     public async Task<StorageActor> PlatformActorAsync() => new(await Quota.ActorAsync(), AuditActorKind.PlatformAdmin);

@@ -26,11 +26,11 @@ internal sealed class ScheduleKit(PostgreSqlFixture database)
     private DbContextOptions<PlatformDbContext> Options() => new DbContextOptionsBuilder<PlatformDbContext>()
         .UseNpgsql(new NpgsqlConnectionStringBuilder(Database.ConnectionString) { MaxPoolSize = MaxConnections }.ConnectionString).Options;
 
-    public PostgreSqlBackupScheduleStore Store(AgentConnectivityOptions? connectivity = null) => new(Options(), AdmitAllBackupAdmission.Instance, connectivity);
+    public ScheduleStoreFacade Store(AgentConnectivityOptions? connectivity = null) => new(Options(), AdmitAllBackupAdmission.Instance, connectivity);
 
     public BackupScheduleService Service(TimeProvider time, IBackupScheduleCoordinator? coordinator = null, RecordingSignal? signal = null,
         BackupSchedulingOptions? options = null, BackupExecutionOptions? limits = null) =>
-        new(Store(), Runs.Store(limits), coordinator ?? new RecordingCoordinator(), signal ?? new RecordingSignal(), time, options ?? new BackupSchedulingOptions(),
+        new(Store(), Store(), Runs.Store(limits), Runs.Store(limits), coordinator ?? new RecordingCoordinator(), signal ?? new RecordingSignal(), time, options ?? new BackupSchedulingOptions(),
             NullLogger<BackupScheduleService>.Instance);
 
     public async Task<BackupJob> AddJobAsync(StoreAgent agent, string cron = "0 * * * *", string zone = "UTC", TimeSpan? grace = null,
@@ -72,7 +72,7 @@ internal sealed class ScheduleKit(PostgreSqlFixture database)
     public Task EnableAsync(BackupJob job, DateTimeOffset now) => Store().ModifyJobAsync(job.TenantId, job.Id, target => target.Enable(now), default);
 
     /// <summary>Claims and starts the agent's next attempt, as the Agent.Host does; null when nothing is claimable.</summary>
-    public async Task<BackupClaim?> ClaimAndStartAsync(PostgreSqlBackupRunStore store, StoreAgent agent, DateTimeOffset at)
+    public async Task<BackupClaim?> ClaimAndStartAsync(RunStoreFacade store, StoreAgent agent, DateTimeOffset at)
     {
         var claim = await BackupStoreHarness.ClaimAsync(store, agent, at);
         if (claim is not null) await BackupStoreHarness.StartAttemptAsync(store, claim, at.AddSeconds(1));

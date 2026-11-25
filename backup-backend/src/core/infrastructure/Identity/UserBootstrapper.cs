@@ -30,7 +30,7 @@ public static class UserBootstrapper
         var user = new User(userId, displayName, UserRole.PlatformAdmin);
         var hasher = new PasswordHashService();
         var credential = new PasswordCredential(userId, loginIdentifier, hasher.Hash(userId, password), email);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(731429850126)", cancellationToken);
         if (await context.Users.AnyAsync(user => user.Role == UserRole.PlatformAdmin, cancellationToken))
@@ -39,7 +39,7 @@ public static class UserBootstrapper
         }
         context.Users.Add(user);
         context.PasswordCredentials.Add(credential);
-        context.AuditEvents.Add(AuditEvent.Record(DateTimeOffset.UtcNow, UserId.System, AuditActorKind.System,
+        context.RecordAudit(AuditEvent.Record(DateTimeOffset.UtcNow, UserId.System, AuditActorKind.System,
             "user.bootstrap", null, "user", userId.Value.ToString("D")));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

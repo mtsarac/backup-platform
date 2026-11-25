@@ -408,7 +408,7 @@ public sealed class BackupAuditSafetyIntegrationTests(PostgreSqlFixture fixture)
         var agent = await kit.Runs.AddAgentAsync();
         var job = await kit.AddJobAsync(agent);
         await kit.SeenAsync(agent, Now.AddHours(1));
-        var store = new PostgreSqlBackupScheduleStore(fixture.Options, new DeniedAdmission());
+        var store = new ScheduleStoreFacade(fixture.Options, new DeniedAdmission());
         await store.EvaluateAsync(agent.TenantId, job.Id, Now.AddHours(1), default);
         await store.EvaluateAsync(agent.TenantId, job.Id, Now.AddHours(1), default);
         var events = await EventsAsync(agent.TenantId);

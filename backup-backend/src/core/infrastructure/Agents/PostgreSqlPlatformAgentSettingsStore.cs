@@ -12,7 +12,7 @@ public sealed class PostgreSqlPlatformAgentSettingsStore(DbContextOptions<Platfo
 
     public async Task<PlatformAgentSettingsState?> GetAsync(CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var row = await context.PlatformAgentSettings.AsNoTracking()
             .SingleOrDefaultAsync(settings => settings.Id == PlatformAgentSettings.SingletonId, cancellationToken)
             .ConfigureAwait(false);
@@ -24,7 +24,7 @@ public sealed class PostgreSqlPlatformAgentSettingsStore(DbContextOptions<Platfo
         ArgumentNullException.ThrowIfNull(actor);
         for (var attempt = 1; ; attempt++)
         {
-            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var context = PlatformOperationsDbContext.Create(options);
             var row = await context.PlatformAgentSettings
                 .SingleOrDefaultAsync(settings => settings.Id == PlatformAgentSettings.SingletonId, cancellationToken)
                 .ConfigureAwait(false);
@@ -44,7 +44,7 @@ public sealed class PostgreSqlPlatformAgentSettingsStore(DbContextOptions<Platfo
 
             if (changed)
             {
-                context.AuditEvents.Add(AuditEvent.Record(
+                context.RecordAudit(AuditEvent.Record(
                     now, actor, AuditActorKind.PlatformAdmin, AuditActions.AgentSettingsChanged, null,
                     "platform_agent_settings", "singleton",
                     new Dictionary<string, object?>

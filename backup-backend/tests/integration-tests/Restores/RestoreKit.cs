@@ -42,12 +42,12 @@ internal sealed class RestoreWorld(PostgreSqlFixture database)
     public BackupStoreHarness Harness => Retention.Harness;
 
     /// <summary>A store with its own options and pool: what another backend node would hold.</summary>
-    public PostgreSqlRestoreStore Store() => new(Options());
+    public RestoreStoreFacade Store() => new(Options());
 
     /// <summary>A store that probes backend-readable replicas through <paramref name="storage"/> before it hands out a restore.</summary>
-    public PostgreSqlRestoreStore Store(IBackupStorageResolver storage) => new(Options(), storage);
+    public RestoreStoreFacade Store(IBackupStorageResolver storage) => new(Options(), storage);
 
-    public PostgreSqlBackupRunStore BackupStore() => Harness.Store(BackupStoreHarness.Limits());
+    public RunStoreFacade BackupStore() => Harness.Store(BackupStoreHarness.Limits());
 
     public PostgreSqlAgentReplicaDeletionStore AgentDeletionStore() => new(Options(), new BackupRetentionOptions());
 
@@ -109,7 +109,7 @@ internal sealed class RestoreWorld(PostgreSqlFixture database)
         Command(seed.TenantId, seed.ArtifactId, seed.AgentId, key, replicaId, fingerprint, now, mode, databaseName);
 
     /// <summary>Creates a restore of the seed's backup by its agent and fails the test if the store refused.</summary>
-    public async Task<RestoreOperation> CreateAsync(RestoreSeed seed, PostgreSqlRestoreStore? store = null, DateTimeOffset? now = null, string? key = null,
+    public async Task<RestoreOperation> CreateAsync(RestoreSeed seed, RestoreStoreFacade? store = null, DateTimeOffset? now = null, string? key = null,
         RestoreMode mode = RestoreMode.NewDatabase, string databaseName = "Restored")
     {
         var result = await (store ?? Store()).CreateAsync(Command(seed, key, now: now, mode: mode, databaseName: databaseName), default);
@@ -117,27 +117,27 @@ internal sealed class RestoreWorld(PostgreSqlFixture database)
         return result.Operation!;
     }
 
-    public static Task<RestoreClaim?> ClaimAsync(PostgreSqlRestoreStore store, StoreAgent agent, DateTimeOffset at) =>
+    public static Task<RestoreClaim?> ClaimAsync(RestoreStoreFacade store, StoreAgent agent, DateTimeOffset at) =>
         store.ClaimNextAsync(agent.TenantId, agent.AgentId, at, Lease, Unclaimed, default);
 
     /// <summary>Claims the agent's next restore and fails the test if nothing was handed out.</summary>
-    public static async Task<RestoreClaim> MustClaimAsync(PostgreSqlRestoreStore store, StoreAgent agent, DateTimeOffset at) =>
+    public static async Task<RestoreClaim> MustClaimAsync(RestoreStoreFacade store, StoreAgent agent, DateTimeOffset at) =>
         await ClaimAsync(store, agent, at) ?? throw new Xunit.Sdk.XunitException("The agent was expected to claim a restore but nothing was handed out.");
 
     public static RestoreLeaseCommand Command(RestoreClaim claim, DateTimeOffset at, Guid? token = null) =>
         new(claim.Operation.TenantId, claim.Operation.AgentId, claim.Attempt.Id, token ?? claim.Attempt.LeaseToken!.Value, at)
         { SoftwareVersion = "1.2.3", ProtocolVersion = "1.0", Platform = "Linux" };
 
-    public static async Task StartAsync(PostgreSqlRestoreStore store, RestoreClaim claim, DateTimeOffset at)
+    public static async Task StartAsync(RestoreStoreFacade store, RestoreClaim claim, DateTimeOffset at)
     {
         var outcome = await store.StartAsync(Command(claim, at), Lease, default);
         Assert.Equal(BackupMutationResult.Accepted, outcome.Result);
     }
 
-    public static Task<BackupMutationResult> ProgressAsync(PostgreSqlRestoreStore store, RestoreClaim claim, DateTimeOffset at, string stage, double? percent = null) =>
+    public static Task<BackupMutationResult> ProgressAsync(RestoreStoreFacade store, RestoreClaim claim, DateTimeOffset at, string stage, double? percent = null) =>
         store.ReportProgressAsync(Command(claim, at), new RestoreProgress(stage, percent), default);
 
-    public static Task<BackupMutationResult> CompleteAsync(PostgreSqlRestoreStore store, RestoreClaim claim, DateTimeOffset at, RestoreCompletion completion, Guid? token = null) =>
+    public static Task<BackupMutationResult> CompleteAsync(RestoreStoreFacade store, RestoreClaim claim, DateTimeOffset at, RestoreCompletion completion, Guid? token = null) =>
         store.CompleteAsync(Command(claim, at, token), completion, default);
 
     public static RestoreCompletion Succeeded(string? resultJson = "{\"databaseState\":\"ONLINE\"}") => new(RestoreStatus.Succeeded, null, RestoreTargetState.Online, resultJson);
@@ -147,7 +147,7 @@ internal sealed class RestoreWorld(PostgreSqlFixture database)
     public static RestoreCompletion Cancelled(RestoreTargetState state = RestoreTargetState.PartiallyRestored) => new(RestoreStatus.Cancelled, RestoreFailureCodes.Cancelled, state, null);
 
     /// <summary>Claims, starts and moves a restore to <paramref name="stage"/>; returns the claim (leased from <paramref name="at"/>).</summary>
-    public static async Task<RestoreClaim> RunToAsync(PostgreSqlRestoreStore store, StoreAgent agent, DateTimeOffset at, string? stage = null)
+    public static async Task<RestoreClaim> RunToAsync(RestoreStoreFacade store, StoreAgent agent, DateTimeOffset at, string? stage = null)
     {
         var claim = await MustClaimAsync(store, agent, at);
         await StartAsync(store, claim, at);

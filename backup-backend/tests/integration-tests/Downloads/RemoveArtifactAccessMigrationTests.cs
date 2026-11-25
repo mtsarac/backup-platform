@@ -31,7 +31,7 @@ public sealed class RemoveArtifactAccessMigrationTests(PostgreSqlFixture fixture
         var readyId = Guid.NewGuid();
         var completedId = Guid.NewGuid();
         var requestId = Guid.NewGuid();
-        await using (var context = fixture.CreatePlatformContext())
+        await using (var context = fixture.CreateMigrationContext())
         {
             var migrator = context.GetService<IMigrator>();
             await migrator.MigrateAsync("20261106140706_JobCredentialClaims");

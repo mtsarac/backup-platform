@@ -11,7 +11,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Backups;
 
-/// <summary>Replica row locks serialize dispatch, polls, renewal and completion; operation and token fence every mutation.</summary>
+/// <summary>
+/// Replica row locks serialize dispatch, polls, renewal and completion; operation and token fence every mutation. Platform-operations only: every method is an agent-identity call, so no tenant request reaches it.
+/// </summary>
 public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<PlatformDbContext> options, BackupRetentionOptions retention)
     : IAgentReplicaDeletionStore
 {
@@ -21,7 +23,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
         CancellationToken cancellationToken)
     {
         now = now.ToUniversalTime();
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         // External replicas have no owning agent: any agent of the tenant that advertises the lifecycle capability may remove them. An older agent would never run the task.
         var external = await context.AgentCapabilities.AsNoTracking().AnyAsync(capability => capability.TenantId == identity.TenantId && capability.AgentId == identity.AgentId &&
@@ -83,7 +85,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
     public async Task<DeleteReplicaLeaseResponse?> RenewAsync(AgentIdentity identity, Guid replicaId, DeleteReplicaLeaseRequest request,
         DateTimeOffset now, TimeSpan lease, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var replica = await LockReplicaAsync(context, identity, replicaId, cancellationToken);
         if (replica is null || request.OperationId == Guid.Empty || request.LeaseToken == Guid.Empty ||
@@ -96,7 +98,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
     public async Task<BackupMutationResult> CompleteAsync(AgentIdentity identity, Guid replicaId, DeleteReplicaCompletionRequest request,
         DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var replica = await LockReplicaAsync(context, identity, replicaId, cancellationToken);
         if (replica is null) return BackupMutationResult.NotFound;
@@ -124,7 +126,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
     public async Task<DeletionStorageTarget?> AuthorizeStorageAsync(AgentIdentity identity, Guid replicaId, Guid leaseToken, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var replica = await context.BackupReplicas.AsNoTracking()
             .SingleOrDefaultAsync(entity => entity.TenantId == identity.TenantId && entity.Id == replicaId, cancellationToken);
         return replica is { ExecutionLocation: BackupStorageExecutionLocation.Backend, Status: BackupReplicaStatus.Deleting } && replica.AgentExecuted
@@ -145,7 +147,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
 
     private static void RecordDeletionOutcome(PlatformDbContext context, BackupReplica replica, AgentIdentity identity,
         DateTimeOffset now, bool absenceVerified, string? failureCode) =>
-        context.AuditEvents.Add(AuditEvent.Record(
+        context.RecordAudit(AuditEvent.Record(
             now, UserId.System, AuditActorKind.System,
             absenceVerified ? AuditActions.BackupReplicaPhysicalDeleteCompleted : AuditActions.BackupReplicaPhysicalDeleteFailed,
             replica.TenantId, "backup_replica", replica.Id.ToString("D"),

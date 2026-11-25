@@ -14,7 +14,7 @@ trap cleanup EXIT
 
 dotnet tool restore
 BACKUP_PLATFORM_CONNECTION_STRING='Host=unused;Database=unused' \
-  dotnet ef migrations script --idempotent --configuration Release --no-build \
+  dotnet ef migrations script --context PlatformDbContext --idempotent --configuration Release --no-build \
   --project src/core/infrastructure --output "${work}/migrations.sql"
 docker exec "${container}" createdb --username postgres "${database}"
 

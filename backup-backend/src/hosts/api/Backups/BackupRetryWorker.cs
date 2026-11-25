@@ -30,7 +30,7 @@ public sealed class BackupRetryWorker(IServiceScopeFactory scopes, BackupExecuti
     public async Task<int> ScanAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var store = scope.ServiceProvider.GetRequiredService<IBackupRunStore>();
+        var store = scope.ServiceProvider.GetRequiredService<IBackupRunPlatformStore>();
         var now = time.GetUtcNow();
         // A run paused by an unreachable storage ends its pause by itself (bounded, with backoff); every other pause waits for an operator or the time rule.
         var started = (await store.StartDueRetriesAsync(now, options.RetryScanBatchSize, cancellationToken))

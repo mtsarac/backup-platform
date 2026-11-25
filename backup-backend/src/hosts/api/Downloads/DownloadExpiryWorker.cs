@@ -13,7 +13,7 @@ public sealed class DownloadExpiryWorker(IServiceScopeFactory scopes, TimeProvid
             try
             {
                 await using var scope = scopes.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<IDownloadStore>().ExpireAsync(time.GetUtcNow(), stoppingToken);
+                await scope.ServiceProvider.GetRequiredService<IDownloadPlatformStore>().ExpireAsync(time.GetUtcNow(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception) { logger.LogError("Download expiry or expiry audit persistence failed with {ExceptionType}", exception.GetType().Name); }

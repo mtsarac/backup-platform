@@ -16,7 +16,7 @@ public sealed class PostgreSqlTenantEntitlementReader(DbContextOptions<PlatformD
     public async Task<TenantEntitlement> GetAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await ResolveAsync(context, tenantId, now, cancellationToken);
     }
 

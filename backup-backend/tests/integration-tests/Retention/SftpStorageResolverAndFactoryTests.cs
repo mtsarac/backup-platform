@@ -85,7 +85,7 @@ public sealed class SftpStorageResolverAndFactoryTests
         Assert.NotEqual(StorageFailureKind.InvalidConfiguration, exception.Kind);
     }
 
-    private static ConfiguredBackupStorageResolver BuildResolver(IStorageConnectionStore store, ISecretProvider secrets)
+    private static ConfiguredBackupStorageResolver BuildResolver(IStorageConnectionPlatformStore store, ISecretProvider secrets)
     {
         var services = new ServiceCollection();
         services.AddSingleton(store);
@@ -132,7 +132,7 @@ public sealed class SftpStorageResolverAndFactoryTests
         }
     }
 
-    private sealed class FakeStorageConnectionStore(IEnumerable<StorageConnection> connections) : IStorageConnectionStore
+    private sealed class FakeStorageConnectionStore(IEnumerable<StorageConnection> connections) : IStorageConnectionPlatformStore
     {
         private readonly List<StorageConnection> _connections = [.. connections];
 

@@ -302,7 +302,7 @@ public sealed class BackupOverlapTests(PostgreSqlFixture fixture) : IClassFixtur
     }
 
     /// <summary>A job created with the constructor's overlap default, which must be Skip, whatever the harness would pick.</summary>
-    private static async Task<BackupJob> SkipJobAsync(StoreAgent agent, PostgreSqlBackupRunStore store, BackupRetryPolicy? retry = null)
+    private static async Task<BackupJob> SkipJobAsync(StoreAgent agent, RunStoreFacade store, BackupRetryPolicy? retry = null)
     {
         var created = await store.CreateJobAsync(new BackupJob(Guid.NewGuid(), agent.TenantId, "Database", agent.AgentId, Configuration(), T0, retry), default);
         var persisted = (await store.GetJobAsync(agent.TenantId, created!.Id, default))!;
@@ -311,7 +311,7 @@ public sealed class BackupOverlapTests(PostgreSqlFixture fixture) : IClassFixtur
     }
 
     /// <summary>Moves the agent's only queued attempt to the requested state (Pending does nothing); a retryable failure ends in RetryPending.</summary>
-    private static async Task DriveAsync(PostgreSqlBackupRunStore store, StoreAgent agent, string state)
+    private static async Task DriveAsync(RunStoreFacade store, StoreAgent agent, string state)
     {
         if (state == "Pending") return;
         var claim = (await ClaimAsync(store, agent, T0))!;

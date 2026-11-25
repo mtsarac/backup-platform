@@ -101,12 +101,7 @@ public sealed record RestoreCleanupRequestResult(RestoreCleanupRequestOutcome Ou
 
 public sealed record RestorePage(IReadOnlyList<RestoreOperation> Items, long TotalCount, int Page, int PageSize);
 
-/// <summary>
-/// All mutations are atomic, tenant-qualified and durably committed before returning; every lifecycle write holds the target agent's row lock,
-/// which fences concurrent polls, callbacks, cancellations and the expiry sweeps of one agent. An operation of another tenant is never found,
-/// whatever the caller passes. The replica pin lives and dies with the operation inside the same transaction: creating one locks the replica row,
-/// ending one releases the pin in the same save, and retention's delete claims honour the pin (a database trigger is the backstop).
-/// </summary>
+/// <summary>Restores of the request's tenant, on the filtered tenant context.</summary>
 public interface IRestoreStore
 {
     /// <summary>
@@ -114,54 +109,53 @@ public interface IRestoreStore
     /// and re-validated under its row lock), then operation + first attempt + replica pin.
     /// </summary>
     Task<RestoreCreateResult> CreateAsync(RestoreCommand command, CancellationToken cancellationToken);
-
     Task<RestoreOperation?> GetAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken);
-
     /// <summary>Searched, sorted and paged by <see cref="RestoreQuery.List"/>, newest first by default. Attempts and the pin are loaded.</summary>
     Task<RestorePage> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken);
-
     /// <summary>
     /// Pending: withdrawn at once (Cancelled, target NotModified, pin released). Leased or Running: the request is recorded and delivered to the agent on its next
     /// lease renewal. Terminal: no change. Null when the operation does not exist in the tenant.
     /// </summary>
     Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null);
-
-    /// <summary>
-    /// Claims the agent's oldest Pending restore. Expires the agent's stale leases and unclaimed restores first, and hands out nothing while the agent
-    /// holds a live (unexpired Leased/Running) backup attempt or restore attempt: a restore never runs beside another job of the same agent.
-    /// </summary>
-    Task<RestoreClaim?> ClaimNextAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, TimeSpan unclaimedExpiry, CancellationToken cancellationToken);
-
-    /// <summary>Leased to Running, and the lease extended in the same transaction.</summary>
-    Task<RestoreLeaseOutcome> StartAsync(RestoreLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken);
-
-    Task<RestoreLeaseOutcome> RenewLeaseAsync(RestoreLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken);
-
-    Task<BackupMutationResult> ReportProgressAsync(RestoreLeaseCommand command, RestoreProgress progress, CancellationToken cancellationToken);
-
-    /// <summary>Terminal outcome. Idempotent: the same completion again is accepted without a change; a different one, or one under a lost lease, is a conflict.</summary>
-    Task<BackupMutationResult> CompleteAsync(RestoreLeaseCommand command, RestoreCompletion completion, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Leases the oldest removal owed to <paramref name="agentId"/> (a terminal operation whose cleanup is Pending and due), under the agent's lock, and hands out nothing while
-    /// the agent holds a live restore or backup attempt. Increments the attempt count and replaces the lease token, so a stale agent's report is refused.
-    /// </summary>
-    Task<RestoreCleanupClaim?> ClaimCleanupAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
-
-    /// <summary>Records the agent's removal outcome for the lease it holds. Fenced by the lease token; a repeated report is accepted unchanged.</summary>
-    Task<BackupMutationResult> CompleteCleanupAsync(TenantId tenantId, AgentId agentId, Guid operationId, Guid leaseToken, bool removed, string? failureCode, DateTimeOffset now,
-        CancellationToken cancellationToken);
-
     /// <summary>
     /// An operator asks for the removal of a retained rollback copy (only after <paramref name="rollbackRetention"/> has passed since the restore completed) or for an immediate retry of
     /// a pending removal. Never acts on a database itself: it only schedules the agent's work.
     /// </summary>
     Task<RestoreCleanupRequestResult> RequestCleanupAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, TimeSpan rollbackRetention, Guid? requestedByUserId,
         CancellationToken cancellationToken);
+}
 
+/// <summary>
+/// All mutations are atomic, tenant-qualified and durably committed before returning; every lifecycle write holds the target agent's row lock,
+/// which fences concurrent polls, callbacks, cancellations and the expiry sweeps of one agent. An operation of another tenant is never found,
+/// whatever the caller passes. The replica pin lives and dies with the operation inside the same transaction: creating one locks the replica row,
+/// ending one releases the pin in the same save, and retention's delete claims honour the pin (a database trigger is the backstop).
+/// </summary>
+public interface IRestorePlatformStore
+{
+    /// <summary>An agent-driven call reads the restore its attempt belongs to; the agent's identity names the tenant.</summary>
+    Task<RestoreOperation?> GetAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Claims the agent's oldest Pending restore. Expires the agent's stale leases and unclaimed restores first, and hands out nothing while the agent
+    /// holds a live (unexpired Leased/Running) backup attempt or restore attempt: a restore never runs beside another job of the same agent.
+    /// </summary>
+    Task<RestoreClaim?> ClaimNextAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, TimeSpan unclaimedExpiry, CancellationToken cancellationToken);
+    /// <summary>Leased to Running, and the lease extended in the same transaction.</summary>
+    Task<RestoreLeaseOutcome> StartAsync(RestoreLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken);
+    Task<RestoreLeaseOutcome> RenewLeaseAsync(RestoreLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken);
+    Task<BackupMutationResult> ReportProgressAsync(RestoreLeaseCommand command, RestoreProgress progress, CancellationToken cancellationToken);
+    /// <summary>Terminal outcome. Idempotent: the same completion again is accepted without a change; a different one, or one under a lost lease, is a conflict.</summary>
+    Task<BackupMutationResult> CompleteAsync(RestoreLeaseCommand command, RestoreCompletion completion, CancellationToken cancellationToken);
+    /// <summary>
+    /// Leases the oldest removal owed to <paramref name="agentId"/> (a terminal operation whose cleanup is Pending and due), under the agent's lock, and hands out nothing while
+    /// the agent holds a live restore or backup attempt. Increments the attempt count and replaces the lease token, so a stale agent's report is refused.
+    /// </summary>
+    Task<RestoreCleanupClaim?> ClaimCleanupAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
+    /// <summary>Records the agent's removal outcome for the lease it holds. Fenced by the lease token; a repeated report is accepted unchanged.</summary>
+    Task<BackupMutationResult> CompleteCleanupAsync(TenantId tenantId, AgentId agentId, Guid operationId, Guid leaseToken, bool removed, string? failureCode, DateTimeOffset now,
+        CancellationToken cancellationToken);
     /// <summary>Expired Leased/Running attempts end AgentLost (target Unknown or NotModified by the stage reached) and release their pin. Returns the operations expired.</summary>
     Task<int> ExpireStaleAsync(DateTimeOffset now, CancellationToken cancellationToken);
-
     /// <summary>Pending restores older than <paramref name="maximumWait"/> end Cancelled (NotClaimed) and release their pin. Returns the operations withdrawn.</summary>
     Task<int> ExpireUnclaimedAsync(DateTimeOffset now, TimeSpan maximumWait, CancellationToken cancellationToken);
 }

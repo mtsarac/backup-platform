@@ -11,7 +11,7 @@ public sealed class UploadBandwidthServiceTests
     private readonly TenantId _tenant = TenantId.New();
     private readonly AgentId _agent = AgentId.New();
 
-    private UploadBandwidthService Service(int tenantSlots = 5) => new(_store, new BackupExecutionOptions { TenantMaxConcurrentBackups = tenantSlots }, TimeProvider.System);
+    private UploadBandwidthService Service(int tenantSlots = 5) => new(_store, _store, new BackupExecutionOptions { TenantMaxConcurrentBackups = tenantSlots }, TimeProvider.System);
 
     private BackupLeaseCommand Lease() => new(_tenant, _agent, Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow);
 
@@ -107,7 +107,7 @@ public sealed class UploadBandwidthServiceTests
         Assert.Null(await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default));
     }
 
-    private sealed class FakeStore : IUploadBandwidthStore
+    private sealed class FakeStore : IUploadBandwidthStore, IUploadBandwidthPlatformStore
     {
         public AttemptUploadLimits? Limits { get; set; }
         public int Sets;

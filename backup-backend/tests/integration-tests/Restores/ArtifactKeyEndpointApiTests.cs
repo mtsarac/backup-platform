@@ -67,7 +67,7 @@ public sealed class ArtifactKeyEndpointApiTests(PostgreSqlFixture fixture) : ICl
         var (scenario, task, artifactId) = await ClaimedAsync(fixture);
         await using var _ = scenario;
         await using var scope = scenario.World.Factory.Services.CreateAsyncScope();
-        var keys = scope.ServiceProvider.GetRequiredService<ITenantWrapKeyStore>();
+        var keys = TenantWrapKeyStoreFacade.From(scope.ServiceProvider);
         var tenant = new TenantId(scenario.TenantId);
         var key = await keys.EnsureActiveAsync(tenant, default);
         var dek = RandomNumberGenerator.GetBytes(32);

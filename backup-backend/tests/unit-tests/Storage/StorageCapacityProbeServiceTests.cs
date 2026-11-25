@@ -90,7 +90,7 @@ public sealed class StorageCapacityProbeServiceTests
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    private sealed class FakeConnections(StorageConnection connection) : IStorageConnectionStore
+    private sealed class FakeConnections(StorageConnection connection) : IStorageConnectionPlatformStore
     {
         public Task<StorageConnectionRecord?> FindAsync(Guid id, TenantId? tenantScope, CancellationToken cancellationToken) =>
             Task.FromResult<StorageConnectionRecord?>(id == connection.Id ? new StorageConnectionRecord(connection, null, 0, 0) : null);

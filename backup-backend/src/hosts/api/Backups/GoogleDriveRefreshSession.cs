@@ -17,7 +17,7 @@ internal sealed class GoogleDriveRefreshSession(NpgsqlConnection connection, Pla
         DbContextOptions<PlatformDbContext> options, TenantId tenantId, Guid connectionId,
         TimeSpan waitTimeout, CancellationToken cancellationToken)
     {
-        await using var configuration = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var configuration = PlatformOperationsDbContext.Create(options);
         // Session locks must not return to a pool
         var settings = new NpgsqlConnectionStringBuilder(configuration.Database.GetConnectionString())
         {
@@ -34,7 +34,7 @@ internal sealed class GoogleDriveRefreshSession(NpgsqlConnection connection, Pla
             command.Parameters.AddWithValue("key", ComputeKey(tenantId.Value, connectionId));
             while (!Equals(await command.ExecuteScalarAsync(timeout.Token), true))
                 await Task.Delay(TimeSpan.FromMilliseconds(100), timeout.Token);
-            var database = PlatformDbContext.CreateForPlatformOperations(
+            var database = PlatformOperationsDbContext.Create(
                 new DbContextOptionsBuilder<PlatformDbContext>(options).UseNpgsql(connection).Options);
             return new GoogleDriveRefreshSession(connection, database);
         }

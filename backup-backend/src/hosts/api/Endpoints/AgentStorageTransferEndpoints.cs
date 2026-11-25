@@ -65,8 +65,8 @@ public static class AgentStorageTransferEndpoints
     /// No body in, nothing logged: the agent names no key and no wrapped DEK. The backend unwraps only what it stored for the operation's artifact, so a
     /// compromised agent cannot use this route as a decryption oracle for arbitrary ciphertext.
     /// </summary>
-    private static async Task<IResult> UnwrapArtifactKeyAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore restoreStore,
-        IDownloadStore downloadStore, ITenantWrapKeyStore keys, CancellationToken cancellationToken)
+    private static async Task<IResult> UnwrapArtifactKeyAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestorePlatformStore restoreStore,
+        IDownloadPlatformStore downloadStore, ITenantWrapKeyPlatformStore keys, CancellationToken cancellationToken)
     {
         if (agent.Identity is null) return Results.Unauthorized();
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty
@@ -102,8 +102,8 @@ public static class AgentStorageTransferEndpoints
 
 
     private static async Task<(IResult? Result, Guid? TenantId, Guid? ConnectionId, StorageConnection? Connection, Guid? RunId, Guid? JobId)> FenceDirectBackupAccessAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
-        IStorageConnectionStore connections, string? requiredProvider, CancellationToken cancellationToken)
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunPlatformStore store,
+        IStorageConnectionPlatformStore connections, string? requiredProvider, CancellationToken cancellationToken)
     {
         if (agent.Identity is null)
             return (Results.Unauthorized(), null, null, null, null, null);
@@ -129,8 +129,8 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<(IResult? Result, Guid? TenantId, Guid? ConnectionId, StorageConnection? Connection, string? StorageKey)> FenceDirectRestoreAccessAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore store,
-        IDownloadStore downloadStore, IStorageConnectionStore connections, string? requiredProvider, CancellationToken cancellationToken)
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestorePlatformStore store,
+        IDownloadPlatformStore downloadStore, IStorageConnectionPlatformStore connections, string? requiredProvider, CancellationToken cancellationToken)
     {
         if (agent.Identity is null)
             return (Results.Unauthorized(), null, null, null, null);
@@ -158,7 +158,7 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> RecordDirectIntentAsync(Guid attemptId, TaskStorageVerifyRequest body, HttpRequest request,
-        ICurrentAgent agent, IBackupRunStore store, IStorageConnectionStore connections, CancellationToken cancellationToken)
+        ICurrentAgent agent, IBackupRunPlatformStore store, IStorageConnectionPlatformStore connections, CancellationToken cancellationToken)
     {
         var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, null, cancellationToken);
         if (fence.Result is not null) return fence.Result;
@@ -182,8 +182,8 @@ public static class AgentStorageTransferEndpoints
     /// no second path. The agent uses the credential for one thing, aborting its own journaled upload.
     /// </summary>
     private static async Task<IResult> GetAbortAccessAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
-        IStorageConnectionStore connections, ISecretProvider secrets,
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunPlatformStore store,
+        IStorageConnectionPlatformStore connections, ISecretProvider secrets,
         GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
         if (agent.Identity is null) return Results.Unauthorized();
@@ -207,8 +207,8 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> GetBackupStorageAccessAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
-        IStorageConnectionStore connections, ISecretProvider secrets,
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunPlatformStore store,
+        IStorageConnectionPlatformStore connections, ISecretProvider secrets,
         GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
         var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, null, cancellationToken);
@@ -217,8 +217,8 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> GetRestoreStorageAccessAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore store,
-        IDownloadStore downloadStore, IStorageConnectionStore connections, ISecretProvider secrets,
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestorePlatformStore store,
+        IDownloadPlatformStore downloadStore, IStorageConnectionPlatformStore connections, ISecretProvider secrets,
         GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
         var fence = await FenceDirectRestoreAccessAsync(attemptId, request, agent, store, downloadStore, connections, null, cancellationToken);
@@ -234,8 +234,8 @@ public static class AgentStorageTransferEndpoints
             : Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key layout does not match the attempt." });
 
     private static async Task<IResult> GetBackupStorageCatalogAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
-        IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunPlatformStore store,
+        IStorageConnectionPlatformStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
     {
         var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, "google-drive", cancellationToken);
         if (fence.Result is not null) return fence.Result;
@@ -249,8 +249,8 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> SaveBackupStorageCatalogAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
-        IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, TaskStorageCatalogSaveRequest body, CancellationToken cancellationToken)
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunPlatformStore store,
+        IStorageConnectionPlatformStore connections, IGoogleDriveFileCatalog catalog, TaskStorageCatalogSaveRequest body, CancellationToken cancellationToken)
     {
         var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, "google-drive", cancellationToken);
         if (fence.Result is not null) return fence.Result;
@@ -263,8 +263,8 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> DeleteBackupStorageCatalogAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
-        IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunPlatformStore store,
+        IStorageConnectionPlatformStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
     {
         var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, "google-drive", cancellationToken);
         if (fence.Result is not null) return fence.Result;
@@ -278,8 +278,8 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> GetRestoreStorageCatalogAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore store,
-        IDownloadStore downloadStore, IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestorePlatformStore store,
+        IDownloadPlatformStore downloadStore, IStorageConnectionPlatformStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
     {
         var fence = await FenceDirectRestoreAccessAsync(attemptId, request, agent, store, downloadStore, connections, "google-drive", cancellationToken);
         if (fence.Result is not null) return fence.Result;

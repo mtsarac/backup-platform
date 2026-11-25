@@ -57,19 +57,32 @@ public sealed record PendingStorageCleanup(
     Guid Id, TenantId TenantId, Guid JobId, Guid RunId, Guid AttemptId, string StorageProvider, string StorageName,
     string TargetIdentity, string Key, bool IsPartial);
 
+/// <summary>Artifact listing, lookup and manual delete of the request's tenant (filtered tenant context). Retention scans, delete workers and the storage sweeper are <see cref="IBackupRetentionPlatformStore"/>.</summary>
+public interface IBackupRetentionStore
+{
+    /// <summary>Manual delete: soft delete (DeletePending with the grace period). Never physical.</summary>
+    Task<BackupArtifactDeleteResult> RequestDeleteAsync(TenantId tenantId, Guid artifactId, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>DeletePending back to Available. Refused once a physical delete has begun. Race-safe against the delete workers and against the retention scan.</summary>
+    Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null);
+    Task<BackupArtifactRecord?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);
+    /// <summary>Newest first (by acceptance), optionally of one job. Includes artifacts whose replicas are all Deleted: history is never dropped.</summary>
+    Task<IReadOnlyList<BackupArtifactRecord>> ListArtifactsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken);
+    Task<PagedResult<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Durable retention state transitions and the queries the sweeps need. Every method is atomic and safe to call from any number of backend
 /// nodes at once: eligibility is decided by the database inside the same statement or transaction that applies it, never by a read that
 /// can go stale. Tenant-scoped operations never reveal that an id exists in another tenant.
 /// </summary>
-public interface IBackupRetentionStore
+/// <remarks>Retention scans, delete workers and the storage sweeper run unfiltered by tenant; <see cref="GetArtifactAsync"/> also serves agent-driven flows that name the tenant from the agent's identity.</remarks>
+public interface IBackupRetentionPlatformStore
 {
     /// <summary>
     /// Moves every Available replica of up to <paramref name="limit"/> expired, unpinned artifacts to DeletePending (soft delete) with the artifact's
     /// own grace period. Idempotent; concurrent nodes never act on the same artifact at once.
     /// </summary>
     Task<BackupRetentionApplication> ApplyExpiredRetentionAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken);
-
     /// <summary>
     /// Atomically claims due backend replicas and durably dispatches due agent replicas. Only backend replicas are returned for physical IO.
     /// Active agent leases are never taken by a backend worker; unclaimed dispatches are checked again at a bounded cadence.
@@ -78,45 +91,25 @@ public interface IBackupRetentionStore
     /// </summary>
     Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken,
         bool dispatchExternalToAgents = false);
-
     /// <summary>Records verified absence as Deleted. False when the lease token no longer matches or the replica is not Deleting.</summary>
     Task<bool> CompleteDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken);
-
     /// <summary>Marks the delete failed and schedules its retry. False when the lease token no longer matches.</summary>
     Task<bool> FailDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, string failureCode, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken);
-
-    /// <summary>Manual delete: soft delete (DeletePending with the grace period). Never physical.</summary>
-    Task<BackupArtifactDeleteResult> RequestDeleteAsync(TenantId tenantId, Guid artifactId, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken);
-
-    /// <summary>DeletePending back to Available. Refused once a physical delete has begun. Race-safe against the delete workers and against the retention scan.</summary>
-    Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null);
-
     Task<BackupArtifactRecord?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);
-
-    /// <summary>Newest first (by acceptance), optionally of one job. Includes artifacts whose replicas are all Deleted: history is never dropped.</summary>
-    Task<IReadOnlyList<BackupArtifactRecord>> ListArtifactsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken);
-
-    Task<PagedResult<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken);
-
     /// <summary>Of <paramref name="keys"/>, those some replica of ANY status references under <paramref name="storageProvider"/>, in any tenant.</summary>
     Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken);
-
     /// <summary>The attempts among <paramref name="attemptIds"/> that exist, with the state of their run. Unknown ids are simply absent.</summary>
     Task<IReadOnlyDictionary<Guid, BackupAttemptActivity>> GetAttemptActivityAsync(IReadOnlyCollection<Guid> attemptIds, CancellationToken cancellationToken);
-
     /// <summary>Persists durable cleanup intent before physical delete; recovers or claims an existing record if already present.</summary>
     Task<ClaimedStorageCleanup?> BeginSweptDeletionAsync(
         string storageProvider, string storageName, TenantId? storageScope, ManagedStorageKey key, string objectKey,
         DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
-
     /// <summary>Lists pending sweep cleanups that can be recovered or retried for the storage.</summary>
     Task<IReadOnlyList<PendingStorageCleanup>> ListPendingSweptDeletionsAsync(
         string storageProvider, string storageName, TenantId? storageScope, DateTimeOffset now, int limit, CancellationToken cancellationToken);
-
     /// <summary>Re-claims an existing pending sweep cleanup under a fresh lease token.</summary>
     Task<ClaimedStorageCleanup?> ClaimPendingSweptDeletionAsync(
         Guid cleanupId, TenantId? storageScope, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
-
     /// <summary>Records verified absence and marks the cleanup completed, appending the opaque audit event atomically.</summary>
     Task<bool> CompleteSweptDeletionAsync(Guid cleanupId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken);
     /// <summary>

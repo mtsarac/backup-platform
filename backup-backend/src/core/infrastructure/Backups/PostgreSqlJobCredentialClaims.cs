@@ -13,7 +13,7 @@ public sealed class PostgreSqlJobCredentialClaims(DbContextOptions<Persistence.P
 {
     public async Task ClaimAsync(string reference, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = Persistence.PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = Persistence.PlatformOperationsDbContext.Create(options);
         var at = now.ToUniversalTime();
         await context.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO job_credential_claims ("Reference", "ClaimedAt") VALUES ({reference}, {at})
@@ -23,13 +23,13 @@ public sealed class PostgreSqlJobCredentialClaims(DbContextOptions<Persistence.P
 
     public async Task ReleaseAsync(string reference, CancellationToken cancellationToken)
     {
-        await using var context = Persistence.PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = Persistence.PlatformOperationsDbContext.Create(options);
         await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM job_credential_claims WHERE \"Reference\" = {reference}", cancellationToken);
     }
 
     public async Task<int> SweepStaleAsync(DateTimeOffset olderThan, int limit, Func<string, CancellationToken, Task> deleteCredential, CancellationToken cancellationToken)
     {
-        await using var context = Persistence.PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = Persistence.PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var cutoff = olderThan.ToUniversalTime();
         // SKIP LOCKED: another node sweeping the same row, or a retry refreshing it right now, is simply left alone this round.

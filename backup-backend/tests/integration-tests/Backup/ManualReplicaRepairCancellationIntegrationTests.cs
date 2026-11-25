@@ -70,7 +70,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var service = CancellationService(setup, destination);
         var gate = new RepairRowLockGate();
         var options = new DbContextOptionsBuilder<PlatformDbContext>(World.Options()).AddInterceptors(gate).Options;
-        var cancellingService = new ReplicaRepairService(new PostgreSqlReplicaRepairStore(options), setup.Resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
+        var cancellingService = new ReplicaRepairService(new ReplicaRepairStoreFacade(options), new ReplicaRepairStoreFacade(options), setup.Resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
         Task<bool>? cancellation = null;
         using var shutdown = new CancellationTokenSource();
         var execution = service.ExecuteRepairAsync(tenantId, setup.Artifact.Id, started.Operation!.Id, externalToken: shutdown.Token);
@@ -160,7 +160,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         Assert.True(started.Success);
         var gate = new RepairRowLockGate();
         var options = new DbContextOptionsBuilder<PlatformDbContext>(World.Options()).AddInterceptors(gate).Options;
-        var heldStore = new PostgreSqlReplicaRepairStore(options);
+        var heldStore = new ReplicaRepairStoreFacade(options);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         Task<bool>? cancelling = null;
         Task<ReplicaRepairOperation?>? claiming = null;
@@ -219,8 +219,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         Assert.NotNull(claimed);
         var fault = new RepairAdmissionFault();
         var options = new DbContextOptionsBuilder<PlatformDbContext>(World.Options()).AddInterceptors(fault).Options;
-        var store = new PostgreSqlReplicaRepairStore(options);
-        var service = new ReplicaRepairService(store, setup.Resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
+        var store = new ReplicaRepairStoreFacade(options);
+        var service = new ReplicaRepairService(store, store, setup.Resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
         var registrations = (ConcurrentDictionary<Guid, CancellationTokenSource>)typeof(ReplicaRepairService)
             .GetField("_activeLocalCts", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
 
@@ -262,13 +262,13 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var connectionString = new Npgsql.NpgsqlConnectionStringBuilder(fixture.ConnectionString) { ApplicationName = name }.ConnectionString;
         var readmissionOptions = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options;
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        var cancelling = new PostgreSqlReplicaRepairStore(cancellationOptions)
+        var cancelling = new ReplicaRepairStoreFacade(cancellationOptions)
             .RequestCancellationAsync(tenantId, setup.Artifact.Id, claimed!.Id, now, deadline.Token);
         Task<ReplicaRepairAdmissionResult>? readmitting = null;
         try
         {
             await gate.RowLocked.Task.WaitAsync(deadline.Token);
-            readmitting = new PostgreSqlReplicaRepairStore(readmissionOptions).AdmitRepairAsync(tenantId, setup.Artifact.Id,
+            readmitting = new ReplicaRepairStoreFacade(readmissionOptions).AdmitRepairAsync(tenantId, setup.Artifact.Id,
                 setup.Sftp.Id, null, now, deadline.Token, excludeOperationId: claimed.Id);
             await WaitForDatabaseLockAsync(name, deadline.Token);
             gate.Release.TrySetResult();
@@ -318,7 +318,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         new(setup.Resolver.Resolve(setup.Agent.TenantId, "sftp", setup.Sftp.Id.ToString("D"))!);
 
     private static ReplicaRepairService CancellationService(MultiSetup setup, BlockingRepairDestination destination) =>
-        new(setup.RepairStore, new RepairCancellationResolver(setup.Resolver, setup.Sftp.Id.ToString("D"), destination),
+        new(setup.RepairStore, setup.RepairStore, new RepairCancellationResolver(setup.Resolver, setup.Sftp.Id.ToString("D"), destination),
             new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
 
     private sealed class RepairCancellationResolver(FakeResolver inner, string target, IStorageProvider destination) : IBackupStorageResolver

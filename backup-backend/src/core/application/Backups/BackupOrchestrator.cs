@@ -57,8 +57,8 @@ public sealed record BackupReplicaView(Guid Id, string StorageProvider, string S
 /// </summary>
 public sealed record BackupReplicationView(int RequiredVerifiedReplicas, int VerifiedReplicas, int DestinationCount, string Status, bool PolicySatisfied, IReadOnlyList<BackupDestinationHealthView> Destinations);
 public sealed record BackupDestinationHealthView(string StorageProvider, Guid? StorageConnectionId, bool IsPrimary, string State, string? FailureCode, string? FailureReason, bool ObjectMayRemain, Guid? ReplicaId, string? ReplicaStatus);
-public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null, ITenantWrapKeyStore? wrapKeys = null,
-    ArtifactRecoveryOptions? recovery = null, ITenantRecoveryKeyStore? tenantRecoveryKeys = null, IStorageCapacityProbeTrigger? probeTrigger = null)
+public sealed class BackupOrchestrator(IBackupRunStore store, IBackupRunPlatformStore platformStore, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null, ITenantWrapKeyPlatformStore? wrapKeys = null,
+    ArtifactRecoveryOptions? recovery = null, ITenantRecoveryKeyPlatformStore? tenantRecoveryKeys = null, IStorageCapacityProbeTrigger? probeTrigger = null)
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(120);
 
@@ -181,7 +181,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 
     public async Task<BackupTaskSnapshot?> ClaimAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
-        var claim = await store.ClaimNextAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), LeaseDuration, cancellationToken);
+        var claim = await platformStore.ClaimNextAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), LeaseDuration, cancellationToken);
         if (claim is null) return null;
         var policy = claim.Run.Configuration.EncryptionPolicy;
         BackupEncryptionInstruction? encryption = null;
@@ -204,7 +204,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             LeaseToken = claim.Attempt.LeaseToken!.Value, LeaseExpiresAt = claim.Attempt.LeaseExpiresAt!.Value,
             MaxArtifactBytes = claim.MaxArtifactBytes,
             ResumeTransfer = claim.Attempt.StartedAt.HasValue,
-            Checkpoints = (await store.GetCheckpointsAsync(identity.TenantId, claim.Attempt.Id, cancellationToken))
+            Checkpoints = (await platformStore.GetCheckpointsAsync(identity.TenantId, claim.Attempt.Id, cancellationToken))
                 .Select(x => new TransferCheckpointContract { StorageProvider = x.StorageProvider, DestinationId = x.DestinationId,
                     VerifiedByteOffset = x.VerifiedByteOffset, ProviderState = x.ProviderState }).ToArray(),
             Configuration = ToWire(claim.Run.Configuration), CancellationRequested = claim.Run.CancellationRequestedAt is not null,
@@ -217,14 +217,14 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 
     public async Task<BackupMutationResult> CompleteAsync(AgentIdentity identity, Guid attemptId, BackupTaskCompletionRequest request, CancellationToken cancellationToken)
     {
-        var claim = await store.GetAttemptAsync(identity.TenantId, identity.AgentId, attemptId, cancellationToken);
+        var claim = await platformStore.GetAttemptAsync(identity.TenantId, identity.AgentId, attemptId, cancellationToken);
         if (claim is null) return BackupMutationResult.NotFound;
         if (!BackupInputValidation.IsValidCompletion(request, claim.Run.Configuration))
         {
             throw new ArgumentException("Invalid completion metadata.");
         }
         if (request.Status == "Paused")
-            return await store.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken),
+            return await platformStore.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken),
                 new BackupCompletion("Paused", request.FailureCode, null), cancellationToken);
         request = await ApplyEncryptionPolicyAsync(identity.TenantId, claim.Run.Configuration, request, cancellationToken);
         var a = request.Artifact;
@@ -234,7 +234,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             a.Format, a.EncryptionKeyId, a.EncryptionKeyVersion, a.EncryptionWrappedDekBase64, a.Format == ArtifactFormats.Bpe2 ? RecipientIndex(a.EncryptionRecipients) : null);
         var destinations = request.Destinations.Select(d => new BackupDestinationReport(d.StorageProvider, d.StorageConnectionId, d.State, d.Upload, d.Verification,
             d.FailureCode, d.Key, d.ObjectMayRemain, d.StartedAt, d.CompletedAt)).ToArray();
-        var mutationResult = await store.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken), new BackupCompletion(request.Status, request.FailureCode, artifact, destinations), cancellationToken);
+        var mutationResult = await platformStore.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken), new BackupCompletion(request.Status, request.FailureCode, artifact, destinations), cancellationToken);
         if (mutationResult == BackupMutationResult.Accepted && probeTrigger is not null)
         {
             var connectionIds = destinations

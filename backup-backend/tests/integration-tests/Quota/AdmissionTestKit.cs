@@ -74,7 +74,7 @@ internal static class AdmissionTestKit
         return (await world.RunStore().CreateJobAsync(job, default))!;
     }
 
-    public static async Task<BackupRun> StartAsync(PostgreSqlBackupRunStore store, BackupJob job, string key, DateTimeOffset at)
+    public static async Task<BackupRun> StartAsync(RunStoreFacade store, BackupJob job, string key, DateTimeOffset at)
     {
         var result = await store.StartRunAsync(job.TenantId, job.Id, key, at, default);
         Assert.Equal(BackupStartOutcome.Started, result.Outcome);
@@ -82,7 +82,7 @@ internal static class AdmissionTestKit
     }
 
     /// <summary>Claims the agent's next attempt and starts it, as an agent does.</summary>
-    public static async Task<BackupClaim> ClaimStartedAsync(PostgreSqlBackupRunStore store, StoreAgent agent, DateTimeOffset at)
+    public static async Task<BackupClaim> ClaimStartedAsync(RunStoreFacade store, StoreAgent agent, DateTimeOffset at)
     {
         var claim = await BackupStoreHarness.ClaimAsync(store, agent, at);
         Assert.NotNull(claim);
@@ -90,7 +90,7 @@ internal static class AdmissionTestKit
         return claim!;
     }
 
-    public static async Task FailNextAsync(PostgreSqlBackupRunStore store, StoreAgent agent, string code, DateTimeOffset at)
+    public static async Task FailNextAsync(RunStoreFacade store, StoreAgent agent, string code, DateTimeOffset at)
     {
         var claim = await ClaimStartedAsync(store, agent, at);
         await BackupStoreHarness.CompleteAsync(store, claim, BackupStoreHarness.Failed(code), at.AddSeconds(5));

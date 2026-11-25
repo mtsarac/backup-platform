@@ -21,7 +21,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
 
     public async Task<EnrollmentPolicyState?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
@@ -36,7 +36,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
     {
         for (var attempt = 1; ; attempt++)
         {
-            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var context = PlatformOperationsDbContext.Create(options);
             if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
             {
                 return null;
@@ -56,7 +56,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
             }
             if (previous != isEnabled)
             {
-                context.AuditEvents.Add(AuditEvent.Record(now, actor, actorKind, AuditActions.EnrollmentPolicyChanged, tenantId,
+                context.RecordAudit(AuditEvent.Record(now, actor, actorKind, AuditActions.EnrollmentPolicyChanged, tenantId,
                     "tenant", tenantId.Value.ToString("D"), new Dictionary<string, object?> { ["previousEnabled"] = previous, ["enabled"] = isEnabled }));
             }
             try
@@ -73,9 +73,9 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
 
     public async Task AddTokenAsync(EnrollmentToken token, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         context.EnrollmentTokens.Add(token);
-        context.AuditEvents.Add(AuditEvent.Record(
+        context.RecordAudit(AuditEvent.Record(
             token.CreatedAt, token.CreatedBy, AuditActorKind.UserAdmin, AuditActions.AgentEnrollmentTokenCreated, token.TenantId,
             "agent_enrollment_token", token.Id.ToString("D"),
             new Dictionary<string, object?> { ["expiresAt"] = token.ExpiresAt, ["result"] = "created" }));
@@ -84,7 +84,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
 
     public async Task<IReadOnlyList<EnrollmentToken>> ListActiveTokensAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.EnrollmentTokens.AsNoTracking()
             .Where(token => token.TenantId == tenantId && token.ConsumedAt == null && token.RevokedAt == null && token.ExpiresAt > now)
             .OrderByDescending(token => token.CreatedAt).ThenBy(token => token.Id)
@@ -95,7 +95,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
     {
         for (var attempt = 1; ; attempt++)
         {
-            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var context = PlatformOperationsDbContext.Create(options);
             var token = await context.EnrollmentTokens.SingleOrDefaultAsync(
                 row => row.Id == tokenId && row.TenantId == tenantId, cancellationToken);
             if (token is null || token.ConsumedAt is not null || token.RevokedAt is not null)
@@ -103,7 +103,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
                 return false;
             }
             token.Revoke(actor, now);
-            context.AuditEvents.Add(AuditEvent.Record(
+            context.RecordAudit(AuditEvent.Record(
                 now, actor, AuditActorKind.UserAdmin, AuditActions.AgentEnrollmentTokenRevoked, tenantId,
                 "agent_enrollment_token", tokenId.ToString("D"),
                 new Dictionary<string, object?> { ["result"] = "revoked" }));
@@ -121,13 +121,13 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
 
     public async Task<EnrollmentToken?> FindTokenAsync(Guid tokenId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.EnrollmentTokens.AsNoTracking().SingleOrDefaultAsync(token => token.Id == tokenId, cancellationToken);
     }
 
     public async Task<EnrollmentToken?> FindTenantTokenAsync(TenantId tenantId, Guid tokenId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.EnrollmentTokens.AsNoTracking().SingleOrDefaultAsync(
             token => token.Id == tokenId && token.TenantId == tenantId, cancellationToken);
     }
@@ -135,7 +135,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
     public async Task<EnrollmentCommit> EnrollAsync(
         Guid tokenId, TenantId tenantId, Agent agent, AgentCredential credential, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var token = await context.EnrollmentTokens.SingleOrDefaultAsync(
             row => row.Id == tokenId && row.TenantId == tenantId, cancellationToken);
@@ -146,7 +146,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
         token.Consume(agent.Id, now);
         context.Agents.Add(agent);
         context.AgentCredentials.Add(credential);
-        context.AuditEvents.Add(AuditEvent.Record(
+        context.RecordAudit(AuditEvent.Record(
             now, UserId.System, AuditActorKind.System, AuditActions.AgentEnrolled, tenantId,
             "agent", agent.Id.ToString(),
             new Dictionary<string, object?>

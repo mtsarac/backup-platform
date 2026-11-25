@@ -122,7 +122,7 @@ public sealed class ManagedServiceBoundaryTests(DependencyGraphFixture fixture) 
 
     [Theory]
     [InlineData("BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore")]
-    [InlineData("BackupPlatform.Infrastructure.Backups.PostgreSqlBackupScheduleStore")]
+    [InlineData("BackupPlatform.Infrastructure.Backups.PostgreSqlBackupSchedulePlatformStore")]
     public void BackupStoresTakeTheAdmissionPolicyInterface(string store)
     {
         var infrastructure = fixture.Graphs["Release"]["BackupPlatform.Infrastructure"];

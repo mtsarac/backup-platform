@@ -40,7 +40,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
         var clock = new MutableClock(BackupStoreHarness.T0);
-        var service = new ReplicaRepairService(setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(setup.RepairStore, setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
         var started = await service.StartRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default);
         var destination = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, "sftp", setup.Sftp.Id.ToString("D"))!;
         var deleting = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -58,7 +58,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             var oldKey = await deleting.Task.WaitAsync(deadline.Token);
             clock.Advance(TimeSpan.FromMinutes(11));
             await setup.RepairStore.RecoverStaleRepairsAsync(clock.GetUtcNow(), TimeSpan.Zero, deadline.Token);
-            var replacement = await new PostgreSqlReplicaRepairStore(World.Options()).ClaimOperationAsync(
+            var replacement = await new ReplicaRepairStoreFacade(World.Options()).ClaimOperationAsync(
                 setup.Agent.TenantId, started.Operation.Id, Guid.NewGuid(), "takeover", clock.GetUtcNow(), TimeSpan.FromMinutes(10), deadline.Token);
             Assert.NotNull(replacement);
             destination.ShouldFailVerify = false;
@@ -104,7 +104,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         destination.Storage[source.Key] = foreign;
         await setup.RepairStore.RecoverStaleRepairsAsync(clock.GetUtcNow(), TimeSpan.Zero, default);
         destination.BeforePut = key => destination.Storage[key.Value] = foreign;
-        var service = new ReplicaRepairService(setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(setup.RepairStore, setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
         var result = await service.ExecuteRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, operation.Id);
         Assert.Equal("Failed", result!.Status);
         Assert.Equal(ReplicaRepairFailureCodes.TargetConflict, result.FailureCode);
@@ -129,7 +129,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         operation.Claim(token, "writing", now, TimeSpan.FromMinutes(10));
         operation.SetTargetIntent(setup.Artifact.Replicas.First().Id, $"target-{operation.Id:N}.bak");
         Assert.True((await setup.RepairStore.CreateOperationAsync(operation, default)).Allowed);
-        var retention = new PostgreSqlBackupRetentionStore(World.Options());
+        var retention = new RetentionStoreFacade(World.Options());
         var activity = (await retention.GetAttemptActivityAsync([setup.Artifact.AttemptId], default))[setup.Artifact.AttemptId];
         Assert.False(activity.AttemptIsLive);
         Assert.False(activity.RunIsActive);
@@ -249,7 +249,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     {
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
         var clock = new MutableClock(BackupStoreHarness.T0);
-        var service = new ReplicaRepairService(setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(setup.RepairStore, setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
         var started = await service.StartRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default);
         var destination = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, "sftp", setup.Sftp.Id.ToString("D"))!;
         var writing = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -266,7 +266,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             var oldKey = await writing.Task.WaitAsync(deadline.Token);
             clock.Advance(TimeSpan.FromMinutes(11));
             await setup.RepairStore.RecoverStaleRepairsAsync(clock.GetUtcNow(), TimeSpan.Zero, deadline.Token);
-            var retention = new PostgreSqlBackupRetentionStore(World.Options());
+            var retention = new RetentionStoreFacade(World.Options());
             var claims = await retention.ClaimDueDeletionsAsync("old-target-cleanup", clock.GetUtcNow(), TimeSpan.FromMinutes(1), 500, deadline.Token);
             foreach (var claim in claims.Where(c => c.Key == oldKey))
             {
@@ -341,7 +341,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var before = await World.StoredUsageAsync(setup.Agent.TenantId);
         var fault = new ConflictProjectionFault();
         var options = new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>(World.Options()).AddInterceptors(fault).Options;
-        await Assert.ThrowsAsync<IOException>(() => new PostgreSqlReplicaRepairStore(options)
+        await Assert.ThrowsAsync<IOException>(() => new ReplicaRepairStoreFacade(options)
             .FailTargetConflictAsync(operation.TenantId, operation.Id, operation.LeaseToken.Value, now, default));
         Assert.True(fault.Triggered);
         await using (var context = fixture.CreatePlatformContext())

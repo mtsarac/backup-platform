@@ -554,7 +554,7 @@ public sealed class ShareRevocationCancellationIntegrationTests(PostgreSqlFixtur
             var http2 = new DefaultHttpContext { RequestAborted = abortCts.Token };
             http2.Response.Body = new AbortOnWriteStream(abortCts);
             using var scope2 = scenario.World.Factory.Services.CreateScope();
-            await scope2.ServiceProvider.GetRequiredService<DownloadStreamer>().StreamAsync(http2, session2);
+            await scope2.ServiceProvider.ForTenant(session2.TenantId).GetRequiredService<DownloadStreamer>().StreamAsync(http2, session2);
             Assert.Equal(0, registry.Count);
             Assert.False(registry.ContainsSession(id2));
         }
@@ -588,7 +588,7 @@ public sealed class ShareRevocationCancellationIntegrationTests(PostgreSqlFixtur
             var http4 = new DefaultHttpContext();
             http4.Response.Body = new MemoryStream();
             using var scope4 = scenario.World.Factory.Services.CreateScope();
-            await scope4.ServiceProvider.GetRequiredService<DownloadStreamer>().StreamAsync(http4, session4);
+            await scope4.ServiceProvider.ForTenant(session4.TenantId).GetRequiredService<DownloadStreamer>().StreamAsync(http4, session4);
             Assert.Equal(StatusCodes.Status409Conflict, http4.Response.StatusCode);
             Assert.Equal(0, registry.Count);
             Assert.False(registry.ContainsSession(id4));

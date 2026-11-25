@@ -73,9 +73,8 @@ public sealed record BackupJobUpdate(string Name, AgentId AgentId, BackupConfigu
     Action<BackupJob>? ApplyUnderLock = null);
 
 /// <summary>
-/// All mutations are atomic, ownership-filtered and durably committed before returning. Retries and concurrency limits live
-/// entirely in the database: a retry is a row (RetryPending + NextAttemptAt) and a slot is a Leased/Running attempt, so neither
-/// depends on process memory.
+/// The run and job operations of the request's tenant. The implementation runs on the filtered tenant context, so a tenant never reaches another's rows.
+/// All mutations are atomic and durably committed before returning; their audit rows commit with them. Agent and worker flows are <see cref="IBackupRunPlatformStore"/>.
 /// </summary>
 public interface IBackupRunStore
 {
@@ -96,6 +95,18 @@ public interface IBackupRunStore
     /// <summary>Operator retry: a new attempt on the same run, immediately, within the policy's attempt budget. Not related to the manual-start Idempotency-Key.</summary>
     Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
     Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
+}
+
+/// <summary>
+/// Agent- and worker-driven run flows, unfiltered by tenant (the caller names the tenant from the agent's identity or the row it works on).
+/// All mutations are atomic, ownership-filtered and durably committed before returning. Retries and concurrency limits live
+/// entirely in the database: a retry is a row (RetryPending + NextAttemptAt) and a slot is a Leased/Running attempt, so neither
+/// depends on process memory.
+/// </summary>
+public interface IBackupRunPlatformStore
+{
+    /// <summary>The job of a tenant the caller already names (scheduler wake-ups and sweeps); a tenant request reads it through <see cref="IBackupRunStore"/>.</summary>
+    Task<BackupJob?> GetJobAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken);
     Task<IReadOnlyList<TransferCheckpoint>> GetCheckpointsAsync(TenantId tenantId, Guid attemptId, CancellationToken cancellationToken);
     Task<TenantId?> FindRunTenantAsync(Guid runId, CancellationToken cancellationToken);
     /// <summary>

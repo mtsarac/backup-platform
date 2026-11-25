@@ -21,13 +21,13 @@ public sealed class ScheduledAdmissionIntegrationTests(PostgreSqlFixture fixture
     private readonly QuotaWorld _world = new(fixture);
     private readonly ScheduleKit _kit = new(fixture);
 
-    private sealed record Scheduled(StoreAgent Agent, BackupJob Job, CountingAdmission Admission, PostgreSqlBackupScheduleStore Store);
+    private sealed record Scheduled(StoreAgent Agent, BackupJob Job, CountingAdmission Admission, ScheduleStoreFacade Store);
 
     /// <summary>A tenant with a hourly scheduled job (30 minute grace) whose evaluations go through a counting wrapper of the real admission.</summary>
     private async Task<Scheduled> ScheduleAsync(BackupOverlapPolicy overlap = BackupOverlapPolicy.Queue, bool subscribe = true)
     {
         var agent = await _world.AgentAsync(subscribe: subscribe);
-        await new PostgreSqlStorageConnectionStore(_world.Options(), TimeProvider.System, NullLogger<PostgreSqlStorageConnectionStore>.Instance)
+        await new StorageConnectionStoreFacade(_world.Options(), TimeProvider.System)
             .ListAsync(agent.TenantId, default);
         var job = await _kit.AddJobAsync(agent, overlap: overlap);
         var admission = new CountingAdmission(_world.Admission());

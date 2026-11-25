@@ -29,7 +29,7 @@ public sealed record StorageSweepReport(
 /// </para>
 /// </summary>
 public sealed class BackupStorageSweeper(
-    IBackupRetentionStore store, IBackupStorageResolver storages, BackupRetentionOptions options, TimeProvider time, ILogger<BackupStorageSweeper> logger)
+    IBackupRetentionPlatformStore store, IBackupStorageResolver storages, BackupRetentionOptions options, TimeProvider time, ILogger<BackupStorageSweeper> logger)
 {
     private const int ChunkSize = 200;
 

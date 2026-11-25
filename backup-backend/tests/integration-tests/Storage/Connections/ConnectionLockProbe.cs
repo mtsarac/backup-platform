@@ -7,7 +7,7 @@ using BackupPlatform.Storage;
 namespace BackupPlatform.IntegrationTests.Storage.Connections;
 
 /// <summary>Only coordinates requests; every lookup, lock, mutation and audit still uses the real PostgreSQL store.</summary>
-internal sealed class ConnectionLockProbe(IStorageConnectionStore store) : IStorageConnectionStore, IDisposable
+internal sealed class ConnectionLockProbe(IStorageConnectionPlatformStore store) : IStorageConnectionPlatformStore, IStorageConnectionStore, IDisposable
 {
     private readonly ManualResetEventSlim _release = new(false);
     private Guid _target;

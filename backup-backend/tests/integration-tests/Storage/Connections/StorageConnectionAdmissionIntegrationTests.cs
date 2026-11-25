@@ -39,7 +39,7 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
         await _world.Quota.RunStore().UpdateJobAsync(agent.TenantId, job.Id,
             new BackupJobUpdate(job.Name, job.AgentId, BackupStoreHarness.Configuration("smb", BackupStorageExecutionLocation.Backend, target.Id), null, null), default);
         var admission = new CountingAdmission(_world.Quota.Admission());
-        var store = new PostgreSqlBackupRunStore(_world.Quota.Options(), admission, flags: new FeatureFlags(key => key == Features.Smb.Key ? false : true));
+        var store = new RunStoreFacade(_world.Quota.Options(), admission, flags: new FeatureFlags(key => key == Features.Smb.Key ? false : true));
 
         var result = await store.StartRunAsync(agent.TenantId, job.Id, "smb-disabled", ConnectionWorld.Now, default);
 

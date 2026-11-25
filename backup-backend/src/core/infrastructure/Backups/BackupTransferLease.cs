@@ -58,13 +58,13 @@ public sealed class BackupTransferLeaseService(DbContextOptions<PlatformDbContex
 
     private async Task<bool> TryAcquireAsync(long lockId, Guid owner, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+        await using var context = PlatformOperationsDbContext.Create(dbOptions);
         return await BackupTransferLeases.TryTakeAsync(context, lockId, owner, _timing.Ttl, cancellationToken).ConfigureAwait(false);
     }
 
     internal async Task<bool> RenewAsync(long lockId, Guid owner, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+        await using var context = PlatformOperationsDbContext.Create(dbOptions);
         var seconds = _timing.Ttl.TotalSeconds;
         return await context.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE backup_transfer_leases SET \"ExpiresAt\" = clock_timestamp() + make_interval(secs => {seconds}) WHERE \"LockId\" = {lockId} AND \"OwnerId\" = {owner}",
@@ -76,7 +76,7 @@ public sealed class BackupTransferLeaseService(DbContextOptions<PlatformDbContex
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
         {
-            await using var context = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+            await using var context = PlatformOperationsDbContext.Create(dbOptions);
             await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM backup_transfer_leases WHERE \"LockId\" = {lockId} AND \"OwnerId\" = {owner}", timeout.Token).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)

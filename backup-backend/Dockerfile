@@ -36,7 +36,7 @@ RUN dotnet tool restore
 RUN dotnet publish src/hosts/api/BackupPlatform.Api.csproj -c Release -o /app/publish
 
 ENV BACKUP_PLATFORM_CONNECTION_STRING="Host=dummy"
-RUN dotnet ef migrations bundle --project src/core/infrastructure --startup-project src/core/infrastructure -o /app/publish/efbundle --no-build --configuration Release
+RUN dotnet ef migrations bundle --context PlatformDbContext --project src/core/infrastructure --startup-project src/core/infrastructure -o /app/publish/efbundle --no-build --configuration Release
 
 # Build agent release packages (Windows zip & Linux tar.gz)
 RUN mkdir -p /app/publish/agent-dist && \

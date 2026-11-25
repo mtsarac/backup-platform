@@ -1,3 +1,7 @@
+using BackupPlatform.Application.Tenancy;
+using BackupPlatform.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using BackupPlatform.Infrastructure.Backups;
 using System.Net;
 using System.Text.Json;
 using BackupPlatform.Application.Backups;
@@ -186,7 +190,9 @@ public sealed class ScheduledBackupHostTests(PostgreSqlFixture database, ITestOu
     private static async Task<IReadOnlyList<BackupPlatform.Domain.Backups.BackupRun>> RunsAsync(BackupApiScenario scenario, Guid jobId)
     {
         await using var scope = scenario.World.Factory.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<IBackupRunStore>().ListRunsAsync(scenario.Setup.Tenant.Id, jobId, 100, default);
+        var store = new PostgreSqlBackupRunStore(scope.ServiceProvider.GetRequiredService<DbContextOptions<PlatformDbContext>>(),
+            new MutableTenantContext(scenario.Setup.Tenant.Id), AdmitAllBackupAdmission.Instance);
+        return await store.ListRunsAsync(scenario.Setup.Tenant.Id, jobId, 100, default);
     }
 
     private async Task<int> RunCountAsync(Guid jobId)

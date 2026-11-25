@@ -81,6 +81,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         services.AddLogging();
         services.AddScoped<ScopeLifetimeTracker>();
         services.AddScoped<IReplicaRepairStore>(_ => fakeStore);
+        services.AddScoped<IReplicaRepairPlatformStore>(_ => fakeStore);
         services.AddScoped<IBackupStorageResolver>(sp => new FakeStorageResolver(fakeProvider, sp));
         services.AddScoped<TimeProvider>(_ => TimeProvider.System);
         services.AddScoped<ReplicaRepairService>();
@@ -119,7 +120,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         var fakeStore = new FakeWorkerRepairStore(artifact, source, targetConnId);
         var resolver = new FakeStorageResolver(fakeProvider);
 
-        var service = new ReplicaRepairService(fakeStore, resolver, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(fakeStore, fakeStore, resolver, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance);
 
         // Manual repair API call creates durable operation
         var result = await service.StartRepairAsync(
@@ -137,6 +138,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         // Worker claims and executes through unified execution path
         var services = new ServiceCollection();
         services.AddSingleton<IReplicaRepairStore>(fakeStore);
+        services.AddSingleton<IReplicaRepairPlatformStore>(fakeStore);
         services.AddSingleton<IBackupStorageResolver>(resolver);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(service);
@@ -188,7 +190,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         };
 
         var resolver = new FakeStorageResolver(fakeProvider);
-        var service1 = new ReplicaRepairService(fakeStore, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service1 = new ReplicaRepairService(fakeStore, fakeStore, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var startResult = await service1.StartRepairAsync(Tenant, artifact.Id, new(StorageConnectionId: targetConnId), null, default);
         operationId = startResult.Operation!.Id;
@@ -251,6 +253,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IReplicaRepairStore>(fakeStore);
+        services.AddSingleton<IReplicaRepairPlatformStore>(fakeStore);
         services.AddSingleton<IBackupStorageResolver>(resolver);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ReplicaRepairService>();
@@ -347,7 +350,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         };
 
         var resolver = new FakeStorageResolver(fakeProvider);
-        var service = new ReplicaRepairService(fakeStore, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(fakeStore, fakeStore, resolver, time, NullLogger<ReplicaRepairService>.Instance);
         var startResult = await service.StartRepairAsync(Tenant, artifact.Id, new(StorageConnectionId: targetConnId), null, default);
         var opId = startResult.Operation!.Id;
 
@@ -368,7 +371,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         }
     }
 
-    private sealed class FakeWorkerRepairStore : IReplicaRepairStore
+    private sealed class FakeWorkerRepairStore : IReplicaRepairStore, IReplicaRepairPlatformStore
     {
         public ReplicaRepairOperation? CurrentOperation;
         private readonly BackupArtifact? _artifact;

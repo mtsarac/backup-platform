@@ -18,30 +18,36 @@ public sealed record TenantWrapKeyRetirement(TenantWrapKeyRetireOutcome Outcome,
 /// <summary>The key is not one of the tenant's, is retired, or does not open the wrapped DEK. Carries no key material.</summary>
 public sealed class TenantWrapKeyUnavailableException() : InvalidOperationException("The tenant wrap key is unavailable.");
 
-/// <summary>Tenant wrap keys (TWK). The private half never leaves this boundary except as the unwrapped DEK of a restore or a decrypted download.</summary>
-public interface ITenantWrapKeyStore
+/// <summary>Wrap-key use shared by the tenant's requests and the agent- and platform-driven flows; each passes its own store.</summary>
+public interface ITenantWrapKeyOperations
 {
     /// <summary>The tenant's Active key, created on first use.</summary>
     Task<TenantWrapPublicKey> EnsureActiveAsync(TenantId tenantId, CancellationToken cancellationToken);
-
     /// <summary>
     /// True when <paramref name="keyId"/> and <paramref name="version"/> are one and the same key of this tenant AND it can still seal or open artifacts (not Retired):
     /// a recipient naming a retired key would produce an artifact nobody can open through the backend.
     /// </summary>
     Task<bool> OwnsKeyAsync(TenantId tenantId, string keyId, int version, CancellationToken cancellationToken);
-
     /// <summary>
     /// Opens <paramref name="wrappedDek"/> with the tenant's private key and audits it against the operation that asked (ids only;
     /// <paramref name="targetType"/> is <c>restore_attempt</c> or <c>download</c>).
     /// Throws <see cref="TenantWrapKeyUnavailableException"/> for another tenant's key id, a Retired key, or a DEK the key does not open.
     /// </summary>
     Task<byte[]> UnwrapDekAsync(TenantId tenantId, string targetType, Guid targetId, string keyId, byte[] wrappedDek, CancellationToken cancellationToken);
-
     Task<IReadOnlyList<TenantWrapKeyView>> ListAsync(TenantId tenantId, CancellationToken cancellationToken);
+}
 
+/// <summary>Wrap keys of the request's tenant (filtered tenant context).</summary>
+public interface ITenantWrapKeyStore : ITenantWrapKeyOperations
+{
+
+}
+
+/// <summary>Wrap-key administration by the platform (rotation, retirement) and agent-driven use, unfiltered by tenant.</summary>
+public interface ITenantWrapKeyPlatformStore : ITenantWrapKeyOperations
+{
     /// <summary>The new key becomes Active and the previous Active one DecryptOnly, in one transaction with the audit (<c>tenant_wrap_key.rotated</c>).</summary>
     Task<TenantWrapKeyRotation> RotateAsync(TenantId tenantId, UserId actor, CancellationToken cancellationToken);
-
     /// <summary>
     /// Retires a DecryptOnly key and destroys its private half. The Active key is refused (rotate first): the tenant must always keep one key that seals new artifacts.
     /// Audited as <c>tenant_wrap_key.retired</c>.
@@ -66,14 +72,23 @@ public sealed class InvalidRecoveryKeyException(string code) : ArgumentException
     public string Code { get; } = code;
 }
 
-/// <summary>A tenant's optional recovery recipient (public key). Setting and removing are audited with the key id only.</summary>
-public interface ITenantRecoveryKeyStore
+/// <summary>Reading the tenant's recovery recipient, shared by the tenant's requests and the agent-driven claim.</summary>
+public interface ITenantRecoveryKeyReader
 {
     Task<TenantRecoveryKeyInfo?> GetAsync(TenantId tenantId, CancellationToken cancellationToken);
+}
 
+/// <summary>The recovery key of the request's tenant (filtered tenant context).</summary>
+public interface ITenantRecoveryKeyStore : ITenantRecoveryKeyReader
+{
     /// <summary>Validates and stores <paramref name="publicKeyPem"/> (replacing any earlier key, version + 1). <exception cref="InvalidRecoveryKeyException">The PEM is not a usable public key.</exception></summary>
     Task<TenantRecoveryKeyInfo> SetAsync(TenantId tenantId, UserId actor, string publicKeyPem, CancellationToken cancellationToken);
-
     /// <summary>False when there was none.</summary>
     Task<bool> RemoveAsync(TenantId tenantId, UserId actor, CancellationToken cancellationToken);
+}
+
+/// <summary>Reads the recovery recipient for agent-driven flows, unfiltered by tenant.</summary>
+public interface ITenantRecoveryKeyPlatformStore : ITenantRecoveryKeyReader
+{
+
 }

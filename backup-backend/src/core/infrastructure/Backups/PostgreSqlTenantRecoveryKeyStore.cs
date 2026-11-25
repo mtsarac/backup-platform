@@ -4,55 +4,16 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using BackupPlatform.Application.Tenancy;
 
 namespace BackupPlatform.Infrastructure.Backups;
 
-/// <summary>A tenant's optional recovery recipient: the public key only, one row per tenant, every change audited with the key id (never the key) in the same transaction.</summary>
-public sealed class PostgreSqlTenantRecoveryKeyStore(DbContextOptions<PlatformDbContext> options, TimeProvider time) : ITenantRecoveryKeyStore
+/// <summary>The recovery key of the request's tenant on the filtered context.</summary>
+public sealed class PostgreSqlTenantRecoveryKeyStore(DbContextOptions<PlatformDbContext> options, ITenantContext tenant, TimeProvider time) : ITenantRecoveryKeyStore
 {
-    public async Task<TenantRecoveryKeyInfo?> GetAsync(TenantId tenantId, CancellationToken cancellationToken)
-    {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var key = await context.TenantRecoveryKeys.AsNoTracking().SingleOrDefaultAsync(row => row.TenantId == tenantId, cancellationToken);
-        return key is null ? null : new TenantRecoveryKeyInfo(key.Version, key.KeyId, key.PublicKeySpki, key.CreatedAt);
-    }
+    private readonly TenantRecoveryKeyStoreCore core = new(tenantId => PlatformDbContext.ForTenant(options, tenant, tenantId), time);
 
-    public async Task<TenantRecoveryKeyInfo> SetAsync(TenantId tenantId, UserId actor, string publicKeyPem, CancellationToken cancellationToken)
-    {
-        var (spki, keyId) = RecoveryPublicKeyParser.Parse(publicKeyPem);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        // One writer per tenant: the unique TenantId index would otherwise turn two first-time sets into an error instead of an ordered replace.
-        var lockName = $"trk:{tenantId.Value:N}";
-        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockName}, 0))", cancellationToken);
-        var now = time.GetUtcNow();
-        var key = await context.TenantRecoveryKeys.SingleOrDefaultAsync(row => row.TenantId == tenantId, cancellationToken);
-        if (key is null)
-        {
-            key = new TenantRecoveryKey(Guid.NewGuid(), tenantId, 1, keyId, spki, actor, now);
-            context.TenantRecoveryKeys.Add(key);
-        }
-        else key.Replace(keyId, spki, actor, now);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.UserAdmin, AuditActions.TenantRecoveryKeySet, tenantId, "tenant_recovery_key",
-            key.Id.ToString("D"), new Dictionary<string, object?> { ["result"] = "succeeded", ["keyId"] = keyId, ["keyVersion"] = key.Version }));
-        await context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new TenantRecoveryKeyInfo(key.Version, key.KeyId, key.PublicKeySpki, key.CreatedAt);
-    }
-
-    public async Task<bool> RemoveAsync(TenantId tenantId, UserId actor, CancellationToken cancellationToken)
-    {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        var lockName = $"trk:{tenantId.Value:N}";
-        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockName}, 0))", cancellationToken);
-        var key = await context.TenantRecoveryKeys.SingleOrDefaultAsync(row => row.TenantId == tenantId, cancellationToken);
-        if (key is null) return false;
-        context.TenantRecoveryKeys.Remove(key);
-        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor, AuditActorKind.UserAdmin, AuditActions.TenantRecoveryKeyRemoved, tenantId, "tenant_recovery_key",
-            key.Id.ToString("D"), new Dictionary<string, object?> { ["result"] = "succeeded", ["keyId"] = key.KeyId, ["keyVersion"] = key.Version }));
-        await context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return true;
-    }
+    public Task<TenantRecoveryKeyInfo?> GetAsync(TenantId tenantId, CancellationToken cancellationToken) => core.GetAsync(tenantId, cancellationToken);
+    public Task<TenantRecoveryKeyInfo> SetAsync(TenantId tenantId, UserId actor, string publicKeyPem, CancellationToken cancellationToken) => core.SetAsync(tenantId, actor, publicKeyPem, cancellationToken);
+    public Task<bool> RemoveAsync(TenantId tenantId, UserId actor, CancellationToken cancellationToken) => core.RemoveAsync(tenantId, actor, cancellationToken);
 }

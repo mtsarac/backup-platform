@@ -49,7 +49,7 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
 
     public async Task RecordHeartbeatAsync(HeartbeatWrite write, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await context.Database.ExecuteSqlRawAsync(HeartbeatSql,
         [
             new NpgsqlParameter("agent", NpgsqlDbType.Uuid) { Value = write.AgentId.Value },
@@ -68,7 +68,7 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
     public async Task<bool> TouchAsync(
         AgentId agentId, TenantId tenantId, DateTimeOffset at, bool connected, TimeSpan coalescing, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var affected = await context.Database.ExecuteSqlRawAsync(TouchSql,
         [
             new NpgsqlParameter("agent", NpgsqlDbType.Uuid) { Value = agentId.Value },
@@ -83,7 +83,7 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
     public async Task<IReadOnlyList<AgentConnectivityListItem>> ListAsync(
         TenantId tenantId, DateTimeOffset now, TimeSpan offlineTimeout, AgentConnectivityFilter filter, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var cutoff = (now - offlineTimeout).ToUniversalTime();
         var query = from agent in context.Agents.AsNoTracking()
                     where agent.TenantId == tenantId
@@ -111,7 +111,7 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
 
     public async Task<AgentConnectivityListItem?> GetAsync(TenantId tenantId, AgentId agentId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var row = await (from agent in context.Agents.AsNoTracking()
                          where agent.TenantId == tenantId && agent.Id == agentId
                          join record in context.AgentConnectivity.AsNoTracking() on agent.Id equals record.AgentId into joined
@@ -130,7 +130,7 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
     public async Task<AgentConnectivitySummary> SummarizeAsync(
         TenantId tenantId, DateTimeOffset now, TimeSpan offlineTimeout, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var cutoff = (now - offlineTimeout).ToUniversalTime();
         var groups = await (from agent in context.Agents.AsNoTracking()
                             where agent.TenantId == tenantId
@@ -156,7 +156,7 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
         {
             return new Dictionary<AgentId, AgentStatus>();
         }
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var ids = agentIds.ToArray();
         var rows = await context.Agents.AsNoTracking()
             .Where(agent => ids.Contains(agent.Id))

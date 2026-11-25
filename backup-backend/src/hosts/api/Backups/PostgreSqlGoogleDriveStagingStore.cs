@@ -121,7 +121,7 @@ public sealed class PostgreSqlGoogleDriveStagingStore : BackgroundService, IGoog
     {
         using var directory = new GoogleDriveStagingDirectory(_basePath, _probe);
         var volumeId = _volumeId.Value;
-        await using var context = PlatformDbContext.CreateForPlatformOperations(_database);
+        await using var context = PlatformOperationsDbContext.Create(_database);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await LockAsync(context, cancellationToken);
         var now = await DatabaseNowAsync(context, cancellationToken);
@@ -183,7 +183,7 @@ public sealed class PostgreSqlGoogleDriveStagingStore : BackgroundService, IGoog
 
     private async Task<GoogleDriveStagingReservation> ReserveAsync(GoogleDriveStagingDirectory directory, long expectedLength, CancellationToken token)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(_database);
+        await using var context = PlatformOperationsDbContext.Create(_database);
         await using var transaction = await context.Database.BeginTransactionAsync(token);
         await LockAsync(context, token);
         var totals = await ReadTotalsAsync(context, token);
@@ -227,7 +227,7 @@ public sealed class PostgreSqlGoogleDriveStagingStore : BackgroundService, IGoog
 
     private async Task CheckPhysicalAsync(GoogleDriveStagingLease lease, GoogleDriveStagingReservation row, CancellationToken token)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(_database);
+        await using var context = PlatformOperationsDbContext.Create(_database);
         await using var transaction = await context.Database.BeginTransactionAsync(token);
         await LockAsync(context, token);
         var now = await DatabaseNowAsync(context, token);
@@ -241,7 +241,7 @@ public sealed class PostgreSqlGoogleDriveStagingStore : BackgroundService, IGoog
 
     private async Task RecordWrittenAsync(GoogleDriveStagingReservation row, long written, CancellationToken token)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(_database);
+        await using var context = PlatformOperationsDbContext.Create(_database);
         var updated = await context.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE google_drive_staging_reservations SET "WrittenBytes" = {written}
             WHERE "Id" = {row.Id} AND "LeaseToken" = {row.LeaseToken} AND "LeaseExpiresAt" > clock_timestamp()
@@ -251,7 +251,7 @@ public sealed class PostgreSqlGoogleDriveStagingStore : BackgroundService, IGoog
 
     private async Task<bool> RenewAsync(GoogleDriveStagingReservation row, CancellationToken token)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(_database);
+        await using var context = PlatformOperationsDbContext.Create(_database);
         return await context.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE google_drive_staging_reservations SET "LeaseExpiresAt" = clock_timestamp() + {_leaseDuration}
             WHERE "Id" = {row.Id} AND "LeaseToken" = {row.LeaseToken} AND "LeaseExpiresAt" > clock_timestamp()
@@ -260,7 +260,7 @@ public sealed class PostgreSqlGoogleDriveStagingStore : BackgroundService, IGoog
 
     private async ValueTask ReleaseAsync(GoogleDriveStagingReservation row)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(_database);
+        await using var context = PlatformOperationsDbContext.Create(_database);
         await using var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None);
         await LockAsync(context, CancellationToken.None);
         await context.GoogleDriveStagingReservations.Where(candidate => candidate.Id == row.Id && candidate.LeaseToken == row.LeaseToken)

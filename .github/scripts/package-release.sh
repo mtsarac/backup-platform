@@ -78,7 +78,7 @@ case "${component}" in
       dotnet tool restore >/dev/null
       # The design-time factory only requires the variable to exist; an idempotent script never connects.
       BACKUP_PLATFORM_CONNECTION_STRING='Host=unused;Database=unused' \
-        dotnet ef migrations script --idempotent --configuration Release \
+        dotnet ef migrations script --context PlatformDbContext --idempotent --configuration Release \
         --project src/core/infrastructure --output "${stage}/sql/migrations.sql" \
         -- -p:ContinuousIntegrationBuild=true >/dev/null
     )

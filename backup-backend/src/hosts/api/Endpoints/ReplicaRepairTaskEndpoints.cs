@@ -31,10 +31,10 @@ public static class ReplicaRepairTaskEndpoints
         repairs.MapPost("/cleanup-check", CleanupCheckAsync);
         repairs.MapPost("/complete", CompleteAsync);
         repairs.MapPost("/storage/source/access", (Guid operationId, HttpRequest request, ICurrentAgent agent, ReplicaRepairService service,
-            IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken) =>
+            IStorageConnectionPlatformStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken) =>
             AccessAsync(operationId, source: true, request, agent, service, connections, secrets, driveFactory, cancellationToken));
         repairs.MapPost("/storage/target/access", (Guid operationId, HttpRequest request, ICurrentAgent agent, ReplicaRepairService service,
-            IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken) =>
+            IStorageConnectionPlatformStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken) =>
             AccessAsync(operationId, source: false, request, agent, service, connections, secrets, driveFactory, cancellationToken));
         return endpoints;
     }
@@ -94,7 +94,7 @@ public static class ReplicaRepairTaskEndpoints
 
     /// <summary>Credentials for the one connection this repair is entitled to; the connection comes from the operation, never from the request.</summary>
     private static async Task<IResult> AccessAsync(Guid operationId, bool source, HttpRequest request, ICurrentAgent agent, ReplicaRepairService service,
-        IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+        IStorageConnectionPlatformStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader].FirstOrDefault(), out var lease) || lease == Guid.Empty)
             return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease header." });

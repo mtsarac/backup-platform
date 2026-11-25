@@ -110,6 +110,7 @@ public sealed record UpdateAuditRetentionRequest(int? RetentionDays);
 
 public sealed record AuditHistoryPruneResult(int AuditEventsRemoved, int DownloadSessionsRemoved, int SharesRemoved);
 
+/// <summary>Shares of the request's tenant on the filtered tenant context.</summary>
 public interface IBackupShareStore
 {
     Task<BackupShareCreateResult> CreateAsync(
@@ -121,7 +122,6 @@ public interface IBackupShareStore
         string? reason,
         DateTimeOffset now,
         CancellationToken cancellationToken);
-
     Task<BackupShareModifyResult> ExtendAsync(
         TenantId tenantId,
         Guid shareId,
@@ -130,7 +130,6 @@ public interface IBackupShareStore
         ExtendBackupShareRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken);
-
     Task<BackupShareModifyResult> RevokeAsync(
         TenantId tenantId,
         Guid shareId,
@@ -139,45 +138,55 @@ public interface IBackupShareStore
         string? reason,
         DateTimeOffset now,
         CancellationToken cancellationToken);
-
     Task<BackupShareView?> GetAsync(
         TenantId tenantId,
         Guid shareId,
         DateTimeOffset now,
         CancellationToken cancellationToken);
-
     Task<IReadOnlyList<BackupShareView>> ListAsync(
         TenantId tenantId,
         Guid? artifactId,
         DateTimeOffset now,
         CancellationToken cancellationToken);
+    /// <summary>The request's tenant only: <see cref="DownloadAttemptFilter.TenantId"/> names it, a filter without one lists nothing.</summary>
+    Task<PagedResult<DownloadAttemptView>> ListDownloadAttemptsAsync(
+        DownloadAttemptFilter filter,
+        ListQuery query,
+        CancellationToken cancellationToken);
+}
 
+/// <summary>Platform-wide share administration, audit retention and history pruning (unfiltered by tenant). <see cref="CreateAsync"/> is the platform administrator's share creation for a tenant's artifact.</summary>
+public interface IBackupSharePlatformStore
+{
+    Task<BackupShareCreateResult> CreateAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        UserId createdByUserId,
+        UserRole createdByRole,
+        TimeSpan duration,
+        string? reason,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<BackupShareView>> ListPlatformAsync(
         TenantId? tenantId,
         BackupShareStatus? status,
         DateTimeOffset now,
         CancellationToken cancellationToken);
-
     Task<BackupShareView?> GetPlatformAsync(
         Guid shareId,
         DateTimeOffset now,
         CancellationToken cancellationToken);
-
-    Task<PagedResult<DownloadAttemptView>> ListDownloadAttemptsAsync(
+    Task<PagedResult<DownloadAttemptView>> ListPlatformDownloadAttemptsAsync(
         DownloadAttemptFilter filter,
-        bool tenantScoped,
         ListQuery query,
         CancellationToken cancellationToken);
-
     Task<AuditRetentionSettingsView> GetAuditRetentionAsync(
         CancellationToken cancellationToken);
-
     Task<AuditRetentionSettingsView> SaveAuditRetentionAsync(
         int retentionDays,
         UserId actor,
         DateTimeOffset now,
         CancellationToken cancellationToken);
-
     Task<AuditHistoryPruneResult> PruneHistoryAsync(
         DateTimeOffset now,
         CancellationToken cancellationToken);

@@ -18,7 +18,7 @@ public sealed class TenantWrapKeyLifecycleIntegrationTests(PostgreSqlFixture fix
     private readonly InMemorySecretStore _secrets = new();
     private readonly UserId _admin = UserId.New();
 
-    private PostgreSqlTenantWrapKeyStore Store() => new(fixture.Options, _secrets, TimeProvider.System);
+    private TenantWrapKeyStoreFacade Store() => new(fixture.Options, _secrets, TimeProvider.System);
 
     private async Task<TenantId> TenantAsync()
     {

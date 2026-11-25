@@ -17,7 +17,7 @@ public sealed class AuditSealIntegrationTests(PostgreSqlFixture fixture) : IClas
             .AddInterceptors(new AuditSigningInterceptor("test-key", key.ExportPkcs8PrivateKeyPem())).Options;
         var record = AuditEvent.Record(DateTimeOffset.Parse("2026-10-21T10:00:00Z"), UserId.System, AuditActorKind.System,
             "test.sealed", null, "test", Guid.NewGuid().ToString("D"), new Dictionary<string, object?> { ["z"] = 1.25, ["a"] = "value" });
-        await using (var writer = PlatformDbContext.CreateForPlatformOperations(options))
+        await using (var writer = PlatformOperationsDbContext.Create(options))
         {
             writer.AuditEvents.Add(record);
             await writer.SaveChangesAsync();

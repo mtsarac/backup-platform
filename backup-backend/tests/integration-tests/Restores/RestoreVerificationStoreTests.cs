@@ -34,7 +34,7 @@ public sealed class RestoreVerificationStoreTests(PostgreSqlFixture fixture) : I
     private static RestoreCommand VerificationCommand(RestoreSeed seed, DateTimeOffset? now = null, string? key = null) =>
         Command(seed, key, now: now, databaseName: PlatformDatabaseNames.NewVerificationName()) with { Purpose = RestorePurpose.Verification };
 
-    private async Task<RestoreOperation> CreateVerificationAsync(RestoreSeed seed, PostgreSqlRestoreStore? store = null, DateTimeOffset? now = null)
+    private async Task<RestoreOperation> CreateVerificationAsync(RestoreSeed seed, RestoreStoreFacade? store = null, DateTimeOffset? now = null)
     {
         var result = await (store ?? _world.Store()).CreateAsync(VerificationCommand(seed, now), default);
         Assert.Equal(RestoreCreateOutcome.Created, result.Outcome);
@@ -246,7 +246,7 @@ public sealed class RestoreVerificationStoreTests(PostgreSqlFixture fixture) : I
 
     // ---- the rollback copy -------------------------------------------------------------------------------------------------
 
-    private async Task<RestoreOperation> ReplacedWithRollbackAsync(RestoreSeed seed, PostgreSqlRestoreStore store)
+    private async Task<RestoreOperation> ReplacedWithRollbackAsync(RestoreSeed seed, RestoreStoreFacade store)
     {
         var operation = await _world.CreateAsync(seed, store, At(0), mode: RestoreMode.ReplaceExistingDatabase, databaseName: "Sales");
         var claim = await RunToAsync(store, seed.Agent, At(1));

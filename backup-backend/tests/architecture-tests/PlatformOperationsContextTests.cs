@@ -16,19 +16,19 @@ public sealed class PlatformOperationsContextTests
         "core/infrastructure/Agents/PostgreSqlPlatformAgentStore.cs",
         "core/infrastructure/Backups/BackupTransferLease.cs",
         "core/infrastructure/Backups/PostgreSqlAgentReplicaDeletionStore.cs",
-        "core/infrastructure/Backups/PostgreSqlBackupHealthStore.cs",
-        "core/infrastructure/Backups/PostgreSqlBackupRetentionStore.cs",
-        "core/infrastructure/Backups/PostgreSqlBackupRunStore.cs",
-        "core/infrastructure/Backups/PostgreSqlBackupScheduleStore.cs",
-        "core/infrastructure/Backups/PostgreSqlBackupShareStore.cs",
+        "core/infrastructure/Backups/PostgreSqlBackupHealthPlatformStore.cs",
+        "core/infrastructure/Backups/PostgreSqlBackupRetentionPlatformStore.cs",
+        "core/infrastructure/Backups/PostgreSqlBackupRunPlatformStore.cs",
+        "core/infrastructure/Backups/PostgreSqlBackupSchedulePlatformStore.cs",
+        "core/infrastructure/Backups/PostgreSqlBackupSharePlatformStore.cs",
         "core/infrastructure/Backups/PostgreSqlJobCredentialClaims.cs",
         "core/infrastructure/Backups/PostgreSqlReplicaMissingReporter.cs",
-        "core/infrastructure/Backups/PostgreSqlReplicaRepairStore.cs",
-        "core/infrastructure/Backups/PostgreSqlTenantRecoveryKeyStore.cs",
-        "core/infrastructure/Backups/PostgreSqlTenantWrapKeyStore.cs",
-        "core/infrastructure/Backups/PostgreSqlUploadBandwidthStore.cs",
-        "core/infrastructure/Discovery/PostgreSqlDiscoveryStore.cs",
-        "core/infrastructure/Downloads/PostgreSqlDownloadStore.cs",
+        "core/infrastructure/Backups/PostgreSqlReplicaRepairPlatformStore.cs",
+        "core/infrastructure/Backups/PostgreSqlTenantRecoveryKeyPlatformStore.cs",
+        "core/infrastructure/Backups/PostgreSqlTenantWrapKeyPlatformStore.cs",
+        "core/infrastructure/Backups/PostgreSqlUploadBandwidthPlatformStore.cs",
+        "core/infrastructure/Discovery/PostgreSqlDiscoveryPlatformStore.cs",
+        "core/infrastructure/Downloads/PostgreSqlDownloadPlatformStore.cs",
         "core/infrastructure/Identity/PostgreSqlIdentityStore.cs",
         "core/infrastructure/Identity/PostgreSqlUserAccessStore.cs",
         "core/infrastructure/Identity/UserBootstrapper.cs",
@@ -40,13 +40,14 @@ public sealed class PlatformOperationsContextTests
         "core/infrastructure/Notifications/PostgreSqlNotificationObservationSource.cs",
         "core/infrastructure/Notifications/PostgreSqlNotificationStore.cs",
         "core/infrastructure/Persistence/PlatformDbContext.cs",
+        "core/infrastructure/Persistence/PlatformOperationsDbContext.cs",
         "core/infrastructure/Platform/PostgreSqlPlatformAdministrationStore.cs",
-        "core/infrastructure/Restores/PostgreSqlRestoreStore.cs",
+        "core/infrastructure/Restores/PostgreSqlRestorePlatformStore.cs",
         "core/infrastructure/Scheduling/SchedulingServiceCollectionExtensions.cs",
         "core/infrastructure/Secrets/PostgreSqlSecretCiphertextRepository.cs",
         "core/infrastructure/Storage/PostgreSqlStorageCapacitySnapshotStore.cs",
         "core/infrastructure/Storage/PostgreSqlStorageCapacityTaskQueue.cs",
-        "core/infrastructure/Storage/PostgreSqlStorageConnectionStore.cs",
+        "core/infrastructure/Storage/PostgreSqlStorageConnectionPlatformStore.cs",
         "core/infrastructure/Tenancy/PostgreSqlCentralAuthorizationService.cs",
         "hosts/api/Backups/EfGoogleDriveFileCatalog.cs",
         "hosts/api/Backups/GoogleDriveOAuthService.cs",
@@ -54,13 +55,54 @@ public sealed class PlatformOperationsContextTests
         "hosts/api/Backups/PostgreSqlGoogleDriveStagingStore.cs",
         "hosts/api/Databases/IdempotencyFingerprintKey.cs",
         "hosts/api/Downloads/ShareRevocationCancellationWorker.cs",
-        "hosts/api/Endpoints/AuditReportingEndpoints.cs",
+        "hosts/api/Endpoints/AgentLogIngestEndpoint.cs",
+        "hosts/api/Endpoints/AgentLogRetentionWorker.cs",
+        "hosts/api/Endpoints/AuditIntegrityEndpoint.cs",
         "hosts/api/Endpoints/UserNotificationEndpoints.cs",
         "hosts/api/Notifications/SecurityNotificationMailWorker.cs",
         "hosts/api/Push/InAppNotificationFanout.cs",
         "hosts/api/Security/LoginThrottle.cs",
         "hosts/api/Storage/StorageCapacityPeriodicProbeWorker.cs",
     ];
+
+    private static readonly string[] CompanionAllowed =
+    [
+        "core/infrastructure/Backups/BackupShareQueries.cs",
+        "core/infrastructure/Backups/PostgreSqlBackupShareStore.cs",
+        "core/infrastructure/Backups/ReplicaRepairStoreCore.cs",
+        "core/infrastructure/Discovery/DiscoveryStoreCore.cs",
+        "core/infrastructure/Persistence/PlatformDbContext.cs",
+        "core/infrastructure/Storage/StorageConnectionStoreCore.cs",
+    ];
+
+    private static bool UsesCompanion(string source) =>
+        source.Contains("PlatformCompanion", StringComparison.Ordinal)
+        || source.Contains("PlatformSide", StringComparison.Ordinal);
+
+    private static bool IsUnauthorizedCompanionAccess(string file, string source) =>
+        UsesCompanion(source) && !CompanionAllowed.Contains(file, StringComparer.Ordinal);
+
+    [Fact]
+    public void OnlyAllowListedFilesAccessThePlatformCompanion()
+    {
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../src"));
+        Assert.True(Directory.Exists(root), $"Source directory not found: {root}");
+        var users = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .Select(file => (File: Path.GetRelativePath(root, file).Replace('\\', '/'), Source: File.ReadAllText(file)))
+            .Where(item => UsesCompanion(item.Source)).ToArray();
+
+        Assert.Empty(users.Where(item => IsUnauthorizedCompanionAccess(item.File, item.Source)).Select(item => item.File));
+        Assert.Empty(CompanionAllowed.Except(users.Select(item => item.File)));
+    }
+
+    [Theory]
+    [InlineData("var platform = context.PlatformCompanion();")]
+    [InlineData("var platform = context.PlatformSide();")]
+    public void CompanionAccessIsDetectedWithoutNamingThePlatformContext(string source)
+    {
+        Assert.True(IsUnauthorizedCompanionAccess("core/infrastructure/Backups/TenantStore.cs", source));
+    }
 
     [Fact]
     public void OnlyAllowListedFilesOpenTheUnfilteredPlatformContext()
@@ -69,7 +111,7 @@ public sealed class PlatformOperationsContextTests
         Assert.True(Directory.Exists(root), $"Source directory not found: {root}");
         var users = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                && File.ReadAllText(file).Contains("CreateForPlatformOperations", StringComparison.Ordinal))
+                && File.ReadAllText(file).Contains("PlatformOperationsDbContext", StringComparison.Ordinal))
             .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
             .Order(StringComparer.Ordinal).ToArray();
 

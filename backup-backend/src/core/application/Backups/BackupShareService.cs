@@ -10,6 +10,7 @@ namespace BackupPlatform.Application.Backups;
 
 public sealed class BackupShareService(
     IBackupShareStore store,
+    IBackupSharePlatformStore platformStore,
     IUserAccessStore userStore,
     TimeProvider timeProvider)
 {
@@ -156,7 +157,7 @@ public sealed class BackupShareService(
         }
 
         var now = timeProvider.GetUtcNow();
-        return await store.CreateAsync(
+        return await platformStore.CreateAsync(
             tenantId,
             artifactId,
             actor,
@@ -173,7 +174,7 @@ public sealed class BackupShareService(
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        return await store.ListPlatformAsync(tenantId, status, now, cancellationToken);
+        return await platformStore.ListPlatformAsync(tenantId, status, now, cancellationToken);
     }
 
     public async Task<BackupShareView?> GetPlatformShareAsync(
@@ -181,27 +182,27 @@ public sealed class BackupShareService(
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        return await store.GetPlatformAsync(shareId, now, cancellationToken);
+        return await platformStore.GetPlatformAsync(shareId, now, cancellationToken);
     }
 
     public Task<PagedResult<DownloadAttemptView>> ListTenantDownloadAttemptsAsync(
         TenantId tenantId, DownloadAttemptFilter filter, ListQuery query, CancellationToken cancellationToken) =>
-        store.ListDownloadAttemptsAsync(filter with { TenantId = tenantId }, tenantScoped: true, query, cancellationToken);
+        store.ListDownloadAttemptsAsync(filter with { TenantId = tenantId }, query, cancellationToken);
 
     public Task<PagedResult<DownloadAttemptView>> ListPlatformDownloadAttemptsAsync(
         DownloadAttemptFilter filter, ListQuery query, CancellationToken cancellationToken) =>
-        store.ListDownloadAttemptsAsync(filter, tenantScoped: false, query, cancellationToken);
+        platformStore.ListPlatformDownloadAttemptsAsync(filter, query, cancellationToken);
 
     public Task<AuditRetentionSettingsView> GetAuditRetentionAsync(
         CancellationToken cancellationToken)
     {
-        return store.GetAuditRetentionAsync(cancellationToken);
+        return platformStore.GetAuditRetentionAsync(cancellationToken);
     }
 
     /// <summary>Null when the value is outside the allowed range. The caller is a PlatformAdmin (endpoint policy).</summary>
     public async Task<AuditRetentionSettingsView?> UpdateAuditRetentionAsync(UserId actor, int retentionDays, CancellationToken cancellationToken)
     {
         if (retentionDays is < PlatformAuditRetentionSettings.MinimumRetentionDays or > PlatformAuditRetentionSettings.MaximumRetentionDays) return null;
-        return await store.SaveAuditRetentionAsync(retentionDays, actor, timeProvider.GetUtcNow(), cancellationToken);
+        return await platformStore.SaveAuditRetentionAsync(retentionDays, actor, timeProvider.GetUtcNow(), cancellationToken);
     }
 }

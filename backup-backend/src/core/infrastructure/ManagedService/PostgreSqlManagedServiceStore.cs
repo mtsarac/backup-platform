@@ -44,7 +44,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
 
     public async Task<PagedResult<PlanView>> ListPlansAsync(bool? enabled, ListQuery query, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var plans = context.Plans.AsNoTracking().AsQueryable();
         if (enabled is { } only)
         {
@@ -64,7 +64,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
 
     public async Task<ManagedServiceChange<PlanView>> CreatePlanAsync(Plan plan, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (await context.Plans.AnyAsync(row => row.NormalizedName == plan.NormalizedName, cancellationToken))
         {
             return new(ManagedServiceOutcome.PlanNameTaken);
@@ -74,7 +74,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
             return new(referenceProblem);
         }
         context.Plans.Add(plan);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.PlanCreated, null,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.PlanCreated, null,
             ManagedServiceAuditActions.PlanTargetType, Id(plan.Id), new Dictionary<string, object?>
             {
                 ["name"] = plan.Name,
@@ -96,7 +96,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
     public async Task<ManagedServiceChange<PlanView>> UpdatePlanAsync(
         PlanId planId, string name, long? storageLimitBytes, string? quotaPolicyReference, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var plan = await context.Plans.SingleOrDefaultAsync(row => row.Id == planId, cancellationToken);
         if (plan is null)
         {
@@ -138,7 +138,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
                 details["previousQuotaPolicyReference"] = previousReference;
                 details["quotaPolicyReference"] = plan.QuotaPolicyReference;
             }
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.PlanChanged, null,
+            context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.PlanChanged, null,
                 ManagedServiceAuditActions.PlanTargetType, Id(plan.Id), details));
             try
             {
@@ -166,7 +166,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
     public async Task<ManagedServiceChange<PlanView>> SetPlanEnabledAsync(
         PlanId planId, bool enabled, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var plan = await context.Plans.SingleOrDefaultAsync(row => row.Id == planId, cancellationToken);
         if (plan is null)
         {
@@ -179,7 +179,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         var outcome = ManagedServiceOutcome.Unchanged;
         if (plan.SetEnabled(enabled, now))
         {
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin,
+            context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin,
                 enabled ? ManagedServiceAuditActions.PlanEnabled : ManagedServiceAuditActions.PlanDisabled, null,
                 ManagedServiceAuditActions.PlanTargetType, Id(plan.Id), new Dictionary<string, object?> { ["name"] = plan.Name }));
             try
@@ -197,7 +197,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
 
     public async Task<(bool TenantExists, SubscriptionRecord? Current)> GetCurrentSubscriptionAsync(TenantId tenantId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return (false, null);
@@ -216,7 +216,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
 
     public async Task<PagedResult<SubscriptionRecord>?> ListSubscriptionsAsync(TenantId tenantId, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
@@ -235,7 +235,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
     public async Task<ManagedServiceChange<SubscriptionAssignment>> AssignPlanAsync(
         TenantId tenantId, PlanId planId, StorageLimitOverride limitOverride, DateTimeOffset? endsAt, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await LockTenantAsync(context, tenantId, cancellationToken))
         {
@@ -298,7 +298,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         {
             details[key] = value;
         }
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin,
             superseded is null ? ManagedServiceAuditActions.SubscriptionAssigned : ManagedServiceAuditActions.SubscriptionChanged, tenantId,
             ManagedServiceAuditActions.SubscriptionTargetType, Id(subscription.Id), details));
         try
@@ -350,7 +350,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
     private async Task<ManagedServiceChange<SubscriptionRecord>> TransitionAsync(
         TenantId tenantId, UserId actor, DateTimeOffset now, string action, Func<TenantSubscription, Dictionary<string, object?>?> change, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await LockTenantAsync(context, tenantId, cancellationToken))
         {
@@ -389,7 +389,7 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
             {
                 details[key] = value;
             }
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, action, tenantId,
+            context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, action, tenantId,
                 ManagedServiceAuditActions.SubscriptionTargetType, Id(subscription.Id), details));
             try
             {

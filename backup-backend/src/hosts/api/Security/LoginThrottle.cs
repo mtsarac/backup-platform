@@ -25,7 +25,7 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
         var accountKey = AccountKey(account);
         var ipKey = IpKey(kind, ipAddress);
         var now = time.GetUtcNow();
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         var until = await db.LoginThrottleEntries.AsNoTracking()
             .Where(entry => entry.Kind == kind && entry.LockedUntil > now &&
                 ((accountKey != null && entry.Scope == "account" && entry.Identifier == accountKey) ||
@@ -41,7 +41,7 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
         var ipKey = IpKey(kind, ipAddress);
         var now = time.GetUtcNow();
         var expired = now - Retention;
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "LastFailureAt" <= {expired}""", cancellationToken);
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO login_throttle_entries ("Kind", "Scope", "Identifier", "Failures", "LastFailureAt", "LockedUntil")
@@ -62,7 +62,7 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
     {
         ValidateKind(kind);
         if (AccountKey(account) is not { } key) return;
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "Kind" = {kind} AND "Scope" = 'account' AND "Identifier" = {key}""", cancellationToken);
     }
 

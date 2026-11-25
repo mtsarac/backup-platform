@@ -103,7 +103,7 @@ public sealed class StorageCapacityPeriodicProbeWorker(
     {
         await using var scope = scopes.CreateAsyncScope();
         var options = scope.ServiceProvider.GetRequiredService<DbContextOptions<PlatformDbContext>>();
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         var probeService = scope.ServiceProvider.GetRequiredService<StorageCapacityProbeService>();
         var tasks = scope.ServiceProvider.GetRequiredService<IStorageCapacityTaskQueue>();
 

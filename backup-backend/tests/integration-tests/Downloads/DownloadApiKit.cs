@@ -29,7 +29,7 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
     public string Checksum => Convert.ToHexStringLower(SHA256.HashData(Bytes));
     public string Root => Backup.Root;
     public string ArtifactPath => Root + $"/backup-artifacts/{Accepted.ArtifactId}";
-    public PostgreSqlDownloadStore Store()
+    public DownloadStoreFacade Store()
     {
         var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(World.Database.ConnectionString).Options;
         return new(options, new BackupPlatform.Infrastructure.Tenancy.PostgreSqlCentralAuthorizationService(options));
@@ -88,7 +88,7 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
     public async Task<byte[]> EncryptAsync(string? sourceChecksum = null)
     {
         using var scope = World.Factory.Services.CreateScope();
-        var key = await scope.ServiceProvider.GetRequiredService<ITenantWrapKeyStore>().EnsureActiveAsync(Backup.Backup.Setup.Tenant.Id, default);
+        var key = await TenantWrapKeyStoreFacade.From(scope.ServiceProvider).EnsureActiveAsync(Backup.Backup.Setup.Tenant.Id, default);
         using var rsa = RSA.Create();
         rsa.ImportSubjectPublicKeyInfo(key.PublicKeySpki, out _);
         using var ciphertext = new MemoryStream();

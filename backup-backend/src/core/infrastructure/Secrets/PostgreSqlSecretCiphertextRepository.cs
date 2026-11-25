@@ -25,7 +25,7 @@ public sealed class PostgreSqlSecretCiphertextRepository(DbContextOptions<Platfo
     public async Task<string?> GetAsync(string name, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.Set<SecretCiphertextRecord>().AsNoTracking().Where(record => record.Name == name).Select(record => record.Ciphertext).SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -34,7 +34,7 @@ public sealed class PostgreSqlSecretCiphertextRepository(DbContextOptions<Platfo
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(ciphertext);
         var now = time.GetUtcNow().ToUniversalTime();
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await context.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO platform_secrets ("Name", "Ciphertext", "CreatedAt", "UpdatedAt") VALUES ({name}, {ciphertext}, {now}, {now})
             ON CONFLICT ("Name") DO UPDATE SET "Ciphertext" = EXCLUDED."Ciphertext", "UpdatedAt" = EXCLUDED."UpdatedAt"
@@ -44,7 +44,7 @@ public sealed class PostgreSqlSecretCiphertextRepository(DbContextOptions<Platfo
     public async Task<bool> DeleteAsync(string name, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM platform_secrets WHERE \"Name\" = {name}", cancellationToken) > 0;
     }
 }

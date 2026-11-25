@@ -46,29 +46,32 @@ public static class StorageRejections
 /// half-rotated secret.
 /// </remarks>
 public sealed class StorageConnectionService(
-    IStorageConnectionStore store, IStorageProviderCatalog catalog, ISecretStore secrets, IEnumerable<IStorageConnectionTester> testers, TimeProvider time,
+    IStorageConnectionStore tenantStore, IStorageConnectionPlatformStore platformStore, IStorageProviderCatalog catalog, ISecretStore secrets, IEnumerable<IStorageConnectionTester> testers, TimeProvider time,
     ILogger<StorageConnectionService> logger)
 {
     private readonly Dictionary<string, IStorageConnectionTester> _testers = testers.ToDictionary(tester => tester.ProviderType, StringComparer.Ordinal);
 
     public IReadOnlyList<StorageProviderDescriptor> Providers => catalog.Descriptors;
 
+    /// <summary>A tenant scope runs on the tenant store (the request's tenant context), the platform scope on the platform-operations store.</summary>
+    private IStorageConnectionOperations Store(StorageScope scope) => scope.IsPlatform ? platformStore : tenantStore;
+
     public async Task<IReadOnlyList<StorageConnectionView>?> ListAsync(StorageScope scope, TenantId tenantId, CancellationToken cancellationToken)
     {
         EnsureWithin(scope, tenantId);
-        var records = await store.ListAsync(tenantId, cancellationToken);
+        var records = await Store(scope).ListAsync(tenantId, cancellationToken);
         return records?.Select(record => ToView(scope, record)).ToList();
     }
 
     public async Task<PagedResult<StorageConnectionView>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken)
     {
-        var result = await store.SearchAsync(filter, query, cancellationToken);
+        var result = await platformStore.SearchAsync(filter, query, cancellationToken);
         return new PagedResult<StorageConnectionView>([.. result.Items.Select(record => ToView(StorageScope.Platform, record))], result.TotalCount, result.Page, result.PageSize);
     }
 
     public async Task<StorageConnectionView?> GetAsync(StorageScope scope, Guid id, CancellationToken cancellationToken)
     {
-        var record = await store.FindAsync(id, scope.TenantId, cancellationToken);
+        var record = await Store(scope).FindAsync(id, scope.TenantId, cancellationToken);
         return record is null ? null : ToView(scope, record);
     }
 
@@ -121,7 +124,7 @@ public sealed class StorageConnectionService(
         StorageConnectionResult result;
         try
         {
-            result = await store.CreateAsync(connection, descriptor.MaxConnectionsPerTenant, new StorageActor(actorId, scope.ActorKind), details, now, cancellationToken);
+            result = await Store(scope).CreateAsync(connection, descriptor.MaxConnectionsPerTenant, new StorageActor(actorId, scope.ActorKind), details, now, cancellationToken);
         }
         catch
         {
@@ -139,7 +142,7 @@ public sealed class StorageConnectionService(
         StorageScope scope, Guid id, UpdateStorageConnectionCommand command, UserId actorId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        var record = await store.FindAsync(id, scope.TenantId, cancellationToken);
+        var record = await Store(scope).FindAsync(id, scope.TenantId, cancellationToken);
         if (record is null)
         {
             return new(StorageConnectionOutcome.NotFound);
@@ -182,7 +185,7 @@ public sealed class StorageConnectionService(
                 return new(StorageConnectionOutcome.Rejected, Code: updateTest.Code ?? "rotation_test_failed");
         }
 
-        var result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
+        var result = await Store(scope).MutateAsync(id, scope.TenantId, (connection, now) =>
         {
             if (connection.ProviderType == StorageProviderTypes.Sftp && newConfiguration is not null
                 && (connection.SecretReference != expectedSecret || !SftpConnectionRules.SameConfiguration(connection.Configuration, expectedConfiguration)))
@@ -230,7 +233,7 @@ public sealed class StorageConnectionService(
     public async Task<StorageResult<StorageConnectionView>> SetSecretAsync(
         StorageScope scope, Guid id, IReadOnlyDictionary<string, string>? values, UserId actorId, CancellationToken cancellationToken)
     {
-        var record = await store.FindAsync(id, scope.TenantId, cancellationToken);
+        var record = await Store(scope).FindAsync(id, scope.TenantId, cancellationToken);
         if (record is null)
         {
             return new(StorageConnectionOutcome.NotFound);
@@ -269,7 +272,7 @@ public sealed class StorageConnectionService(
         StorageConnectionResult result;
         try
         {
-            result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
+            result = await Store(scope).MutateAsync(id, scope.TenantId, (connection, now) =>
             {
                 if (connection.ProviderType == StorageProviderTypes.Sftp
                     && (connection.SecretReference != expectedReference || !SftpConnectionRules.SameConfiguration(connection.Configuration, expectedConfiguration)))
@@ -301,7 +304,7 @@ public sealed class StorageConnectionService(
 
     public async Task<StorageResult<StorageConnectionView>> ClearSecretAsync(StorageScope scope, Guid id, UserId actorId, CancellationToken cancellationToken)
     {
-        var record = await store.FindAsync(id, scope.TenantId, cancellationToken);
+        var record = await Store(scope).FindAsync(id, scope.TenantId, cancellationToken);
         if (record is null)
         {
             return new(StorageConnectionOutcome.NotFound);
@@ -314,7 +317,7 @@ public sealed class StorageConnectionService(
             return new(StorageConnectionOutcome.Rejected, Code: Refusal(scope));
         }
         string? removed = null;
-        var result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
+        var result = await Store(scope).MutateAsync(id, scope.TenantId, (connection, now) =>
         {
             removed = connection.DetachSecret(now);
             var configurationChanged = false;
@@ -336,7 +339,7 @@ public sealed class StorageConnectionService(
 
     public async Task<StorageResult<StorageConnectionView>> SetEnabledAsync(StorageScope scope, Guid id, bool enabled, UserId actorId, CancellationToken cancellationToken)
     {
-        var record = await store.FindAsync(id, scope.TenantId, cancellationToken);
+        var record = await Store(scope).FindAsync(id, scope.TenantId, cancellationToken);
         if (record is null)
         {
             return new(StorageConnectionOutcome.NotFound);
@@ -345,7 +348,7 @@ public sealed class StorageConnectionService(
         {
             return new(StorageConnectionOutcome.Rejected, Code: Refusal(scope));
         }
-        var result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
+        var result = await Store(scope).MutateAsync(id, scope.TenantId, (connection, now) =>
         {
             // Recheck under the tenant lock: a prefetched view must not let an enable race bypass a platform lock.
             if (!scope.IsPlatform && enabled && connection.AdministrativelyDisabled)
@@ -364,7 +367,7 @@ public sealed class StorageConnectionService(
 
     public async Task<StorageResult<StorageConnectionView>> DeleteAsync(StorageScope scope, Guid id, UserId actorId, CancellationToken cancellationToken)
     {
-        var record = await store.FindAsync(id, scope.TenantId, cancellationToken);
+        var record = await Store(scope).FindAsync(id, scope.TenantId, cancellationToken);
         if (record is null)
         {
             return new(StorageConnectionOutcome.NotFound);
@@ -375,7 +378,7 @@ public sealed class StorageConnectionService(
         {
             return new(StorageConnectionOutcome.Rejected, Code: Refusal(scope));
         }
-        var result = await store.DeleteAsync(id, scope.TenantId, new StorageActor(actorId, scope.ActorKind), time.GetUtcNow(), cancellationToken);
+        var result = await Store(scope).DeleteAsync(id, scope.TenantId, new StorageActor(actorId, scope.ActorKind), time.GetUtcNow(), cancellationToken);
         if (result.Outcome == StorageConnectionOutcome.Changed)
         {
             await DiscardAsync(result.Record?.Connection.SecretReference);
@@ -385,7 +388,7 @@ public sealed class StorageConnectionService(
 
     public async Task<StorageResult<StorageTestOutcome>> TestAsync(StorageScope scope, Guid id, UserId actorId, CancellationToken cancellationToken)
     {
-        var record = await store.FindAsync(id, scope.TenantId, cancellationToken);
+        var record = await Store(scope).FindAsync(id, scope.TenantId, cancellationToken);
         if (record is null)
         {
             return new(StorageConnectionOutcome.NotFound);
@@ -400,7 +403,7 @@ public sealed class StorageConnectionService(
         var testedSecret = record.Connection.SecretReference;
         var test = await RunTesterAsync(record.Connection, descriptor, cancellationToken);
         watch.Stop();
-        StorageConnectionResult result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
+        StorageConnectionResult result = await Store(scope).MutateAsync(id, scope.TenantId, (connection, now) =>
         {
             IReadOnlyDictionary<string, string> currentConfiguration = connection.Configuration;
             IReadOnlyDictionary<string, string> expectedConfiguration = testedConfiguration;

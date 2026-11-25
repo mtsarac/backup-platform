@@ -53,7 +53,7 @@ public sealed class AgentReplicaRepairUnitTests
         public string TargetKeyFor(BackupReplica source) =>
             $"{source.Key[..source.Key.LastIndexOf('/')]}/{ManagedBackupLayout.RepairFileName(Operation.Id, LeaseToken)}";
 
-        public ReplicaRepairService Service => new(Store, null!, Time, NullLogger<ReplicaRepairService>.Instance);
+        public ReplicaRepairService Service => new(Store, Store, null!, Time, NullLogger<ReplicaRepairService>.Instance);
 
         public Task<BackupMutationResult> CompleteAsync(ReplicaRepairCompletionRequest request, Func<Guid, string, TaskStorageCatalogRecord, CancellationToken, Task>? save = null) =>
             Service.CompleteForAgentAsync(Agent, Operation.Id, request with { LeaseToken = request.LeaseToken == Guid.Empty ? LeaseToken : request.LeaseToken },
@@ -495,7 +495,7 @@ public sealed class AgentReplicaRepairUnitTests
 
     private sealed record Orphan(string Provider, Guid Connection, string Key, long Size, string Checksum, bool Quarantine);
 
-    private sealed class FakeStore : IReplicaRepairStore
+    private sealed class FakeStore : IReplicaRepairStore, IReplicaRepairPlatformStore
     {
         public ReplicaRepairOperation? Operation;
         public BackupArtifact? Artifact;

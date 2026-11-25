@@ -15,7 +15,7 @@ namespace BackupPlatform.IntegrationTests;
 internal sealed record StoreAgent(TenantId TenantId, AgentId AgentId);
 
 /// <summary>
-/// Drives the real <see cref="PostgreSqlBackupRunStore"/> against a real database. Every <see cref="Store"/> call returns an
+/// Drives the real <see cref="RunStoreFacade"/> against a real database. Every <see cref="Store"/> call returns an
 /// instance with its own <see cref="DbContextOptions{TContext}"/>, i.e. what a separate backend process would hold. Times are
 /// passed explicitly so lifecycles are deterministic; jitter is always 0.
 /// </summary>
@@ -36,7 +36,7 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
     // (each of which holds one while it waits for a lock) and could starve the rest of the suite; racers beyond this simply queue for the pool.
     private const int MaxStoreConnections = 16;
 
-    public PostgreSqlBackupRunStore Store(BackupExecutionOptions? limits = null) => new(new DbContextOptionsBuilder<PlatformDbContext>()
+    public RunStoreFacade Store(BackupExecutionOptions? limits = null) => new(new DbContextOptionsBuilder<PlatformDbContext>()
         .UseNpgsql(new NpgsqlConnectionStringBuilder(Database.ConnectionString) { MaxPoolSize = MaxStoreConnections }.ConnectionString).Options, AdmitAllBackupAdmission.Instance, limits, () => 0);
 
     public static BackupExecutionOptions Limits(int agent = 1, int tenant = Unbounded, int global = Unbounded, Dictionary<string, int>? overrides = null) => new()
@@ -103,23 +103,23 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
     }
 
     /// <summary>Queues a run now and returns it; fails the test if the store did not start one.</summary>
-    public async Task<BackupRun> StartRunAsync(PostgreSqlBackupRunStore store, BackupJob job, string key, DateTimeOffset at)
+    public async Task<BackupRun> StartRunAsync(RunStoreFacade store, BackupJob job, string key, DateTimeOffset at)
     {
         var result = await store.StartRunAsync(job.TenantId, job.Id, key, at, default);
         Assert.Equal(BackupStartOutcome.Started, result.Outcome);
         return result.Run!;
     }
 
-    public static Task<BackupClaim?> ClaimAsync(PostgreSqlBackupRunStore store, StoreAgent agent, DateTimeOffset at) =>
+    public static Task<BackupClaim?> ClaimAsync(RunStoreFacade store, StoreAgent agent, DateTimeOffset at) =>
         store.ClaimNextAsync(agent.TenantId, agent.AgentId, at, Lease, default);
 
     public static BackupLeaseCommand Command(BackupClaim claim, DateTimeOffset at) => new(claim.Run.TenantId, claim.Run.AgentId,
         claim.Attempt.Id, claim.Attempt.LeaseToken!.Value, at) { SoftwareVersion = "1.0", ProtocolVersion = "1.0", Platform = "Linux" };
 
-    public static async Task StartAttemptAsync(PostgreSqlBackupRunStore store, BackupClaim claim, DateTimeOffset at) =>
+    public static async Task StartAttemptAsync(RunStoreFacade store, BackupClaim claim, DateTimeOffset at) =>
         Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(Command(claim, at), default));
 
-    public static async Task CompleteAsync(PostgreSqlBackupRunStore store, BackupClaim claim, Completion completion, DateTimeOffset at) =>
+    public static async Task CompleteAsync(RunStoreFacade store, BackupClaim claim, Completion completion, DateTimeOffset at) =>
         Assert.Equal(BackupMutationResult.Accepted, await store.CompleteAttemptAsync(Command(claim, at), completion, default));
 
     public static Completion Failed(string code) => new("Failed", code, null);

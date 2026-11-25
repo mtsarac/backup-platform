@@ -341,16 +341,16 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         Assert.Equal("Unavailable", BackupOrchestrator.ToView(run).Replication!.Status);
         await World.AssertUsedAsync(multi.Agent.TenantId, 200);
         await World.AssertNoDriftAsync(multi.Agent.TenantId);
-        var retention = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        var retention = new RetentionStoreFacade(World.Options());
         var first = await retention.ClaimDueDeletionsAsync("before-restart", T0, TimeSpan.FromMinutes(1), 10, default);
         Assert.Equal(2, first.Count);
         foreach (var deletion in first)
             Assert.True(await retention.FailDeletionAsync(deletion.ReplicaId, deletion.LeaseToken, T0, BackupDeleteFailureCodes.StorageUnavailable, T0.AddMinutes(1), default));
         await World.AssertUsedAsync(multi.Agent.TenantId, 200);
-        retention = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        retention = new RetentionStoreFacade(World.Options());
         var retry = await retention.ClaimDueDeletionsAsync("restarted", T0.AddMinutes(1), TimeSpan.FromMinutes(1), 10, default);
         Assert.Equal(first.Select(d => d.ReplicaId).Order(), retry.Select(d => d.ReplicaId).Order());
-        var recovered = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options())
+        var recovered = await new RetentionStoreFacade(World.Options())
             .ClaimDueDeletionsAsync("after-worker-crash", T0.AddMinutes(2), TimeSpan.FromMinutes(1), 10, default);
         Assert.Equal(2, recovered.Count);
         foreach (var stale in retry)
@@ -382,7 +382,7 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         var run = await ReloadAsync(multi, started.Id);
         Assert.Equal(2, run.CurrentAttempt.Artifacts.Single().Replicas.Count);
         await World.AssertUsedAsync(multi.Agent.TenantId, 200);
-        var retention = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        var retention = new RetentionStoreFacade(World.Options());
         Assert.DoesNotContain(await retention.ClaimDueDeletionsAsync("live", T0.AddMinutes(1), TimeSpan.FromMinutes(1), 100, default),
             deletion => deletion.TenantId == multi.Agent.TenantId);
         var expired = claim.Attempt.LeaseExpiresAt!.Value.AddSeconds(1);
@@ -395,7 +395,7 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         // A remote writer of the partial object still holds a live transfer lease on it.
         await using (var writer = fixture.CreatePlatformContext())
             await writer.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO backup_transfer_leases (\"LockId\",\"OwnerId\",\"ExpiresAt\") VALUES ({lockId}, {Guid.NewGuid()}, clock_timestamp() + interval '5 minutes')");
-        var restarted = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        var restarted = new RetentionStoreFacade(World.Options());
         var first = (await restarted.ClaimDueDeletionsAsync("restarted", expired, TimeSpan.FromMinutes(1), 100, default))
             .Where(deletion => deletion.TenantId == multi.Agent.TenantId).ToArray();
         Assert.Equal("google-drive", Assert.Single(first).StorageProvider);
@@ -440,7 +440,7 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         Assert.Equal("Degraded", BackupOrchestrator.ToView(run).Replication!.Status);
         await World.AssertUsedAsync(multi.Agent.TenantId, expectedBytes);
         await World.AssertNoDriftAsync(multi.Agent.TenantId);
-        var due = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options())
+        var due = await new RetentionStoreFacade(World.Options())
             .ClaimDueDeletionsAsync("cleanup", T0, TimeSpan.FromMinutes(1), 100, default);
         var deletion = Assert.Single(due, candidate => candidate.TenantId == multi.Agent.TenantId);
         Assert.Equal("google-drive", deletion.StorageProvider);

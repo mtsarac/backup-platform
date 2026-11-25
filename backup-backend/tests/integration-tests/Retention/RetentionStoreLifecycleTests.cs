@@ -350,7 +350,7 @@ public sealed class RetentionStoreLifecycleTests(PostgreSqlFixture fixture) : IC
         await AssertNothingToCancelAsync(store, backup, BackupReplicaStatus.Deleted, due + TimeSpan.FromMinutes(3));
     }
 
-    private async Task AssertNothingToCancelAsync(PostgreSqlBackupRetentionStore store, SeededBackup backup, BackupReplicaStatus expected, DateTimeOffset now)
+    private async Task AssertNothingToCancelAsync(RetentionStoreFacade store, SeededBackup backup, BackupReplicaStatus expected, DateTimeOffset now)
     {
         var result = await store.CancelDeleteAsync(backup.TenantId, backup.ArtifactId, now, default);
 

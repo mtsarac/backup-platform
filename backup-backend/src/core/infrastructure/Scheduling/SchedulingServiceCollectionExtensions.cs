@@ -28,6 +28,7 @@ public static class SchedulingServiceCollectionExtensions
             return options;
         });
         services.AddScoped<IBackupScheduleStore, PostgreSqlBackupScheduleStore>();
+        services.AddScoped<IBackupSchedulePlatformStore, PostgreSqlBackupSchedulePlatformStore>();
         services.AddScoped<BackupScheduleService>();
         services.AddQuartz(quartz =>
         {
@@ -58,7 +59,7 @@ public static class SchedulingServiceCollectionExtensions
 
     private static string ConnectionString(IServiceProvider provider)
     {
-        using var context = PlatformDbContext.CreateForPlatformOperations(provider.GetRequiredService<DbContextOptions<PlatformDbContext>>());
+        using var context = PlatformOperationsDbContext.Create(provider.GetRequiredService<DbContextOptions<PlatformDbContext>>());
         return context.Database.GetConnectionString() ?? throw new InvalidOperationException("The platform database connection string is required by the scheduler.");
     }
 }

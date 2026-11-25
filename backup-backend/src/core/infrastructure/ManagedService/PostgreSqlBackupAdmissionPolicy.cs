@@ -30,7 +30,7 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
     public async Task<BackupAdmissionDecision> AdmitNewRunAsync(BackupAdmissionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var decision = await DecideAsync(context, request, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -210,7 +210,7 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
 
     public async Task ReleaseAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await TenantUsageEngine.LockTenantAsync(context, tenantId, cancellationToken))
         {

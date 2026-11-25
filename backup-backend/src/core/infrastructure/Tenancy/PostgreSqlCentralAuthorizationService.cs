@@ -11,7 +11,7 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     public async Task<TenantAccess?> EvaluateTenantAccessAsync(UserId userId, TenantId tenantId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (user is null || user.IsDisabled)
         {
@@ -32,7 +32,7 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
 
     public async Task<bool> EvaluateContentAccessAsync(UserId userId, TenantId tenantId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (user is null || user.IsDisabled || user.Role == UserRole.PlatformAdmin)
         {
@@ -47,12 +47,12 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
 
     public async Task<bool> IsPlatformAdminAsync(UserId userId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && !u.IsManuallyDisabled && !u.IsSecurityDisabled && !u.IsNoMembershipDisabled && u.Role == UserRole.PlatformAdmin, cancellationToken);
     }
     public async Task<DownloadAuthorizationResult> EvaluateDownloadAccessAsync(UserId userId, TenantId tenantId, Guid artifactId, Guid? shareId, CancellationToken cancellationToken, bool allowExpiredShare = false)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (user is null || user.IsDisabled)
         {
@@ -113,7 +113,7 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
 
     public async Task<bool> EvaluateAgentSessionAccessAsync(TenantId tenantId, Guid artifactId, Guid? shareId, UserId sessionUserId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (shareId is { } sid)
         {
             var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == sessionUserId, cancellationToken);
