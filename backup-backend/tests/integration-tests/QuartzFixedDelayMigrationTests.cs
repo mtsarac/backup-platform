@@ -33,7 +33,7 @@ public sealed class QuartzFixedDelayMigrationTests(PostgreSqlFixture fixture) : 
     [Fact]
     public async Task UpgradePreservesExistingQuartzJobsAndTriggers()
     {
-        await using var context = fixture.CreatePlatformContext();
+        await using var context = fixture.CreateMigrationContext();
         var migrator = context.GetService<IMigrator>();
         await context.Database.ExecuteSqlRawAsync("""
             DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261125000000_QuartzFixedDelay';
