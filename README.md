@@ -80,11 +80,21 @@ Launch the full platform (PostgreSQL, ASP.NET Core API, and React frontend) in c
 # 1. Copy sample environment
 cp .env.example .env
 
-# 2. Start all services
+# 2. Set a unique POSTGRES_PASSWORD and BOOTSTRAP_ADMIN_PASSWORD in .env.
+#    Set PUBLIC_HOST to the host clients will use.
+
+# 3. Create the first PlatformAdmin (once per database)
+docker compose run --build --rm bootstrap
+
+# 4. Start all services
 docker compose up --build
 ```
 
-Access the web interface at `http://localhost:3000` (or your configured `PUBLIC_HOST`). The bootstrap platform administrator credentials are set via `BOOTSTRAP_ADMIN_LOGIN` and `BOOTSTRAP_ADMIN_PASSWORD` in `.env`.
+Open `https://localhost:5173` on the Docker host, or `https://<PUBLIC_HOST>:5173` from another machine (use `FRONTEND_PORT` if changed). The frontend generates a self-signed certificate; trust it only after verifying it for your environment.
+
+The bootstrap command reads `BOOTSTRAP_ADMIN_LOGIN`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_NAME`, and `BOOTSTRAP_ADMIN_EMAIL` from `.env`. Use a unique password of at least 12 characters and protect `.env`; the example credentials are public. It refuses to run if a PlatformAdmin already exists and does not change existing credentials. The bootstrap service is not started by normal `docker compose up`.
+
+This Compose stack is for local development: port 5174 currently serves plaintext HTTP, not a redirect. Do not expose it or use it to sign in. The nginx proxy at `172.29.0.10` is trusted by the API on the dedicated Compose network; ensure the subnet does not overlap existing networks.
 
 > For native development (running .NET and Bun locally without containers) or launching the local E2E stack, consult [`backup-backend/README.md`](backup-backend/README.md) and [`scripts/README.md`](scripts/README.md).
 
