@@ -93,6 +93,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         Assert.False(attempt.GetProperty("retryable").GetBoolean());
         Assert.Equal("NotRetryable", detail.GetProperty("retry").GetProperty("state").GetString());
         Assert.Empty(attempt.GetProperty("artifacts").EnumerateArray());
+        Assert.Contains("\"code\":\"backup.stage_failed\"", await host.StopAndCaptureOutputAsync());
         Assert.Empty(Directory.GetFiles(host.StorageDirectory, "*", SearchOption.AllDirectories));
         output.WriteLine("Actual invalid database: Run Failed (NotRetryable) -> Attempt Failed / DatabaseNotFound; no artifact or storage output.");
     }

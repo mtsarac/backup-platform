@@ -62,7 +62,8 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             var run = await MsSqlManualAgentSmokeTests.StartRunAsync(tenant, jobId, "restore-source");
             await using var agentHost = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
             var backup = await WaitAsync(tenant, "backup-runs", run.GetProperty("id").GetGuid(), agentHost);
-            Assert.Equal("Succeeded", backup.GetProperty("status").GetString());
+            if (backup.GetProperty("status").GetString() != "Succeeded")
+                Assert.Fail($"Backup: {backup}\nAgent output:\n{await agentHost.StopAndCaptureOutputAsync()}");
             var artifact = Assert.Single(Assert.Single(backup.GetProperty("attempts").EnumerateArray()).GetProperty("artifacts").EnumerateArray());
             var artifactId = artifact.GetProperty("id").GetGuid();
             var replica = Assert.Single(artifact.GetProperty("replicas").EnumerateArray());
