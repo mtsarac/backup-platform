@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { english, realWorld, signIn, tenantUrl, watch, type RealWorld } from './support'
-import { getObject, objectExists, objectKey, putObject, removeObject, sha256 } from '../../s3-artifact'
+import { getObject, objectKey, putObject, removeObject, repairWithRealBytes, sha256 } from '../../s3-artifact'
 
 test.skip(process.env.E2E_STATE_FILE !== '.state-s5.json', 'Requires the isolated S5 stack; run e2e/s5-stack.sh and use its documented environment.')
 let w: RealWorld
@@ -14,7 +14,7 @@ const runUrl = (id: string) => tenantUrl(w.t, `/backup-runs/${id}`)
 async function openDownload(page: Page, runId: string) {
   await page.goto(runUrl(runId))
   await page.getByText('More', { exact: true }).click()
-  await page.getByRole('button', { name: 'Download', exact: true }).click()
+  await page.getByRole('tabpanel', { name: 'Summary' }).getByRole('button', { name: 'Download', exact: true }).click()
 }
 
 test.describe('download with SHA-256 check', () => {
@@ -64,9 +64,7 @@ test.describe('download integrity', () => {
     const a = await w.mk()
     for (const d of w.dests) removeObject(d.bucket, objectKey(w.t, d, a.key))
     await signIn(page, w.t.account)
-    await page.goto(runUrl(a.runId))
-    await page.getByText('More', { exact: true }).click()
-    await page.getByRole('button', { name: 'Download', exact: true }).click()
+    await openDownload(page, a.runId)
     await expect(page.getByText(/Download unavailable|No verified replicas/i).first()).toBeVisible()
   })
 })
@@ -83,6 +81,7 @@ test.describe('replica repair', () => {
   }
 
   test('lost copy: run shows partial replication, and the repair button is offered on the artifact', async ({ page }) => {
+    test.setTimeout(90_000)
     const a = await loseReplica()
     await signIn(page, w.t.account)
     await page.goto(runUrl(a.runId))
@@ -90,17 +89,19 @@ test.describe('replica repair', () => {
     for (const b of await page.getByRole('button', { name: 'Technical details' }).all()) await b.click()
     await page.getByRole('button', { name: 'Repair' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Start repair' }).click()
-    await expect(page.getByText('Replica repaired and verified successfully.')).toBeVisible({ timeout: 60_000 })
-    expect(sha256(getObject(w.dests[1].bucket, objectKey(w.t, w.dests[1], a.key)))).toBe(a.checksum)
+    const repaired = await repairWithRealBytes(w.t, w.agent, w.dests)
+    await expect(page.getByText('The replica was successfully repaired and verified.')).toBeVisible({ timeout: 60_000 })
+    expect(sha256(getObject(repaired.targetDest.bucket, objectKey(w.t, repaired.targetDest, repaired.targetKey)))).toBe(a.checksum)
   })
 
-  test.fixme('repair started through the API is reflected by the UI once finished: both replicas verified, bytes restored', async ({ page }) => {
-    // S3-to-S3 repair requires a lifecycle-capable agent; the protocol fixture does not claim repair tasks.
+  test('repair started through the API is reflected by the UI once finished: both replicas verified, bytes restored', async ({ page }) => {
+    test.fail(true, 'https://github.com/mtsarac/backup-platform/issues/294')
+    test.setTimeout(90_000)
     const a = await loseReplica()
     const op = await w.t.tenant.call('POST', `/api/tenants/${w.t.tenantId}/backup-artifacts/${a.artifactId}/repairs`, { storageProvider: 's3', storageConnectionId: w.dests[1].connectionId }, [200, 201, 202])
+    const repaired = await repairWithRealBytes(w.t, w.agent, w.dests)
     await expect.poll(async () => (await w.t.tenant.call('GET', `/api/tenants/${w.t.tenantId}/backup-artifacts/${a.artifactId}/repairs/${op.id}`)).status, { timeout: 60_000 }).toBe('Succeeded')
-    expect(objectExists(w.dests[1].bucket, objectKey(w.t, w.dests[1], a.key))).toBe(true)
-    expect(sha256(getObject(w.dests[1].bucket, objectKey(w.t, w.dests[1], a.key)))).toBe(a.checksum)
+    expect(sha256(getObject(repaired.targetDest.bucket, objectKey(w.t, repaired.targetDest, repaired.targetKey)))).toBe(a.checksum)
     await signIn(page, w.t.account)
     await page.goto(runUrl(a.runId))
     await expect(page.getByText('Replication healthy').first()).toBeVisible()

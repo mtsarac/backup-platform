@@ -29,6 +29,8 @@ Reset to empty: `docker compose -p bpe2e --env-file .env.e2e down -v && bash e2e
 
 `up.sh` creates `.env.e2e` from `.env.example` (POSTGRES_PORT=5433 because 5432 is often taken). Other ports/host: edit `.env.e2e`.
 
+`up.sh` enables the API's Windows VSS feature for the E2E stack; VSS also requires agent-side configuration and privileges as described in S4.
+
 ### Writing tests
 
 - `import { state } from '../state'` gives tenant id and accounts. Sign in through the UI (`tests/auth.spec.ts` has `signIn`).

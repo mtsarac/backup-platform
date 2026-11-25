@@ -2,6 +2,7 @@
 // The MinIO is the bps5 stack's own (e2e/s5-stack.sh). The protocol agent only reports the upload; the bytes are put by `mc`.
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { type ProtocolAgent, type S5Tenant } from './protocol-agent'
 
 const container = process.env.E2E_MINIO_CONTAINER ?? 'bps5-minio'
@@ -75,4 +76,37 @@ export async function runWithRealBytes(t: S5Tenant, agent: ProtocolAgent, jobId:
   const list = await t.tenant.call('GET', `/api/tenants/${t.tenantId}/backup-artifacts?pageSize=50`)
   const artifact = list.items.find((a: any) => a.runId === backup.runId)
   return { runId: backup.runId as string, artifactId: artifact.id as string, key, payload, checksum }
+}
+
+export async function repairWithRealBytes(t: S5Tenant, agent: ProtocolAgent, dests: S3Dest[]) {
+  const deadline = Date.now() + 60_000
+  while (Date.now() < deadline) {
+    const response = await agent.ctx.get('/api/agent/tasks', { headers: agent.headers })
+    if (!response.ok()) throw new Error(`poll -> ${response.status()} ${await response.text()}`)
+    const poll: { tasks: { type: string; replicaRepair?: { operationId: string; leaseToken: string; sizeBytes: number; checksum: string; target: { storageConnectionId: string }; sources: { replicaId: string; storageConnectionId: string; storageKey: string }[] } }[] } = await response.json()
+    const task = poll.tasks.find(item => item.type === 'replica-repair')?.replicaRepair
+    if (!task) { await sleep(500); continue }
+    const source = task.sources.find(item => dests.some(d => d.connectionId === item.storageConnectionId))
+    const sourceDest = dests.find(d => d.connectionId === source?.storageConnectionId)
+    const targetDest = dests.find(d => d.connectionId === task.target.storageConnectionId)
+    if (!source || !sourceDest || !targetDest) throw new Error('repair destination or source is not in the fixture')
+    const file = `repair_${task.operationId.replaceAll('-', '')}_${task.leaseToken.replaceAll('-', '')}_FULL.bak`
+    const targetKey = `${source.storageKey.slice(0, source.storageKey.lastIndexOf('/') + 1)}${file}`
+    const post = async (path: string, data: object) => {
+      const r = await agent.ctx.post(`/api/agent/replica-repairs/${task.operationId}/${path}`, { headers: { ...agent.headers, 'X-Task-Lease': task.leaseToken }, data })
+      if (!r.ok()) throw new Error(`${path} -> ${r.status()} ${await r.text()}`)
+    }
+    const leaseToken = task.leaseToken
+    await post('lease', { leaseToken })
+    await post('pin', { leaseToken, sourceReplicaId: source.replicaId, targetKey })
+    await post('storage/source/access', { leaseToken })
+    await post('storage/target/access', { leaseToken })
+    const bytes = getObject(sourceDest.bucket, objectKey(t, sourceDest, source.storageKey))
+    if (bytes.length !== task.sizeBytes || sha256(bytes) !== task.checksum) throw new Error('repair source checksum mismatch')
+    putObject(targetDest.bucket, objectKey(t, targetDest, targetKey), bytes)
+    if (sha256(getObject(targetDest.bucket, objectKey(t, targetDest, targetKey))) !== task.checksum) throw new Error('repair target checksum mismatch')
+    await post('complete', { leaseToken, outcome: 'succeeded', verificationMethod: 'ReadBack' })
+    return { targetDest, targetKey }
+  }
+  throw new Error('no repair task received')
 }
