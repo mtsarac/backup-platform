@@ -26,9 +26,7 @@ public sealed class SetAgentEnrollmentRequest
 }
 
 /// <summary>
-/// Browser-authenticated control-plane routes. Platform enrollment operations require PlatformAdmin independently
-/// of membership. Tenant routes resolve membership first: safe agent reads require Viewer, while enrollment policy,
-/// tokens and agent revocation require the administrator role for that same tenant.
+/// Platform enrollment operations require PlatformAdmin. Tenant agent operations require tenant access.
 /// </summary>
 public static class AgentAdministrationEndpoints
 {
