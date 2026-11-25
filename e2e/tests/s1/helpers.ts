@@ -94,7 +94,7 @@ const nowStep = () => Math.floor(Date.now() / 30000)
 /** A code the server accepts: it refuses replays, so each call uses a step later than any this secret already produced (waits for the clock if needed; the server tolerates one step of skew). */
 export async function totp(secretBase32: string): Promise<string> {
   for (;;) {
-    const step = Math.max(nowStep() - 1, (lastUsedStep.get(secretBase32) ?? 0) + 1)
+    const step = Math.max(nowStep(), (lastUsedStep.get(secretBase32) ?? 0) + 1)
     if (step <= nowStep() + 1) { lastUsedStep.set(secretBase32, step); return totpAtStep(secretBase32, step) }
     await new Promise((r) => setTimeout(r, 1000))
   }

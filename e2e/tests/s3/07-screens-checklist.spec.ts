@@ -173,6 +173,7 @@ test('wizard and form validations explain missing or invalid fields clearly', as
 
   if (instanceId) {
     await page.goto(tenantPath(tenantId, `discovery/instances/${instanceId}`))
+    await expect(page.getByLabel('Veritabanı kullanıcı adı')).toBeAttached()
     const change = page.getByText('Giriş bilgilerini değiştir', { exact: true })
     if (await change.isVisible()) await change.click()
     await page.getByLabel('Veritabanı kullanıcı adı').fill('')
