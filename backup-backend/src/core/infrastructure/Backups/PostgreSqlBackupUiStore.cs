@@ -12,16 +12,16 @@ namespace BackupPlatform.Infrastructure.Backups;
 
 public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> options, ITenantContext tenant) : IBackupUiStore
 {
-    public async Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, bool includeArchived, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, bool includeArchived, CancellationToken cancellationToken, bool? enabled = null)
     {
         await using var context = new PlatformDbContext(options, tenant);
-        return await ReadJobsAsync(context, tenantId, null, includeArchived, now, cancellationToken);
+        return await ReadJobsAsync(context, tenantId, null, includeArchived, enabled, now, cancellationToken);
     }
 
     public async Task<BackupJobView?> GetJobAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = new PlatformDbContext(options, tenant);
-        return (await ReadJobsAsync(context, tenantId, jobId, true, now, cancellationToken)).SingleOrDefault();
+        return (await ReadJobsAsync(context, tenantId, jobId, true, null, now, cancellationToken)).SingleOrDefault();
     }
 
     /// <summary>One run as the list sorts and searches it: the columns it shows, none of the run itself.</summary>
@@ -83,7 +83,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
     {
         await using var context = new PlatformDbContext(options, tenant);
         // A revoked computer's jobs no longer protect anything: they stay in the job list, not in the dashboard numbers.
-        var jobs = (await ReadJobsAsync(context, tenantId, null, false, now, cancellationToken)).Where(job => !job.AgentRevoked).ToList();
+        var jobs = (await ReadJobsAsync(context, tenantId, null, false, null, now, cancellationToken)).Where(job => !job.AgentRevoked).ToList();
         var runs = context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId);
         var since = now.AddHours(-24);
         var active = await runs.CountAsync(run => run.Status == BackupStatus.Pending || run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running || run.Status == BackupStatus.RetryPending || run.Status == BackupStatus.Paused, cancellationToken);
@@ -150,9 +150,15 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         return query;
     }
 
-    private static async Task<IReadOnlyList<BackupJobView>> ReadJobsAsync(PlatformDbContext context, TenantId tenantId, Guid? jobId, bool includeArchived, DateTimeOffset now, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<BackupJobView>> ReadJobsAsync(PlatformDbContext context, TenantId tenantId, Guid? jobId, bool includeArchived, bool? enabled, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var rows = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && (jobId == null || job.Id == jobId) && (includeArchived || job.ArchivedAt == null))
+        var query = context.BackupJobs.AsNoTracking()
+            .Where(job => job.TenantId == tenantId && (jobId == null || job.Id == jobId) && (includeArchived || job.ArchivedAt == null));
+        if (enabled is true)
+            query = query.Where(job => job.Enabled && !context.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked));
+        else if (enabled is false)
+            query = query.Where(job => !job.Enabled || context.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked));
+        var rows = await query
             .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new
             {
                 Job = job,

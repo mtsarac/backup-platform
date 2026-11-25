@@ -1,6 +1,8 @@
 using System.Net;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Tenancy;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BackupPlatform.IntegrationTests;
 
@@ -298,6 +300,88 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         finally
         {
             foreach (var response in responses) response.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task JobListEnabledFilterExecutesInSqlAcrossActiveDisabledArchivedAndRevokedJobs()
+    {
+        var sqlLog = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        await using var world = await AgentWorld.CreateAsync(fixture, configureServices: services =>
+        {
+            services.AddScoped<BackupPlatform.Application.Backups.IBackupUiStore>(provider =>
+            {
+                var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>()
+                    .UseNpgsql(fixture.ConnectionString)
+                    .AddInterceptors(new SqlCaptureInterceptor(sqlLog))
+                    .Options;
+                return new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(options, provider.GetRequiredService<BackupPlatform.Application.Tenancy.ITenantContext>());
+            });
+        });
+        var setup = await world.CreateTenantAsync();
+        var activeAgent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup));
+        var revokedAgent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup, Guid.NewGuid()));
+        var root = BackupApiScenario.RootOf(setup);
+
+        async Task<Guid> CreateJobAsync(Guid agentId, string name)
+        {
+            using var res = await setup.Admin.SendAsync(HttpMethod.Post, root + "/backup-jobs", new
+            {
+                name,
+                agentId,
+                configuration = new BackupExecutionConfiguration { Database = name, Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalAgent }
+            });
+            Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+            return AgentWorld.ReadJson(res).GetProperty("id").GetGuid();
+        }
+
+        var enabledJob = await CreateJobAsync(activeAgent.AgentId, "job_enabled");
+        var disabledJob = await CreateJobAsync(activeAgent.AgentId, "job_disabled");
+        var archivedJob = await CreateJobAsync(activeAgent.AgentId, "job_archived");
+        var revokedAgentJob = await CreateJobAsync(revokedAgent.AgentId, "job_revoked_agent");
+
+        using (var r = await setup.Admin.SendAsync(HttpMethod.Post, root + $"/backup-jobs/{disabledJob}/disable")) Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        using (var r = await setup.Admin.SendAsync(HttpMethod.Delete, root + $"/backup-jobs/{archivedJob}")) Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
+        using (var r = await setup.Admin.SendAsync(HttpMethod.Post, root + $"/agents/{revokedAgent.AgentId}/revoke")) Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
+
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            var stored = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(db.BackupJobs, row => row.Id == revokedAgentJob);
+            stored.Enable(DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        while (sqlLog.TryDequeue(out _)) { }
+        using var enabledRes = await setup.Admin.GetAsync(root + "/backup-jobs?enabled=true");
+        Assert.Equal(HttpStatusCode.OK, enabledRes.StatusCode);
+        Assert.Equal([enabledJob], AgentWorld.ReadJson(enabledRes).EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray());
+        var enabledSql = Assert.Single(sqlLog, text => text.Contains("b.\"ArchivedAt\"", StringComparison.Ordinal));
+        var whereClause = enabledSql[enabledSql.IndexOf("WHERE", StringComparison.Ordinal)..];
+        Assert.Contains("b.\"Enabled\"", whereClause, StringComparison.Ordinal);
+
+        while (sqlLog.TryDequeue(out _)) { }
+        using var disabledRes = await setup.Admin.GetAsync(root + "/backup-jobs?enabled=false");
+        Assert.Equal(HttpStatusCode.OK, disabledRes.StatusCode);
+        Assert.Equal([disabledJob, revokedAgentJob], AgentWorld.ReadJson(disabledRes).EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray());
+        var disabledSql = Assert.Single(sqlLog, text => text.Contains("b.\"ArchivedAt\"", StringComparison.Ordinal));
+        Assert.Contains("b.\"Enabled\"", disabledSql[disabledSql.IndexOf("WHERE", StringComparison.Ordinal)..], StringComparison.Ordinal);
+
+        using var enabledWithArchived = await setup.Admin.GetAsync(root + "/backup-jobs?enabled=true&includeArchived=true");
+        Assert.Equal(HttpStatusCode.OK, enabledWithArchived.StatusCode);
+        Assert.Equal([enabledJob], AgentWorld.ReadJson(enabledWithArchived).EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray());
+
+        using var disabledWithArchived = await setup.Admin.GetAsync(root + "/backup-jobs?enabled=false&includeArchived=true");
+        Assert.Equal(HttpStatusCode.OK, disabledWithArchived.StatusCode);
+        Assert.Equal([archivedJob, disabledJob, revokedAgentJob], AgentWorld.ReadJson(disabledWithArchived).EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray());
+    }
+
+    private sealed class SqlCaptureInterceptor(System.Collections.Concurrent.ConcurrentQueue<string> log) : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        public override System.Threading.Tasks.ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            log.Enqueue(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 }
