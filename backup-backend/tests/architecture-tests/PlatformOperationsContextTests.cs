@@ -65,6 +65,45 @@ public sealed class PlatformOperationsContextTests
         "hosts/api/Storage/StorageCapacityPeriodicProbeWorker.cs",
     ];
 
+    private static readonly string[] CompanionAllowed =
+    [
+        "core/infrastructure/Backups/BackupShareQueries.cs",
+        "core/infrastructure/Backups/PostgreSqlBackupShareStore.cs",
+        "core/infrastructure/Backups/ReplicaRepairStoreCore.cs",
+        "core/infrastructure/Discovery/DiscoveryStoreCore.cs",
+        "core/infrastructure/Persistence/PlatformDbContext.cs",
+        "core/infrastructure/Storage/StorageConnectionStoreCore.cs",
+    ];
+
+    private static bool UsesCompanion(string source) =>
+        source.Contains("PlatformCompanion", StringComparison.Ordinal)
+        || source.Contains("PlatformSide", StringComparison.Ordinal);
+
+    private static bool IsUnauthorizedCompanionAccess(string file, string source) =>
+        UsesCompanion(source) && !CompanionAllowed.Contains(file, StringComparer.Ordinal);
+
+    [Fact]
+    public void OnlyAllowListedFilesAccessThePlatformCompanion()
+    {
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../src"));
+        Assert.True(Directory.Exists(root), $"Source directory not found: {root}");
+        var users = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .Select(file => (File: Path.GetRelativePath(root, file).Replace('\\', '/'), Source: File.ReadAllText(file)))
+            .Where(item => UsesCompanion(item.Source)).ToArray();
+
+        Assert.Empty(users.Where(item => IsUnauthorizedCompanionAccess(item.File, item.Source)).Select(item => item.File));
+        Assert.Empty(CompanionAllowed.Except(users.Select(item => item.File)));
+    }
+
+    [Theory]
+    [InlineData("var platform = context.PlatformCompanion();")]
+    [InlineData("var platform = context.PlatformSide();")]
+    public void CompanionAccessIsDetectedWithoutNamingThePlatformContext(string source)
+    {
+        Assert.True(IsUnauthorizedCompanionAccess("core/infrastructure/Backups/TenantStore.cs", source));
+    }
+
     [Fact]
     public void OnlyAllowListedFilesOpenTheUnfilteredPlatformContext()
     {
