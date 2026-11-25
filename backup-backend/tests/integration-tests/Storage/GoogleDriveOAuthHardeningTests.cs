@@ -443,7 +443,7 @@ public sealed class GoogleDriveOAuthHardeningTests(PostgreSqlFixture fixture) : 
 
     private async Task<StorageConnection> SeedAsync(string reauthorizationRequired = "false")
     {
-        var tenant = new Tenant(TenantId.New(), "OAuth Hardening");
+        var tenant = new Tenant(TenantId.New(), $"OAuth Hardening {Guid.NewGuid():N}");
         var connection = new StorageConnection(Guid.NewGuid(), tenant.Id, "Drive", StorageProviderTypes.GoogleDrive,
             StorageOwnership.TenantManaged, "tenant", new Dictionary<string, string>
             {
