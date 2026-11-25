@@ -44,6 +44,23 @@ services:
       - api_dp_keys:/app/dp-keys
       - api_gdrive_staging:/app/gdrive-staging
 
+  bootstrap:
+    profiles: ["bootstrap"]
+    build:
+      context: ./backup-backend
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform_dev;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+      BACKUP_PLATFORM_BOOTSTRAP_LOGIN: ${BOOTSTRAP_ADMIN_LOGIN:-}
+      BACKUP_PLATFORM_BOOTSTRAP_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+      BACKUP_PLATFORM_BOOTSTRAP_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+    command: ["--bootstrap-user"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./backup-frontend
