@@ -112,6 +112,26 @@ public sealed class AuthenticationEndpointsTests
     }
 
     [Fact]
+    public async Task RegisterAndRemovePasskey_UnderLoginThrottle_Return429WithRetryAfter_EvenForCorrectPassword()
+    {
+        var userId = UserId.New();
+        var existingPasskeyId = Guid.NewGuid();
+        await using var harness = CreateHarness(userId, "Correct-password-123!", existingPasskeyId, loginLocked: true);
+
+        var (status, body) = await harness.InvokeAsync(
+            "DELETE",
+            $"/api/auth/passkeys/{existingPasskeyId}",
+            userId,
+            Guid.NewGuid(),
+            SessionAuthenticationState.FullyAuthenticated,
+            new { currentPassword = "Correct-password-123!" },
+            new RouteValueDictionary { ["id"] = existingPasskeyId.ToString("D") });
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, status);
+        Assert.Equal("too_many_attempts", body.GetProperty("error").GetString());
+    }
+
+    [Fact]
     public async Task ChangePassword_ReturnsAvailableSecondFactorMethods_DistinguishingPasskeyOnlyFromTotp()
     {
         var userId = UserId.New();
@@ -154,7 +174,7 @@ public sealed class AuthenticationEndpointsTests
         Assert.Equal("passkey_not_enrolled", sfBody.GetProperty("error").GetString());
     }
 
-    private static EndpointHarness CreateHarness(UserId userId, string password, Guid? existingPasskeyId = null, bool hasTotp = false)
+    private static EndpointHarness CreateHarness(UserId userId, string password, Guid? existingPasskeyId = null, bool hasTotp = false, bool loginLocked = false)
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 24, 12, 0, 0, TimeSpan.Zero));
         var hasher = new PasswordHashService();
@@ -171,7 +191,7 @@ public sealed class AuthenticationEndpointsTests
         builder.Services.AddSingleton<IHttpContextAccessor>(accessor);
         builder.Services.AddSingleton<PasswordHashService>(hasher);
         builder.Services.AddSingleton<IIdentityStore>(store);
-        builder.Services.AddSingleton<ILoginThrottle>(new NoopThrottle());
+        builder.Services.AddSingleton<ILoginThrottle>(new NoopThrottle(loginLocked));
         builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
         builder.Services.AddSingleton<IUserAccessStore>(new SingleUserAccessStore(new UserProfile(userId, "Test User", UserRole.UserAdmin)));
         builder.Services.AddScoped<AuthenticationService>();
@@ -251,9 +271,10 @@ public sealed class AuthenticationEndpointsTests
         }
     }
 
-    private sealed class NoopThrottle : ILoginThrottle
+    private sealed class NoopThrottle(bool loginLocked = false) : ILoginThrottle
     {
-        public Task<TimeSpan?> RetryAfterAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken) => Task.FromResult<TimeSpan?>(null);
+        public Task<TimeSpan?> RetryAfterAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken) =>
+            Task.FromResult<TimeSpan?>(loginLocked && kind == "login" ? TimeSpan.FromSeconds(7) : null);
         public Task FailedAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SucceededAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken) => Task.CompletedTask;
     }

@@ -402,7 +402,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         var agentId = AgentId.New();
         await using (var context = (database ?? fixture).CreatePlatformContext())
         {
-            context.Tenants.Add(new Tenant(tenantId, "Backup tenant"));
+            context.Tenants.Add(new Tenant(tenantId, $"Backup tenant {tenantId.Value:N}"));
             var agent = new BackupPlatform.Domain.Agents.Agent(agentId, tenantId, new AgentSoftware(AgentPlatform.Linux, new Version(1, 0), new AgentProtocolVersion(1, 0)));
             agent.RecordEnrollment();
             context.Agents.Add(agent);

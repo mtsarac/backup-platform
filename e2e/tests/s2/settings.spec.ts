@@ -394,7 +394,7 @@ test.describe('upload bandwidth (static limits, profiles, per-agent & per-job li
     expect(problems).toEqual([])
   })
 
-  test.fixme('editing a bandwidth profile with windows succeeds instead of throwing 500 (#286)', async ({ page }) => {
+  test('editing a bandwidth profile with windows succeeds instead of throwing 500 (#286)', async ({ page }) => {
     await signInAs(page, t.account)
     const name = uniq('prof-edit')
     await page.goto(`${settingsUrl}/bandwidth?tab=profiles`)

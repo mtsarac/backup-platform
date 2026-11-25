@@ -406,7 +406,7 @@ test.describe('platform notification transports & retention settings', () => {
     expect(problems).toEqual([])
   })
 
-  test.fixme('changing notification history retention keeps confirmation notice visible (#285)', async ({ page }) => {
+  test('changing notification history retention keeps confirmation notice visible (#285)', async ({ page }) => {
     const api = await platformApi()
     await api.call('PUT', '/api/platform/notifications/history-retention', { retentionDays: 90 })
     await signInPlatform(page)

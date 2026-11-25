@@ -108,6 +108,7 @@ export const codeMessages: Record<string, string> = {
   get invalid_tenant() { return tx("Seçilen çalışma alanı geçersiz.") },
   get invalid_date_range() { return tx("Tarih aralığı geçersiz.") },
   get invalid_report_period() { return tx("Rapor dönemi geçersiz.") },
+  get too_many_attempts() { return tx("Çok fazla başarısız deneme; bu işlem geçici olarak kilitlendi. Biraz bekleyip yeniden deneyin.") },
   get invalid_password() { return tx("Parola geçersiz.") },
   get password_same_as_current() { return tx("Yeni parola mevcut parolayla aynı olamaz.") },
   get invalid_token() { return tx("Bağlantı geçersiz veya süresi dolmuş.") },

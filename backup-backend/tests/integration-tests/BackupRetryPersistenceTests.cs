@@ -1050,7 +1050,7 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
             var tenantId = TenantId.New();
             await using (var context = database.CreatePlatformContext())
             {
-                context.Tenants.Add(new Tenant(tenantId, "Retry tenant"));
+                context.Tenants.Add(new Tenant(tenantId, $"Retry tenant {tenantId.Value:N}"));
                 await context.SaveChangesAsync();
             }
             var agentId = await AddAgentAsync(tenantId);

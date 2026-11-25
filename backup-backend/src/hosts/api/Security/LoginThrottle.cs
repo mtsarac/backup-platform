@@ -23,7 +23,7 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
     {
         ValidateKind(kind);
         var accountKey = AccountKey(account);
-        var ipKey = IpKey(ipAddress);
+        var ipKey = IpKey(kind, ipAddress);
         var now = time.GetUtcNow();
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
         var until = await db.LoginThrottleEntries.AsNoTracking()
@@ -38,7 +38,7 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
     {
         ValidateKind(kind);
         var accountKey = AccountKey(account);
-        var ipKey = IpKey(ipAddress);
+        var ipKey = IpKey(kind, ipAddress);
         var now = time.GetUtcNow();
         var expired = now - Retention;
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
@@ -77,7 +77,9 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
         catch (ArgumentException) { return null; }
     }
 
-    private static string? IpKey(string? ipAddress) => IPAddress.TryParse(ipAddress, out var ip) ? ip.MapToIPv6().ToString() : null;
+    // Second-factor attempts need a password-verified session and SucceededAsync only clears the account: an IP scope would never reset and, behind a shared address, locks out every account.
+    private static string? IpKey(string kind, string? ipAddress) =>
+        kind is "totp" or "recovery" ? null : IPAddress.TryParse(ipAddress, out var ip) ? ip.MapToIPv6().ToString() : null;
 
     private static void ValidateKind(string kind)
     {

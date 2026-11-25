@@ -186,7 +186,7 @@ test('cumulative password typos across distinct accounts on a shared IP do not l
   await expect(page).toHaveURL(/\/tenants\//)
 })
 
-test.fail('passkey step-up under an active login throttle reports temporary lockout instead of 400 invalid password (#282)', async ({ page, context }) => {
+test('passkey step-up under an active login throttle reports temporary lockout instead of 400 invalid password (#282)', async ({ page, context }) => {
   await virtualAuthenticator(context, page)
   const platform = await platformApi()
   const u = await newUser(platform)

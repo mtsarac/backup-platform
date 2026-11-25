@@ -3033,6 +3033,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Sıfırlama bağlantısı geçersiz veya süresi dolmuş.": {"tr":"Sıfırlama bağlantısı geçersiz veya süresi dolmuş.","en":"The reset link is invalid or has expired."},
   "Sıfırlama bağlantısı gönder": {"tr":"Sıfırlama bağlantısı gönder","en":"Send reset link"},
   "Yeni bir sıfırlama bağlantısı isteyin.": {"tr":"Yeni bir sıfırlama bağlantısı isteyin.","en":"Request a new reset link."},
+  "Çok fazla başarısız deneme; bu işlem geçici olarak kilitlendi. Biraz bekleyip yeniden deneyin.": {"tr":"Çok fazla başarısız deneme; bu işlem geçici olarak kilitlendi. Biraz bekleyip yeniden deneyin.","en":"Too many failed attempts; this action is temporarily locked. Wait a moment and try again."},
   "Çok fazla istek gönderildi.": {"tr":"Çok fazla istek gönderildi.","en":"Too many requests were sent."},
   "Şifre sıfırlama": {"tr":"Şifre sıfırlama","en":"Password reset"},
   "Şifre sıfırlama bağlantısı yalnızca doğrulanmış e-posta adreslerine gönderilir.": {"tr":"Şifre sıfırlama bağlantısı yalnızca doğrulanmış e-posta adreslerine gönderilir.","en":"The reset link is only sent to verified email addresses."},

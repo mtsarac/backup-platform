@@ -66,7 +66,7 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
     {
         var tenantId = TenantId.New();
         await using var context = Database.CreatePlatformContext();
-        context.Tenants.Add(new Tenant(tenantId, "Backup tenant"));
+        context.Tenants.Add(new Tenant(tenantId, $"Backup tenant {tenantId.Value:N}"));
         await context.SaveChangesAsync();
         return tenantId;
     }

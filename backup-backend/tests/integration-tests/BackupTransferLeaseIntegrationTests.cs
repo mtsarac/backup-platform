@@ -63,16 +63,25 @@ public sealed class BackupTransferLeaseIntegrationTests(PostgreSqlFixture fixtur
         await using var otherConnection = await service.AcquireAsync(Guid.NewGuid(), "one", default).WaitAsync(Deadline);
     }
 
+    // Waits for the holder's renewals to be visible in the database instead of sleeping past the lease time: a fixed sleep needs every renewal on time, which a loaded machine cannot promise.
     [Fact]
     public async Task A_renewing_holder_keeps_the_key_far_beyond_one_lease_time()
     {
         var connection = Guid.NewGuid();
-        var faster = new BackupTransferLeaseOptions(TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(300));
-        var service = Service(faster);
-        await using var hold = await service.AcquireAsync(connection, "long-transfer", default);
+        var lockId = BackupTransferLock.Id(connection, "long-transfer");
+        var renewing = new BackupTransferLeaseOptions(TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(10));
+        await using var hold = await Service(renewing).AcquireAsync(connection, "long-transfer", default);
+        var rival = Service(renewing).AcquireAsync(connection, "long-transfer", default);
 
-        var rival = service.AcquireAsync(connection, "long-transfer", default);
-        await Task.Delay(TimeSpan.FromMilliseconds(2500)); // more than two lease times
+        async Task<DateTimeOffset> ExpiryAsync()
+        {
+            await using var db = fixture.CreatePlatformContext();
+            return await db.Database.SqlQuery<DateTimeOffset>($"SELECT \"ExpiresAt\" AS \"Value\" FROM backup_transfer_leases WHERE \"LockId\" = {lockId}").SingleAsync();
+        }
+        var first = await ExpiryAsync();
+        using var give_up = new CancellationTokenSource(Deadline);
+        while (await ExpiryAsync() < first + 3 * renewing.RenewEvery) await Task.Delay(50, give_up.Token);
+
         Assert.False(rival.IsCompleted);
         Assert.False(hold.Lost.IsCancellationRequested);
         await hold.DisposeAsync();

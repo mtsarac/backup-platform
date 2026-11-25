@@ -46,6 +46,7 @@ describe('notification administration', () => {
     await user.type(input, '120')
     await user.click(screen.getByRole('button', { name: 'Saklama süresini kaydet' }))
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('platform/notifications/history-retention', { method: 'PUT', json: { retentionDays: 120 } }))
+    expect(await screen.findByText('Saklama süresi kaydedildi.')).toBeInTheDocument()
   })
 
   it('preserves a failed delivery and reports a failed retry', async () => {
