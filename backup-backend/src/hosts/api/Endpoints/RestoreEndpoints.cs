@@ -19,9 +19,11 @@ namespace BackupPlatform.Api.Endpoints;
 /// </summary>
 public static class RestoreEndpoints
 {
+    public const int MaximumRequestBytes = 512 * 1024;
+
     public static IEndpointRouteBuilder MapRestoreEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapTenantGroup();
+        var tenant = endpoints.MapTenantGroup().WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaximumRequestBytes));
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore", StartAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-precheck", PrecheckAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-verifications", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -35,40 +37,18 @@ public static class RestoreEndpoints
         tenant.MapPost("/restores/{restoreId:guid}/rollback-removal", RemoveRollbackAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.AddEndpointFilter(async (invocationContext, next) =>
         {
-            var httpContext = invocationContext.HttpContext;
-            if (httpContext.Request.Query.ContainsKey("shareId") || httpContext.Request.Query.ContainsKey("ShareId") ||
-                httpContext.Request.Headers.ContainsKey("X-Share-Id") || httpContext.Request.Headers.ContainsKey("x-share-id"))
+            var request = invocationContext.HttpContext.Request;
+            if (request.Query.ContainsKey("shareId") || request.Headers.ContainsKey("X-Share-Id"))
             {
-                return Results.BadRequest(new { error = "invalid_request", message = "Restore does not accept a ShareId." });
+                return Results.BadRequest(new { error = "invalid_request", field = "shareId", message = "Restore does not accept a ShareId." });
             }
             foreach (var arg in invocationContext.Arguments)
             {
-                if (arg is IRestoreRequestPayload { ShareId: not null })
+                if (arg is IRestoreRequestPayload { ShareId.ValueKind: not System.Text.Json.JsonValueKind.Undefined })
                 {
                     return Results.BadRequest(new { error = "invalid_request", field = "shareId", message = "Restore does not accept a ShareId." });
                 }
             }
-
-            if (httpContext.Request.HasJsonContentType())
-            {
-                httpContext.Request.EnableBuffering();
-                using var reader = new StreamReader(httpContext.Request.Body, leaveOpen: true);
-                var body = await reader.ReadToEndAsync();
-                httpContext.Request.Body.Position = 0;
-                if (!string.IsNullOrWhiteSpace(body))
-                {
-                    try
-                    {
-                        using var doc = System.Text.Json.JsonDocument.Parse(body);
-                        if (doc.RootElement.TryGetProperty("shareId", out _) || doc.RootElement.TryGetProperty("ShareId", out _))
-                        {
-                            return Results.BadRequest(new { error = "invalid_request", message = "Restore does not accept a ShareId." });
-                        }
-                    }
-                    catch { }
-                }
-            }
-
             return await next(invocationContext);
         });
         return endpoints;

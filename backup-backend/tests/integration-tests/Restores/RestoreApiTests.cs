@@ -688,4 +688,72 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
         Assert.False(view.GetProperty("replicaPinned").GetBoolean());
         Assert.Null(await scenario.PollRestoreAsync());
     }
+
+    [Fact]
+    public async Task RestoreRequestsAreBoundedAndRejectEveryShareIdSpellingWithoutReparsing()
+    {
+        await using var scenario = await CreateAsync(fixture);
+        await scenario.SyncCapabilitiesAsync(scenario.Agent, Capability, "mssql.restore.precheck", "mssql.restore.discovery", "mssql.restore.verification");
+        var backup = await scenario.AcceptBackupAsync();
+        var shareId = Guid.NewGuid();
+
+        foreach (var payload in new object[]
+        {
+            new { shareId = (string?)null, agentId = scenario.Agent.AgentId, databaseName = "NullShareDb", target = new { host = "sql-target", integratedSecurity = true } },
+            new { ShareId = shareId, agentId = scenario.Agent.AgentId, databaseName = "PascalShareDb", target = new { host = "sql-target", integratedSecurity = true } }
+        })
+        {
+            using var rejected = await scenario.StartRawAsync(backup.ArtifactId, payload, Guid.NewGuid().ToString("N"));
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+            var error = AgentWorld.ReadJson(rejected);
+            Assert.Equal("shareId", error.GetProperty("field").GetString());
+            Assert.Equal("Restore does not accept a ShareId.", error.GetProperty("message").GetString());
+        }
+
+        foreach (var purpose in new[] { "precheck", "verifications", "discovery" })
+        {
+            using var rejected = await scenario.StartPreparationRawAsync(backup.ArtifactId, purpose,
+                new { shareId = (string?)null, agentId = scenario.Agent.AgentId, databaseName = "PrepDb", target = new { host = "sql-target", integratedSecurity = true } },
+                Guid.NewGuid().ToString("N"));
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+            Assert.Equal("shareId", AgentWorld.ReadJson(rejected).GetProperty("field").GetString());
+        }
+
+        using (var csrf = await scenario.Admin.Client.GetAsync("/api/auth/antiforgery"))
+        using (var request = new HttpRequestMessage(HttpMethod.Post, $"{scenario.Root}/backup-artifacts/{backup.ArtifactId}/restore"))
+        {
+            request.Headers.Add("X-CSRF-TOKEN", AgentWorld.ReadJson(csrf).GetProperty("requestToken").GetString());
+            request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            request.Content = new StringContent("{not-valid-json", System.Text.Encoding.UTF8, "application/json");
+            using var malformed = await scenario.Admin.Client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+        }
+
+        var oversized = new
+        {
+            agentId = scenario.Agent.AgentId,
+            databaseName = "OversizedDb",
+            target = new { host = "sql-target", integratedSecurity = true },
+            padding = new string('x', 600 * 1024)
+        };
+        await using (var kestrelWorld = await AgentWorld.CreateAsync(fixture, kestrel: true))
+        {
+            var kestrelTenant = await kestrelWorld.CreateTenantAsync();
+            using var tooLarge = await kestrelTenant.Admin.SendAsync(HttpMethod.Post,
+                $"{BackupApiScenario.RootOf(kestrelTenant)}/backup-artifacts/{Guid.NewGuid()}/restore",
+                oversized, headers: [new("Idempotency-Key", Guid.NewGuid().ToString("N"))]);
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, tooLarge.StatusCode);
+        }
+
+        using (var cleanupRejected = await scenario.Admin.SendAsync(HttpMethod.Post,
+            $"{scenario.Root}/restores/{Guid.NewGuid()}/rollback-removal",
+            new { confirmDatabaseName = "bp_old_0123456789abcdef0123456789abcdef", shareId = (string?)null }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, cleanupRejected.StatusCode);
+            Assert.Equal("shareId", AgentWorld.ReadJson(cleanupRejected).GetProperty("field").GetString());
+        }
+
+        using var list = await scenario.GetRawAsync("/restores?purpose=All");
+        Assert.Equal(0, AgentWorld.ReadJson(list).GetProperty("totalCount").GetInt32());
+    }
 }
