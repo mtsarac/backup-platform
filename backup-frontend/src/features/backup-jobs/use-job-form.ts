@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { getAgents } from '@/features/agents/api'
-import { getDiscoveryInstance } from '@/features/discovery/api'
 import { discoveredConfiguration } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { useSaveBackupJob } from '@/features/backup-jobs/hooks'
@@ -15,6 +14,7 @@ import { useTenantConnections, useTenantProviders } from '@/features/storage-con
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
 import type { BackupConfiguration, BackupJob, BackupJobInput } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
+import { isUncertainError } from '@/lib/idempotency-key'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 
@@ -27,11 +27,12 @@ export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }
   const [saved, setSaved] = useState(() => initialValues(job, prefill))
   const [values, setValues] = useState(draft?.values ?? saved)
   const [results, setResults] = useState<Record<string, string>>({})
-  /** The inventory instance the selected databases belong to; the source summary shows it and a failed create is checked against it. */
+  /** The inventory instance the selected databases belong to. */
   const [discovered, setDiscovered] = useState<DiscoveryInstanceDetail | null>(draft ? draft.discovered : prefill?.databases.length ? prefill.instance : null)
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const engines = useRef<EngineMemory>({})
   const saving = useRef(false)
+  const uncertain = useRef(new Map<string, BackupJobInput>())
   const [finished, setFinished] = useState(false)
   const connections = useTenantConnections()
   const providers = useTenantProviders()
@@ -124,26 +125,23 @@ export function useJobForm({ job, prefill, draft, storageConnectionId, onSaved }
   }
   async function createMany(input: BackupJobInput) {
     const outcome = { ...results }
-    // A create that failed on the client side (timeout) may still have succeeded on the server: before retrying, look at the inventory's jobs.
-    const covered = await coveredAfterFailure(selected.filter(item => outcome[item] && outcome[item] !== 'ok'))
     for (const database of selected.filter(item => outcome[item] !== 'ok')) {
-      if (covered.has(database)) { outcome[database] = 'ok'; continue }
+      // The server may have created it: the retry must carry the same body to reuse the same key
+      const request = uncertain.current.get(database) ?? { ...input, name: `${input.name} – ${database}`, configuration: { ...input.configuration, database } }
       try {
-        await save.mutateAsync({ ...input, name: `${input.name} – ${database}`, configuration: { ...input.configuration, database } })
+        await save.mutateAsync(request)
+        uncertain.current.delete(database)
         outcome[database] = 'ok'
-      } catch (error) { outcome[database] = errorMessage(error) }
+      } catch (error) {
+        if (isUncertainError(error)) uncertain.current.set(database, request)
+        else uncertain.current.delete(database)
+        outcome[database] = errorMessage(error)
+      }
       setResults({ ...outcome })
     }
     setResults({ ...outcome })
     saving.current = false
     if (selected.every(item => outcome[item] === 'ok')) finish()
-  }
-  async function coveredAfterFailure(retrying: string[]) {
-    if (!discovered || retrying.length === 0) return new Set<string>()
-    try {
-      const detail = await getDiscoveryInstance(tenantId, discovered.id)
-      return new Set(detail.databases.filter(database => retrying.includes(database.name) && database.jobs.length > 0).map(database => database.name))
-    } catch { return new Set<string>() }
   }
 
   useEffect(() => {
