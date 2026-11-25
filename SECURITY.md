@@ -36,7 +36,7 @@ Treat the right to restore as the right to read the data.
 
 - Passwords: at least 12 characters, no composition rule, checked against a bundled list of common and breached passwords. An initial or temporary password must be changed at the next sign-in; until then the session can only change the password or sign out.
 - Second factors: TOTP and passkeys, with recovery codes. A session waiting for its second factor cannot reach any other API.
-- Sign-in attempts are rate limited per account and per IP address with a counter shared by all API nodes.
+- Sign-in attempts are rate limited per account and per IP address with a counter shared by all API nodes. A successful password verification clears its account and IP counters; a user with valid credentials can therefore reset the shared IP counter, while other accounts' counters remain in force. Second-factor attempts are limited per account, not per IP.
 - Email verification is optional. Self-service password reset works only for a verified address and only when the platform SMTP relay and `Notifications:PublicBaseUrl` are configured; otherwise a PlatformAdmin assigns a temporary password. Reset and verification tokens are single-use, short-lived and stored hashed, and the reset request answers identically for known and unknown accounts.
 - Security events on an account (password or email changes, temporary password, disable and enable, second factor and recovery code changes, suspicious sign-in) always create an in-app notification for the affected user, and an email when the address is verified. This category cannot be switched off.
 

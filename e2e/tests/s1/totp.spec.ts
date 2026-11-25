@@ -137,7 +137,7 @@ test('removing TOTP requires proof; with the password it is removed and sign-in 
   await page.goto('/account/security')
   await page.getByRole('button', { name: /TOTP’yi Kaldır/ }).click()
   await dialog(page).getByRole('button', { name: 'Kaldır' }).click()
-  await expect(dialog(page).getByRole('alert')).toBeVisible()
+  await expect(dialog(page).getByRole('alert')).toContainText('Güvenlik doğrulaması için mevcut şifrenizi veya geçerli bir TOTP kodunu girin.')
   await dialog(page).getByLabel('Mevcut şifre').fill(user.password)
   await dialog(page).getByRole('button', { name: 'Kaldır' }).click()
   await expect(page.getByRole('button', { name: 'TOTP Etkinleştir' })).toBeVisible()
@@ -146,7 +146,7 @@ test('removing TOTP requires proof; with the password it is removed and sign-in 
   await expect(page).toHaveURL(/\/tenants\//)
 })
 
-test.fail('TOTP setup and removal dialogs explain wrong code or wrong password instead of generic unexpected failure (#266)', async ({ page }) => {
+test('TOTP setup explains wrong code or wrong password instead of generic unexpected failure (#266)', async ({ page }) => {
   test.skip(!isIsolatedStack, ISOLATED_SKIP)
   const platform = await platformApi()
   const u = await newUser(platform)
@@ -155,8 +155,12 @@ test.fail('TOTP setup and removal dialogs explain wrong code or wrong password i
   await page.waitForURL(/\/tenants\//)
   await page.goto('/account/security')
   await page.getByRole('button', { name: 'TOTP Etkinleştir' }).click()
+  await dialog(page).getByLabel('Mevcut şifreniz').fill('incorrect-password')
+  await dialog(page).getByLabel('Doğrulama kodu').fill('000000')
+  await dialog(page).getByRole('button', { name: 'Doğrula ve Etkinleştir' }).click()
+  await expect(dialog(page).getByRole('alert')).toContainText('Mevcut şifreniz hatalı.')
   await dialog(page).getByLabel('Mevcut şifreniz').fill(u.password)
   await dialog(page).getByLabel('Doğrulama kodu').fill('000000')
   await dialog(page).getByRole('button', { name: 'Doğrula ve Etkinleştir' }).click()
-  await expect(dialog(page).getByRole('alert')).not.toContainText('Beklenmeyen bir sorun oluştu')
+  await expect(dialog(page).getByRole('alert')).toContainText('Doğrulama kodu hatalı veya süresi dolmuş.')
 })

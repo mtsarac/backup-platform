@@ -49,6 +49,26 @@ describe('SecurityPage', () => {
     expect(screen.getByRole('button', { name: 'Kurtarma kodlarını yeniden oluştur' })).toBeInTheDocument()
   })
 
+  it.each([
+    [400, 'current_password_incorrect', 'Mevcut şifreniz hatalı.'],
+    [400, 'invalid_verification_code', 'Doğrulama kodu hatalı veya süresi dolmuş.'],
+    [429, 'too_many_attempts', 'Çok fazla başarısız deneme'],
+  ])('explains enrollment errors in the dialog', async (status, code, message) => {
+    apiMock.mockImplementation(async (path) => {
+      if (path === 'auth/security') return { hasTotp: false, remainingRecoveryCodes: 0 }
+      if (path === 'auth/security/totp/setup') return { setupToken: 'token', manualEntryKey: 'JBSWY3DPEHPK3PXP', qrSvg: '<svg></svg>' }
+      if (path === 'auth/security/totp/enroll') throw new client.ApiError(status, { error: code })
+      return {}
+    })
+    mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'TOTP Etkinleştir' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.type(within(dialog).getByLabelText('Mevcut şifreniz'), 'password')
+    await userEvent.type(within(dialog).getByLabelText('Doğrulama kodu'), '123456')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Doğrula ve Etkinleştir' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(message)
+  })
+
   it('completes TOTP enrolment and shows single-use recovery codes', async () => {
     apiMock.mockImplementation(async (path, options) => {
       if (path === 'auth/security') return { hasTotp: false, remainingRecoveryCodes: 0 }

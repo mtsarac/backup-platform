@@ -61,9 +61,10 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
     public async Task SucceededAsync(string kind, string? account, string? ipAddress, CancellationToken cancellationToken)
     {
         ValidateKind(kind);
-        if (AccountKey(account) is not { } key) return;
+        var accountKey = AccountKey(account);
+        var ipKey = IpKey(kind, ipAddress);
         await using var db = PlatformOperationsDbContext.Create(options);
-        await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "Kind" = {kind} AND "Scope" = 'account' AND "Identifier" = {key}""", cancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM login_throttle_entries WHERE "Kind" = {kind} AND (("Scope" = 'account' AND "Identifier" = {accountKey}) OR ("Scope" = 'ip' AND "Identifier" = {ipKey}))""", cancellationToken);
     }
 
     private static string? AccountKey(string? account)
@@ -77,7 +78,7 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
         catch (ArgumentException) { return null; }
     }
 
-    // Second-factor attempts need a password-verified session and SucceededAsync only clears the account: an IP scope would never reset and, behind a shared address, locks out every account.
+    // Second-factor attempts require a password-verified session and must not lock out unrelated accounts behind a shared IP
     private static string? IpKey(string kind, string? ipAddress) =>
         kind is "totp" or "recovery" ? null : IPAddress.TryParse(ipAddress, out var ip) ? ip.MapToIPv6().ToString() : null;
 

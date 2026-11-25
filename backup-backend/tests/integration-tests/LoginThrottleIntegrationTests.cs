@@ -42,7 +42,7 @@ public sealed class LoginThrottleIntegrationTests(PostgreSqlFixture fixture) : I
         await throttle.FailedAsync(Kind, account, null, default);
         Assert.Null(await throttle.RetryAfterAsync(Kind, account, null, default));
         await throttle.FailedAsync(Kind, null, ip, default);
-        Assert.Equal(LoginThrottle.MaxWait, await throttle.RetryAfterAsync(Kind, null, ip, default));
+        Assert.Null(await throttle.RetryAfterAsync(Kind, null, ip, default));
     }
 
     [Theory]
@@ -64,19 +64,23 @@ public sealed class LoginThrottleIntegrationTests(PostgreSqlFixture fixture) : I
     }
 
     [Fact]
-    public async Task Ip_history_is_shared_across_accounts_and_account_history_across_ips()
+    public async Task Success_clears_shared_ip_and_own_account_but_not_other_accounts()
     {
         var throttle = Instance(new MutableClock());
         var account = NewIdentifier();
         var ip = NewIp();
+        var otherAccount = NewIdentifier();
         for (var i = 0; i < LoginThrottle.MaxFailures; i++)
             await throttle.FailedAsync(Kind, account, ip, default);
+        for (var i = 0; i < LoginThrottle.MaxFailures; i++)
+            await throttle.FailedAsync(Kind, otherAccount, NewIp(), default);
 
         Assert.NotNull(await throttle.RetryAfterAsync(Kind, account, NewIp(), default));
         Assert.NotNull(await throttle.RetryAfterAsync(Kind, NewIdentifier(), ip, default));
         await throttle.SucceededAsync(Kind, account, ip, default);
         Assert.Null(await throttle.RetryAfterAsync(Kind, account, NewIp(), default));
-        Assert.NotNull(await throttle.RetryAfterAsync(Kind, NewIdentifier(), ip, default));
+        Assert.Null(await throttle.RetryAfterAsync(Kind, NewIdentifier(), ip, default));
+        Assert.NotNull(await throttle.RetryAfterAsync(Kind, otherAccount, null, default));
     }
 
     [Fact]

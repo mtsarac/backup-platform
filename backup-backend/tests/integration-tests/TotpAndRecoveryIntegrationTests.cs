@@ -305,6 +305,16 @@ public sealed class TotpAndRecoveryIntegrationTests(PostgreSqlFixture fixture) :
                 currentPassword = "Wrong-password!"
             });
             Assert.Equal(HttpStatusCode.BadRequest, badPw.StatusCode);
+            Assert.Equal("current_password_incorrect", AgentWorld.ReadJson(badPw).GetProperty("error").GetString());
+
+            using var badCode = await browser.SendAsync(HttpMethod.Post, "/api/auth/security/totp/enroll", new
+            {
+                setupToken,
+                code = "not-a-code",
+                currentPassword = account.Password
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, badCode.StatusCode);
+            Assert.Equal("invalid_verification_code", AgentWorld.ReadJson(badCode).GetProperty("error").GetString());
         }
 
         // Enrol properly
@@ -318,6 +328,7 @@ public sealed class TotpAndRecoveryIntegrationTests(PostgreSqlFixture fixture) :
         }))
         {
             Assert.Equal(HttpStatusCode.BadRequest, badRemove.StatusCode);
+            Assert.Equal("security_verification_failed", AgentWorld.ReadJson(badRemove).GetProperty("error").GetString());
         }
 
         // Removal with valid password -> succeeded
@@ -410,6 +421,7 @@ public sealed class TotpAndRecoveryIntegrationTests(PostgreSqlFixture fixture) :
                 currentPassword = "WrongPassword!"
             });
             Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+            Assert.Equal("too_many_attempts", AgentWorld.ReadJson(locked).GetProperty("error").GetString());
             Assert.NotNull(locked.Headers.RetryAfter);
         }
 
@@ -434,6 +446,7 @@ public sealed class TotpAndRecoveryIntegrationTests(PostgreSqlFixture fixture) :
         }))
         {
             Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+            Assert.Equal("too_many_attempts", AgentWorld.ReadJson(locked).GetProperty("error").GetString());
         }
 
         // Advance past window
@@ -456,6 +469,7 @@ public sealed class TotpAndRecoveryIntegrationTests(PostgreSqlFixture fixture) :
         }))
         {
             Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+            Assert.Equal("too_many_attempts", AgentWorld.ReadJson(locked).GetProperty("error").GetString());
         }
 
         // Advance past window
@@ -486,6 +500,7 @@ public sealed class TotpAndRecoveryIntegrationTests(PostgreSqlFixture fixture) :
             }))
         {
             Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+            Assert.Equal("too_many_attempts", AgentWorld.ReadJson(locked).GetProperty("error").GetString());
         }
     }
 

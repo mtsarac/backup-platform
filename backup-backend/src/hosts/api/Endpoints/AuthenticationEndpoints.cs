@@ -515,32 +515,32 @@ public static class AuthenticationEndpoints
         if (await throttle.RetryAfterAsync("login", account, ip, context.RequestAborted) is { } waitLogin)
         {
             context.Response.Headers.RetryAfter = ((int)Math.Ceiling(waitLogin.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-            return Results.Json(new { error = "Too many failed login attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+            return Results.Json(new { error = "too_many_attempts" }, statusCode: StatusCodes.Status429TooManyRequests);
         }
 
         if (await throttle.RetryAfterAsync("totp", account, ip, context.RequestAborted) is { } waitTotp)
         {
             context.Response.Headers.RetryAfter = ((int)Math.Ceiling(waitTotp.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-            return Results.Json(new { error = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+            return Results.Json(new { error = "too_many_attempts" }, statusCode: StatusCodes.Status429TooManyRequests);
         }
 
         // Security verification: current password required
         if (string.IsNullOrWhiteSpace(request.CurrentPassword))
         {
-            return Results.Json(new { error = "Current password is required." }, statusCode: StatusCodes.Status400BadRequest);
+            return Results.Json(new { error = "current_password_required" }, statusCode: StatusCodes.Status400BadRequest);
         }
         var passwordCheck = passwordHasher.Verify(userId!, credential.PasswordHash, request.CurrentPassword);
         if (passwordCheck == Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
         {
             await throttle.FailedAsync("login", account, ip, context.RequestAborted);
-            return Results.Json(new { error = "Current password is incorrect." }, statusCode: StatusCodes.Status400BadRequest);
+            return Results.Json(new { error = "current_password_incorrect" }, statusCode: StatusCodes.Status400BadRequest);
         }
         await throttle.SucceededAsync("login", account, ip, context.RequestAborted);
 
         var existingTotp = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted);
         if (existingTotp is not null)
         {
-            return Results.Json(new { error = "TOTP is already enrolled." }, statusCode: StatusCodes.Status409Conflict);
+            return Results.Json(new { error = "totp_already_enrolled" }, statusCode: StatusCodes.Status409Conflict);
         }
 
         // Unpack setup token
@@ -551,24 +551,24 @@ public static class AuthenticationEndpoints
             var unpacked = setupProtector.Unprotect(request.SetupToken);
             var parts = unpacked.Split('|');
             if (parts.Length != 3 || parts[0] != userId!.Value.ToString("D"))
-                return Results.Json(new { error = "Invalid setup token." }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(new { error = "invalid_setup_token" }, statusCode: StatusCodes.Status400BadRequest);
 
             var expiresAtUnix = long.Parse(parts[2], CultureInfo.InvariantCulture);
             if (clock.GetUtcNow().ToUnixTimeSeconds() > expiresAtUnix)
-                return Results.Json(new { error = "Setup token has expired. Please restart enrollment." }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(new { error = "invalid_setup_token" }, statusCode: StatusCodes.Status400BadRequest);
 
             secretBase32 = parts[1];
         }
         catch
         {
-            return Results.Json(new { error = "Invalid setup token." }, statusCode: StatusCodes.Status400BadRequest);
+            return Results.Json(new { error = "invalid_setup_token" }, statusCode: StatusCodes.Status400BadRequest);
         }
 
         var secretBytes = Totp.DecodeBase32(secretBase32);
         if (!Totp.VerifyCode(secretBytes, request.Code, clock.GetUtcNow(), null, out var matchedStep))
         {
             await throttle.FailedAsync("totp", account, ip, context.RequestAborted);
-            return Results.Json(new { error = "Invalid verification code." }, statusCode: StatusCodes.Status400BadRequest);
+            return Results.Json(new { error = "invalid_verification_code" }, statusCode: StatusCodes.Status400BadRequest);
         }
         await throttle.SucceededAsync("totp", account, ip, context.RequestAborted);
 
@@ -581,7 +581,7 @@ public static class AuthenticationEndpoints
         var outcome = await identityStore.SaveTotpCredentialAsync(totpCredential, hashes, now, context.RequestAborted);
         if (outcome == TotpEnrollmentOutcome.Conflict)
         {
-            return Results.Json(new { error = "TOTP is already enrolled." }, statusCode: StatusCodes.Status409Conflict);
+            return Results.Json(new { error = "totp_already_enrolled" }, statusCode: StatusCodes.Status409Conflict);
         }
         if (outcome == TotpEnrollmentOutcome.EnrolledWithoutRecoveryCodes)
         {
@@ -616,7 +616,7 @@ public static class AuthenticationEndpoints
             if (await throttle.RetryAfterAsync("login", account, ip, context.RequestAborted) is { } waitLogin)
             {
                 context.Response.Headers.RetryAfter = ((int)Math.Ceiling(waitLogin.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-                return Results.Json(new { error = "Too many failed login attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+                return Results.Json(new { error = "too_many_attempts" }, statusCode: StatusCodes.Status429TooManyRequests);
             }
             var passwordCheck = passwordHasher.Verify(userId!, credential.PasswordHash, request.CurrentPassword);
             if (passwordCheck != Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
@@ -634,7 +634,7 @@ public static class AuthenticationEndpoints
             if (await throttle.RetryAfterAsync("totp", account, ip, context.RequestAborted) is { } waitTotp)
             {
                 context.Response.Headers.RetryAfter = ((int)Math.Ceiling(waitTotp.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-                return Results.Json(new { error = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+                return Results.Json(new { error = "too_many_attempts" }, statusCode: StatusCodes.Status429TooManyRequests);
             }
             var totpCred = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted);
             if (totpCred is not null)
@@ -661,7 +661,7 @@ public static class AuthenticationEndpoints
 
         if (!verified)
         {
-            return Results.Json(new { error = "Security verification failed. Please provide your current password or TOTP code." }, statusCode: StatusCodes.Status400BadRequest);
+            return Results.Json(new { error = "security_verification_failed" }, statusCode: StatusCodes.Status400BadRequest);
         }
 
         var now = clock.GetUtcNow();
@@ -694,7 +694,7 @@ public static class AuthenticationEndpoints
             if (await throttle.RetryAfterAsync("login", account, ip, context.RequestAborted) is { } waitLogin)
             {
                 context.Response.Headers.RetryAfter = ((int)Math.Ceiling(waitLogin.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-                return Results.Json(new { error = "Too many failed login attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+                return Results.Json(new { error = "too_many_attempts" }, statusCode: StatusCodes.Status429TooManyRequests);
             }
             var passwordCheck = passwordHasher.Verify(userId!, credential.PasswordHash, request.CurrentPassword);
             if (passwordCheck != Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed)
@@ -712,7 +712,7 @@ public static class AuthenticationEndpoints
             if (await throttle.RetryAfterAsync("totp", account, ip, context.RequestAborted) is { } waitTotp)
             {
                 context.Response.Headers.RetryAfter = ((int)Math.Ceiling(waitTotp.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-                return Results.Json(new { error = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+                return Results.Json(new { error = "too_many_attempts" }, statusCode: StatusCodes.Status429TooManyRequests);
             }
             var totpCred = await identityStore.FindTotpCredentialAsync(userId!, context.RequestAborted);
             if (totpCred is not null)
@@ -739,7 +739,7 @@ public static class AuthenticationEndpoints
 
         if (!verified)
         {
-            return Results.Json(new { error = "Security verification failed. Please provide your current password or TOTP code." }, statusCode: StatusCodes.Status400BadRequest);
+            return Results.Json(new { error = "security_verification_failed" }, statusCode: StatusCodes.Status400BadRequest);
         }
 
         var now = clock.GetUtcNow();
