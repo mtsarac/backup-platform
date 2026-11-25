@@ -1,0 +1,96 @@
+name: Playwright E2E
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  schedule:
+    - cron: '17 2 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    name: Playwright ${{ matrix.slice }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slice: S1
+            state: .state-auth.json
+            frontend: 6273
+            api: 6352
+          - slice: S2
+            state: .state.json
+            frontend: 5173
+            api: 5252
+          - slice: S2-sinks
+            state: .state-s2.json
+            frontend: 7473
+            api: 7552
+          - slice: S5
+            state: .state-s5.json
+            frontend: 7273
+            api: 7352
+    env:
+      PUBLIC_HOST: localhost
+      E2E_STATE_FILE: ${{ matrix.state }}
+      E2E_BASE_URL: https://localhost:${{ matrix.frontend }}
+      E2E_API_URL: https://localhost:${{ matrix.api }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.x
+      - name: Install dependencies and Chromium
+        working-directory: e2e
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install chromium --with-deps
+          echo "CHROMIUM_PATH=$(bun -e "import { chromium } from '@playwright/test'; console.log(chromium.executablePath())")" >> "$GITHUB_ENV"
+      - name: Start S1 stack
+        if: matrix.slice == 'S1'
+        run: bash e2e/auth-stack.sh
+      - name: Start S2 default stack
+        if: matrix.slice == 'S2'
+        run: |
+          printf '%s\n' 'POSTGRES_PASSWORD=postgres' 'POSTGRES_PORT=5433' 'PUBLIC_HOST=localhost' 'BOOTSTRAP_ADMIN_PASSWORD=PlatformAdmin123!' > .env.e2e
+          bash e2e/up.sh
+      - name: Start S2 sink stack
+        if: matrix.slice == 'S2-sinks'
+        run: |
+          sudo ip address add 192.168.122.1/32 dev lo
+          bash e2e/s2-stack.sh
+      - name: Start S5 stack
+        if: matrix.slice == 'S5'
+        run: bash e2e/s5-stack.sh
+      - name: Playwright S1
+        if: matrix.slice == 'S1'
+        working-directory: e2e
+        env:
+          E2E_MAILPIT_URL: http://127.0.0.1:8026
+        run: bun run test tests/s1
+      - name: Playwright S2
+        if: matrix.slice == 'S2'
+        working-directory: e2e
+        run: bun run test tests/s2/pages.spec.ts tests/s2/platform.spec.ts tests/s2/settings.spec.ts tests/s2/storage.spec.ts
+      - name: Playwright S2 sinks
+        if: matrix.slice == 'S2-sinks'
+        working-directory: e2e
+        run: bun run test tests/s2/s2-sinks.spec.ts
+      - name: Playwright S5
+        if: matrix.slice == 'S5'
+        working-directory: e2e
+        run: bun run test tests/s5 tests/s5-real
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-${{ matrix.slice }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          if-no-files-found: ignore

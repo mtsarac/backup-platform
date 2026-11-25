@@ -45,14 +45,16 @@ test('validation: too short, mismatch, same as current, breached password; nothi
   await expect(page).toHaveURL(/\/login$/)
 })
 
-test('valid new password signs in; the new password works on the next sign-in', async ({ page, context }) => {
+test('valid new password signs in; the new password works on the next sign-in', async ({ page }) => {
   const u = await forcedUser()
   const w = watch(page)
   await signIn(page, u.login, u.password)
   const f = form(page)
   await f.next.fill(NEW); await f.again.fill(NEW); await f.submit.click()
   await expect(page).toHaveURL(/\/tenants\//)
-  await context.clearCookies()
+  await page.goto('/account')
+  await page.getByRole('button', { name: 'Çıkış' }).click()
+  await expect(page).toHaveURL(/\/login/)
   await signIn(page, u.login, NEW)
   await expect(page).toHaveURL(/\/tenants\//)
   expect(w.unexpected()).toEqual([])
