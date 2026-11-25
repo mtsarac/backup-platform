@@ -326,7 +326,7 @@ public static class SecurityServiceCollectionExtensions
         {
             throw new InvalidOperationException("Configure BACKUP_PLATFORM_CONNECTION_STRING or ConnectionStrings:Platform.");
         }
-        var builder = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString);
+        var builder = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(PlatformConnectionString.WithoutRemovedMultiplexingOptions(connectionString));
         if (services.GetRequiredService<AuditSealKeys>().Interceptor is { } signing) builder.AddInterceptors(signing);
         return builder.Options;
     }

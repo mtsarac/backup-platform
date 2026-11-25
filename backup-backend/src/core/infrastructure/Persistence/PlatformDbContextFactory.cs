@@ -21,7 +21,7 @@ public sealed class PlatformDbContextFactory : IDesignTimeDbContextFactory<Platf
         {
             throw new InvalidOperationException("Set BACKUP_PLATFORM_CONNECTION_STRING externally before running EF tooling.");
         }
-        var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options;
+        var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(PlatformConnectionString.WithoutRemovedMultiplexingOptions(connectionString)).Options;
         return new PlatformDbContext(options, new DesignTimeTenantContext());
     }
 

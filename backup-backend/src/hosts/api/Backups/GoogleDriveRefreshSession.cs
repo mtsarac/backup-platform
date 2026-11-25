@@ -18,11 +18,10 @@ internal sealed class GoogleDriveRefreshSession(NpgsqlConnection connection, Pla
         TimeSpan waitTimeout, CancellationToken cancellationToken)
     {
         await using var configuration = PlatformDbContext.CreateForPlatformOperations(options);
-        // Session locks must never return to a pool or be moved between backends by multiplexing.
+        // Session locks must not return to a pool
         var settings = new NpgsqlConnectionStringBuilder(configuration.Database.GetConnectionString())
         {
             Pooling = false,
-            Multiplexing = false,
             ApplicationName = "BackupPlatform.GoogleDrive.Refresh"
         };
         var connection = new NpgsqlConnection(settings.ConnectionString);

@@ -1,5 +1,5 @@
--- Quartz.NET 4.6 persistent job store, PostgreSQL.
--- Source: quartznet/quartznet tag v4.3.0 database/tables plus the three mandatory 4.6 columns (database/migrations/4.6), with three changes only:
+-- Quartz.NET 4.7 persistent job store, PostgreSQL.
+-- Source: quartznet/quartznet tag v4.3.0 database/tables plus the mandatory 4.6 and 4.7 columns (database/migrations/4.6, 4.7), with three changes only:
 --   1. every object lives in the dedicated "quartz" schema, apart from the platform's domain tables;
 --   2. CREATE ... IF NOT EXISTS, so applying it is repeatable;
 --   3. the optional execution/misfire history tables are left out (the scheduler is not configured to use them) and so is the script's DROP block.
@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS quartz.qrtz_triggers
     paused_by VARCHAR(200) NULL,
     paused_at BIGINT NULL,
     misfire_threshold BIGINT NULL,
+    fixed_delay BOOL NULL,
     job_data BYTEA NULL,
     PRIMARY KEY (sched_name, trigger_name, trigger_group),
     FOREIGN KEY (sched_name, job_name, job_group)

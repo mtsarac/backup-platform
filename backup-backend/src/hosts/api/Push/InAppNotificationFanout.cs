@@ -81,7 +81,7 @@ public sealed class InAppNotificationFanout(
             try
             {
                 await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-                var settings = new NpgsqlConnectionStringBuilder(context.Database.GetConnectionString() ?? throw new InvalidOperationException("The platform database connection is missing.")) { Pooling = false, Multiplexing = false };
+                var settings = new NpgsqlConnectionStringBuilder(context.Database.GetConnectionString() ?? throw new InvalidOperationException("The platform database connection is missing.")) { Pooling = false };
                 await using var connection = new NpgsqlConnection(settings.ConnectionString);
                 connection.Notification += (_, _) => _signals.Writer.TryWrite(true);
                 await connection.OpenAsync(cancellationToken);
