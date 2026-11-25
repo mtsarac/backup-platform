@@ -411,12 +411,19 @@ public abstract partial class FileSystemProviderContractTests : IDisposable
     {
         var key = new StorageObjectKey("race.bak");
         var sizes = Enumerable.Range(1, 8).Select(i => i * 100_000L).ToArray();
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var arrived = 0;
+        async Task Rendezvous(CancellationToken token)
+        {
+            if (Interlocked.Increment(ref arrived) == sizes.Length) ready.TrySetResult();
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(30), token);
+        }
 
         var outcomes = await Task.WhenAll(sizes.Select(async size =>
         {
             try
             {
-                await Provider.PutAsync(key, new PatternStream(size), new StoragePutOptions(StorageOverwritePolicy.Fail), null, CancellationToken.None);
+                await Provider.PutAsync(key, new PatternStream(size, Rendezvous), new StoragePutOptions(StorageOverwritePolicy.Fail), null, CancellationToken.None);
                 return (Size: size, Failure: (StorageFailureKind?)null);
             }
             catch (StorageException exception)

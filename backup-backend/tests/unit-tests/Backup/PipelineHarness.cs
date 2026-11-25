@@ -13,7 +13,7 @@ internal sealed class PipelineHarness : IDisposable
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "bp_test_pipeline_" + Guid.NewGuid().ToString("N")[..10]);
 
-    public PipelineHarness(IArtifactPreparer? preparer = null, StagingUsageRegistry? usage = null)
+    public PipelineHarness(IArtifactPreparer? preparer = null, StagingUsageRegistry? usage = null, TimeProvider? time = null)
     {
         Directory.CreateDirectory(_root);
         StagingDirectory = Path.Combine(_root, "staging");
@@ -22,7 +22,7 @@ internal sealed class PipelineHarness : IDisposable
         Provider = new FakeBackupProvider(this);
         Storage = new InMemoryStorage(this);
         Pipeline = new DatabaseBackupPipeline(
-            [Provider], [Storage], preparer ?? new PassThroughArtifactPreparer(), NullLogger<DatabaseBackupPipeline>.Instance, staging: usage);
+            [Provider], [Storage], preparer ?? new PassThroughArtifactPreparer(), NullLogger<DatabaseBackupPipeline>.Instance, time: time, staging: usage);
     }
 
     public string StagingDirectory { get; }

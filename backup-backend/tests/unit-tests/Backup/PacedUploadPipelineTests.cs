@@ -2,6 +2,7 @@ using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Abstractions.Transfer;
+using Microsoft.Extensions.Time.Testing;
 
 namespace BackupPlatform.UnitTests.Backup;
 
@@ -12,9 +13,9 @@ public sealed class PacedUploadPipelineTests : IDisposable
 
     public void Dispose() => _h.Dispose();
 
-    private DatabaseBackupPipelineRequest Request(IUploadBandwidth? bandwidth, InMemoryStorage storage, TimeSpan? timeout = null)
+    private DatabaseBackupPipelineRequest Request(IUploadBandwidth? bandwidth, InMemoryStorage storage, TimeSpan? timeout = null, PipelineHarness? harness = null)
     {
-        var single = _h.Request();
+        var single = (harness ?? _h).Request();
         return new DatabaseBackupPipelineRequest(single.Engine, single.Connection, single.Credential, single.DatabaseName, single.Staging,
             StorageProviderId.Local, single.StoragePrefix, single.Options, single.Overwrite, stagingOnFailure: single.StagingOnFailure)
         {
@@ -89,22 +90,44 @@ public sealed class PacedUploadPipelineTests : IDisposable
     [Fact]
     public async Task The_destination_deadline_is_widened_by_the_pacing_allowance()
     {
-        var storage = new InMemoryStorage(_h);
+        var clock = new FakeTimeProvider();
+        using var harness = new PipelineHarness(time: clock);
+        var storage = new InMemoryStorage(harness);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken uploadToken = default;
         storage.OnPut = async (key, content, options, token) =>
         {
-            await Task.Delay(400, token);
-            using var copy = new MemoryStream();
-            await content.CopyToAsync(copy, token);
-            return new StorageObjectMetadata(new StorageLocation(storage.Id, key), copy.Length, null, DateTimeOffset.UtcNow);
+            uploadToken = token;
+            started.SetResult();
+            await complete.Task.WaitAsync(token);
+            return new StorageObjectMetadata(new StorageLocation(storage.Id, key), 0, null, DateTimeOffset.UtcNow);
         };
         storage.OnVerify = (key, expected) => new StorageVerificationResult(new StorageLocation(storage.Id, key), StorageVerificationStatus.Verified,
             StorageVerificationMethod.ReadBack, expected.SizeBytes, expected.Checksum);
 
-        var unpaced = await _h.RunAsync(Request(null, storage, TimeSpan.FromMilliseconds(150)));
-        var paced = await _h.RunAsync(Request(new FakeBandwidth { Allowance = TimeSpan.FromSeconds(30) }, storage, TimeSpan.FromMilliseconds(150)));
-
+        var unpacedTask = harness.RunAsync(Request(null, storage, TimeSpan.FromSeconds(1), harness));
+        await started.Task;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        var unpaced = await unpacedTask;
         Assert.Equal(BackupPipelineReasons.DestinationTimeout, unpaced.Failure!.ReasonCode);
+
+        started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pacedTask = harness.RunAsync(Request(new FakeBandwidth { Allowance = TimeSpan.FromSeconds(30) }, storage, TimeSpan.FromSeconds(1), harness));
+        await started.Task;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.False(uploadToken.IsCancellationRequested);
+        complete.SetResult();
+        var paced = await pacedTask;
         Assert.Equal(DatabaseBackupStatus.Succeeded, paced.Status);
+
+        started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var expiredTask = harness.RunAsync(Request(new FakeBandwidth { Allowance = TimeSpan.FromSeconds(30) }, storage, TimeSpan.FromSeconds(1), harness));
+        await started.Task;
+        clock.Advance(TimeSpan.FromSeconds(31));
+        var expired = await expiredTask;
+        Assert.Equal(BackupPipelineReasons.DestinationTimeout, expired.Failure!.ReasonCode);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
@@ -11,7 +12,8 @@ namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
 /// <item><description><b>Atomic publish.</b> Content is written to a hidden sibling file named <c>.&lt;name&gt;.&lt;guid&gt;.partial</c> in the final directory,
 /// flushed to disk, validated against the expected length and checksum, and only then renamed onto the final name. A reader therefore sees
 /// the complete object or nothing. Leftovers of a crashed process keep the <c>.partial</c> suffix so a sweeper can recognise them. The directory entry
-/// itself is not fsynced; after a power loss the rename may be lost, never half-applied.</description></item>
+/// itself is not fsynced; after a power loss the rename may be lost, never half-applied. On Unix, no-overwrite publication requires an atomic
+/// no-replace rename or hard links; unsupported filesystems fail rather than overwrite an existing object.</description></item>
 /// <item><description><b>Containment.</b> A key is mapped to <c>root/prefix/segments</c> and the result must lie strictly inside the root. Because
 /// <see cref="StorageObjectKey"/> already forbids <c>..</c>, rooted and drive-qualified keys, this is defence in depth. In addition,
 /// no existing directory below the root and no existing target file may be a symbolic link or reparse point: such an entry fails the
@@ -676,7 +678,25 @@ public abstract class FileSystemStorageProvider : IStorageProvider
     {
         try
         {
-            File.Move(temporaryPath, finalPath, overwrite == StorageOverwritePolicy.Replace);
+            if (overwrite == StorageOverwritePolicy.Replace || OperatingSystem.IsWindows())
+            {
+                File.Move(temporaryPath, finalPath, overwrite == StorageOverwritePolicy.Replace);
+                return;
+            }
+
+            if (OperatingSystem.IsLinux())
+            {
+                try
+                {
+                    if (RenameNoReplace(-100, temporaryPath, -100, finalPath, 1) == 0) return;
+                    var error = Marshal.GetLastPInvokeError();
+                    if (error is not (22 or 38 or 95)) ThrowPublishError(error);
+                }
+                catch (EntryPointNotFoundException) { }
+            }
+
+            if (Link(temporaryPath, finalPath) != 0) ThrowPublishError(Marshal.GetLastPInvokeError());
+            DeleteQuietly(temporaryPath);
         }
         catch (IOException) when (overwrite == StorageOverwritePolicy.Fail && (File.Exists(finalPath) || Directory.Exists(finalPath)))
         {
@@ -684,4 +704,18 @@ public abstract class FileSystemStorageProvider : IStorageProvider
             throw new StorageException(StorageFailureKind.AlreadyExists, "An object already exists under this key.");
         }
     }
+
+    private static void ThrowPublishError(int error)
+    {
+        if (error == 17) throw new StorageException(StorageFailureKind.AlreadyExists, "An object already exists under this key.");
+        if (error is 1 or 13) throw new UnauthorizedAccessException("Access to the storage was denied.");
+        throw new IOException("The storage could not publish the object.", error);
+    }
+
+    [DllImport("libc", EntryPoint = "renameat2", SetLastError = true)]
+    private static extern int RenameNoReplace(int oldDirectory, [MarshalAs(UnmanagedType.LPUTF8Str)] string oldPath,
+        int newDirectory, [MarshalAs(UnmanagedType.LPUTF8Str)] string newPath, uint flags);
+
+    [DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int Link([MarshalAs(UnmanagedType.LPUTF8Str)] string source, [MarshalAs(UnmanagedType.LPUTF8Str)] string destination);
 }
