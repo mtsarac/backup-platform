@@ -171,7 +171,7 @@ test('forgot-password throttle: 6th reset request from the same IP shows 429 rat
   await expect(page.getByRole('alert')).toContainText('Çok fazla istek gönderildi')
 })
 
-test.fixme('cumulative password typos across distinct accounts on a shared IP do not lock out unrelated sessions (#267)', async ({ page }) => {
+test('cumulative password typos across distinct accounts on a shared IP do not lock out unrelated sessions (#267)', async ({ page }) => {
   const platform = await platformApi()
   const accounts = await Promise.all(Array.from({ length: 5 }, () => newUser(platform)))
   const victim = await newUser(platform)
@@ -186,7 +186,7 @@ test.fixme('cumulative password typos across distinct accounts on a shared IP do
   await expect(page).toHaveURL(/\/tenants\//)
 })
 
-test.fixme('passkey step-up under an active login throttle reports temporary lockout instead of 400 invalid password (#282)', async ({ page, context }) => {
+test.fail('passkey step-up under an active login throttle reports temporary lockout instead of 400 invalid password (#282)', async ({ page, context }) => {
   await virtualAuthenticator(context, page)
   const platform = await platformApi()
   const u = await newUser(platform)

@@ -20,13 +20,13 @@ const PLATFORM_SCREENS = [
   ['/platform/audit', 'Denetim kaydı', 'Audit log'],
 ] as const
 
-async function inspectScreen(page: Page, path: string, trHeading: string, w: ReturnType<typeof watch>, checkOverflow = true) {
+async function inspectScreen(page: Page, path: string, trHeading: string, w: ReturnType<typeof watch>) {
   w.reset()
   await page.goto(path)
   await expect(page.getByRole('main'), `${path} main`).toBeVisible()
   await expect(page.getByRole('heading', { level: 1 }), `${path} h1 count`).toHaveCount(1)
   await expect(page.getByRole('heading', { level: 1, name: trHeading }), `${path} h1`).toBeVisible()
-  if (checkOverflow) await expectNoHorizontalScroll(page)
+  await expectNoHorizontalScroll(page)
   await expect(page.getByText(/undefined|NaN|\[object Object\]/), `${path} raw values`).toHaveCount(0)
   expect(await axeViolations(page), `${path} axe`).toEqual([])
   await page.reload()
@@ -51,8 +51,7 @@ test.describe('S1 screen checklist sweep', () => {
       await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
       await page.waitForURL((u) => u.pathname !== '/login')
       for (const [path, trHeading] of PLATFORM_SCREENS) {
-        // /platform/users 1440px horizontal overflow with long e-mails is tracked as #287 (test.fixme in platform-users.spec.ts)
-        await inspectScreen(page, path, trHeading, w, !(vpName === 'desktop' && path === '/platform/users'))
+        await inspectScreen(page, path, trHeading, w)
       }
     })
   }

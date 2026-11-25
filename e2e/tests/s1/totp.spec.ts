@@ -140,7 +140,7 @@ test('removing TOTP requires proof; with the password it is removed and sign-in 
   await expect(page).toHaveURL(/\/tenants\//)
 })
 
-test.fixme('TOTP setup and removal dialogs explain wrong code or wrong password instead of generic unexpected failure (#266)', async ({ page }) => {
+test.fail('TOTP setup and removal dialogs explain wrong code or wrong password instead of generic unexpected failure (#266)', async ({ page }) => {
   const platform = await platformApi()
   const u = await newUser(platform)
   await platform.dispose()

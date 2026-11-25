@@ -140,7 +140,7 @@ test.describe('/login', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Giriş yapın')
   })
 
-  test.fixme('English /login submit button uses ASCII "Sign in" instead of Turkish dotless ı (#281)', async ({ page }) => {
+  test.fail('English /login submit button uses ASCII "Sign in" instead of Turkish dotless ı (#281)', async ({ page }) => {
     await page.goto('/login')
     await page.getByRole('button', { name: /Dili değiştir/ }).click()
     await expect(page.getByRole('button', { name: /^Sign in$/i })).toBeVisible()

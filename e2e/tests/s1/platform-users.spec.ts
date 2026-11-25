@@ -44,7 +44,7 @@ test('list: columns, axe, search narrows and empty search shows a message; mobil
   expect(w.unexpected()).toEqual([])
 })
 
-test.fixme('desktop 1440px: long unspaced usernames and e-mails wrap without overflowing the table (#287)', async ({ page }) => {
+test('desktop 1440px: long unspaced usernames and e-mails wrap without overflowing the table (#287)', async ({ page }) => {
   const platform = await platformApi()
   const longLogin = `e2e.s1.long-identifier-${rand()}-admin`
   await platform.call('POST', '/api/platform/users', {

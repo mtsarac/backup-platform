@@ -189,7 +189,7 @@ Order: S1, S2, S3, S4 in parallel; S5 after artifacts exist.
 
 ## S1 results (#235)
 
-Specs: `e2e/tests/s1/` (login, password-change, totp, passkeys, recovery, account, guards, platform-users/-tenants/-plans/-quota-audit, features). 81 pass on the main stack, 22 are skipped (`test.fixme` open defects #240 #241 #243 #244 #245 #248 #250 #251 #252 #257 #260 #261 #266 #267 plus the passkey/mail gated specs); on the isolated `bps1` auth stack 86 pass and 17 are skipped.
+Specs: `e2e/tests/s1/` (login, password-change, totp, passkeys, recovery, account, guards, platform-users/-tenants/-plans/-quota-audit, features, z-throttle, screens-checklist). On the isolated `bps1` auth stack 108 pass and 3 are `test.fail` for open defects (#266 #281 #282); the shared stack skips the passkey, mail and throttle specs. Defects #240 #241 #243 #244 #245 #248 #250 #251 #252 #257 #260 #261 #267 #287 are fixed on main and their specs now run as normal tests.
 
 - **Passkeys and e-mail recovery need a second stack.** The main stack has no WebAuthn relying party (`passkeys_not_configured`; the id cannot be an IP) and no account-mail wiring (`Notifications__PublicBaseUrl` unset, so `/api/auth/email-recovery` says `available:false`). Both need an API restart, so `bash e2e/auth-stack.sh` brings up an isolated project `bps1` (overlay `docker-compose.e2e-auth.yml`: localhost RP id, mailpit, own ports and subnet). Run the same specs there with the variables printed at the top of that script; the gated specs then execute instead of skipping.
 - **Failed logins are shared state.** The login throttle counts failures per client IP for 24 hours; run the suite only on an isolated stack to avoid locking out other users.
