@@ -17,7 +17,7 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
-  # Fast checks gate packaging; Windows Validation is a separate manual workflow; integration and e2e run on the owner's PC.
+  # Fast CI includes integration tests; Windows validation and scheduled E2E are separate workflows.
   ci:
     name: Fast CI
     uses: ./.github/workflows/ci.yml
