@@ -256,6 +256,39 @@ describe('first backup flow', () => {
     expect(startJobRun).toHaveBeenCalledTimes(2)
   })
 
+  it('yanıtı kaybolan ilk işin anahtarını diğer iş başarıyla oluşsa da korur', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('response lost'))
+    const user = userEvent.setup()
+    mount()
+    await toSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Sadece oluştur' }))
+    expect(await screen.findByRole('alert')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Sadece oluştur' }))
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(3))
+    const calls = vi.mocked(saveBackupJob).mock.calls
+    expect(calls[0][1].configuration.database).toBe('Muhasebe')
+    expect(calls[1][1].configuration.database).toBe('CRM')
+    expect(calls[2][1].configuration.database).toBe('Muhasebe')
+    expect(calls[0][3]).not.toBe(calls[1][3])
+    expect(calls[2][3]).toBe(calls[0][3])
+  })
+
+  it('yanıtı kaybolan işi ayarlar değişse de aynı gövde ve anahtarla yeniden dener', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('response lost'))
+    const user = userEvent.setup()
+    mount()
+    await toSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Sadece oluştur' }))
+    expect(await screen.findByRole('alert')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: /Değiştir — Saklama/ }))
+    await user.selectOptions(screen.getByLabelText('Saklama süresi'), '7 gün')
+    await user.click(screen.getByRole('button', { name: 'Sadece oluştur' }))
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(3))
+    const calls = vi.mocked(saveBackupJob).mock.calls
+    expect(calls[2][1]).toEqual(calls[0][1])
+    expect(calls[2][3]).toBe(calls[0][3])
+  })
+
   describe('adding a computer', () => {
     const windowsBrowser = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/150.0 Safari/537.36'
     const linuxBrowser = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/150.0 Safari/537.36'

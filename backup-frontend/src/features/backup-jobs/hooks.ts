@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
-import { useIdempotencyKey } from '@/lib/idempotency-key'
+import { isUncertainError } from '@/lib/idempotency-key'
 import { getBackupJob, getBackupJobs, getOccurrences, saveBackupJob, setJobEnabled, startJobRun } from './api'
 import { isActiveRun } from '@/features/backups/presentation'
 import type { BackupJob, BackupJobInput } from './types'
@@ -33,11 +33,24 @@ function useInvalidateJobs() {
 export function useSaveBackupJob(id?: string) {
   const { tenantId } = useTenant()
   const invalidate = useInvalidateJobs()
-  // A creation whose outcome is unknown (network error, 5xx) is retried with the same key, so the server never creates the job twice.
-  const idempotency = useIdempotencyKey()
-  return useMutation({ mutationFn: (input: BackupJobInput) => {
-    return id ? saveBackupJob(tenantId, input, id) : saveBackupJob(tenantId, input, undefined, idempotency.keyFor(input))
-  }, onSuccess: invalidate, onError: invalidate, onSettled: (_data, error) => idempotency.settle(error ?? undefined) })
+  const actions = useRef(new Map<string, { key: string; pending: number; settled: boolean }>())
+  return useMutation({ mutationFn: async (input: BackupJobInput) => {
+    if (id) return saveBackupJob(tenantId, input, id)
+    const body = JSON.stringify([tenantId, input])
+    const action = actions.current.get(body) ?? { key: crypto.randomUUID(), pending: 0, settled: false }
+    actions.current.set(body, action)
+    action.pending++
+    try {
+      const result = await saveBackupJob(tenantId, input, undefined, action.key)
+      action.settled = true
+      return result
+    } catch (error) {
+      if (!isUncertainError(error)) action.settled = true
+      throw error
+    } finally {
+      if (--action.pending === 0 && action.settled) actions.current.delete(body)
+    }
+  }, onSuccess: invalidate, onError: invalidate })
 }
 /** Saves the job's own configuration with the server certificate trusted, then runs it again: the trust stays on the job. */
 export function useTrustJobCertificate() {

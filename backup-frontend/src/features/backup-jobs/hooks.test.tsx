@@ -51,6 +51,66 @@ describe('job oluşturma', () => {
     await act(async () => { await result.current.mutateAsync(input) })
     expect(vi.mocked(saveBackupJob).mock.calls[2][3]).not.toBe(calls[0][3])
   })
+  it('farklı iş tamamlandığında belirsiz kalan işin anahtarını korur', async () => {
+    const a = { name: 'A' } as never
+    const b = { name: 'B' } as never
+    vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('response lost')).mockResolvedValue({ id: 'job' } as never)
+    const { result } = renderHook(() => useSaveBackupJob(), { wrapper })
+    await act(async () => { await expect(result.current.mutateAsync(a)).rejects.toThrow('response lost') })
+    await act(async () => { await result.current.mutateAsync(b) })
+    await act(async () => { await result.current.mutateAsync(a) })
+    const calls = vi.mocked(saveBackupJob).mock.calls
+    expect(calls[0][3]).not.toBe(calls[1][3])
+    expect(calls[2][3]).toBe(calls[0][3])
+  })
+  it('eşzamanlı farklı işlerden biri bitince diğerinin anahtarını silmez', async () => {
+    const firstCall = Promise.withResolvers<never>()
+    const secondCall = Promise.withResolvers<never>()
+    vi.mocked(saveBackupJob)
+      .mockReturnValueOnce(firstCall.promise)
+      .mockReturnValueOnce(secondCall.promise)
+      .mockResolvedValue({ id: 'job-a' } as never)
+    const { result } = renderHook(() => useSaveBackupJob(), { wrapper })
+    const a = { name: 'A' } as never
+    const b = { name: 'B' } as never
+    await act(async () => {
+      const first = result.current.mutateAsync(a).catch(() => undefined)
+      const second = result.current.mutateAsync(b)
+      await Promise.resolve()
+      secondCall.resolve({ id: 'job-b' } as never)
+      await second
+      firstCall.reject(new TypeError('response lost'))
+      await first
+    })
+    await act(async () => { await result.current.mutateAsync(a) })
+    const calls = vi.mocked(saveBackupJob).mock.calls
+    expect(calls[0][3]).not.toBe(calls[1][3])
+    expect(calls[2][3]).toBe(calls[0][3])
+  })
+  it('aynı işin eşzamanlı yanıtlarından biri gelince diğeri sürerken anahtarı korur', async () => {
+    const firstCall = Promise.withResolvers<never>()
+    const secondCall = Promise.withResolvers<never>()
+    vi.mocked(saveBackupJob)
+      .mockReturnValueOnce(firstCall.promise)
+      .mockReturnValueOnce(secondCall.promise)
+      .mockResolvedValue({ id: 'job-a' } as never)
+    const { result } = renderHook(() => useSaveBackupJob(), { wrapper })
+    await act(async () => {
+      const first = result.current.mutateAsync(input)
+      const second = result.current.mutateAsync(input).catch(() => undefined)
+      await Promise.resolve()
+      firstCall.resolve({ id: 'job-a' } as never)
+      await first
+      await result.current.mutateAsync(input)
+      secondCall.reject(new TypeError('response lost'))
+      await second
+    })
+    const calls = vi.mocked(saveBackupJob).mock.calls
+    expect(calls[0][3]).toBe(calls[1][3])
+    expect(calls[2][3]).toBe(calls[0][3])
+    await act(async () => { await result.current.mutateAsync(input) })
+    expect(vi.mocked(saveBackupJob).mock.calls[3][3]).not.toBe(calls[0][3])
+  })
   it('düzenlemede (PUT) anahtar göndermez', async () => {
     vi.mocked(saveBackupJob).mockResolvedValue({ id: 'job-a' } as never)
     const { result } = renderHook(() => useSaveBackupJob('job-a'), { wrapper })

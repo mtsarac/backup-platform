@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -12,6 +12,8 @@ import { autoJobName, awaitingCapabilities, CAPABILITY_POLL_MS, defaultSettings,
 import { ProgressStep, ReadyStep } from '@/features/first-backup/progress-step'
 import { SummaryStep, type ItemResult } from '@/features/first-backup/summary-step'
 import { discoveredDatabasesPath } from '@/lib/routes'
+import { isUncertainError } from '@/lib/idempotency-key'
+import type { BackupJobInput } from '@/features/backup-jobs/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
 type Step = 'computer' | 'data' | 'summary'
@@ -34,6 +36,7 @@ export function FirstBackupPage() {
   const [settings, setSettings] = useState<FirstBackupSettings>(defaultSettings)
   const [results, setResults] = useState<Record<string, ItemResult>>({})
   const [pending, setPending] = useState(false)
+  const uncertain = useRef(new Map<string, BackupJobInput>())
   const [phase, setPhase] = useState<Phase>('')
   // Decided once from the first fresh list (not a stale cached one): the list changing later (a computer enrolling) must not move the user to another screen.
   if (step === null && agents.data && !agents.isFetching) setStep(agents.data.length ? 'data' : 'computer')
@@ -52,7 +55,18 @@ export function FirstBackupPage() {
       const previous = outcome[item.key] ?? {}
       let next: ItemResult = { jobId: previous.jobId, runId: previous.runId }
       try {
-        if (!next.jobId) next.jobId = (await save.mutateAsync(firstBackupJobInput(item, itemName(item), settings))).id
+        if (!next.jobId) {
+          // The server may have created it: the retry must carry the same body to reuse the same key
+          const request = uncertain.current.get(item.key) ?? firstBackupJobInput(item, itemName(item), settings)
+          try {
+            next.jobId = (await save.mutateAsync(request)).id
+            uncertain.current.delete(item.key)
+          } catch (error) {
+            if (isUncertainError(error)) uncertain.current.set(item.key, request)
+            else uncertain.current.delete(item.key)
+            throw error
+          }
+        }
         if (startFirstBackup && !next.runId) next.runId = (await run(next.jobId))?.id
       } catch (error) { next = { ...next, error } }
       outcome[item.key] = next
