@@ -118,7 +118,7 @@ test.describe('storage wizard validation & feature flags', () => {
     expect(problems).toEqual([])
   })
 
-  test.fixme('deep links ?provider=sftp, ?provider=s3 and ?provider=local open the details step directly on cold load (#284)', async ({ page }) => {
+  test('deep links ?provider=sftp, ?provider=s3 and ?provider=local open the details step directly on cold load (#284)', async ({ page }) => {
     await signInTenant(page)
     await page.goto(`${base}/connections/new?provider=sftp`)
     await expect(page.getByRole('textbox', { name: 'Sunucu adresi' })).toBeVisible()

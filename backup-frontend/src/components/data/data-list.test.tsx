@@ -28,6 +28,13 @@ describe('DataList', () => {
     expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toContain('Şifreleme')
   })
 
+  it('lets unbroken long values in wrap columns break anywhere so the table cannot overflow', () => {
+    setViewport(true)
+    const long = 'e2e.s2.e2e-s2-settings-8p5r4@example.test'
+    render(<DataList rows={[{ ...jobs[0], name: long }]} columns={[{ ...columns[0], wrap: true }]} keyExtractor={job => job.id} emptyMessage="" />)
+    expect(screen.getByRole('cell', { name: long }).className).toContain('[overflow-wrap:anywhere]')
+  })
+
   it('is a table when the browser cannot report its width', () => {
     render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     expect(screen.getByRole('table')).toBeInTheDocument()

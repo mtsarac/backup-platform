@@ -251,7 +251,7 @@ test.describe('notification channels & deliveries history', () => {
     expect(problems).toEqual([])
   })
 
-  test.fixme('populated /settings?tab=deliveries passes axe definition-list rule (#283)', async ({ page }) => {
+  test('populated /settings?tab=deliveries passes axe definition-list rule (#283)', async ({ page }) => {
     await signInAs(page, t.account)
     await page.goto(`${settingsUrl}?tab=deliveries`)
     await expect(page.getByRole('listitem').first()).toBeVisible()

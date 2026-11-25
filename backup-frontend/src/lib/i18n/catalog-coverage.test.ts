@@ -62,6 +62,13 @@ function bareTexts(source: string): string[] {
   return texts.filter(text => /\p{L}/u.test(text) && !verbatim.includes(text))
 }
 
+describe('English catalog text', () => {
+  it('never contains Turkish-only letters (a Turkish-locale lowercase once produced "Sign ın")', () => {
+    const bad = Object.entries(sourceCatalog).filter(([, entry]) => /[ıİşŞğĞ]/.test(entry.en)).map(([key]) => key)
+    expect(bad).toEqual([])
+  })
+})
+
 describe('i18n source catalog', () => {
   it('has every tx() string literal, including ternary branches', () => {
     const missing: string[] = []

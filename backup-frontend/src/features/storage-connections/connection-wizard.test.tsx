@@ -86,6 +86,14 @@ describe('Storage connection wizard: providers and steps', () => {
     expect(screen.getByRole('radio', { name: /Merkezi/ })).toBeDisabled()
   })
 
+  it('opens the details step when a ?provider= deep link loads on a cold cache, and Geri still returns to the picker', async () => {
+    const user = userEvent.setup()
+    mount('/storage/connections/new?provider=s3')
+    expect(await screen.findByLabelText('HTTPS uç noktası')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Geri' }))
+    expect(await screen.findByRole('radio', { name: /S3/ })).toBeChecked()
+  })
+
   it('shows at most three steps for every provider', async () => {
     const user = userEvent.setup()
     mount()
