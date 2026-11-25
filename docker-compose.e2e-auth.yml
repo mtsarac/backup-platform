@@ -1,0 +1,38 @@
+# Second, isolated stack for the auth slice (project bps1): the main e2e stack has no WebAuthn relying party and no account-mail wiring, and both need
+# API restarts. This overlay changes only what passkeys and e-mail recovery need and moves ports, subnet and container names out of the way:
+#   bash e2e/auth-stack.sh   # up + bootstrap admin + seed; prints the E2E_* variables to run the specs against it
+services:
+  postgres:
+    container_name: bps1-postgres
+    ports: !override
+      - "127.0.0.1:5434:5432"
+  api:
+    container_name: bps1-api
+    environment:
+      Authentication__TrustedProxies__0: 172.30.0.10
+      # WebAuthn rejects IP addresses as relying-party id; localhost is the one hostname Chromium's virtual authenticator accepts without DNS.
+      Authentication__Passkeys__RelyingPartyId: localhost
+      Authentication__Passkeys__Origins__0: https://localhost:6273
+      Notifications__PublicBaseUrl: https://localhost:6273
+      Notifications__AllowedPrivateNetworks__0: 172.30.0.0/24
+  frontend:
+    container_name: bps1-frontend
+    ports: !override
+      - "6273:443"
+      - "6274:80"
+      - "6352:5252"
+    networks:
+      default:
+        ipv4_address: 172.30.0.10
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: bps1-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8026:8025"
+
+networks:
+  default:
+    ipam:
+      config: !override
+        - subnet: 172.30.0.0/24

@@ -187,3 +187,12 @@ Order: S1, S2, S3, S4 in parallel; S5 after artifacts exist.
 - `docker compose up` (stock compose) could not serve the API through nginx: antiforgery threw `SecurePolicy = Always, but the current request is not an SSL request` because the API trusted no forwarding proxy. Fixed in `docker-compose.yml` (fixed bridge subnet, `Authentication__TrustedProxies__0`).
 - Stock compose does not bootstrap a PlatformAdmin although README and `.env.example` say it does; `e2e/up.sh` runs `--bootstrap-user` in the API container.
 - `README.md` quick start says the UI is `http://localhost:3000`; the compose file publishes `https://…:5173`.
+
+## S1 results (#235)
+
+Specs: `e2e/tests/s1/` (login, password-change, totp, passkeys, recovery, account, guards, platform-users/-tenants/-plans/-quota-audit, features, z-throttle, screens-checklist). On the isolated `bps1` auth stack 108 pass and 3 are `test.fail` for open defects (#266 #281 #282); the shared stack runs 91 pass and skips 22 by design: 9 passkey specs (no WebAuthn RP on an IP host), 2 mail specs (no account-mail wiring), 11 specs that send wrong credentials (the per-IP throttle never decays, #267 #290). Wrong-TOTP steps in `totp.spec.ts` run only on the isolated stack. Defects #240 #241 #243 #244 #245 #248 #250 #251 #252 #257 #260 #261 #267 #287 are fixed on main and their specs now run as normal tests.
+
+- **Passkeys and e-mail recovery need a second stack.** The main stack has no WebAuthn relying party (`passkeys_not_configured`; the id cannot be an IP) and no account-mail wiring (`Notifications__PublicBaseUrl` unset, so `/api/auth/email-recovery` says `available:false`). Both need an API restart, so `bash e2e/auth-stack.sh` brings up an isolated project `bps1` (overlay `docker-compose.e2e-auth.yml`: localhost RP id, mailpit, own ports and subnet). Run the same specs there with the variables printed at the top of that script; the gated specs then execute instead of skipping.
+- **Failed logins are shared state.** The login throttle counts failures per client IP for 24 hours; run the suite only on an isolated stack to avoid locking out other users.
+- TOTP codes are replay-protected: `totp()` in `tests/s1/helpers.ts` hands out a strictly later step on every call and waits for the clock if needed.
+- Not tested: forced re-login after the real 30-minute reset-token and 24-hour verification-token expiry, the 15-minute max throttle wait, and feature-flag toggling (needs an API restart; only the flag endpoint and one hidden-UI check run).
