@@ -83,6 +83,17 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
     public void AssertAlive() => Assert.False(_process.HasExited, _process.HasExited
         ? "Actual Agent.Host exited: " + _output.GetAwaiter().GetResult() + _error.GetAwaiter().GetResult() : null);
 
+    public async Task<string> StopAndCaptureOutputAsync()
+    {
+        if (!_process.HasExited) _process.Kill(entireProcessTree: true);
+        await _process.WaitForExitAsync();
+        var logs = Path.Combine(_scratch, "identity", "logs");
+        var journal = Directory.Exists(logs)
+            ? string.Join("\n", await Task.WhenAll(Directory.GetFiles(logs, "*.jsonl").Order(StringComparer.Ordinal).Select(path => File.ReadAllTextAsync(path))))
+            : "(no journal)";
+        return $"stdout/stderr:\n{await _output}{await _error}\nAgent journal:\n{journal}";
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (!_process.HasExited && !OperatingSystem.IsWindows())
