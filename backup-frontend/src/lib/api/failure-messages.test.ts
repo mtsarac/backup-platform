@@ -195,7 +195,7 @@ describe('backend codes that had no mapping', () => {
     'protocol_incompatible', 'protocol_missing', 'rate_limited', 'lease_conflict', 'destination_not_authorized', 'destination_unavailable', 'source_unavailable', 'source_inaccessible', 'unsupported_provider', 'agent_direct_required', 'attempt_not_terminal',
     'share_not_found', 'share_expired', 'share_revoked', 'already_revoked', 'cannot_shorten', 'duration_exceeded', 'invalid_duration', 'missing_expiry', 'no_downloadable_replica', 'invalid_artifact',
     'invalid_cursor', 'invalid_limit', 'invalid_status', 'invalid_result', 'invalid_tenant', 'invalid_date_range', 'invalid_report_period',
-    'too_many_attempts', 'invalid_password', 'password_same_as_current', 'invalid_token', 'email_not_verifiable', 'email_recovery_unavailable', 'last_platform_admin', 'invalid_recovery_key',
+    'too_many_attempts', 'invalid_password', 'current_password_required', 'current_password_incorrect', 'invalid_verification_code', 'security_verification_failed', 'invalid_setup_token', 'totp_already_enrolled', 'password_same_as_current', 'invalid_token', 'email_not_verifiable', 'email_recovery_unavailable', 'last_platform_admin', 'invalid_recovery_key',
     'google_drive_authorization_unavailable', 'forbidden', 'unauthorized', 'retry_not_allowed', 'invalid_run_state', 'invalid_schedule', 'agent_cannot_restore', 'invalid_lifetime', 'invalid_server_url',
   ]
 
