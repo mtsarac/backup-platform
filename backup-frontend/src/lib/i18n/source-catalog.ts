@@ -1,5 +1,9 @@
 // UI source copy only. Stable wire values and customer-entered names are never catalog lookups.
 export const sourceCatalog: Record<string, { tr: string; en: string }> = {
+  "Mevcut şifrenizi girin.": { tr: "Mevcut şifrenizi girin.", en: "Enter your current password." },
+  "Mevcut şifreniz hatalı.": { tr: "Mevcut şifreniz hatalı.", en: "Your current password is incorrect." },
+  "TOTP kurulumu geçersiz veya süresi dolmuş. Kurulumu yeniden başlatın.": { tr: "TOTP kurulumu geçersiz veya süresi dolmuş. Kurulumu yeniden başlatın.", en: "TOTP setup is invalid or expired. Start setup again." },
+  "TOTP zaten etkin.": { tr: "TOTP zaten etkin.", en: "TOTP is already enabled." },
   "Bilgisayar günlükleri": { tr: "Bilgisayar günlükleri", en: "Computer logs" },
   "En fazla son 1000 kayıt gösterilir.": { tr: "En fazla son 1000 kayıt gösterilir.", en: "Up to the latest 1,000 records are shown." },
   "Canlı takip": { tr: "Canlı takip", en: "Live tail" },

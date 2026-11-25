@@ -186,6 +186,32 @@ test('cumulative password typos across distinct accounts on a shared IP do not l
   await expect(page).toHaveURL(/\/tenants\//)
 })
 
+test('security dialog explains an active login IP limit (#267)', async ({ page }) => {
+  const platform = await platformApi()
+  const user = await newUser(platform)
+  await platform.dispose()
+  await signIn(page, user.login, user.password)
+  await page.waitForURL(/\/tenants\//)
+
+  const anon = await request.newContext({ baseURL: apiUrl, ignoreHTTPSErrors: true })
+  for (let i = 0; i < 5; i++) {
+    const csrf = await (await anon.get('/api/auth/antiforgery')).json()
+    await anon.post('/api/auth/login', {
+      headers: { [csrf.headerName]: csrf.requestToken },
+      data: { loginIdentifier: `other-${i}`, password: 'definitely-wrong-password' },
+    })
+  }
+  await anon.dispose()
+
+  await page.goto('/account/security')
+  await page.getByRole('button', { name: 'TOTP Etkinleştir' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Mevcut şifreniz').fill(user.password)
+  await dialog.getByLabel('Doğrulama kodu').fill('000000')
+  await dialog.getByRole('button', { name: 'Doğrula ve Etkinleştir' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Çok fazla başarısız deneme')
+})
+
 test('passkey step-up under an active login throttle reports temporary lockout instead of 400 invalid password (#282)', async ({ page, context }) => {
   await virtualAuthenticator(context, page)
   const platform = await platformApi()

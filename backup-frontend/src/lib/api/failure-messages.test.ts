@@ -5,6 +5,16 @@ import { actionLabel, describeError, describeFailure, errorMessage, failureMessa
 
 describe('platform failure messages', () => {
   it.each([
+    ['current_password_required', 'Mevcut şifrenizi girin.'],
+    ['current_password_incorrect', 'Mevcut şifreniz hatalı.'],
+    ['invalid_verification_code', 'Doğrulama kodu hatalı veya süresi dolmuş.'],
+    ['security_verification_failed', 'Güvenlik doğrulaması için mevcut şifrenizi veya geçerli bir TOTP kodunu girin.'],
+    ['too_many_attempts', 'Çok fazla başarısız deneme; bu işlem geçici olarak kilitlendi. Biraz bekleyip yeniden deneyin.'],
+  ])('explains security verification failure %s', (code, expected) => {
+    expect(describeError(new ApiError(code === 'too_many_attempts' ? 429 : 400, { error: code })).what).toBe(expected)
+  })
+
+  it.each([
     [409, { error: 'already_member' }, 'Bu kullanıcı zaten çalışma alanı üyesi.'],
     [404, { error: 'user_not_found' }, 'Kullanıcı bulunamadı.'],
     [404, { error: 'tenant_not_found' }, 'Çalışma alanı bulunamadı.'],
