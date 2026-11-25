@@ -183,7 +183,8 @@ test('revoking an agent via UI disables its jobs, explains why on job detail, an
   await page.goto(tenantPath(tenantId, 'agents'))
   await expect(page.getByRole('link', { name: AGENT_NAME, exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: revokeAgentName })).toHaveCount(0)
-  await page.getByLabel('İptal edilenleri göster').check()
+  await page.getByLabel('İptal edilenleri göster').click()
+  await expect(page.getByLabel('İptal edilenleri göster')).toBeChecked()
   await expect(page.getByRole('row', { name: new RegExp(revokeAgentName) })).toContainText('İptal edildi')
 
   await page.goto(tenantPath(tenantId, `backup-jobs/${revokeJobId}`))
