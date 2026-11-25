@@ -101,7 +101,7 @@ public sealed class PacedUploadPipelineTests : IDisposable
             uploadToken = token;
             started.SetResult();
             await complete.Task.WaitAsync(token);
-            return new StorageObjectMetadata(new StorageLocation(storage.Id, key), 0, null, DateTimeOffset.UtcNow);
+            return new StorageObjectMetadata(new StorageLocation(storage.Id, key), options.ExpectedLength!.Value, null, DateTimeOffset.UtcNow);
         };
         storage.OnVerify = (key, expected) => new StorageVerificationResult(new StorageLocation(storage.Id, key), StorageVerificationStatus.Verified,
             StorageVerificationMethod.ReadBack, expected.SizeBytes, expected.Checksum);
