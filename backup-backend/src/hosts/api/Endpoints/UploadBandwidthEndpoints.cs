@@ -19,7 +19,7 @@ public static class UploadBandwidthEndpoints
 {
     public static IEndpointRouteBuilder MapUploadBandwidthEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var limits = endpoints.MapGroup("/api/tenants/{tenantId:guid}/upload-bandwidth").WithMetadata(new TenantScopedEndpoint());
+        var limits = endpoints.MapTenantGroup("/upload-bandwidth");
         limits.MapGet("", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         limits.MapPut("/tenant", (UploadBandwidthLimitRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>
             SetAsync(UploadBandwidthScope.Tenant, tenant.TenantId!.Value, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -37,7 +37,7 @@ public static class UploadBandwidthEndpoints
             AssignProfileAsync(UploadBandwidthScope.Job, jobId, request, tenant, user, service, cancellationToken)).RequireAuthorization(AuthorizationPolicies.TenantAccess);
 
         // Bandwidth profiles CRUD
-        var profiles = endpoints.MapGroup("/api/tenants/{tenantId:guid}/bandwidth-profiles").WithMetadata(new TenantScopedEndpoint());
+        var profiles = endpoints.MapTenantGroup("/bandwidth-profiles");
         profiles.MapGet("", ListProfilesAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         profiles.MapGet("/{profileId:guid}", GetProfileAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         profiles.MapPost("", (SaveBandwidthProfileRequest request, ITenantContext tenant, ICurrentUser user, UploadBandwidthService service, CancellationToken cancellationToken) =>

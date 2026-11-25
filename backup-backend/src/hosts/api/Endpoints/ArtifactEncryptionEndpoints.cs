@@ -27,8 +27,7 @@ public static class ArtifactEncryptionEndpoints
         platform.MapPost("/rotate", RotateWrapKeyAsync);
         platform.MapPost("/{version:int}/retire", RetireWrapKeyAsync);
 
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}/encryption").WithMetadata(new TenantScopedEndpoint())
-            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        var tenant = endpoints.MapTenantGroup("/encryption");
         tenant.MapGet("", GetTenantEncryptionAsync);
         tenant.MapPut("/recovery-key", SetRecoveryKeyAsync);
         tenant.MapDelete("/recovery-key", RemoveRecoveryKeyAsync);

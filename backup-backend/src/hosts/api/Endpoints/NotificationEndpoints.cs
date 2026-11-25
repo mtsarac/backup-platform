@@ -81,8 +81,7 @@ public static class NotificationEndpoints
 {
     public static IEndpointRouteBuilder MapNotificationEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}/notifications").WithMetadata(new TenantScopedEndpoint())
-            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        var tenant = endpoints.MapTenantGroup("/notifications");
         tenant.AddEndpointFilter(async (context, next) =>
         {
             var services = context.HttpContext.RequestServices;

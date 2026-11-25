@@ -98,6 +98,18 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
 
     private async Task<BackupRun> ReloadAsync(Multi multi, Guid runId) => (await World.RunStore().GetRunAsync(multi.Agent.TenantId, runId, default))!;
 
+    [Fact]
+    public async Task BackupViewsUseTheResolvedTenantEvenWhenAnotherTenantIdIsRequested()
+    {
+        var multi = await SetupAsync();
+        var (run, _) = await StartAndClaimAsync(multi, T0);
+        var store = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(World.Options(), new MutableTenantContext(BackupPlatform.Domain.Identity.TenantId.New()));
+
+        Assert.Null(await store.GetJobAsync(multi.Agent.TenantId, multi.Job.Id, T0, default));
+        Assert.Null(await store.GetRunAsync(multi.Agent.TenantId, run.Id, default));
+        Assert.Empty(await store.ListJobsAsync(multi.Agent.TenantId, T0, false, default));
+    }
+
     // ---- admission and claim: manual, scheduled and retry are fenced alike ----
 
     [Fact]
@@ -230,7 +242,7 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         await World.AssertUsedAsync(multi.Agent.TenantId, 100);
         await World.AssertNoDriftAsync(multi.Agent.TenantId);
         Assert.Empty(await UnreleasedAsync(fixture, multi.Agent.TenantId));
-        var dashboard = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(World.Options()).GetDashboardAsync(multi.Agent.TenantId, T0, default);
+        var dashboard = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(World.Options(), new MutableTenantContext(multi.Agent.TenantId)).GetDashboardAsync(multi.Agent.TenantId, T0, default);
         Assert.Equal(0, dashboard.Runs.ReplicationInsufficientLast24Hours);
     }
 
@@ -278,7 +290,7 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         Assert.Equal(BackupStatus.Succeeded, run.Status);
         Assert.Equal(BackupArtifactState.Available, run.CurrentAttempt.Artifacts.Single().State);
         Assert.Equal(("InsufficientReplicas", false, 1), (view.Replication!.Status, view.Replication.PolicySatisfied, view.Replication.VerifiedReplicas));
-        var dashboard = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(World.Options()).GetDashboardAsync(multi.Agent.TenantId, T0, default);
+        var dashboard = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(World.Options(), new MutableTenantContext(multi.Agent.TenantId)).GetDashboardAsync(multi.Agent.TenantId, T0, default);
         Assert.Equal((1, 1, 0), (dashboard.Runs.ReplicationInsufficientLast24Hours, dashboard.Runs.SucceededLast24Hours, dashboard.Runs.FailedLast24Hours));
     }
 
