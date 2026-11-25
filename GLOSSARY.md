@@ -57,11 +57,11 @@ _Avoid_: BackendRelay, ProxyUpload
 ### Accounts & Access
 
 **PlatformAdmin** (shown as "Platform Yöneticisi"):
-The account role that operates the platform: tenants, users, plans, storage, shares shown under `Paylaşılan Yedekler`. It is not a tenant member and reaches tenant backup content only through a BackupShare.
+The account role that operates the platform: tenants, users, plans, storage, shares shown under `Paylaşılan Yedekler`. It is not a tenant member; direct artifact downloads require a BackupShare, while restore can expose plaintext at the target.
 _Avoid_: Super admin, Operator, Support user
 
 **UserAdmin** (shown as "Kullanıcı Yöneticisi"):
-The account role of a tenant's own administrator. It manages every tenant it is a member of, with the same rights in each; an account with no membership is disabled.
+The account role of a tenant's own administrator. Every member has full administrative rights in each tenant they belong to; an account with no membership is disabled.
 _Avoid_: Owner, Admin, Operator, Viewer, Tenant role
 
 **BackupShare** (shown as "Paylaşım"; lists `Paylaşımlarım` and `Paylaşılan Yedekler`):
