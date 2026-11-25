@@ -20,26 +20,30 @@ public sealed record RestoreOptionsRequest(bool? TerminateActiveConnections = nu
 /// </summary>
 public interface IRestoreRequestPayload
 {
-    System.Text.Json.JsonElement? ShareId { get; }
+    System.Text.Json.JsonElement ShareId { get; }
 }
 
 public sealed record StartRestoreRequest(Guid AgentId, RestoreTargetRequest Target, string DatabaseName, Guid? ReplicaId = null, string? Mode = null,
-    string? ConfirmOverwrite = null, RestoreOptionsRequest? Options = null, Guid? PrecheckId = null, System.Text.Json.JsonElement? ShareId = null) : IRestoreRequestPayload;
+    string? ConfirmOverwrite = null, RestoreOptionsRequest? Options = null, Guid? PrecheckId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] System.Text.Json.JsonElement ShareId = default) : IRestoreRequestPayload;
 
 public sealed record StartRestorePrecheckRequest(Guid AgentId, RestoreTargetRequest Target, string DatabaseName, Guid? ReplicaId = null, string? Mode = null,
-    RestoreOptionsRequest? Options = null, System.Text.Json.JsonElement? ShareId = null) : IRestoreRequestPayload;
+    RestoreOptionsRequest? Options = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] System.Text.Json.JsonElement ShareId = default) : IRestoreRequestPayload;
 
 /// <summary>
 /// Restores one artifact into a disposable database on the target, proves it is usable and drops it. The backend names the database; the caller never supplies a name,
 /// an overwrite mode or a confirmation, because a verification can only ever create a new, platform-named database.
 /// </summary>
 public sealed record StartRestoreVerificationRequest(Guid AgentId, RestoreTargetRequest Target, Guid? ReplicaId = null, RestoreOptionsRequest? Options = null,
-    System.Text.Json.JsonElement? ShareId = null) : IRestoreRequestPayload;
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] System.Text.Json.JsonElement ShareId = default) : IRestoreRequestPayload;
 
 /// <summary>An operator's explicit removal request for a retained rollback copy: the database name must be repeated exactly.</summary>
-public sealed record RestoreCleanupRequest(string? ConfirmDatabaseName = null, System.Text.Json.JsonElement? ShareId = null) : IRestoreRequestPayload;
+public sealed record RestoreCleanupRequest(string? ConfirmDatabaseName = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] System.Text.Json.JsonElement ShareId = default) : IRestoreRequestPayload;
 
-public sealed record StartRestoreDiscoveryRequest(Guid AgentId, RestoreTargetRequest Target, Guid? ReplicaId = null, System.Text.Json.JsonElement? ShareId = null) : IRestoreRequestPayload;
+public sealed record StartRestoreDiscoveryRequest(Guid AgentId, RestoreTargetRequest Target, Guid? ReplicaId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] System.Text.Json.JsonElement ShareId = default) : IRestoreRequestPayload;
 
 /// <summary>A request field is invalid. Carries the field and a stable code, never the offending value or a parser message.</summary>
 public sealed class InvalidRestoreRequestException(string field, string code = "invalid_value") : ArgumentException("The restore request field is invalid.")
