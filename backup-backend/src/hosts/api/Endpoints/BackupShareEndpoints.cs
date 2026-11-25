@@ -13,7 +13,7 @@ public static class BackupShareEndpoints
 {
     public static IEndpointRouteBuilder MapBackupShareEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
 
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/shares", CreateShareForArtifactAsync)
             .RequireAuthorization(AuthorizationPolicies.TenantAccess);

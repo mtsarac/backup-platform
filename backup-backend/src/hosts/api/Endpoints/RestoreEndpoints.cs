@@ -14,15 +14,14 @@ using BackupPlatform.Domain.Restores;
 namespace BackupPlatform.Api.Endpoints;
 
 /// <summary>
-/// Restoring a stored backup into a SQL Server. Starting and cancelling a restore change a target database, so they need the operator role; reading needs only the
-/// viewer role. A restore is asynchronous work for the target agent: starting one answers 202 with the restore to poll, and an agent never receives anything from these
-/// routes: it gets the work from its own poll. Nothing here accepts a secret, a path or a storage key: the target names a credential the agent holds.
+/// Restore is asynchronous work for the target agent; starting one answers 202 with the restore to poll.
+/// These routes accept neither secrets nor paths nor storage keys: the target names a credential the agent holds.
 /// </summary>
 public static class RestoreEndpoints
 {
     public static IEndpointRouteBuilder MapRestoreEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore", StartAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-precheck", PrecheckAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-verifications", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);

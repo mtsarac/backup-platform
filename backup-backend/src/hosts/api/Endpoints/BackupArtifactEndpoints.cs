@@ -16,7 +16,7 @@ public static class BackupArtifactEndpoints
 {
     public static IEndpointRouteBuilder MapBackupArtifactEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.MapGet("/backup-artifacts", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess).WithListQuery();
         tenant.MapGet("/backup-artifacts/{artifactId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapDelete("/backup-artifacts/{artifactId:guid}", DeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);

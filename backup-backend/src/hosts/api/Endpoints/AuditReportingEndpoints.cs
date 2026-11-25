@@ -11,8 +11,7 @@ public static class AuditReportingEndpoints
     public static IEndpointRouteBuilder MapAuditReportingEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/platform/audit/integrity", VerifyAsync).RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
-        endpoints.MapGet("/api/tenants/{tenantId:guid}/reports/backups", ReportAsync)
-            .WithMetadata(new TenantScopedEndpoint()).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        endpoints.MapTenantGroup().MapGet("/reports/backups", ReportAsync);
         return endpoints;
     }
 

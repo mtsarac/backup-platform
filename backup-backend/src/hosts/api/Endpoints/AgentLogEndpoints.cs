@@ -18,8 +18,7 @@ public static class AgentLogEndpoints
         endpoints.MapPost("/api/agent/logs", IngestAsync)
             .WithMetadata(new AgentApiEndpoint(), new RequestSizeLimitAttribute(64 * 1024))
             .RequireAuthorization(AuthorizationPolicies.Agent).RequireRateLimiting(AgentRateLimitOptions.Policies.Poll);
-        endpoints.MapGet("/api/tenants/{tenantId:guid}/agent-logs", QueryAsync)
-            .WithMetadata(new TenantScopedEndpoint()).RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        endpoints.MapTenantGroup().MapGet("/agent-logs", QueryAsync);
         return endpoints;
     }
 

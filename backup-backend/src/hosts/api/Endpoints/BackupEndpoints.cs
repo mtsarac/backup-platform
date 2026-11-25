@@ -15,7 +15,7 @@ public static class BackupEndpoints
 {
     public static IEndpointRouteBuilder MapBackupEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.MapPost("/backup-jobs", CreateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-jobs", ListJobsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/backup-jobs/health-timeline", GetHealthTimelineAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
@@ -151,7 +151,6 @@ public static class BackupEndpoints
     private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, HttpContext context, ITenantContext tenant,
         BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        // Retention keeps its administrator-only rule even though it now travels in the same request: an operator simply does not send it.
         try
         {
             request = request with { Configuration = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken) };

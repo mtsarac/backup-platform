@@ -26,9 +26,7 @@ public sealed class SetAgentEnrollmentRequest
 }
 
 /// <summary>
-/// Browser-authenticated control-plane routes. Platform enrollment operations require PlatformAdmin independently
-/// of membership. Tenant routes resolve membership first: safe agent reads require Viewer, while enrollment policy,
-/// tokens and agent revocation require the administrator role for that same tenant.
+/// Platform enrollment operations require PlatformAdmin. Tenant agent operations require tenant access.
 /// </summary>
 public static class AgentAdministrationEndpoints
 {
@@ -44,8 +42,7 @@ public static class AgentAdministrationEndpoints
         settings.MapGet("", GetAgentSettingsAsync);
         settings.MapPut("", UpdateAgentSettingsAsync);
 
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}")
-            .WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.MapGet("/agent-enrollment", GetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPut("/agent-enrollment", SetTenantPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
