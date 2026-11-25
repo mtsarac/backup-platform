@@ -12,6 +12,7 @@ public sealed class BaselineMigrationIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal("Baseline", (await context.Database.GetAppliedMigrationsAsync()).Select(m => m[(m.IndexOf('_') + 1)..]).First());
         Assert.Equal(context.Database.GetMigrations().Count(), (await context.Database.GetAppliedMigrationsAsync()).Count());
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
+        Assert.Equal(1L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM information_schema.columns WHERE table_schema = 'quartz' AND table_name = 'qrtz_triggers' AND column_name = 'fixed_delay'").SingleAsync());
         Assert.False(context.Database.HasPendingModelChanges());
     }
 
