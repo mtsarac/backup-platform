@@ -164,13 +164,27 @@ public sealed class AccountDisableAndLastAdminGuardIntegrationTests(PostgreSqlFi
         var taskA = sessionA.SendAsync(HttpMethod.Post, $"/api/platform/users/{adminB.UserId.Value}/disable", new { reason = "Concurrent A->B" });
         var taskB = sessionB.SendAsync(HttpMethod.Post, $"/api/platform/users/{adminA.UserId.Value}/disable", new { reason = "Concurrent B->A" });
         var responses = await Task.WhenAll(taskA, taskB);
-        var statuses = responses.Select(r => r.StatusCode).ToList();
-        Assert.Contains(HttpStatusCode.OK, statuses);
-        Assert.Contains(HttpStatusCode.Conflict, statuses);
+        try
+        {
+            Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+            var rejected = Assert.Single(responses, r => r.StatusCode != HttpStatusCode.OK);
+            // Winner's commit may revoke the loser before auth (401), before policy check (403), or inside the store guard (409)
+            Assert.True(
+                rejected.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized,
+                $"Expected Conflict, Forbidden, or Unauthorized for the losing disable request, got {rejected.StatusCode}.");
+            if (rejected.StatusCode == HttpStatusCode.Conflict)
+            {
+                Assert.Equal("last_platform_admin", AgentWorld.ReadJson(rejected).GetProperty("error").GetString());
+            }
+        }
+        finally
+        {
+            foreach (var response in responses) response.Dispose();
+        }
 
-        // Verify in DB that at least one PlatformAdmin is active
         await using var verifyContext = fixture.CreatePlatformContext();
         var activeAdmins = await verifyContext.Users.CountAsync(
             u => u.Role == UserRole.PlatformAdmin && !u.IsManuallyDisabled && !u.IsSecurityDisabled && !u.IsNoMembershipDisabled);
+        Assert.Equal(1, activeAdmins);
     }
 }
