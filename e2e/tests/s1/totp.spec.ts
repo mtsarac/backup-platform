@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { axeViolations, MOBILE, newUser, platformApi, resetIsolatedThrottle, signIn, totp, watch } from './helpers'
+import { axeViolations, isIsolatedStack, ISOLATED_SKIP, MOBILE, newUser, platformApi, resetIsolatedThrottle, signIn, totp, watch } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -39,9 +39,11 @@ test('security page offers TOTP enrolment; setup dialog validates and enables TO
   await dialog(page).getByRole('button', { name: 'Doğrula ve Etkinleştir' }).click()
   expect(await dialog(page).getByLabel('Mevcut şifreniz').evaluate((e: HTMLInputElement) => e.validity.valueMissing)).toBe(true)
   await dialog(page).getByLabel('Mevcut şifreniz').fill(user.password)
-  await dialog(page).getByLabel('Doğrulama kodu').fill('000000')
-  await dialog(page).getByRole('button', { name: 'Doğrula ve Etkinleştir' }).click()
-  await expect(dialog(page).getByRole('alert')).toBeVisible()
+  if (isIsolatedStack) { // a wrong code feeds the shared per-IP TOTP throttle, which never decays within 24h (#290)
+    await dialog(page).getByLabel('Doğrulama kodu').fill('000000')
+    await dialog(page).getByRole('button', { name: 'Doğrula ve Etkinleştir' }).click()
+    await expect(dialog(page).getByRole('alert')).toBeVisible()
+  }
 
   await dialog(page).getByLabel('Doğrulama kodu').fill(await totp(secret))
   await dialog(page).getByRole('button', { name: 'Doğrula ve Etkinleştir' }).click()
@@ -81,9 +83,11 @@ test('password sign-in focuses the code field (#245); wrong code is rejected, va
   await expect(page.getByRole('heading', { level: 1, name: 'İki faktörlü doğrulama' })).toBeVisible()
   await expect(page.getByLabel('Doğrulama kodu')).toBeFocused()
   expect(await axeViolations(page)).toEqual([])
-  await page.getByLabel('Doğrulama kodu').fill('000000')
-  await page.getByRole('button', { name: 'Doğrula', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Doğrulama kodu hatalı')
+  if (isIsolatedStack) { // see #290
+    await page.getByLabel('Doğrulama kodu').fill('000000')
+    await page.getByRole('button', { name: 'Doğrula', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('Doğrulama kodu hatalı')
+  }
   await page.getByLabel('Doğrulama kodu').fill(await totp(secret))
   await page.getByRole('button', { name: 'Doğrula', exact: true }).click()
   await expect(page).toHaveURL(/\/tenants\//)
@@ -141,6 +145,7 @@ test('removing TOTP requires proof; with the password it is removed and sign-in 
 })
 
 test.fail('TOTP setup and removal dialogs explain wrong code or wrong password instead of generic unexpected failure (#266)', async ({ page }) => {
+  test.skip(!isIsolatedStack, ISOLATED_SKIP)
   const platform = await platformApi()
   const u = await newUser(platform)
   await platform.dispose()
