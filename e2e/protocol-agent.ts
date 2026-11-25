@@ -5,7 +5,7 @@ import { request, type APIRequestContext } from '@playwright/test'
 import { Api, apiUrl, createEnrollmentToken, enableAgentEnrollment, ensureTenant, ensureTenantUser, ensureUnlimitedPlan } from './api'
 import type { Account } from './state'
 
-const CAPS = ['backup.file-system', 'backup.multi-destination', 'backup.quota-bounded-upload', 'mssql.backup.full', 'storage.agent-direct', 'storage.s3'].sort()
+const CAPS = ['backup.file-system', 'backup.multi-destination', 'backup.quota-bounded-upload', 'mssql.backup.full', 'replica.agent-lifecycle', 'storage.agent-direct', 'storage.s3'].sort()
 
 export type ProtocolAgent = { agentId: string; hostName: string; ctx: APIRequestContext; headers: Record<string, string> }
 export type S5Tenant = { tenantId: string; tenantName: string; account: Account; tenant: Api; platform: Api }
