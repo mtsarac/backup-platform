@@ -33,7 +33,7 @@ public sealed class RemoveLegacyAccessMigrationTests(PostgreSqlFixture fixture) 
         var supportSessionId = Guid.NewGuid();
         var adminId = Guid.NewGuid();
 
-        await using (var context = fixture.CreatePlatformContext())
+        await using (var context = fixture.CreateMigrationContext())
         {
             var migrator = context.GetService<IMigrator>();
             await migrator.MigrateAsync("20261111125127_RemoveArtifactAccess");

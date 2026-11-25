@@ -25,7 +25,8 @@ public sealed class PostgreSqlFixtureIsolationTests
             {
                 await using var context = fixture.CreatePlatformContext();
                 Assert.Empty(await context.Tenants.ToListAsync());
-                Assert.Empty(await context.Database.GetPendingMigrationsAsync());
+                await using (var migrations = fixture.CreateMigrationContext())
+                    Assert.Empty(await migrations.Database.GetPendingMigrationsAsync());
                 context.Tenants.Add(new Tenant(tenantIds[index], "Isolated fixture"));
                 await context.SaveChangesAsync();
             }));
@@ -56,7 +57,7 @@ public sealed class PostgreSqlFixtureIsolationTests
         {
             await first.InitializeAsync();
             await using var context = first.CreatePlatformContext();
-            var migrations = context.Database.GetMigrations().ToArray();
+            var migrations = first.CreateMigrationContext().Database.GetMigrations().ToArray();
             var tenantId = TenantId.New();
             context.Tenants.Add(new Tenant(tenantId, "Migration clone"));
             await context.SaveChangesAsync();
@@ -90,7 +91,8 @@ public sealed class PostgreSqlFixtureIsolationTests
             command.Parameters.AddWithValue("name", name);
             Assert.Equal(0L, await command.ExecuteScalarAsync());
             await using var context = clone.CreatePlatformContext();
-            Assert.Empty(await context.Database.GetPendingMigrationsAsync());
+            await using (var migrations = clone.CreateMigrationContext())
+                Assert.Empty(await migrations.Database.GetPendingMigrationsAsync());
             var tenant = new Tenant(TenantId.New(), "Surviving clone");
             context.Tenants.Add(tenant);
             await context.SaveChangesAsync();

@@ -7,7 +7,7 @@ public sealed class BaselineMigrationIntegrationTests(PostgreSqlFixture fixture)
     [Fact]
     public async Task AFreshDatabaseAppliesTheBaselineFirstAndMatchesTheCurrentModel()
     {
-        await using var context = fixture.CreatePlatformContext();
+        await using var context = fixture.CreateMigrationContext();
         // The baseline is always first; later migrations are incremental and must all be applied on a fresh database.
         Assert.Equal("Baseline", (await context.Database.GetAppliedMigrationsAsync()).Select(m => m[(m.IndexOf('_') + 1)..]).First());
         Assert.Equal(context.Database.GetMigrations().Count(), (await context.Database.GetAppliedMigrationsAsync()).Count());
@@ -19,7 +19,7 @@ public sealed class BaselineMigrationIntegrationTests(PostgreSqlFixture fixture)
     [Fact]
     public async Task TheBaselineCarriesTheObjectsTheModelCannotExpress()
     {
-        await using var context = fixture.CreatePlatformContext();
+        await using var context = fixture.CreateMigrationContext();
         // 16 in the baseline, minus the three Support Session triggers removed with it, plus the two membership/role guards of the two-role model.
         Assert.Equal(15L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'trg\\_%'").SingleAsync());
         Assert.Equal(1L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM quota_policies WHERE \"IsDefault\"").SingleAsync());
