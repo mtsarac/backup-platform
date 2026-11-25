@@ -27,7 +27,7 @@
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageVersion Include="MailKit" Version="4.18.2" />
+    <PackageVersion Include="MailKit" Version="5.0.0" />
     <PackageVersion Include="Cronos" Version="0.13.0" />
     <PackageVersion Include="Quartz" Version="4.6.2" />
     <PackageVersion Include="QRCoder" Version="1.6.0" />
