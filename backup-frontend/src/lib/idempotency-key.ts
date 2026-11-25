@@ -1,4 +1,6 @@
 import { useMemo, useRef } from 'react'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { ApiError } from '@/lib/api/client'
 
 /** A failure whose outcome is unknown: the server may have recorded the request, so a retry must carry the same key. */
@@ -23,4 +25,32 @@ export function useIdempotencyKey() {
       slot.current = null
     },
   }), [])
+}
+
+const PREFIX = 'bp_idem:'
+const digest = (body: string) => PREFIX + bytesToHex(sha256(utf8ToBytes(body)))
+
+/**
+ * Keys of create requests whose outcome may be lost with the page, kept per tab and addressed by a hash of the body
+ * (tenant included), so the same request after a reload reuses its key and the body itself is never stored.
+ * Cleared when the session ends so another user in the tab can never inherit one.
+ */
+export const pendingKeys = {
+  // The storage can be unavailable (privacy mode, quota); the in-memory key still protects the open page.
+  take(body: string) {
+    try {
+      const id = digest(body)
+      const key = sessionStorage.getItem(id) ?? crypto.randomUUID()
+      sessionStorage.setItem(id, key)
+      return key
+    } catch { return crypto.randomUUID() }
+  },
+  drop(body: string) {
+    try { sessionStorage.removeItem(digest(body)) } catch { /* nothing persisted */ }
+  },
+  clear() {
+    try {
+      Object.keys(sessionStorage).filter(name => name.startsWith(PREFIX)).forEach(name => sessionStorage.removeItem(name))
+    } catch { /* nothing persisted */ }
+  },
 }

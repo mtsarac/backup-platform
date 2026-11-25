@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
-import { isUncertainError } from '@/lib/idempotency-key'
+import { isUncertainError, pendingKeys } from '@/lib/idempotency-key'
 import { getBackupJob, getBackupJobs, getOccurrences, saveBackupJob, setJobEnabled, startJobRun } from './api'
 import { isActiveRun } from '@/features/backups/presentation'
 import type { BackupJob, BackupJobInput } from './types'
@@ -37,7 +37,7 @@ export function useSaveBackupJob(id?: string) {
   return useMutation({ mutationFn: async (input: BackupJobInput) => {
     if (id) return saveBackupJob(tenantId, input, id)
     const body = JSON.stringify([tenantId, input])
-    const action = actions.current.get(body) ?? { key: crypto.randomUUID(), pending: 0, settled: false }
+    const action = actions.current.get(body) ?? { key: pendingKeys.take(body), pending: 0, settled: false }
     actions.current.set(body, action)
     action.pending++
     try {
@@ -48,7 +48,10 @@ export function useSaveBackupJob(id?: string) {
       if (!isUncertainError(error)) action.settled = true
       throw error
     } finally {
-      if (--action.pending === 0 && action.settled) actions.current.delete(body)
+      if (--action.pending === 0 && action.settled) {
+        actions.current.delete(body)
+        pendingKeys.drop(body)
+      }
     }
   }, onSuccess: invalidate, onError: invalidate })
 }
