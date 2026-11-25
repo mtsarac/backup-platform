@@ -128,7 +128,7 @@ public sealed class PlatformListsIntegrationTests(PostgreSqlFixture fixture) : I
         var tag = NewTag();
         foreach (var name in new[] { "b", "C", "a", "100% x", "1000 x", "a_b", "axb" }) await SeedTenantAsync(world, $"{tag} {name}", 0, 0, false);
         var pagingTag = NewTag();
-        for (var i = 0; i < 5; i++) await SeedTenantAsync(world, $"{pagingTag} same", 0, 0, false);
+        for (var i = 0; i < 5; i++) await SeedTenantAsync(world, $"{pagingTag} {i}", 0, 0, false);
 
         Assert.Equal(["100% x", "1000 x", "a", "a_b", "axb", "b", "C"], Strings(await GetAsync(admin, "/api/platform/tenants", $"search={tag.ToUpperInvariant()}%20&pageSize=100"), "name", tag));
         Assert.Equal(["C", "b"], Strings(await GetAsync(admin, "/api/platform/tenants", $"search={tag}%20&sort=name&dir=desc&pageSize=2"), "name", tag));

@@ -610,7 +610,8 @@ public sealed class PasskeyIntegrationTests(PostgreSqlFixture fixture) : IClassF
         {
             challengeId, name = "Key", response = attestation, currentPassword = account.Password
         });
-        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
+        Assert.Equal("too_many_attempts", AgentWorld.ReadJson(blocked).GetProperty("error").GetString());
         world.Clock.Advance(TimeSpan.FromMinutes(1));
         using var allowed = await browser.SendAsync(HttpMethod.Post, "/api/auth/passkeys/register", new
         {

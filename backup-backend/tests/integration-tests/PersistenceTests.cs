@@ -130,7 +130,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     [InlineData("agent-tenant")]
     public async Task PrincipalDeletionDoesNotCascadeToDependents(string relationship)
     {
-        var tenant = new Tenant(TenantId.New(), "Restricted tenant");
+        var tenant = new Tenant(TenantId.New(), $"Restricted tenant {Guid.NewGuid():N}");
         var user = new User(UserId.New(), "Restricted user");
         await using (var context = fixture.CreatePlatformContext())
         {
@@ -175,7 +175,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
     [InlineData(AgentPlatform.Windows)]
     public async Task AgentSoftwareIdentityAndLifecycleSurviveRoundTrips(AgentPlatform platform)
     {
-        var tenant = new Tenant(TenantId.New(), "Agent tenant");
+        var tenant = new Tenant(TenantId.New(), $"Agent tenant {Guid.NewGuid():N}");
         var software = new AgentSoftware(platform, new Version(3, 2, 1, 7), new AgentProtocolVersion(2, 4));
         var agent = new Agent(AgentId.New(), tenant.Id, software);
         agent.RecordEnrollment();
@@ -454,7 +454,8 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
 
     private async Task<Seed> SeedAsync()
     {
-        var tenant = new Tenant(TenantId.New(), "Seed tenant");
+        var tenantId = TenantId.New();
+        var tenant = new Tenant(tenantId, $"Seed tenant {tenantId.Value:N}");
         var user = new User(UserId.New(), "Seed user");
         var membership = new TenantMembership(tenant.Id, user.Id);
         var agent = new Agent(AgentId.New(), tenant.Id, CreateSoftware());
@@ -492,7 +493,7 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
         switch (persisted)
         {
             case Tenant tenant:
-                Assert.Equal("Seed tenant", tenant.Name);
+                Assert.Equal($"Seed tenant {seed.TenantId.Value:N}", tenant.Name);
                 break;
             case TenantMembership:
                 break;
