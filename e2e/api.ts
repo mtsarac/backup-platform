@@ -49,7 +49,7 @@ export async function ensureTenantUser(platform: Api, tenantIds: string[], accou
 }
 
 export async function ensureUnlimitedPlan(platform: Api, tenantId: string, planName: string) {
-  const plans = await platform.call('GET', '/api/platform/plans?pageSize=100')
+  const plans = await platform.call('GET', `/api/platform/plans?search=${encodeURIComponent(planName)}&pageSize=100`)
   const plan = find(plans, 'name', planName) ?? (await platform.call('POST', '/api/platform/plans', { name: planName, storageLimitBytes: 1_000_000_000_000, unlimited: false, enabled: true, quotaPolicyReference: 'default' }))
   await platform.call('PUT', `/api/platform/tenants/${tenantId}/subscription`, { planId: plan.planId }, [200, 201, 204, 409])
   await platform.call('PUT', `/api/platform/tenants/${tenantId}/subscription/storage-limit-override`, { kind: 'unlimited' })

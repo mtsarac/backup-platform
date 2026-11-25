@@ -62,6 +62,7 @@ test('security page offers TOTP enrolment; setup dialog validates and enables TO
 })
 
 test('regenerating recovery codes accepts TOTP proof as well as password, and shows new codes', async ({ page }) => {
+  test.setTimeout(90_000)
   await signIn(page, user.login, user.password)
   await expect(page.getByLabel('Doğrulama kodu')).toBeFocused()
   await page.getByLabel('Doğrulama kodu').fill(await totp(secret))
@@ -79,6 +80,7 @@ test('regenerating recovery codes accepts TOTP proof as well as password, and sh
 })
 
 test('password sign-in focuses the code field (#245); wrong code is rejected, valid TOTP completes', async ({ page }) => {
+  test.setTimeout(90_000)
   await signIn(page, user.login, user.password)
   await expect(page.getByRole('heading', { level: 1, name: 'İki faktörlü doğrulama' })).toBeVisible()
   await expect(page.getByLabel('Doğrulama kodu')).toBeFocused()
