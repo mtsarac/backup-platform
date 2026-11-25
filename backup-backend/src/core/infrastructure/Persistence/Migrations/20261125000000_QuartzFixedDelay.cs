@@ -11,5 +11,13 @@ public sealed class QuartzFixedDelay : Migration
         migrationBuilder.Sql("ALTER TABLE quartz.qrtz_triggers ADD COLUMN IF NOT EXISTS fixed_delay boolean NULL");
 
     protected override void Down(MigrationBuilder migrationBuilder) =>
-        throw new NotSupportedException("Rolling back the Quartz fixed-delay column could discard scheduler data.");
+        migrationBuilder.Sql("""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM quartz.qrtz_triggers WHERE fixed_delay IS NOT NULL) THEN
+                    RAISE EXCEPTION 'Cannot remove Quartz fixed_delay while it contains data';
+                END IF;
+                ALTER TABLE quartz.qrtz_triggers DROP COLUMN fixed_delay;
+            END $$;
+            """);
 }

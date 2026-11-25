@@ -46,5 +46,8 @@ public sealed class QuartzFixedDelayMigrationTests(PostgreSqlFixture fixture) : 
         await migrator.MigrateAsync();
         Assert.Equal(1L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM quartz.qrtz_triggers WHERE sched_name = 'test' AND trigger_name = 'trigger' AND start_time = 123 AND fixed_delay IS NULL").SingleAsync());
         Assert.Equal(1L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM quartz.qrtz_job_details WHERE sched_name = 'test' AND job_name = 'job'").SingleAsync());
+        await context.Database.ExecuteSqlRawAsync("UPDATE quartz.qrtz_triggers SET fixed_delay = true WHERE sched_name = 'test'");
+        await Assert.ThrowsAsync<PostgresException>(() => migrator.MigrateAsync("20261124010000_TenantNameUnique"));
+        Assert.Equal(1L, await context.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM quartz.qrtz_triggers WHERE sched_name = 'test' AND fixed_delay = true").SingleAsync());
     }
 }

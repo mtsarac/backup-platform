@@ -241,7 +241,8 @@ dotnet run --project src/hosts/agent
 ```
 
 Apply migrations before starting the updated API: the Quartz migration adds `fixed_delay`
-without replacing existing jobs or triggers. Legacy platform connection strings may still
+without replacing existing jobs or triggers; rollback is refused if `fixed_delay` contains values.
+Legacy platform connection strings may still
 contain `Multiplexing` or `Write Coalescing Buffer Threshold Bytes`; these options are ignored
 because Npgsql 11 no longer supports multiplexing. Remove them from deployment configuration.
 
