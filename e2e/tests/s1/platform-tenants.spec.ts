@@ -1,10 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
-import { Api } from '../../api'
 import { axeViolations, DESKTOP, ensureTenant, expectNoHorizontalScroll, MOBILE, newUser, platformApi, rand, s, signIn, watch } from './helpers'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.getByRole('row').filter({ hasText: text })
-
+const searchBox = (page: Page) => page.getByRole('searchbox', { name: /Çalışma alanı ara|Ara/ })
 
 async function admin(page: Page, path = '/platform/tenants') {
   await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
@@ -18,9 +17,11 @@ test('list: heading, columns, axe, search, empty search, responsive, clean conso
   await expect(page.getByRole('heading', { level: 1, name: 'Çalışma alanları' })).toBeVisible()
   await expect(row(page, s.tenantName)).toContainText(/Kayıt açık/)
   expect(await axeViolations(page)).toEqual([])
-  await page.getByLabel('Ara').fill(s.tenantName)
+  await searchBox(page).fill(s.tenantName)
+  await searchBox(page).press('Enter')
   await expect(row(page, s.tenantName)).toBeVisible()
-  await page.getByLabel('Ara').fill(`no-such-tenant-${rand()}`)
+  await searchBox(page).fill(`no-such-tenant-${rand()}`)
+  await searchBox(page).press('Enter')
   await expect(page.getByText(/Aramaya uygun/)).toBeVisible()
   await page.setViewportSize(MOBILE)
   await expectNoHorizontalScroll(page)
@@ -34,30 +35,42 @@ test('create: empty name blocked, success lists the new workspace and survives r
   await page.getByRole('button', { name: /Yeni çalışma alanı/ }).click()
   await expect(dialog(page).getByRole('heading', { name: 'Yeni çalışma alanı' })).toBeVisible()
   expect(await axeViolations(page)).toEqual([])
-  await expect(dialog(page).getByRole('button', { name: 'Çalışma alanı oluştur' })).toBeDisabled() // empty name
+  await expect(dialog(page).getByRole('button', { name: 'Çalışma alanı oluştur' })).toBeDisabled()
   await dialog(page).getByLabel('Çalışma alanı adı').fill(name)
   await dialog(page).getByRole('button', { name: 'Çalışma alanı oluştur' }).click()
   await expect(dialog(page)).toBeHidden()
-  await page.getByLabel('Ara').fill(name)
+  await searchBox(page).fill(name)
+  await searchBox(page).press('Enter')
   await expect(row(page, name)).toBeVisible()
   await page.reload()
-  await page.getByLabel('Ara').fill(name)
+  await searchBox(page).fill(name)
+  await searchBox(page).press('Enter')
   await expect(row(page, name)).toBeVisible()
 })
 
-test.fixme('create: a duplicate workspace name is refused (#252)', async ({ page }) => {
+test('create and rename: duplicate workspace names are refused (#252)', async ({ page }) => {
   const platform = await platformApi()
   const name = `e2e-s1-tenant-${rand()}`
+  const other = `e2e-s1-tenant-${rand()}`
   await ensureTenant(platform, name)
+  const otherId = await ensureTenant(platform, other)
   await platform.dispose()
+
   await admin(page)
   await page.getByRole('button', { name: /Yeni çalışma alanı/ }).click()
   await dialog(page).getByLabel('Çalışma alanı adı').fill(name)
   await dialog(page).getByRole('button', { name: 'Çalışma alanı oluştur' }).click()
-  await expect(dialog(page).getByRole('alert')).toBeVisible()
+  await expect(dialog(page).getByRole('alert')).toContainText('zaten var')
+  await page.keyboard.press('Escape')
+
+  await page.goto(`/platform/tenants/${otherId}`)
+  await page.getByText('Yeniden adlandır').first().click()
+  await page.getByRole('textbox', { name: 'Ad', exact: true }).fill(name)
+  await page.getByRole('button', { name: 'Yeniden adlandır' }).click()
+  await expect(page.getByRole('alert')).toContainText('zaten var')
 })
 
-test('detail: tabs deep-link, back/forward keeps the tab, rename persists, unknown id shows an error not a crash', async ({ page }) => {
+test('detail: all 6 tabs deep-link, back/forward keeps the tab, rename persists, unknown and zero GUID show not-found (#274)', async ({ page }) => {
   const platform = await platformApi()
   const name = `e2e-s1-tenant-${rand()}`
   const id = await ensureTenant(platform, name)
@@ -65,10 +78,15 @@ test('detail: tabs deep-link, back/forward keeps the tab, rename persists, unkno
   await admin(page, `/platform/tenants/${id}`)
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
   expect(await axeViolations(page)).toEqual([])
+
   await page.goto(`/platform/tenants/${id}?tab=subscription`)
   await expect(page.getByText('Plan ve kota')).toBeVisible()
+  await page.goto(`/platform/tenants/${id}?tab=storage`)
+  await expect(page.getByRole('tabpanel')).toBeVisible()
   await page.goto(`/platform/tenants/${id}?tab=security`)
   await expect(page.getByText('Şifreleme anahtarları')).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(/\?tab=storage$/)
   await page.goBack()
   await expect(page.getByText('Plan ve kota')).toBeVisible()
   await page.reload()
@@ -84,7 +102,9 @@ test('detail: tabs deep-link, back/forward keeps the tab, rename persists, unkno
   await expect(page.getByRole('heading', { level: 1, name: renamed })).toBeVisible()
 
   await page.goto('/platform/tenants/00000000-0000-0000-0000-000000000000')
-  await expect(page.getByRole('alert').or(page.getByText(/bulunamadı/i)).first()).toBeVisible()
+  await expect(page.getByText(/bulunamadı/i).first()).toBeVisible()
+  await page.goto('/platform/tenants/11111111-1111-4111-8111-111111111111')
+  await expect(page.getByText(/bulunamadı/i).first()).toBeVisible()
 })
 
 test('agent enrollment toggle asks for confirmation and flips the state; Cancel changes nothing', async ({ page }) => {
@@ -108,7 +128,7 @@ test('agent enrollment toggle asks for confirmation and flips the state; Cancel 
   await expect(page.getByText('Kayıt kapalı').first()).toBeVisible()
 })
 
-test('members: add an existing user, they sign in to that workspace; remove it again', async ({ page, browser }) => {
+test('members: add an existing user, they sign in to that workspace; remove it again with accessible action button', async ({ page, browser }) => {
   const platform = await platformApi()
   const name = `e2e-s1-tenant-${rand()}`
   const id = await ensureTenant(platform, name)
@@ -117,10 +137,9 @@ test('members: add an existing user, they sign in to that workspace; remove it a
   await admin(page, `/platform/tenants/${id}?tab=people`)
   await page.getByLabel('Kullanıcı ara').fill(u.login)
   await page.getByRole('button', { name: 'Ara' }).click()
-  await expect(page.getByLabel('Kullanıcı', { exact: true }).locator('option')).toHaveCount(2) // placeholder + the match
+  await expect(page.getByLabel('Kullanıcı', { exact: true }).locator('option')).toHaveCount(2)
   await page.getByLabel('Kullanıcı', { exact: true }).selectOption({ index: 1 })
-  const add = page.getByRole('button', { name: 'Üye ekle', exact: true })
-  await add.click()
+  await page.getByRole('button', { name: 'Üye ekle', exact: true }).click()
   await expect(row(page, u.login)).toBeVisible()
   await page.reload()
   await expect(row(page, u.login)).toBeVisible()
@@ -131,7 +150,7 @@ test('members: add an existing user, they sign in to that workspace; remove it a
   await expect(p2.getByRole('link', { name })).toBeVisible()
   await ctx.close()
 
-  await row(page, u.login).getByRole('button', { name: /üyeliğini kaldır/ }).click()
+  await row(page, u.login).getByRole('button', { name: /^Kaldır — / }).click()
   await dialog(page).getByRole('button', { name: 'Üyeliği kaldır' }).click()
   await expect(row(page, u.login)).toHaveCount(0)
 })

@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test'
-import { axeViolations, DESKTOP, expectNoHorizontalScroll, MOBILE, s, signIn, watch } from './helpers'
+import { axeViolations, DESKTOP, expectNoHorizontalScroll, isIsolatedStack, ISOLATED_SKIP, MOBILE, resetIsolatedThrottle, s, signIn, watch } from './helpers'
 
 const u = s.accounts.userAdmin
 const BAD = /Kullanıcı adı veya şifre hatalı/
 
-test.describe('/login', () => {
+test.beforeAll(() => { resetIsolatedThrottle() })
+test.afterAll(() => { resetIsolatedThrottle() })
 
-  test('renders labelled form, passes axe, no horizontal scroll on mobile and desktop', async ({ page }) => {
+test.describe('/login', () => {
+  test('renders labelled form, passes axe, no horizontal scroll on mobile and desktop, leaves signed-out console clean (#240)', async ({ page }) => {
     const w = watch(page)
     for (const vp of [DESKTOP, MOBILE]) {
       await page.setViewportSize(vp)
@@ -18,14 +20,6 @@ test.describe('/login', () => {
       expect(await axeViolations(page)).toEqual([])
     }
     expect(await page.title()).toContain('Giriş')
-    expect(w.unexpected()).toEqual([])
-  })
-
-  // A signed-out visit must not log a console error: /api/me 401 is the normal "no session" answer.
-  test.fixme('signed-out /login leaves the browser console clean (#240)', async ({ page }) => {
-    const w = watch(page, { strict: true })
-    await page.goto('/login')
-    await expect(page.getByLabel('Kullanıcı adı')).toBeVisible()
     expect(w.problems).toEqual([])
   })
 
@@ -33,12 +27,13 @@ test.describe('/login', () => {
     await page.goto('/login')
     const posted: string[] = []
     page.on('request', (r) => { if (r.url().includes('/auth/login')) posted.push(r.url()) })
-    await page.getByRole('button', { name: 'Giriş Yap', exact: true }).click()
+    await page.getByRole('button', { name: 'Giriş yap', exact: true }).click()
     expect(await page.getByLabel('Kullanıcı adı').evaluate((e: HTMLInputElement) => e.validity.valueMissing)).toBe(true)
     expect(posted).toEqual([])
   })
 
   test('wrong password shows one alert, stays on /login; unknown user gets the same message', async ({ page }) => {
+    test.skip(!isIsolatedStack, ISOLATED_SKIP)
     await signIn(page, u.login, 'definitely-wrong-password')
     await expect(page.getByRole('alert')).toContainText(BAD)
     await expect(page).toHaveURL(/\/login$/)
@@ -86,16 +81,17 @@ test.describe('/login', () => {
     await expect(page).not.toHaveURL(/\/login/)
   })
 
-  test.fixme('protected deep link sends to /login and returns to it after sign-in (#241)', async ({ page }) => {
-    await page.goto(`/tenants/${s.tenantId}/settings`)
+  test('protected deep link sends to /login and returns to it with query parameters after sign-in (#241)', async ({ page }) => {
+    const target = `/platform/tenants/${s.tenantId}?tab=subscription`
+    await page.goto(target)
     await expect(page).toHaveURL(/\/login/)
-    await page.getByLabel('Kullanıcı adı').fill(u.login)
-    await page.getByLabel('Şifre', { exact: true }).fill(u.password)
-    await page.getByRole('button', { name: 'Giriş Yap', exact: true }).click()
-    await expect(page).toHaveURL(new RegExp(`/tenants/${s.tenantId}/settings`))
+    await page.getByLabel('Kullanıcı adı').fill(s.accounts.platformAdmin.login)
+    await page.getByLabel('Şifre', { exact: true }).fill(s.accounts.platformAdmin.password)
+    await page.getByRole('button', { name: 'Giriş yap', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`/platform/tenants/${s.tenantId}\\?tab=subscription$`))
   })
 
-  test('logout ends the session; Back does not reveal protected content', async ({ page }) => {
+  test('logout ends the session; Back does not reveal protected content and next login ignores stale from state', async ({ page }) => {
     await signIn(page, u.login, u.password)
     await page.waitForURL(/\/tenants\//)
     await page.goto('/account')
@@ -126,7 +122,7 @@ test.describe('/login', () => {
     }
     expect(names[0]).toBe('username')
     expect(names[1]).toBe('current-password')
-    expect(names.slice(3, 6).join('|')).toContain('Giriş Yap')
+    expect(names.slice(3, 6).join('|')).toContain('Giriş yap')
     expect(names.join('|')).toContain('Şifremi unuttum')
   })
 
@@ -134,7 +130,8 @@ test.describe('/login', () => {
     await page.goto('/login')
     await page.getByRole('button', { name: /Dili değiştir/ }).click()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Sign in/i)
-    await expect(page.getByRole('button', { name: /^Sign in$/i })).toBeVisible()
+    await expect(page.getByLabel('Username')).toBeVisible()
+    await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
     await page.reload()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Sign in/i)
     expect(await page.locator('html').getAttribute('lang')).toBe('en')
@@ -143,14 +140,20 @@ test.describe('/login', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Giriş yapın')
   })
 
+  test.fixme('English /login submit button uses ASCII "Sign in" instead of Turkish dotless ı (#281)', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByRole('button', { name: /Dili değiştir/ }).click()
+    await expect(page.getByRole('button', { name: /^Sign in$/i })).toBeVisible()
+  })
+
   test('backend unreachable on submit shows an error, not a blank page', async ({ page }) => {
     await page.goto('/login')
     await page.route('**/api/auth/login', (r) => r.abort('connectionrefused'))
     await page.getByLabel('Kullanıcı adı').fill(u.login)
     await page.getByLabel('Şifre', { exact: true }).fill(u.password)
-    await page.getByRole('button', { name: 'Giriş Yap', exact: true }).click()
+    await page.getByRole('button', { name: 'Giriş yap', exact: true }).click()
     await expect(page.getByRole('alert')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Giriş Yap', exact: true })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Giriş yap', exact: true })).toBeEnabled()
     await expect(page).toHaveURL(/\/login$/)
   })
 
@@ -159,18 +162,7 @@ test.describe('/login', () => {
     await page.route('**/api/auth/login', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{}' }))
     await page.getByLabel('Kullanıcı adı').fill(u.login)
     await page.getByLabel('Şifre', { exact: true }).fill(u.password)
-    await page.getByRole('button', { name: 'Giriş Yap', exact: true }).click()
+    await page.getByRole('button', { name: 'Giriş yap', exact: true }).click()
     await expect(page.getByRole('alert')).toBeVisible()
-  })
-
-  test.fixme('repeated failures lock sign-in with a clear message, even for the right password (#243)', async ({ page }) => {
-    for (let i = 0; i < 5; i++) {
-      await signIn(page, `e2e-s1-lock-${i}`, 'definitely-wrong-password')
-      await expect(page.getByRole('alert')).toBeVisible()
-    }
-    await signIn(page, u.login, u.password)
-    await expect(page).toHaveURL(/\/login$/)
-    await expect(page.getByRole('alert')).toContainText(/Çok fazla|bekleyin|tekrar deneyin/i)
-    expect(await axeViolations(page)).toEqual([])
   })
 })

@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
+import { Api } from '../../api'
 import { axeViolations, DESKTOP, ensureTenant, expectNoHorizontalScroll, MOBILE, platformApi, rand, s, signIn, watch } from './helpers'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.getByRole('row').filter({ hasText: text })
-
 
 async function admin(page: Page, path: string) {
   await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
@@ -24,17 +24,26 @@ test.describe('/platform/quota-policies', () => {
     expect(w.unexpected()).toEqual([])
   })
 
-  test('create: threshold validation, duplicate key refused, then the policy is listed and editable', async ({ page }) => {
+  test('create, validate thresholds and scopes, refuse duplicate key, edit with confirmation, and protect Default policy from disabling', async ({ page }) => {
     const key = `e2e-s1-${rand()}`
     const name = `S1 policy ${key}`
     await admin(page, '/platform/quota-policies')
-    await page.getByRole('button', { name: 'Yeni Politika' }).click()
+    await page.getByRole('button', { name: 'Yeni politika' }).click()
     expect(await axeViolations(page)).toEqual([])
     const submit = dialog(page).getByRole('button', { name: /Oluştur|Kaydet/ })
-    await dialog(page).getByLabel('Politika Anahtarı').fill(key)
-    await dialog(page).getByLabel('Politika Adı').fill(name)
+    await dialog(page).getByLabel('Politika anahtarı').fill(key)
+    await dialog(page).getByLabel('Politika adı').fill(name)
+
+    // scope validation: empty provider list is rejected inline
+    await dialog(page).getByLabel('Depolama kapsamı').selectOption('providerType')
+    await dialog(page).getByLabel(/Sağlayıcı Anahtarları/i).fill('   ')
+    await submit.click()
+    await expect(dialog(page).getByRole('alert')).toContainText('sağlayıcı türü')
+    await dialog(page).getByLabel('Depolama kapsamı').selectOption('all')
+
+    // threshold validation: warning >= critical
     await dialog(page).getByLabel('Uyarı Eşiği (%)').fill('95')
-    await dialog(page).getByLabel('Kritik Eşik (%)').fill('80') // warning above critical
+    await dialog(page).getByLabel('Kritik Eşik (%)').fill('80')
     await submit.click()
     await expect(dialog(page)).toBeVisible()
     await expect(dialog(page).getByRole('alert').or(dialog(page).locator('[aria-invalid=true]').first())).toBeVisible()
@@ -43,26 +52,39 @@ test.describe('/platform/quota-policies', () => {
     await submit.click()
     await expect(dialog(page)).toBeHidden()
     await page.getByLabel('Politika ara').fill(name)
+    await page.getByLabel('Politika ara').press('Enter')
     await expect(row(page, name)).toBeVisible()
 
-    // same key again
-    await page.getByRole('button', { name: 'Yeni Politika' }).click()
-    await dialog(page).getByLabel('Politika Anahtarı').fill(key)
-    await dialog(page).getByLabel('Politika Adı').fill(`${name} again`)
+    // duplicate key refused
+    await page.getByRole('button', { name: 'Yeni politika' }).click()
+    await dialog(page).getByLabel('Politika anahtarı').fill(key)
+    await dialog(page).getByLabel('Politika adı').fill(`${name} again`)
     await dialog(page).getByRole('button', { name: /Oluştur|Kaydet/ }).click()
     await expect(dialog(page).getByRole('alert')).toBeVisible()
     await page.keyboard.press('Escape')
 
+    // edit with impact confirmation
     await row(page, name).getByRole('button', { name: 'Düzenle' }).click()
-    await expect(dialog(page).getByLabel('Politika Anahtarı')).toHaveCount(0) // key is immutable after creation
-    await dialog(page).getByLabel('Politika Adı').fill(`${name} edited`)
+    await expect(dialog(page).getByLabel('Politika anahtarı')).toHaveCount(0)
+    await dialog(page).getByLabel('Politika adı').fill(`${name} edited`)
     await dialog(page).getByRole('button', { name: /Kaydet/ }).click()
-    await expect(dialog(page)).toContainText('Kota politikası değiştirilsin mi?') // impact confirmation
+    await expect(dialog(page)).toContainText('Kota politikası değiştirilsin mi?')
     await dialog(page).getByRole('button', { name: 'Kaydet' }).click()
     await expect(dialog(page)).toBeHidden()
     await page.reload()
     await page.getByLabel('Politika ara').fill(name)
+    await page.getByLabel('Politika ara').press('Enter')
     await expect(row(page, `${name} edited`)).toBeVisible()
+
+    // Default policy cannot be disabled
+    await page.getByLabel('Politika ara').fill('')
+    await page.getByLabel('Politika ara').press('Enter')
+    await row(page, 'Default').getByRole('button', { name: 'Düzenle' }).click()
+    await dialog(page).getByLabel(/Etkin politika/).uncheck()
+    await dialog(page).getByRole('button', { name: 'Kaydet' }).click()
+    await dialog(page).getByRole('button', { name: 'Kaydet' }).click()
+    await expect(dialog(page).getByRole('alert')).toContainText('Varsayılan kota politikası devre dışı bırakılamaz')
+    await page.keyboard.press('Escape')
   })
 })
 
@@ -74,7 +96,7 @@ test.describe('/platform/audit', () => {
     await platform.dispose()
     const w = watch(page)
     await admin(page, '/platform/audit')
-    await expect(page.getByRole('heading', { level: 1, name: 'Denetim' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Denetim kaydı' })).toBeVisible()
     await page.getByRole('combobox').first().fill(name)
     await page.getByRole('option', { name }).click()
     const created = row(page, 'Çalışma alanı oluşturuldu').first()
@@ -91,10 +113,10 @@ test.describe('/platform/audit', () => {
 
   test('tenant filter deep link (?tenantId) narrows the list; unknown tenant shows an empty message; reload keeps the filter', async ({ page }) => {
     await admin(page, `/platform/audit?tenantId=${s.tenantId}`)
-    await expect(page.getByRole('heading', { level: 1, name: 'Denetim' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Denetim kaydı' })).toBeVisible()
     await page.reload()
     await expect(page).toHaveURL(new RegExp(`tenantId=${s.tenantId}`))
-    await page.goto('/platform/audit?tenantId=11111111-1111-1111-1111-111111111111')
+    await page.goto('/platform/audit?tenantId=11111111-1111-4111-8111-111111111111')
     await expect(page.getByText(/kayıt yok|bulunamadı|Henüz/i).first()).toBeVisible()
   })
 
@@ -109,29 +131,34 @@ test.describe('/platform/audit', () => {
     await expect(page.getByRole('table', { name: 'Denetim kayıtları' })).toBeVisible()
   })
 
-  test('PlatformAdmin API audit rejects a UserAdmin session (403)', async () => {
-    const { Api } = await import('../../api')
-    const api = await Api.signIn(s.accounts.userAdmin)
-    await expect(api.call('GET', '/api/platform/audit')).rejects.toThrow(/403/)
-    await api.dispose()
+  test('audit and audit/integrity APIs verify event payloads for PlatformAdmin, validate limit, and reject UserAdmin (403)', async () => {
+    const adminApi = await platformApi()
+    const integrity = await adminApi.call('GET', '/api/platform/audit/integrity?limit=20')
+    expect(typeof integrity.signingEnabled).toBe('boolean')
+    expect(Array.isArray(integrity.events)).toBe(true)
+    expect(integrity.events.length).toBeGreaterThan(0)
+    for (const ev of integrity.events) {
+      expect(['Unsealed', 'Verified', 'UnknownKey', 'Invalid']).toContain(ev.status)
+      expect(typeof ev.canonicalPayloadBase64).toBe('string')
+    }
+    await expect(adminApi.call('GET', '/api/platform/audit/integrity?limit=0')).rejects.toThrow(/400/)
+    await adminApi.dispose()
+
+    const userApi = await Api.signIn(s.accounts.userAdmin)
+    await expect(userApi.call('GET', '/api/platform/audit')).rejects.toThrow(/403/)
+    await expect(userApi.call('GET', '/api/platform/audit/integrity')).rejects.toThrow(/403/)
+    await userApi.dispose()
   })
 })
 
 test.describe('platform navigation consistency', () => {
-  test.fixme('sidebar label matches the page heading (#261)', async ({ page }) => {
-    await admin(page, '/platform')
-    for (const label of ['Çalışma alanları', 'Kullanıcılar', 'Planlar', 'Kota ilkeleri', 'Denetim kaydı']) {
-      await page.getByRole('navigation', { name: 'Platform gezinme menüsü' }).getByRole('link', { name: label, exact: true }).click()
-      await expect(page.getByRole('heading', { level: 1 }), label).toHaveText(label)
-    }
-  })
-
-  test('every S1 sidebar link opens a page with exactly one h1 and no console errors', async ({ page }) => {
+  test('sidebar label matches the page heading and renders one h1 with no console errors (#261)', async ({ page }) => {
     const w = watch(page)
     await admin(page, '/platform')
-    for (const label of ['Çalışma alanları', 'Kullanıcılar', 'Planlar', 'Kota ilkeleri', 'Denetim kaydı']) {
+    for (const label of ['Çalışma alanları', 'Kullanıcılar', 'Planlar', 'Kota politikaları', 'Denetim kaydı']) {
       await page.getByRole('navigation', { name: 'Platform gezinme menüsü' }).getByRole('link', { name: label, exact: true }).click()
       await expect(page.getByRole('heading', { level: 1 }), label).toHaveCount(1)
+      await expect(page.getByRole('heading', { level: 1 }), label).toHaveText(label)
     }
     expect(w.unexpected()).toEqual([])
   })

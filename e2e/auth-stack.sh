@@ -10,6 +10,7 @@ echo "waiting for API ..."
 for _ in $(seq 1 90); do
   [ "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:6352/api/auth/antiforgery)" = 200 ] && break; sleep 2
 done
+$DC exec -T postgres psql -U postgres -d backup_platform_dev -q -c 'TRUNCATE login_throttle_entries;'
 $DC exec -T \
   -e BACKUP_PLATFORM_BOOTSTRAP_LOGIN=admin -e BACKUP_PLATFORM_BOOTSTRAP_PASSWORD='PlatformAdmin123!' \
   -e BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME='Platform Admin' -e BACKUP_PLATFORM_BOOTSTRAP_EMAIL=admin@example.test \

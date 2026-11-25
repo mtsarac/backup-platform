@@ -16,6 +16,8 @@ const PAGES = [
   ['/account/passkeys', 'Geçiş anahtarları'],
 ] as const
 
+const END_SESSION = /^Oturumu sonlandır — /
+
 test.describe('/account', () => {
   test('every account page: heading, tab navigation, axe, no overflow at 1440 and 390, clean console', async ({ page }) => {
     const w = watch(page)
@@ -77,23 +79,23 @@ test.describe('/account', () => {
     await page.waitForURL(/\/tenants\//)
     const other = await Api.signIn(user) // a second live session
     await page.goto('/account/sessions')
-    const items = page.locator('li').filter({ has: page.getByRole('button', { name: /oturumunu sonlandır/ }) })
+    const items = page.locator('li').filter({ has: page.getByRole('button', { name: END_SESSION }) })
     await expect(items.first()).toBeVisible()
     const before = await items.count()
     expect(before).toBeGreaterThanOrEqual(2)
     await expect(page.getByText('Bu oturum')).toHaveCount(1)
     // end a non-current session: confirm dialog names the consequence, Cancel keeps it
     const others = items.filter({ hasNotText: 'Bu oturum' })
-    await others.first().getByRole('button', { name: /oturumunu sonlandır/ }).click()
+    await others.first().getByRole('button', { name: END_SESSION }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: /İptal|Vazgeç/ }).click()
     await expect(items).toHaveCount(before)
-    await others.first().getByRole('button', { name: /oturumunu sonlandır/ }).click()
+    await others.first().getByRole('button', { name: END_SESSION }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Oturumu sonlandır' }).click()
     await expect(items).toHaveCount(before - 1)
     await other.dispose()
     // end the current one
-    await items.filter({ hasText: 'Bu oturum' }).getByRole('button', { name: /oturumunu sonlandır/ }).click()
+    await items.filter({ hasText: 'Bu oturum' }).getByRole('button', { name: END_SESSION }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Oturumu sonlandır' }).click()
     await expect(page).toHaveURL(/\/login/)
   })
@@ -112,21 +114,28 @@ test.describe('/account', () => {
     await expect(pa.getByRole('dialog')).toContainText('Bu cihaz dahil')
     await pa.getByRole('dialog').getByRole('button', { name: 'Tüm oturumları sonlandır' }).click()
     await expect(pa).toHaveURL(/\/login/)
-    await pb.goto(`/tenants/${user.userId ? '' : ''}`)
+    await pb.goto('/account')
     await expect(pb).toHaveURL(/\/login/)
     await a.close(); await b.close()
   })
 
-  test('sessions: list request failure shows an error with retry', async ({ page }) => {
+  test('sessions, security, and passkeys: list request failure shows an error with retry', async ({ page }) => {
     await signIn(page, user.login, user.password)
     await page.waitForURL(/\/tenants\//)
-    let fail = true
-    await page.route('**/api/auth/sessions', (r) => fail ? r.fulfill({ status: 500, contentType: 'application/json', body: '{}' }) : r.continue())
-    await page.goto('/account/sessions')
-    await expect(page.getByRole('alert')).toBeVisible()
-    fail = false
-    await page.getByRole('button', { name: /Yeniden dene|Tekrar dene/ }).click()
-    await expect(page.getByText('Bu oturum')).toBeVisible()
+    for (const [path, endpoint, readyText] of [
+      ['/account/sessions', '**/api/auth/sessions', 'Bu oturum'],
+      ['/account/security', '**/api/auth/security', 'İki faktörlü doğrulama (TOTP)'],
+      ['/account/passkeys', '**/api/auth/passkeys', 'Henüz geçiş anahtarı eklenmedi.'],
+    ] as const) {
+      let fail = true
+      await page.route(endpoint, (r) => fail ? r.fulfill({ status: 500, contentType: 'application/json', body: '{}' }) : r.continue())
+      await page.goto(path)
+      await expect(page.getByRole('alert'), path).toBeVisible()
+      fail = false
+      await page.getByRole('button', { name: /Yeniden dene|Tekrar dene/ }).click()
+      await expect(page.getByText(readyText), path).toBeVisible()
+      await page.unroute(endpoint)
+    }
   })
 
   test('language: EN switch translates account pages and persists across navigation', async ({ page }) => {

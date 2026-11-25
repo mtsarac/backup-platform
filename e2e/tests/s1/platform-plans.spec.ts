@@ -3,7 +3,11 @@ import { axeViolations, DESKTOP, ensureTenant, expectNoHorizontalScroll, MOBILE,
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.getByRole('row').filter({ hasText: text })
-
+const searchPlan = async (page: Page, term: string) => {
+  const box = page.getByLabel('Plan ara')
+  await box.fill(term)
+  await box.press('Enter')
+}
 
 async function admin(page: Page, path: string) {
   await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
@@ -14,13 +18,18 @@ async function admin(page: Page, path: string) {
 test('plans list: heading, system plan is read-only, status filter, search, axe, responsive, clean console', async ({ page }) => {
   const w = watch(page)
   await admin(page, '/platform/plans')
-  await expect(page.getByRole('heading', { level: 1, name: /Planlar|Plans/ })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Planlar' })).toBeVisible()
+  expect(await axeViolations(page)).toEqual([])
+  await searchPlan(page, 'Legacy Unlimited')
   await expect(row(page, 'Legacy Unlimited')).toContainText('Sistem planı; salt okunur.')
   await expect(row(page, 'Legacy Unlimited').getByRole('button', { name: /düzenle|devre dışı|etkinleştir/i })).toHaveCount(0)
-  expect(await axeViolations(page)).toEqual([])
-  await page.getByLabel('Plan ara').fill('Legacy')
   await expect(row(page, 'E2E Unlimited')).toHaveCount(0)
-  await page.getByLabel('Plan ara').fill(`no-plan-${rand()}`)
+  await searchPlan(page, '')
+  await page.getByLabel('Durum').selectOption('true')
+  await searchPlan(page, 'E2E Unlimited')
+  await expect(row(page, 'E2E Unlimited')).toBeVisible()
+  await page.getByLabel('Durum').selectOption('')
+  await searchPlan(page, `no-plan-${rand()}`)
   await expect(page.getByText(/bulunamadı/)).toBeVisible()
   await page.setViewportSize(MOBILE)
   await expectNoHorizontalScroll(page)
@@ -44,11 +53,11 @@ test('create plan: validation (name, negative, >3 decimals), limit in GB is stor
   await dialog(page).getByLabel('Depolama limiti (GB)').fill('2.5')
   await submit.click()
   await expect(dialog(page)).toBeHidden()
-  await page.getByLabel('Plan ara').fill(name)
+  await searchPlan(page, name)
   await expect(row(page, name)).toContainText('2,5 GB')
   await expect(row(page, name)).toContainText('Etkin')
   await page.reload()
-  await page.getByLabel('Plan ara').fill(name)
+  await searchPlan(page, name)
   await expect(row(page, name)).toBeVisible()
 })
 
@@ -61,7 +70,7 @@ test('create plan: "Sınırsız" removes the limit field and lists the plan as u
   await expect(dialog(page).getByLabel('Depolama limiti (GB)')).toHaveCount(0)
   await dialog(page).getByRole('button', { name: 'Plan oluştur' }).click()
   await expect(dialog(page)).toBeHidden()
-  await page.getByLabel('Plan ara').fill(name)
+  await searchPlan(page, name)
   await expect(row(page, name)).toContainText('Sınırsız')
 })
 
@@ -74,26 +83,29 @@ test('duplicate plan name is refused with an alert', async ({ page }) => {
   await expect(dialog(page).getByRole('alert')).toBeVisible()
 })
 
-test('edit plan changes name and limit; disable removes it from the assign list, enable restores it', async ({ page }) => {
+test('edit plan changes limit; disable removes it from the assign list and shows under disabled filter; enable restores it', async ({ page }) => {
   const platform = await platformApi()
   const name = `e2e-s1-plan-${rand()}`
   await platform.call('POST', '/api/platform/plans', { name, storageLimitBytes: 5_000_000_000, unlimited: false, enabled: true, quotaPolicyReference: 'default' })
   const tenantId = await ensureTenant(platform, `e2e-s1-tenant-${rand()}`)
   await platform.dispose()
   await admin(page, '/platform/plans')
-  await page.getByLabel('Plan ara').fill(name)
-  await row(page, name).getByRole('button', { name: /planını düzenle/ }).click()
+  await searchPlan(page, name)
+  await row(page, name).getByRole('button', { name: /^Düzenle — / }).click()
   await dialog(page).getByLabel('Depolama limiti (GB)').fill('7')
   await dialog(page).getByRole('button', { name: 'Kaydet' }).click()
-  await expect(dialog(page).getByRole('button', { name: 'Kaydet' })).toBeDisabled() // typed-name confirmation first
+  await expect(dialog(page).getByRole('button', { name: 'Kaydet' })).toBeDisabled()
   await dialog(page).getByLabel(/Onaylamak için adı yazın/).fill(name)
   await dialog(page).getByRole('button', { name: 'Kaydet' }).click()
   await expect(row(page, name)).toContainText('7 GB')
 
-  await row(page, name).getByRole('button', { name: /devre dışı bırak/ }).click()
+  await row(page, name).getByRole('button', { name: /^Devre dışı bırak — / }).click()
   await expect(dialog(page)).toContainText('mevcut abonelikler etkilenmez')
   await dialog(page).getByRole('button', { name: 'Devre dışı bırak' }).click()
   await expect(row(page, name)).toContainText('Devre dışı')
+  await page.getByLabel('Durum').selectOption('false')
+  await expect(row(page, name)).toBeVisible()
+  await page.getByLabel('Durum').selectOption('')
 
   await page.goto(`/platform/tenants/${tenantId}?tab=subscription`)
   await page.getByRole('button', { name: 'Plan ata' }).click()
@@ -104,8 +116,8 @@ test('edit plan changes name and limit; disable removes it from the assign list,
   await expect(dialog(page)).toBeHidden()
 
   await page.goto('/platform/plans')
-  await page.getByLabel('Plan ara').fill(name)
-  await row(page, name).getByRole('button', { name: /etkinleştir/ }).click()
+  await searchPlan(page, name)
+  await row(page, name).getByRole('button', { name: /^Etkinleştir — / }).click()
   await dialog(page).getByRole('button', { name: 'Etkinleştir' }).click()
   await expect(row(page, name)).toContainText('Etkin')
 })
@@ -139,7 +151,7 @@ test('assign a plan to a workspace through the subscription tab, then suspend an
   await expect(page.getByText(/Etkin/).first()).toBeVisible()
 })
 
-test('storage-limit override: limited and unlimited are validated and shown as the limit source', async ({ page }) => {
+test('storage-limit override: limited, unlimited, and reset to plan default', async ({ page }) => {
   const platform = await platformApi()
   const planName = `e2e-s1-plan-${rand()}`
   const plan = await platform.call('POST', '/api/platform/plans', { name: planName, storageLimitBytes: 5_000_000_000, unlimited: false, enabled: true, quotaPolicyReference: 'default' })
@@ -160,9 +172,18 @@ test('storage-limit override: limited and unlimited are validated and shown as t
   await expect(dialog(page)).toBeHidden()
   await page.getByText('Teknik ayrıntılar').first().click()
   await expect(page.getByText('9.000.000.000')).toBeVisible()
+
+  if (!(await page.getByRole('button', { name: 'Özel limit' }).isVisible())) {
+    await page.getByText('Diğer işlemler').click()
+  }
+  await page.getByRole('button', { name: 'Özel limit' }).click()
+  await dialog(page).getByLabel('Özel depolama limiti').selectOption('unlimited')
+  await dialog(page).getByRole('button', { name: 'Kaydet' }).click()
+  await expect(dialog(page)).toBeHidden()
+  await expect(page.getByText('Sınırsız').first()).toBeVisible()
 })
 
-test('UserAdmin cannot open /platform/plans or /platform/quota-policies', async ({ page }) => {
+test('UserAdmin cannot open /platform/plans, /platform/quota-policies, or /platform/audit', async ({ page }) => {
   await signIn(page, s.accounts.userAdmin.login, s.accounts.userAdmin.password)
   await page.waitForURL(/\/tenants\//)
   for (const p of ['/platform/plans', '/platform/quota-policies', '/platform/audit']) {

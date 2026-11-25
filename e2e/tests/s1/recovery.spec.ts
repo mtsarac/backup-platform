@@ -1,32 +1,26 @@
 import { expect, request, test } from '@playwright/test'
-import { Api, apiUrl } from '../../api'
-import { axeViolations, expectNoHorizontalScroll, MOBILE, newUser, platformApi, signIn, watch } from './helpers'
+import { apiUrl } from '../../api'
+import { axeViolations, expectNoHorizontalScroll, mailTo, MOBILE, newUser, platformApi, resetIsolatedThrottle, signIn, watch } from './helpers'
 
-const MAILPIT = process.env.E2E_MAILPIT_URL ?? 'http://127.0.0.1:8025'
+const MAILPIT = process.env.E2E_MAILPIT_URL ?? ''
 const NEW = 'E2e-S1-Recovered!2026-xyz'
 
 let available = false
+let mailSinkReady = false
 test.beforeAll(async () => {
+  resetIsolatedThrottle()
   const ctx = await request.newContext({ baseURL: apiUrl, ignoreHTTPSErrors: true })
   available = ((await (await ctx.get('/api/auth/email-recovery')).json()) as { available?: boolean }).available === true
   await ctx.dispose()
+  if (available && MAILPIT) {
+    mailSinkReady = await fetch(`${MAILPIT}/api/v1/messages?limit=1`).then((r) => r.ok).catch(() => false)
+  }
+})
+test.afterAll(() => {
+  resetIsolatedThrottle()
 })
 
-const NEEDS_MAIL = 'needs e-mail recovery: Notifications__PublicBaseUrl + AllowedPrivateNetworks on the API, an enabled platform e-mail transport and a mail sink (mailpit at E2E_MAILPIT_URL)'
-
-async function mailTo(address: string, subjectPart: RegExp, since = Date.now() - 60_000): Promise<{ link: string }> {
-  for (let i = 0; i < 30; i++) {
-    const list = (await (await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${address}`)}`)).json()) as { messages: { ID: string; Subject: string; Created: string }[] }
-    const hit = list.messages.find((m) => subjectPart.test(m.Subject) && Date.parse(m.Created) >= since)
-    if (hit) {
-      const body = (await (await fetch(`${MAILPIT}/api/v1/message/${hit.ID}`)).json()) as { Text: string }
-      const link = body.Text.match(/https?:\/\/\S+\?token=[\w-]+/)?.[0]
-      if (link) return { link }
-    }
-    await new Promise((r) => setTimeout(r, 1000))
-  }
-  throw new Error(`no mail for ${address}`)
-}
+const NEEDS_MAIL = 'needs e-mail recovery + reachable Mailpit sink (set E2E_MAILPIT_URL against bps1)'
 
 test.describe('recovery pages without a token (always available)', () => {
   test('/reset-password and /verify-email without token say the link is invalid and offer a way back; axe, mobile', async ({ page }) => {
@@ -46,12 +40,14 @@ test.describe('recovery pages without a token (always available)', () => {
     expect(w.unexpected()).toEqual([])
   })
 
-  test('/reset-password with a bogus token: mismatch and short password are caught, a wrong token is rejected with guidance', async ({ page }) => {
+  test('/reset-password with a bogus token: mismatch is caught client-side, a wrong token is rejected with guidance', async ({ page }) => {
     await page.goto('/reset-password?token=not-a-real-token')
     await page.getByLabel('Yeni şifre', { exact: true }).fill(NEW)
     await page.getByLabel('Yeni şifre (tekrar)').fill(`${NEW}x`)
     await page.getByRole('button', { name: 'Şifreyi sıfırla' }).click()
     await expect(page.getByRole('alert')).toContainText('eşleşmiyor')
+
+    await page.getByLabel('Yeni şifre', { exact: true }).fill(NEW)
     await page.getByLabel('Yeni şifre (tekrar)').fill(NEW)
     await page.getByRole('button', { name: 'Şifreyi sıfırla' }).click()
     await expect(page.getByRole('alert')).toContainText('geçersiz veya süresi dolmuş')
@@ -92,7 +88,7 @@ test.describe('recovery pages without a token (always available)', () => {
 
 test.describe('e-mail verification and password reset (needs a mail sink)', () => {
   test('verify address from the security page, then reset the password through the e-mailed link; the link works once and old sessions end', async ({ page, browser }) => {
-    test.skip(!available, NEEDS_MAIL)
+    test.skip(!mailSinkReady, NEEDS_MAIL)
     const platform = await platformApi()
     const u = await newUser(platform)
     await platform.dispose()
@@ -108,6 +104,9 @@ test.describe('e-mail verification and password reset (needs a mail sink)', () =
     await page.goto(new URL(verify.link).pathname + new URL(verify.link).search)
     await page.getByRole('button', { name: 'E-posta adresini doğrula' }).click()
     await expect(page.getByText('E-posta adresiniz doğrulandı.')).toBeVisible()
+    await page.goto('/account/security')
+    await expect(page.getByText(/E-posta adresiniz doğrulandı; şifre sıfırlama bağlantıları bu adrese gönderilebilir\./)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Doğrulama e-postası gönder' })).toHaveCount(0)
 
     // a second browser holds a live session that the reset must end
     const ctx = await browser.newContext({ ignoreHTTPSErrors: true })
@@ -125,6 +124,18 @@ test.describe('e-mail verification and password reset (needs a mail sink)', () =
     const reset = await mailTo(email, /şifre|password|reset/i, requestedAt)
     const resetPath = new URL(reset.link).pathname + new URL(reset.link).search
     await p.goto(resetPath)
+
+    // short and breached passwords are rejected without consuming the usable reset token
+    await p.getByLabel('Yeni şifre', { exact: true }).fill('short')
+    await p.getByLabel('Yeni şifre (tekrar)').fill('short')
+    await p.getByRole('button', { name: 'Şifreyi sıfırla' }).click()
+    await expect(p.getByRole('alert')).toContainText('en az 12 karakter')
+
+    await p.getByLabel('Yeni şifre', { exact: true }).fill('password1234')
+    await p.getByLabel('Yeni şifre (tekrar)').fill('password1234')
+    await p.getByRole('button', { name: 'Şifreyi sıfırla' }).click()
+    await expect(p.getByRole('alert')).toContainText(/yaygın|sızdırılmış/)
+
     await p.getByLabel('Yeni şifre', { exact: true }).fill(NEW)
     await p.getByLabel('Yeni şifre (tekrar)').fill(NEW)
     await p.getByRole('button', { name: 'Şifreyi sıfırla' }).click()
@@ -145,7 +156,7 @@ test.describe('e-mail verification and password reset (needs a mail sink)', () =
   })
 
   test('forgot-password answers identically for an unknown login and an unverified one (no account enumeration)', async ({ page }) => {
-    test.skip(!available, NEEDS_MAIL)
+    test.skip(!mailSinkReady, NEEDS_MAIL)
     const platform = await platformApi()
     const u = await newUser(platform)
     await platform.dispose()

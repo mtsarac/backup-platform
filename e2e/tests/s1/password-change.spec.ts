@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { axeViolations, expectNoHorizontalScroll, MOBILE, newUser, platformApi, signIn, watch } from './helpers'
-
+import { axeViolations, expectNoHorizontalScroll, MOBILE, newTotpUser, newUser, platformApi, signIn, totp, watch } from './helpers'
 
 const NEW = 'E2e-S1-Changed!2026-xyz'
 const form = (page: Page) => ({
@@ -17,22 +16,18 @@ async function forcedUser() {
   return u
 }
 
-test('first sign-in of a new account is forced into the password change form', async ({ page }) => {
+test('first sign-in of a new account is forced into the password change form and moves focus into it (#245)', async ({ page }) => {
+  const w = watch(page)
   const u = await forcedUser()
   await signIn(page, u.login, u.password)
   await expect(page.getByRole('heading', { name: 'Şifrenizi değiştirin' })).toBeVisible()
   await expect(page).toHaveURL(/\/login$/)
   await expect(form(page).current).toHaveValue(u.password)
+  await expect(form(page).current).toBeFocused()
   expect(await axeViolations(page)).toEqual([])
   await page.setViewportSize(MOBILE)
   await expectNoHorizontalScroll(page)
-})
-
-test.fixme('password change step moves focus into the form (#245)', async ({ page }) => {
-  const u = await forcedUser()
-  await signIn(page, u.login, u.password)
-  await expect(page.getByRole('heading', { name: 'Şifrenizi değiştirin' })).toBeVisible()
-  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY')
+  expect(w.unexpected()).toEqual([])
 })
 
 test('validation: too short, mismatch, same as current, breached password; nothing is changed', async ({ page }) => {
@@ -59,6 +54,26 @@ test('valid new password signs in; the new password works on the next sign-in', 
   await expect(page).toHaveURL(/\/tenants\//)
   await context.clearCookies()
   await signIn(page, u.login, NEW)
+  await expect(page).toHaveURL(/\/tenants\//)
+  expect(w.unexpected()).toEqual([])
+})
+
+test('a TOTP user given a temporary password changes it first and then completes the 2FA step', async ({ page }) => {
+  const platform = await platformApi()
+  const u = await newTotpUser(platform)
+  const tempPw = 'Temp-S1-TotpPass!2026'
+  await platform.call('POST', `/api/platform/users/${u.userId}/temporary-password`, { temporaryPassword: tempPw })
+  await platform.dispose()
+
+  const w = watch(page)
+  await signIn(page, u.login, tempPw)
+  await expect(page.getByRole('heading', { name: 'Şifrenizi değiştirin' })).toBeVisible()
+  const f = form(page)
+  await f.next.fill(NEW); await f.again.fill(NEW); await f.submit.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'İki faktörlü doğrulama' })).toBeVisible()
+  await expect(page.getByLabel('Doğrulama kodu')).toBeFocused()
+  await page.getByLabel('Doğrulama kodu').fill(await totp(u.secret))
+  await page.getByRole('button', { name: 'Doğrula', exact: true }).click()
   await expect(page).toHaveURL(/\/tenants\//)
   expect(w.unexpected()).toEqual([])
 })
