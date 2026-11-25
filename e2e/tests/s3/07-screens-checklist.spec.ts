@@ -118,12 +118,12 @@ for (const vp of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'mobile
   })
 }
 
-test.fixme('enrollment page with a pending token passes WCAG 2.5.3 label-content-name-mismatch on Revoke button (#268)', async ({ page }) => {
+test('enrollment page with a pending token passes WCAG 2.5.3 label-content-name-mismatch on Revoke button (#268)', async ({ page }) => {
   await createEnrollmentToken(tenant, tenantId)
   try {
     await signIn(page)
     await page.goto(tenantPath(tenantId, 'enrollment'))
-    await expect(page.getByRole('button', { name: /kayıt anahtarını iptal et/ }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /^İptal et/ }).first()).toBeVisible()
     const axe = await new AxeBuilder({ page }).analyze()
     expect(axe.violations.filter(v => v.id === 'label-content-name-mismatch')).toEqual([])
   } finally {

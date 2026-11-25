@@ -95,7 +95,7 @@ test('Run now backs up the database and the run succeeds', async ({ page }) => {
   w.expectClean()
 })
 
-test.fixme('small PostgreSQL backup artifact displays non-zero size instead of 0 MB (#265)', async ({ page }) => {
+test('small PostgreSQL backup artifact displays non-zero size instead of 0 MB (#265)', async ({ page }) => {
   await signIn(page)
   await page.goto(tenantPath(tenantId, 'backup-runs'))
   const row = page.getByRole('row', { name: new RegExp(jobName) })
@@ -120,7 +120,7 @@ test('Restore precheck fails for a login without the superuser privilege', async
   w.expectClean()
 })
 
-test.fixme('Restore precheck names the missing superuser privilege in plain language (#263)', async ({ page }) => {
+test('Restore precheck names the missing superuser privilege in plain language (#263)', async ({ page }) => {
   await signIn(page)
   await startRestore(page, restoredDb)
   await expect(page.getByRole('row', { name: /PostgreSQL geri yükleme ön kontrolü/ })).toContainText(/süper kullanıcı|yönetici|superuser/i, { timeout: 60_000 })

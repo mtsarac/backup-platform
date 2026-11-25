@@ -10,6 +10,8 @@ const runUrl = (id: string) => tenantUrl(w.populated, `/backup-runs/${id}`)
 async function more(page: Page) {
   await page.getByText('More', { exact: true }).click()
 }
+/** The artifact's own More menu; the computer-logs panel has its own Download button. */
+const moreMenu = (page: Page) => page.locator('details').filter({ has: page.locator('summary', { hasText: /^More$/ }) })
 
 /** The dialog blocks until the artifact name is typed; the name is read from the label the user sees. */
 async function confirmDelete(page: Page) {
@@ -45,7 +47,7 @@ test.describe('artifact detail (inside the run detail)', () => {
     await signIn(page, w.populated.account)
     await page.goto(runUrl(w.runs.view))
     await more(page)
-    for (const name of ['Download', 'Share', 'Delete']) await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
+    for (const name of ['Download', 'Share', 'Delete']) await expect(moreMenu(page).getByRole('button', { name, exact: true })).toBeVisible()
   })
 
   test('PlatformAdmin cannot download directly and is told why', async ({ page }) => {
@@ -53,7 +55,7 @@ test.describe('artifact detail (inside the run detail)', () => {
     await page.goto(runUrl(w.runs.view))
     await expect(page.getByText('Platform administrators cannot download directly', { exact: false })).toBeVisible()
     await more(page)
-    await expect(page.getByRole('button', { name: 'Download', exact: true })).toHaveCount(0)
+    await expect(moreMenu(page).getByRole('button', { name: 'Download', exact: true })).toHaveCount(0)
   })
 
   test('delete: dialog explains consequences, Escape leaves the artifact untouched', async ({ page }) => {
