@@ -117,6 +117,8 @@ public sealed class PacedUploadPipelineTests : IDisposable
         await started.Task;
         clock.Advance(TimeSpan.FromSeconds(1));
         Assert.False(uploadToken.IsCancellationRequested);
+        clock.Advance(TimeSpan.FromSeconds(29));
+        Assert.False(uploadToken.IsCancellationRequested);
         complete.SetResult();
         var paced = await pacedTask;
         Assert.Equal(DatabaseBackupStatus.Succeeded, paced.Status);
