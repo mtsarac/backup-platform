@@ -358,8 +358,8 @@ internal sealed class DatabaseBackupExecution
         BackupFailure? failure = null;
         BackupReplicaInfo? replica = null;
         var cancelled = false;
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _request.PauseToken, _request.TimeRulePauseToken);
-        bounded.CancelAfter(_request.DestinationTimeout ?? DatabaseBackupPipelineRequest.DefaultDestinationTimeout);
+        using var deadline = new CancellationTokenSource(_request.DestinationTimeout ?? DatabaseBackupPipelineRequest.DefaultDestinationTimeout, _time);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _request.PauseToken, _request.TimeRulePauseToken, deadline.Token);
         try
         {
             if (storage is null)
@@ -368,7 +368,7 @@ internal sealed class DatabaseBackupExecution
                     "The requested storage provider is not available on this agent.", kind: BackupFailureKind.StorageWriteFailed, cause: BackupFailureCause.Unsupported);
             }
 
-            await UploadAsync(destination, storage, transfer, bounded, bounded.Token).ConfigureAwait(false);
+            await UploadAsync(destination, storage, transfer, deadline, bounded.Token).ConfigureAwait(false);
             replica = await VerifyReplicaAsync(storage, transfer, bounded.Token).ConfigureAwait(false);
         }
         catch (TransferPausedException) { throw; }
