@@ -2,5 +2,7 @@
 node_modules/
 test-results/
 playwright-report/
+.state-s2.json
+.s2-certs/
 .state-s5.json
 .s5-certs/

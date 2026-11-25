@@ -1,0 +1,91 @@
+# Isolated stack for S2 real-sink checks (project bps2): the shared bpe2e API denies private S3/SMTP/Webhook addresses, has no Central storage root,
+# and keeps sms/smb flags off. This overlay isolates ports/subnet and wires MinIO (TLS), atmoz/sftp, Mailpit, an HTTPS webhook/SMS sink, and Central root.
+#   bash e2e/s2-stack.sh
+services:
+  postgres:
+    container_name: bps2-postgres
+    ports: !override
+      - "127.0.0.1:5436:5432"
+  api:
+    image: bpe2e-api:latest
+    container_name: bps2-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - BACKUP_PLATFORM_CONNECTION_STRING=Host=postgres;Port=5432;Database=backup_platform_dev;Username=postgres;Password=postgres
+      - AgentDistribution__PackagesDirectory=/app/agent-dist
+      - AgentDistribution__PublicBaseUrl=https://localhost:7552
+      - Secrets__DataProtection__KeysDirectory=/app/dp-keys
+      - GoogleDrive__ClientId=${GOOGLE_CLIENT_ID:-}
+      - GoogleDrive__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - GoogleDrive__RedirectUri=${GOOGLE_REDIRECT_URI:-}
+      - GoogleDrive__FrontendOrigin=${GOOGLE_FRONTEND_ORIGIN:-}
+      - GoogleDrive__StagingDirectory=/app/gdrive-staging
+      - Authentication__TrustedProxies__0=172.36.0.10
+      - SSL_CERT_FILE=/etc/ssl/s2-ca.crt
+      - Backups__S3__AllowedPrivateNetworks__0=172.36.0.0/24
+      - Backups__S3__AllowedPrivateNetworks__1=192.168.122.0/24
+      - Backups__Sftp__AllowedPrivateNetworks__0=172.36.0.0/24
+      - Backups__Sftp__AllowedPrivateNetworks__1=192.168.122.0/24
+      - Backups__Storage__Central__RootDirectory=/tmp/s2-central
+      - Backups__Storage__Central__TenantScopes__${S2_CENTRAL_TENANT:-00000000000000000000000000000001}=e2e-s2
+      - Notifications__PublicBaseUrl=https://localhost:7473
+      - Notifications__AllowedPrivateNetworks__0=172.36.0.0/24
+      - Notifications__DeliveryPollInterval=00:00:01
+      - Notifications__TestNotificationsPerTenantPerHour=1000
+      - Features__sms=true
+      - Features__smb=true
+    volumes:
+      - api_dp_keys:/app/dp-keys
+      - api_gdrive_staging:/app/gdrive-staging
+      - ./e2e/.s2-certs/public.crt:/etc/ssl/s2-ca.crt:ro
+  frontend:
+    image: bpe2e-frontend:latest
+    container_name: bps2-frontend
+    ports: !override
+      - "7473:443"
+      - "7474:80"
+      - "7552:5252"
+    networks:
+      default:
+        ipv4_address: 172.36.0.10
+  minio:
+    image: bitnamilegacy/minio:latest
+    container_name: bps2-minio
+    restart: unless-stopped
+    entrypoint: ["/opt/bitnami/minio/bin/minio"]
+    command: ["server", "/tmp/data", "--address", ":9000", "--certs-dir", "/certs"]
+    environment:
+      MINIO_ROOT_USER: s2minio
+      MINIO_ROOT_PASSWORD: S2-minio-pass-1
+    ports:
+      - "192.168.122.1:9100:9000"
+    volumes:
+      - ./e2e/.s2-certs:/certs:ro
+  sftp:
+    image: atmoz/sftp:alpine
+    container_name: bps2-sftp
+    restart: unless-stopped
+    command: ["s2user:S2-sftp-pass1:::upload"]
+    ports:
+      - "192.168.122.1:2222:22"
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: bps2-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8027:8025"
+  webhook:
+    image: oven/bun:1-alpine
+    container_name: bps2-webhook
+    restart: unless-stopped
+    command: ["bun", "/srv/s2-webhook.ts"]
+    ports:
+      - "127.0.0.1:8028:8080"
+    volumes:
+      - ./e2e/s2-webhook.ts:/srv/s2-webhook.ts:ro
+      - ./e2e/.s2-certs:/certs:ro
+networks:
+  default:
+    ipam: !override
+      config:
+        - subnet: 172.36.0.0/24
