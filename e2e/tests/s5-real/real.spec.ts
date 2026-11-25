@@ -95,7 +95,6 @@ test.describe('replica repair', () => {
   })
 
   test('repair started through the API is reflected by the UI once finished: both replicas verified, bytes restored', async ({ page }) => {
-    test.fail(true, 'https://github.com/mtsarac/backup-platform/issues/294')
     test.setTimeout(90_000)
     const a = await loseReplica()
     const op = await w.t.tenant.call('POST', `/api/tenants/${w.t.tenantId}/backup-artifacts/${a.artifactId}/repairs`, { storageProvider: 's3', storageConnectionId: w.dests[1].connectionId }, [200, 201, 202])
