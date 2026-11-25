@@ -194,7 +194,8 @@ public static class BackupReplicationEvaluator
         {
             bool Matches(string provider, Guid? connection) =>
                 provider == destination.StorageProvider && (destination.StorageConnectionId is null || connection == destination.StorageConnectionId);
-            var verifiedReplica = replicas.FirstOrDefault(replica => (replica.VerificationState == "Verified" || replica.VerificationMethod == BackupReplica.MissingVerificationMethod) && Matches(replica.StorageProvider, replica.StorageConnectionId));
+            var verifiedReplica = replicas.FirstOrDefault(replica => IsUsableVerified(replica) && Matches(replica.StorageProvider, replica.StorageConnectionId))
+                ?? replicas.FirstOrDefault(replica => (replica.VerificationState == "Verified" || replica.VerificationMethod == BackupReplica.MissingVerificationMethod) && Matches(replica.StorageProvider, replica.StorageConnectionId));
             var outcome = attempt.DestinationOutcomes.FirstOrDefault(candidate => Matches(candidate.StorageProvider, candidate.StorageConnectionId));
             string state;
             if (verifiedReplica is not null) state = IsUsableVerified(verifiedReplica) ? BackupDestinationStates.Verified : "Deleted";

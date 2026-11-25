@@ -214,6 +214,27 @@ public sealed class ReplicationComplianceUnitTests
     }
 
     [Fact]
+    public void Repaired_destination_counts_the_replacement_in_run_replication()
+    {
+        var run = SucceededRun(2, "central", "sftp", "google-drive");
+        var artifact = run.CurrentAttempt.Artifacts.Single();
+        var missing = artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+        missing.MarkMissing();
+        var replacement = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, missing.StorageProvider, missing.StorageTarget,
+            "a/b/c/d/two_20261010T000000Z_aaaaaaaa_FULL.bak", missing.SizeBytes, missing.Checksum, missing.ChecksumAlgorithm, "Verified", "ReadBack", At, At,
+            BackupStorageExecutionLocation.Backend, null, missing.StorageConnectionId);
+        artifact.AddRepairedReplica(replacement);
+
+        var health = BackupOrchestrator.ToView(run).Replication!;
+
+        Assert.Equal("Healthy", health.Status);
+        Assert.Equal(3, health.VerifiedReplicas);
+        var destination = Assert.Single(health.Destinations, d => d.StorageProvider == "sftp");
+        Assert.Equal("Verified", destination.State);
+        Assert.Equal(replacement.Id, destination.ReplicaId);
+    }
+
+    [Fact]
     public void An_unverified_orphan_is_never_usable_and_never_keeps_an_artifact_available()
     {
         var artifact = new BackupArtifact(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), 100, Source, Hash, "sha256", At, "{}", "{}");
