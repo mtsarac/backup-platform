@@ -1,28 +1,12 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { expect, test } from '@playwright/test'
-import { Api } from '../../api'
-import { state } from '../../state'
+import { activeAgent } from './support'
 
 const run = promisify(execFile)
 test('Windows file backup and restore preserve file contents', async ({ page }) => {
   test.setTimeout(180_000)
-  const platform = await Api.signIn(state().accounts.platformAdmin)
-  const tenants = await platform.call('GET', '/api/platform/tenants?search=e2e-s4-&pageSize=100')
-  await platform.dispose()
-  let active: { tenantId: string; login: string; agentId: string } | undefined
-  for (const tenant of tenants.items) {
-    const login = `e2e.s4.${tenant.name.slice('e2e-s4-'.length)}`
-    const api = await Api.signIn({ login, password: 'E2e-S4-Passw0rd!2026' })
-    const agents = await api.call('GET', `/api/tenants/${tenant.tenantId}/agents`)
-    await api.dispose()
-    const agent = agents.find((item: { connectivity: string }) => item.connectivity === 'online')
-    if (agent) {
-      if (active) throw new Error('More than one S4 agent is online; select a dedicated test VM')
-      active = { tenantId: tenant.tenantId, login, agentId: agent.agentId }
-    }
-  }
-  if (!active) throw new Error('An enrolled, online S4 Windows agent is required')
+  const active = await activeAgent()
   await page.goto('/login')
   await page.locator('input[autocomplete="username"], input[type="text"]').first().fill(active.login)
   await page.locator('input[type="password"]').fill('E2e-S4-Passw0rd!2026')

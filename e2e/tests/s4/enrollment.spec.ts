@@ -3,6 +3,7 @@ import { promisify } from 'node:util'
 import { expect, test } from '@playwright/test'
 import { Api, enableAgentEnrollment, ensureTenant, ensureTenantUser, ensureUnlimitedPlan } from '../../api'
 import { state } from '../../state'
+import { clearAgentLogs, configureFileSource } from './support'
 
 const run = promisify(execFile)
 const suffix = `${Date.now()}`
@@ -20,8 +21,7 @@ test.beforeAll(async () => {
   } finally { await platform.dispose() }
 })
 
-test('signed-out login has no console errors (#239)', async ({ page }) => {
-  test.fail(true, 'https://github.com/mtsarac/backup-platform/issues/239')
+test('signed-out login has no console errors', async ({ page }) => {
   const errors: string[] = []
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   await page.goto('/login')
@@ -83,7 +83,9 @@ test('Windows enrollment command connects the service', async ({ page }) => {
   await dialog.getByRole('button', { name: /Kayıt anahtarı oluştur|Create enrollment key/ }).click()
   const command = await dialog.getByLabel(/Tek kullanımlık kurulum komutu|One-time installation command/).inputValue()
   expect(command).toContain('/api/agent-dist/install.ps1')
-  const encoded = Buffer.from(command, 'utf16le').toString('base64')
+  // The shared stack is rebuilt between runs, so the VM keeps an agent identity the new stack does not know; -ReplaceExisting re-enrolls it.
+  await clearAgentLogs()
+  const encoded = Buffer.from(`${command} -ReplaceExisting`, 'utf16le').toString('base64')
   try {
     await run('ssh', ['-o', 'BatchMode=yes', 'virtual-win11', 'powershell', '-NoProfile', '-EncodedCommand', encoded], { timeout: 180_000, maxBuffer: 2_000_000 })
   } catch {
@@ -92,6 +94,7 @@ test('Windows enrollment command connects the service', async ({ page }) => {
   await expect(dialog.getByRole('status')).toContainText(/Çevrimiçi|Online/, { timeout: 90_000 })
   await expect(dialog.getByLabel(/Tek kullanımlık kurulum komutu|One-time installation command/)).toHaveCount(0)
   const service = await run('ssh', ['-o', 'BatchMode=yes', 'virtual-win11', 'powershell', '-NoProfile', '-Command', '(Get-Service BackupAgent).Status'])
+  await configureFileSource()
   await dialog.getByRole('button', { name: /Tamam|Done/ }).click()
   const agent = page.getByRole('link', { name: `e2e-s4-${suffix}` })
   await expect(agent).toBeVisible()
