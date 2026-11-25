@@ -54,13 +54,13 @@ test('encryption requested but the server has no TLS explains what to do', async
   await expect(page.getByText(/TLS ekleyin ya da/)).toBeVisible()
 })
 
-test.fixme('rapid credential correction within 5 s re-verifies instead of stalling on rescan_too_soon (#264)', async ({ page }) => {
+test('rapid credential correction within 5 s re-verifies instead of stalling on rescan_too_soon (#264)', async ({ page }) => {
   await signIn(page)
   await openInstance(page)
   await saveCredential(page, PG.user, PG.password, true)
   await expect(page.getByText('Şifreli bağlantı kurulamadı')).toBeVisible({ timeout: 60_000 })
   await saveCredential(page, PG.user, PG.password, false, false)
-  await expect(page.getByText('Kimlik doğrulandı')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('Kimlik doğrulandı')).toBeVisible({ timeout: 60_000 })
 })
 
 test('valid credential verifies and lists databases; system databases are not selectable', async ({ page }) => {

@@ -6,6 +6,7 @@ export default defineConfig({
   testDir: './tests',
   workers: 1, // one shared stack and tenant; slices run in separate worktrees/stacks, not in parallel here
   retries: 0,
+  globalSetup: './global-setup.ts',
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? `https://${host}:5173`,

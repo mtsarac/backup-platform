@@ -89,8 +89,8 @@ echo "EXIT:$rc"`)
     await expect(dialog.getByLabel('Tek kullanımlık kurulum komutu')).toBeVisible()
     await dialog.getByRole('button', { name: 'Kapat' }).click()
 
-    await expect(page.getByRole('button', { name: /kayıt anahtarını iptal et/ }).first()).toBeVisible()
-    await page.getByRole('button', { name: /kayıt anahtarını iptal et/ }).first().click()
+    await expect(page.getByRole('button', { name: /^İptal et/ }).first()).toBeVisible()
+    await page.getByRole('button', { name: /^İptal et/ }).first().click()
     await page.getByRole('dialog').getByRole('button', { name: 'İptali onayla' }).click()
     await expect(page.getByText('Bekleyen kayıt anahtarı yok.')).toBeVisible()
 

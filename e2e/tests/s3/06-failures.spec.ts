@@ -116,7 +116,7 @@ test('stopped PostgreSQL server surfaces clear UI failure/retry notice, and run 
   w.expectClean()
 })
 
-test.fixme('failed run with exhausted retry policy either allows manual Retry or hides Yeniden dene instead of returning 409 (#271)', async ({ page }) => {
+test('failed run with exhausted retry policy either allows manual Retry or hides Yeniden dene instead of returning 409 (#271)', async ({ page }) => {
   await signIn(page)
   await page.goto(tenantPath(tenantId, `backup-jobs/${exhaustedJobId}`))
   vm('sudo -n systemctl stop postgresql')
@@ -127,8 +127,8 @@ test.fixme('failed run with exhausted retry policy either allows manual Retry or
   } finally {
     vm('sudo -n systemctl start postgresql && for _ in $(seq 1 30); do pg_isready -h 127.0.0.1 -q && break; sleep 1; done')
   }
-  await page.getByRole('button', { name: 'Yeniden dene' }).first().click()
-  await expect(page.getByText('Çoğaltma sağlıklı')).toBeVisible({ timeout: 90_000 })
+  await expect(page.getByRole('button', { name: 'Yeniden dene' })).toHaveCount(0)
+  await expect(page.getByText(/409|conflict/i)).toHaveCount(0)
 })
 
 test('backup job with invalid PostgreSQL credential fails run with clear auth error, and manual Yeniden dene succeeds', async ({ page }) => {

@@ -115,7 +115,6 @@ test('job detail renames a job, fires a scheduled occurrence on time, and pauses
 })
 
 test('job detail configures multi-destination replication and retention, verifies 2 replicas, requests/cancels artifact delete, and archives job', async ({ page }) => {
-  test.fail(true, 'archiving a job leaves a 404 /health refetch and console error (#275)')
   multiDestJobId = await seedJob(tenant, tenantId, {
     name: multiDestJobName,
     agentId,
@@ -138,7 +137,7 @@ test('job detail configures multi-destination replication and retention, verifie
   await page.getByRole('button', { name: 'Değiştir: Hedef' }).click()
   await page.locator('summary', { hasText: /Başka hedef ekle/ }).click()
   await page.getByLabel('Yeni Çoğaltma Hedefi Ekle').selectOption(secondConnId)
-  await page.getByLabel(/Gerekli Doğrulanmış Kopya Sayısı/).fill('2')
+  await page.getByLabel(/Gerekli doğrulanmış kopya sayısı/i).fill('2')
   await page.getByRole('button', { name: 'Kaydet' }).click()
   await expect(page.getByRole('button', { name: 'Değiştir: Hedef' })).toBeVisible()
 
