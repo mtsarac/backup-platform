@@ -68,7 +68,7 @@ if [[ $build == true || ! -f $BP_DEV_API_DLL ]]; then
     run_redacted dotnet build src/hosts/api -c Release --nologo -v q >/dev/null
 fi
 run_redacted dotnet tool restore >/dev/null
-run_redacted dotnet ef database update --project src/core/infrastructure --configuration Release --no-build >/dev/null
+run_redacted dotnet ef database update --context PlatformDbContext --project src/core/infrastructure --configuration Release --no-build >/dev/null
 printf 'Database migrated\n'
 
 # 4. First PlatformAdmin: the real CLI, only when no credential exists yet; the password lives only in the accounts file.

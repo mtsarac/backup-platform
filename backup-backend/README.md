@@ -234,7 +234,7 @@ dotnet build BackupPlatform.sln -c Release -p:ContinuousIntegrationBuild=true -w
 
 dotnet tool restore
 export BACKUP_PLATFORM_CONNECTION_STRING='Host=localhost;Port=5432;Database=backup_platform;Username=...;Password=...'
-dotnet ef database update --project src/core/infrastructure
+dotnet ef database update --context PlatformDbContext --project src/core/infrastructure
 dotnet run --project src/hosts/api -- --bootstrap-user   # creates the first platform admin
 dotnet run --project src/hosts/api
 dotnet run --project src/hosts/agent

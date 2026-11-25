@@ -90,7 +90,7 @@ up)
     fi
     (cd -- "$REPO_ROOT/backup-backend" && run_redacted dotnet build src/hosts/api -c Release --nologo -v q >/dev/null)
     export BACKUP_PLATFORM_CONNECTION_STRING="Host=127.0.0.1;Port=$PG_PORT;Database=bp_discovery;Username=postgres;Password=$PG_PASSWORD"
-    (cd -- "$REPO_ROOT/backup-backend" && dotnet tool restore >/dev/null && run_redacted dotnet ef database update --project src/core/infrastructure --configuration Release --no-build >/dev/null)
+    (cd -- "$REPO_ROOT/backup-backend" && dotnet tool restore >/dev/null && run_redacted dotnet ef database update --context PlatformDbContext --project src/core/infrastructure --configuration Release --no-build >/dev/null)
     printf 'Database migrated\n'
     accounts="$H/accounts.yaml"
     python3 "$REPO_ROOT/scripts/dev/bootstrap.py" init-accounts --accounts-file "$accounts" --database bp_discovery --frontend "http://localhost:$WEB_PORT" \

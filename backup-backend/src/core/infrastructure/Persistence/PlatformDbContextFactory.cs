@@ -8,7 +8,7 @@ namespace BackupPlatform.Infrastructure.Persistence;
 /// <summary>HTTP-independent EF tooling entry point; connection configuration is supplied externally.</summary>
 /// <remarks>
 /// Restore tooling with dotnet tool restore from backup-backend. Set BACKUP_PLATFORM_CONNECTION_STRING
-/// before dotnet ef migrations add or database update --project src/core/infrastructure.
+/// before dotnet ef migrations add or database update --context PlatformDbContext --project src/core/infrastructure.
 /// No credentials or fallback connection string are stored in source. Design-time scope is unresolved,
 /// not platform-wide; migrations operate on schema independently of tenant query filters.
 /// </remarks>
