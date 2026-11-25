@@ -64,6 +64,14 @@ _Avoid_: Super admin, Operator, Support user
 The account role of a tenant's own administrator. Every member has full administrative rights in each tenant they belong to; an account with no membership is disabled.
 _Avoid_: Owner, Admin, Operator, Viewer, Tenant role
 
+**Tenant data**:
+Everything one tenant owns (jobs, runs, artifacts, shares, agents, restores). A tenant request sees and writes only its own tenant's data; the tenant is fixed by the validated membership of the request, never by anything the client sends.
+_Avoid_: Tenant scope (for the data itself), Account data
+
+**Platform operation**:
+Work that belongs to no single tenant request: background workers, an agent's identity, heartbeat and leases, sign-in, platform administration. It may read and write across tenants, and must name the tenant it acts on from the agent's identity or the row it works on.
+_Avoid_: Admin mode, Global access, System call
+
 **BackupShare** (shown as "Paylaşım"; lists `Paylaşımlarım` and `Paylaşılan Yedekler`):
 A time-limited, revocable grant that lets a PlatformAdmin download one artifact of a tenant as plaintext. Created by a UserAdmin or a PlatformAdmin with a reason, audited, notified, checked at session creation and stream start; revoking it cancels downloads in progress on every node. It never covers restore and never exposes a key.
 _Avoid_: Support session, Emergency access, Temporary access
