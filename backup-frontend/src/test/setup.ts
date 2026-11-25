@@ -12,5 +12,6 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  sessionStorage.clear()
   Reflect.deleteProperty(window, 'matchMedia')
 })

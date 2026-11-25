@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest, resetAntiforgery, subscribeSessionExpired } from '@/lib/api/client'
+import { pendingKeys } from '@/lib/idempotency-key'
 import { AuthContext, type LoginChallengeResult } from './auth-context'
 import type { TenantMembership, UserProfile } from './types'
 import { getAssertion } from './webauthn'
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }), [cache])
   async function completeSecondFactor() {
     resetAntiforgery()
+    pendingKeys.clear()
     await cache.cancelQueries()
     cache.removeQueries({ queryKey: ['tenant'] })
     cache.removeQueries({ queryKey: ['platform'] })
@@ -85,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   async function clearAuth() {
     resetAntiforgery()
+    pendingKeys.clear()
     await cache.cancelQueries()
     cache.removeQueries({ queryKey: ['tenant'] })
     cache.removeQueries({ queryKey: ['platform'] })

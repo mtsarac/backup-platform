@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useRunBackupJob, useSaveBackupJob } from './hooks'
 import { saveBackupJob, startJobRun } from './api'
+import { pendingKeys } from '@/lib/idempotency-key'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a' }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
@@ -40,6 +41,30 @@ describe('manuel çalıştırma', () => {
 })
 describe('job oluşturma', () => {
   const input = { name: 'Gece' } as never
+  it('sayfa yeniden yüklendikten sonra aynı istek aynı anahtarı kullanır, baska kiracı veya cıkıs kullanmaz', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('response lost')).mockResolvedValue({ id: 'job-a' } as never)
+    const first = renderHook(() => useSaveBackupJob(), { wrapper })
+    await act(async () => { await expect(first.result.current.mutateAsync(input)).rejects.toThrow('response lost') })
+    first.unmount()
+    const reloaded = renderHook(() => useSaveBackupJob(), { wrapper })
+    await act(async () => { await reloaded.result.current.mutateAsync(input) })
+    const calls = vi.mocked(saveBackupJob).mock.calls
+    expect(calls[1][3]).toBe(calls[0][3])
+    expect(sessionStorage.length).toBe(0)
+
+    vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('response lost'))
+    await act(async () => { await expect(reloaded.result.current.mutateAsync(input)).rejects.toThrow('response lost') })
+    access.tenantId = 'tenant-b'
+    const other = renderHook(() => useSaveBackupJob(), { wrapper })
+    await act(async () => { await other.result.current.mutateAsync(input) })
+    access.tenantId = 'tenant-a'
+    expect(vi.mocked(saveBackupJob).mock.calls[3][3]).not.toBe(vi.mocked(saveBackupJob).mock.calls[2][3])
+    pendingKeys.clear()
+    const afterLogout = renderHook(() => useSaveBackupJob(), { wrapper })
+    await act(async () => { await afterLogout.result.current.mutateAsync(input) })
+    expect(vi.mocked(saveBackupJob).mock.calls[4][3]).not.toBe(vi.mocked(saveBackupJob).mock.calls[2][3])
+    expect(sessionStorage.length).toBe(0)
+  })
   it('belirsiz hatadan sonra aynı anahtarla yeniden dener, başarıdan sonra yeni anahtar kullanır', async () => {
     vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('Network failed')).mockResolvedValue({ id: 'job-a' } as never)
     const { result } = renderHook(() => useSaveBackupJob(), { wrapper })
