@@ -127,7 +127,7 @@ function Table<T>({ rows, columns, keyExtractor, className, caption, sort }: Lis
           {rows.map((row) => (
             <tr key={keyExtractor(row)} className="border-b border-border last:border-b-0 hover:bg-surface-2">
               {columns.map((column) => (
-                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-control [&_button]:py-1 [&_button]:text-sm', column.card === 'actions' ? 'whitespace-nowrap [&_.flex-wrap]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 break-words' : 'whitespace-nowrap')}>{column.render(row)}</td>
+                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-control [&_button]:py-1 [&_button]:text-sm', column.card === 'actions' ? 'whitespace-nowrap [&_.flex-wrap]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 [overflow-wrap:anywhere]' : 'whitespace-nowrap')}>{column.render(row)}</td>
               ))}
             </tr>
           ))}

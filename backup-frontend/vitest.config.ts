@@ -14,5 +14,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom', pool: 'vmThreads', maxWorkers: 2, setupFiles: ['./src/test/setup.ts'], restoreMocks: true,
+    // Cold vmThreads transforms and findBy/userEvent polling exceed the 5s default when CPUs are busy, so heavy files failed at random; a real hang still fails.
+    testTimeout: 20_000, hookTimeout: 20_000,
   },
 })

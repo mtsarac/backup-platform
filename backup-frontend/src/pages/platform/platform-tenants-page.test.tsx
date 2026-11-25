@@ -62,7 +62,7 @@ describe('platform tenants list', () => {
     expect(screen.getByRole('button', { name: 'Sonraki' })).toBeDisabled()
     await userEvent.type(screen.getByRole('searchbox', { name: "Çalışma alanı ara" }), 'acme')
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/tenants?search=acme'))
-    expect(api.getTenants).toHaveBeenLastCalledWith({ search: 'acme', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    await waitFor(() => expect(api.getTenants).toHaveBeenLastCalledWith({ search: 'acme', page: 1, pageSize: 25 }, expect.any(AbortSignal)))
   })
 
   it('sends sortable column changes to the server', async () => {

@@ -1421,7 +1421,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Giriş yapın": {"tr":"Giriş yapın","en":"Sign in"},
   "Şifre": {"tr":"Şifre","en":"Password"},
   "Giriş yapılıyor...": {"tr":"Giriş yapılıyor...","en":"Signing in..."},
-  "Giriş yap": {"tr":"Giriş yap","en":"Sign ın"},
+  "Giriş yap": {"tr":"Giriş yap","en":"Sign in"},
   "Running": {"tr":"Çalışıyor","en":"Running"},
   "RetryPending": {"tr":"Yeniden deneme bekleniyor","en":"Retry pending"},
   "CancellationRequested": {"tr":"İptal isteniyor","en":"Cancellation requested"},

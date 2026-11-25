@@ -102,7 +102,9 @@ function ConnectionWizardForm() {
   const [chosen, setChosen] = useState(params.get('provider') ?? '')
   const descriptor = creatable.find((item) => item.providerType === chosen && tenantCreateState(item, connections.data?.items ?? []).creatable)
   const provider = useMemo(() => descriptor && wizardProvider(descriptor), [descriptor])
-  const [step, setStep] = useState<StepKey>(provider ? 'details' : 'provider')
+  // A ?provider= deep link skips the picker once the provider list has loaded; until the person navigates, the step follows the data.
+  const [pickedStep, setStep] = useState<StepKey | null>(null)
+  const step: StepKey = pickedStep ?? (provider && params.has('provider') ? 'details' : 'provider')
   const [customName, setCustomName] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [edits, setEdits] = useState<FieldValues>({})
