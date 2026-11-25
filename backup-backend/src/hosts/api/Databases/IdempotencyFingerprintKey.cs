@@ -31,7 +31,7 @@ public sealed class IdempotencyFingerprintKey(ISecretStore secrets, DbContextOpt
     private async Task<byte[]> LoadOrCreateAsync(CancellationToken cancellationToken)
     {
         var reference = new SecretReference(SecretName);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(database);
+        await using var context = PlatformOperationsDbContext.Create(database);
         await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_lock({LockKey})", cancellationToken).ConfigureAwait(false);
         try

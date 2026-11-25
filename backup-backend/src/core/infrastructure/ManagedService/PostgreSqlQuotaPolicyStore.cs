@@ -24,20 +24,20 @@ public sealed class PostgreSqlQuotaPolicyStore(
 
     public async Task<IReadOnlyList<QuotaPolicyView>> ListAsync(CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var policies = await context.QuotaPolicies.AsNoTracking().ToListAsync(cancellationToken);
         return policies.OrderByDescending(policy => policy.IsDefault).ThenBy(policy => policy.NormalizedName, StringComparer.Ordinal).Select(QuotaPolicyView.From).ToList();
     }
 
     public async Task<ManagedServiceChange<QuotaPolicyChange>> CreateAsync(QuotaPolicy policy, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (await context.QuotaPolicies.AnyAsync(row => row.Key == policy.Key || row.NormalizedName == policy.NormalizedName, cancellationToken))
         {
             return new(ManagedServiceOutcome.QuotaPolicyKeyTaken);
         }
         context.QuotaPolicies.Add(policy);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.QuotaPolicyCreated, null,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.QuotaPolicyCreated, null,
             ManagedServiceAuditActions.QuotaPolicyTargetType, policy.Id.Value.ToString("D"), Details(policy)));
         try
         {
@@ -54,7 +54,7 @@ public sealed class PostgreSqlQuotaPolicyStore(
         QuotaPolicyId id, QuotaPolicyValues values, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         QuotaPolicy policy;
-        await using (var context = PlatformDbContext.CreateForPlatformOperations(options))
+        await using (var context = PlatformOperationsDbContext.Create(options))
         {
             var loaded = await context.QuotaPolicies.SingleOrDefaultAsync(row => row.Id == id, cancellationToken);
             if (loaded is null)
@@ -82,7 +82,7 @@ public sealed class PostgreSqlQuotaPolicyStore(
             {
                 details["previous" + char.ToUpperInvariant(key[0]) + key[1..]] = value;
             }
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.QuotaPolicyChanged, null,
+            context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.QuotaPolicyChanged, null,
                 ManagedServiceAuditActions.QuotaPolicyTargetType, policy.Id.Value.ToString("D"), details));
             try
             {
@@ -101,7 +101,7 @@ public sealed class PostgreSqlQuotaPolicyStore(
     private async Task<int> RecalculateAsync(QuotaPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
         List<TenantId> tenants;
-        await using (var context = PlatformDbContext.CreateForPlatformOperations(options))
+        await using (var context = PlatformOperationsDbContext.Create(options))
         {
             var holding = context.TenantStorageUsages.AsNoTracking().Where(row => row.PolicyId == policy.Id).Select(row => row.TenantId);
             var naming = from subscription in context.TenantSubscriptions.AsNoTracking()

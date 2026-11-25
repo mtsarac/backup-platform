@@ -172,7 +172,7 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         await _world.EnableAsync(agent.TenantId, [NotificationEventTypes.BackupSizeAnomaly]);
         for (var index = 0; index < 3; index++) await CompleteStoreAsync(agent, job, 1000);
         var log = new CapturedLogger();
-        var store = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore(
+        var store = new RunStoreFacade(
             new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>().UseNpgsql(_database.ConnectionString).Options,
             AdmitAllBackupAdmission.Instance, null, () => 0, null, log);
         var now = _world.Clock.GetUtcNow();
@@ -207,7 +207,7 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         await _world.AddEmailAsync(agent.TenantId);
         await _world.EnableAsync(agent.TenantId, [NotificationEventTypes.BackupSizeAnomaly]);
         for (var index = 0; index < 3; index++) await CompleteStoreAsync(agent, job, 1000);
-        var store = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore(
+        var store = new RunStoreFacade(
             new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>().UseNpgsql(_database.ConnectionString).Options,
             AdmitAllBackupAdmission.Instance, null, () => 0, null, null, new BackupPlatform.Contracts.Flags.FeatureFlags(_ => false));
         var now = _world.Clock.GetUtcNow();
@@ -221,7 +221,7 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         Assert.Empty(await _world.EventsAsync(agent.TenantId));
     }
 
-    private sealed class CapturedLogger : Microsoft.Extensions.Logging.ILogger<BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore>
+    private sealed class CapturedLogger : Microsoft.Extensions.Logging.ILogger<BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunPlatformStore>
     {
         public List<string> Errors { get; } = [];
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;

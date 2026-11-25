@@ -101,15 +101,12 @@ public delegate StorageMutationResult StorageMutation(StorageConnection connecti
 
 /// <summary>
 /// Connection persistence. Every write takes the tenant lock, applies the change, writes its audit event in the same transaction and, when
-/// the change alters what quota counts (the quota scope label), recomputes the tenant's usage before committing. The implementation is bound to
-/// explicit platform operations; the endpoints are the authorization boundary and always pass the scope they authorized.
+/// the change alters what quota counts (the quota scope label), recomputes the tenant's usage before committing.
 /// </summary>
-public interface IStorageConnectionStore
+public interface IStorageConnectionOperations
 {
     /// <summary>The tenant's connections, name order. The system default connections are materialized first when missing. Null when the tenant does not exist.</summary>
     Task<IReadOnlyList<StorageConnectionRecord>?> ListAsync(TenantId tenantId, CancellationToken cancellationToken);
-
-    Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken);
 
     /// <summary>One connection. With <paramref name="tenantScope"/> it is found only inside that tenant, so another tenant's id is simply not found.</summary>
     Task<StorageConnectionRecord?> FindAsync(Guid id, TenantId? tenantScope, CancellationToken cancellationToken);
@@ -123,4 +120,15 @@ public interface IStorageConnectionStore
 
     /// <summary>Removes a connection nothing references. <see cref="StorageConnectionOutcome.InUse"/> otherwise.</summary>
     Task<StorageConnectionResult> DeleteAsync(Guid id, TenantId? tenantScope, StorageActor actor, DateTimeOffset now, CancellationToken cancellationToken);
+}
+
+/// <summary>The connections of the request's tenant (filtered tenant context); a call without a tenant scope is refused.</summary>
+public interface IStorageConnectionStore : IStorageConnectionOperations
+{
+}
+
+/// <summary>Platform administration and agent-driven lookups, unfiltered by tenant: the scope the caller authorized (null for the whole platform) is the only restriction.</summary>
+public interface IStorageConnectionPlatformStore : IStorageConnectionOperations
+{
+    Task<PagedResult<StorageConnectionRecord>> SearchAsync(StorageConnectionFilter filter, ListQuery query, CancellationToken cancellationToken);
 }

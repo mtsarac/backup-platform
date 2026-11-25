@@ -36,7 +36,7 @@ public sealed class PostgreSqlAgentCapabilityStore(DbContextOptions<PlatformDbCo
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentException.ThrowIfNullOrEmpty(revision);
         ArgumentNullException.ThrowIfNull(capabilities);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var locked = await context.Database.SqlQueryRaw<Guid>(LockAgentSql,
             new NpgsqlParameter("agent", NpgsqlDbType.Uuid) { Value = identity.AgentId.Value },
@@ -69,7 +69,7 @@ public sealed class PostgreSqlAgentCapabilityStore(DbContextOptions<PlatformDbCo
     public async Task<string?> GetRevisionAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.AgentCapabilities.AsNoTracking()
             .Where(record => record.TenantId == identity.TenantId && record.AgentId == identity.AgentId)
             .Select(record => record.Revision)
@@ -79,7 +79,7 @@ public sealed class PostgreSqlAgentCapabilityStore(DbContextOptions<PlatformDbCo
     public async Task<IReadOnlyDictionary<AgentId, AgentCapabilitySnapshot>> ListAsync(TenantId tenantId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var rows = await context.AgentCapabilities.AsNoTracking()
             .Where(record => record.TenantId == tenantId)
             .ToListAsync(cancellationToken);
@@ -90,7 +90,7 @@ public sealed class PostgreSqlAgentCapabilityStore(DbContextOptions<PlatformDbCo
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         ArgumentNullException.ThrowIfNull(agentId);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var rows = await context.AgentCapabilities.AsNoTracking()
             .Where(record => record.TenantId == tenantId && record.AgentId == agentId)
             .ToListAsync(cancellationToken);

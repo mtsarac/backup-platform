@@ -156,7 +156,7 @@ public sealed class ReplicaRepairConcurrencyIntegrationTests
         Assert.Equal(0, finalOperation.AttemptCount);
     });
 
-    private static PostgreSqlReplicaRepairStore Store(BackupStoreHarness kit) => new(new QuotaWorld(kit.Database).Options());
+    private static ReplicaRepairStoreFacade Store(BackupStoreHarness kit) => new(new QuotaWorld(kit.Database).Options());
 
     private static async Task<IReadOnlyList<ReplicaRepairOperation>> SeedAsync(
         BackupStoreHarness kit, int pending, int active = 0, DateTimeOffset? dueAt = null)
@@ -208,8 +208,8 @@ public sealed class ReplicaRepairConcurrencyIntegrationTests
         var operations = await context.ReplicaRepairOperations.AsNoTracking().ToListAsync();
         var inProgress = operations.Where(op => op.Status == ReplicaRepairStatus.InProgress).ToArray();
         Assert.Equal(active, inProgress.Length);
-        Assert.True(inProgress.Length <= IReplicaRepairStore.MaxGlobalConcurrentRepairs);
-        Assert.All(inProgress.GroupBy(op => op.TenantId), group => Assert.True(group.Count() <= IReplicaRepairStore.MaxTenantConcurrentRepairs));
+        Assert.True(inProgress.Length <= ReplicaRepairLimits.MaxGlobalConcurrentRepairs);
+        Assert.All(inProgress.GroupBy(op => op.TenantId), group => Assert.True(group.Count() <= ReplicaRepairLimits.MaxTenantConcurrentRepairs));
         var waiting = operations.Where(op => op.Status == ReplicaRepairStatus.Pending).ToArray();
         Assert.Equal(pending, waiting.Length);
         Assert.All(waiting, op =>

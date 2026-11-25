@@ -17,7 +17,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
     private const long Limit = 1_000_000;
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(10);
     private readonly BackupStoreHarness _kit = new(fixture);
-    private PostgreSqlUploadBandwidthStore Bandwidth => new(fixture.Options);
+    private UploadBandwidthStoreFacade Bandwidth => new(fixture.Options);
 
     private async Task<StoreAgent> AddPacingAgentAsync(TenantId tenant)
     {
@@ -356,7 +356,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         {
             var at = T0.AddSeconds(1 + round * 3);
             // Separate store instances: what separate backend processes would hold.
-            await Task.WhenAll(claims.Select(claim => new PostgreSqlUploadBandwidthStore(fixture.Options).GrantAsync(Command(claim, at), UploadSliceAction.Renew, Ttl, default)));
+            await Task.WhenAll(claims.Select(claim => new UploadBandwidthStoreFacade(fixture.Options).GrantAsync(Command(claim, at), UploadSliceAction.Renew, Ttl, default)));
             Assert.True(await TotalGrantedAsync(tenant) <= Limit, $"round {round}");
         }
 

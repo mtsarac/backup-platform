@@ -26,7 +26,7 @@ internal sealed class RetentionWorld(PostgreSqlFixture database)
     public BackupStoreHarness Harness { get; } = new(database);
 
     /// <summary>A store with its own options and pool: what another backend node would hold.</summary>
-    public PostgreSqlBackupRetentionStore Store() => new(new DbContextOptionsBuilder<PlatformDbContext>()
+    public RetentionStoreFacade Store() => new(new DbContextOptionsBuilder<PlatformDbContext>()
         .UseNpgsql(new NpgsqlConnectionStringBuilder(Database.ConnectionString) { MaxPoolSize = MaxStoreConnections }.ConnectionString).Options);
 
     /// <summary>A new tenant, agent and job with <paramref name="policy"/>, and one backup of it accepted at <paramref name="acceptedAt"/>.</summary>
@@ -50,7 +50,7 @@ internal sealed class RetentionWorld(PostgreSqlFixture database)
     }
 
     /// <summary>Soft-deletes the backup by hand at <paramref name="now"/> and returns the instant its grace period ends.</summary>
-    public async Task<DateTimeOffset> RequestDeleteAsync(PostgreSqlBackupRetentionStore store, SeededBackup backup, DateTimeOffset now, Guid? userId = null)
+    public async Task<DateTimeOffset> RequestDeleteAsync(RetentionStoreFacade store, SeededBackup backup, DateTimeOffset now, Guid? userId = null)
     {
         var result = await store.RequestDeleteAsync(backup.TenantId, backup.ArtifactId, userId ?? Guid.NewGuid(), now, default);
         Assert.Equal(BackupArtifactDeleteKind.Requested, result.Kind);
@@ -58,7 +58,7 @@ internal sealed class RetentionWorld(PostgreSqlFixture database)
     }
 
     /// <summary>Claims everything due at <paramref name="now"/> and returns the claim of <paramref name="backup"/>'s replica (null when it was not handed out).</summary>
-    public static async Task<ClaimedReplicaDeletion?> ClaimAsync(PostgreSqlBackupRetentionStore store, SeededBackup backup, DateTimeOffset now, string owner = "node-a") =>
+    public static async Task<ClaimedReplicaDeletion?> ClaimAsync(RetentionStoreFacade store, SeededBackup backup, DateTimeOffset now, string owner = "node-a") =>
         Mine(await store.ClaimDueDeletionsAsync(owner, now, Lease, 500, default), backup).SingleOrDefault();
 
     /// <summary>The database is shared by every test of a class, so a claim or a scan also returns what earlier tests left behind: filter to this test's own replica.</summary>

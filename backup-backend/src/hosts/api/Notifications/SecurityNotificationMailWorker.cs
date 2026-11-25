@@ -35,7 +35,7 @@ public sealed class SecurityNotificationMailWorker(DbContextOptions<PlatformDbCo
     /// <summary>Handles one batch and returns how many notifications it looked at.</summary>
     public async Task<int> ProcessAsync(CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var pending = await context.Database.SqlQuery<Pending>($"""
             SELECT n."Id", e."Type", e."OccurredAt", c."Email", c."EmailVerifiedAt"

@@ -15,10 +15,22 @@ public sealed record BackupHealthSummary(DateTimeOffset EvaluatedAt, int TotalJo
 public sealed record BackupHealthEvidence(BackupJob Job, DateTimeOffset? LastSucceededAt, int VerifiedReplicas, RestoreStatus? LatestVerificationStatus,
     DateTimeOffset? LatestVerificationAt, IReadOnlyList<StorageCapacitySnapshot?> DestinationCapacity);
 
-public interface IBackupHealthStore
+/// <summary>The evidence the health evaluation reads.</summary>
+public interface IBackupHealthReader
 {
-    Task<TenantId?> FindJobTenantAsync(Guid jobId, CancellationToken cancellationToken);
     Task<IReadOnlyList<BackupHealthEvidence>> ReadAsync(TenantId tenantId, Guid? jobId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<IReadOnlyList<BackupCapacityRisk>> ReadCapacityRisksAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<(IReadOnlyList<BackupRecentSizeAnomaly> Items, int Total)> ReadRecentSizeAnomaliesAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);
+}
+
+/// <summary>Health evidence of the request's tenant (filtered tenant context).</summary>
+public interface IBackupHealthStore : IBackupHealthReader
+{
+
+}
+
+/// <summary>Resolves the tenant of a job before a request has one, and reads health evidence for platform-driven work; unfiltered by tenant.</summary>
+public interface IBackupHealthPlatformStore : IBackupHealthReader
+{
+    Task<TenantId?> FindJobTenantAsync(Guid jobId, CancellationToken cancellationToken);
 }

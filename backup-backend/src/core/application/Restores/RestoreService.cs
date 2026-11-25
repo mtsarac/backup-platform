@@ -33,7 +33,7 @@ public sealed record RestoreStartResult(RestoreStartOutcome Outcome, RestoreView
 /// What a user may do with restores and what the target agent does with them. Every operation is scoped to one tenant (another tenant's artifact or restore is
 /// reported as not found), and every eligibility and lifecycle decision is the store's, made in the database. The backend clock owns every lease and expiry.
 /// </summary>
-public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions options, TimeProvider time)
+public sealed class RestoreService(IRestoreStore store, IRestorePlatformStore platformStore, RestoreExecutionOptions options, TimeProvider time)
 {
     public const string StagingReference = "default";
 
@@ -126,7 +126,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
 
     public async Task<RestoreTaskSnapshot?> ClaimAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
-        var claim = await store.ClaimNextAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), options.LeaseDuration, options.UnclaimedExpiry, cancellationToken);
+        var claim = await platformStore.ClaimNextAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), options.LeaseDuration, options.UnclaimedExpiry, cancellationToken);
         return claim is null ? null : ToSnapshot(claim);
     }
 
@@ -138,34 +138,34 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         {
             SoftwareVersion = request.SoftwareVersion, ProtocolVersion = request.ProtocolVersion, Platform = request.Platform
         };
-        return store.StartAsync(command, options.LeaseDuration, cancellationToken);
+        return platformStore.StartAsync(command, options.LeaseDuration, cancellationToken);
     }
 
     /// <exception cref="ArgumentException">The request is malformed.</exception>
     public Task<RestoreLeaseOutcome> RenewLeaseAsync(AgentIdentity identity, Guid attemptId, BackupTaskLeaseRequest request, CancellationToken cancellationToken)
     {
         if (request.LeaseToken == Guid.Empty) throw new ArgumentException("A lease token is required.");
-        return store.RenewLeaseAsync(Command(identity, attemptId, request.LeaseToken), options.LeaseDuration, cancellationToken);
+        return platformStore.RenewLeaseAsync(Command(identity, attemptId, request.LeaseToken), options.LeaseDuration, cancellationToken);
     }
 
     /// <exception cref="ArgumentException">The request is malformed.</exception>
     public Task<BackupMutationResult> ReportProgressAsync(AgentIdentity identity, Guid attemptId, BackupTaskProgressRequest request, CancellationToken cancellationToken)
     {
         if (!RestoreInputValidation.IsValidProgress(request)) throw new ArgumentException("Invalid progress report.");
-        return store.ReportProgressAsync(Command(identity, attemptId, request.LeaseToken), new RestoreProgress(request.Stage, request.Percent), cancellationToken);
+        return platformStore.ReportProgressAsync(Command(identity, attemptId, request.LeaseToken), new RestoreProgress(request.Stage, request.Percent), cancellationToken);
     }
 
     /// <exception cref="ArgumentException">The completion is not a well-formed report.</exception>
     public Task<BackupMutationResult> CompleteAsync(AgentIdentity identity, Guid attemptId, RestoreTaskCompletionRequest request, CancellationToken cancellationToken)
     {
         var completion = RestoreInputValidation.ToCompletion(request);
-        return store.CompleteAsync(Command(identity, attemptId, request.LeaseToken), completion, cancellationToken);
+        return platformStore.CompleteAsync(Command(identity, attemptId, request.LeaseToken), completion, cancellationToken);
     }
 
     /// <summary>Leases the next removal owed to this agent, or null when none is due.</summary>
     public async Task<RestoreCleanupSnapshot?> ClaimCleanupAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
-        var claim = await store.ClaimCleanupAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), options.CleanupLeaseDuration, cancellationToken);
+        var claim = await platformStore.ClaimCleanupAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), options.CleanupLeaseDuration, cancellationToken);
         if (claim is null) return null;
         var operation = claim.Operation;
         var target = operation.Target;
@@ -188,7 +188,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         var removed = request.Outcome switch { "Dropped" or "NotFound" => true, "Failed" => false, _ => throw new ArgumentException("Invalid cleanup outcome.") };
         if (removed != (request.FailureCode is null) || request.FailureCode is { } code && !RestoreInputValidation.IsSafeCode(code))
             throw new ArgumentException("A failed cleanup carries a stable failure code; a successful one carries none.");
-        return store.CompleteCleanupAsync(identity.TenantId, identity.AgentId, operationId, request.LeaseToken, removed, request.FailureCode, time.GetUtcNow(), cancellationToken);
+        return platformStore.CompleteCleanupAsync(identity.TenantId, identity.AgentId, operationId, request.LeaseToken, removed, request.FailureCode, time.GetUtcNow(), cancellationToken);
     }
 
     private RestoreLeaseCommand Command(AgentIdentity identity, Guid attemptId, Guid leaseToken) =>

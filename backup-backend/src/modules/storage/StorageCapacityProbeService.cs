@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace BackupPlatform.Storage;
 
 public sealed class StorageCapacityProbeService(
-    IStorageConnectionStore connectionStore,
+    IStorageConnectionPlatformStore connectionStore,
     IStorageCapacitySnapshotStore snapshotStore,
     IStorageCapacityTaskQueue taskQueue,
     IGoogleDriveCapacityClient? googleDriveClient = null,

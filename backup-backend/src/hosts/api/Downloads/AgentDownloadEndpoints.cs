@@ -65,7 +65,7 @@ public static class AgentDownloadEndpoints
     }
 
     private static async Task<IResult> KeyAsync(Guid sessionId, DownloadSignalRequest request, HttpContext http, ICurrentAgent agent,
-        AgentDownloadSource source, IDownloadStore store, ITenantWrapKeyStore keys, ICentralAuthorizationService centralAuth, CancellationToken cancellationToken)
+        AgentDownloadSource source, IDownloadPlatformStore store, ITenantWrapKeyPlatformStore keys, ICentralAuthorizationService centralAuth, CancellationToken cancellationToken)
     {
         var session = await source.GetFencedAsync(agent.Identity!, sessionId, request.LeaseToken, cancellationToken);
         if (session is not { Decrypted: true }) return Rejected();
@@ -83,8 +83,8 @@ public static class AgentDownloadEndpoints
         finally { CryptographicOperations.ZeroMemory(dek); }
     }
 
-    private static async Task<IResult> AccessAsync(Guid sessionId, HttpRequest request, ICurrentAgent agent, AgentDownloadSource source, IDownloadStore store,
-        IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, ICentralAuthorizationService centralAuth, CancellationToken cancellationToken)
+    private static async Task<IResult> AccessAsync(Guid sessionId, HttpRequest request, ICurrentAgent agent, AgentDownloadSource source, IDownloadPlatformStore store,
+        IStorageConnectionPlatformStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, ICentralAuthorizationService centralAuth, CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease)) return Rejected();
         var session = await source.GetFencedAsync(agent.Identity!, sessionId, lease, cancellationToken);

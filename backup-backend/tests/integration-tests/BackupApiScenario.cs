@@ -227,7 +227,7 @@ internal sealed class BackupApiScenario : IAsyncDisposable
     public async Task ExpireStaleAsync()
     {
         await using var scope = World.Factory.Services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<IBackupRunStore>().ExpireStaleAsync(Clock.GetUtcNow(), CancellationToken.None);
+        await scope.ServiceProvider.GetRequiredService<IBackupRunPlatformStore>().ExpireStaleAsync(Clock.GetUtcNow(), CancellationToken.None);
     }
 
     // ---- reading run views ----

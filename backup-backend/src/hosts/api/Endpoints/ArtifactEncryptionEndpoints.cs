@@ -41,20 +41,20 @@ public static class ArtifactEncryptionEndpoints
 
     private static IResult TenantNotFound() => Results.NotFound(new { error = "tenant_not_found" });
 
-    private static async Task<IResult> ListWrapKeysAsync(Guid tenantId, IPlatformAdministrationStore tenants, ITenantWrapKeyStore keys, CancellationToken cancellationToken)
+    private static async Task<IResult> ListWrapKeysAsync(Guid tenantId, IPlatformAdministrationStore tenants, ITenantWrapKeyPlatformStore keys, CancellationToken cancellationToken)
     {
         if (await tenants.GetTenantAsync(new TenantId(tenantId), cancellationToken) is null) return TenantNotFound();
         return Results.Ok(new { items = (await keys.ListAsync(new TenantId(tenantId), cancellationToken)).Select(ToResponse).ToList() });
     }
 
-    private static async Task<IResult> RotateWrapKeyAsync(Guid tenantId, ICurrentUser user, IPlatformAdministrationStore tenants, ITenantWrapKeyStore keys, CancellationToken cancellationToken)
+    private static async Task<IResult> RotateWrapKeyAsync(Guid tenantId, ICurrentUser user, IPlatformAdministrationStore tenants, ITenantWrapKeyPlatformStore keys, CancellationToken cancellationToken)
     {
         if (await tenants.GetTenantAsync(new TenantId(tenantId), cancellationToken) is null) return TenantNotFound();
         var rotation = await keys.RotateAsync(new TenantId(tenantId), user.UserId!, cancellationToken);
         return Results.Json(new { key = ToResponse(rotation.Key), previousKey = rotation.PreviousKey is null ? null : ToResponse(rotation.PreviousKey) }, statusCode: StatusCodes.Status201Created);
     }
 
-    private static async Task<IResult> RetireWrapKeyAsync(Guid tenantId, int version, ICurrentUser user, IPlatformAdministrationStore tenants, ITenantWrapKeyStore keys,
+    private static async Task<IResult> RetireWrapKeyAsync(Guid tenantId, int version, ICurrentUser user, IPlatformAdministrationStore tenants, ITenantWrapKeyPlatformStore keys,
         CancellationToken cancellationToken)
     {
         if (await tenants.GetTenantAsync(new TenantId(tenantId), cancellationToken) is null) return TenantNotFound();

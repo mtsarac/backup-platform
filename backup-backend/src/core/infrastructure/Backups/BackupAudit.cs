@@ -31,7 +31,7 @@ internal static class BackupAudit
     }
 
     internal static void AddJobEvent(PlatformDbContext context, BackupJob job, UserId? actor, DateTimeOffset now, string action) =>
-        context.AuditEvents.Add(AuditEvent.Record(now, actor ?? UserId.System, ActorKind(actor), action, job.TenantId,
+        context.RecordAudit(AuditEvent.Record(now, actor ?? UserId.System, ActorKind(actor), action, job.TenantId,
             "backup_job", job.Id.ToString("D"), new Dictionary<string, object?>
             {
                 ["result"] = "succeeded", ["agentId"] = job.AgentId.ToString(), ["enabled"] = job.Enabled,
@@ -52,7 +52,7 @@ internal static class BackupAudit
     {
         if (run.IsTerminal || run.Status is not (BackupStatus.Pending or BackupStatus.RetryPending or BackupStatus.Paused)) return;
         run.RequestCancellation(now);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor ?? UserId.System, ActorKind(actor), AuditActions.BackupRunCancelRequested, run.TenantId,
+        context.RecordAudit(AuditEvent.Record(now, actor ?? UserId.System, ActorKind(actor), AuditActions.BackupRunCancelRequested, run.TenantId,
             "backup_run", run.Id.ToString("D"), new Dictionary<string, object?>
             {
                 ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["result"] = "requested", ["reason"] = "job_archived"
@@ -66,7 +66,7 @@ internal static class BackupAudit
             AddCompletion(context, run, now, AuditActions.BackupRunAttemptCompleted, run.CurrentAttempt.Status, run.CurrentAttempt.TerminalReason);
             foreach (var artifact in run.CurrentAttempt.Artifacts.Where(artifact => artifact.AcceptedAt.HasValue))
                 foreach (var replica in artifact.Replicas.Where(replica => replica.VerificationState != "Verified" && replica.Status == BackupReplicaStatus.DeletePending))
-                    context.AuditEvents.Add(AuditEvent.Record(now, UserId.System, AuditActorKind.System, AuditActions.BackupReplicaOrphanRecorded,
+                    context.RecordAudit(AuditEvent.Record(now, UserId.System, AuditActorKind.System, AuditActions.BackupReplicaOrphanRecorded,
                         run.TenantId, "backup_replica", replica.Id.ToString("D"), new Dictionary<string, object?>
                         {
                             ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"),
@@ -80,7 +80,7 @@ internal static class BackupAudit
     }
 
     private static void AddCompletion(PlatformDbContext context, BackupRun run, DateTimeOffset now, string action, BackupStatus status, string? reason) =>
-        context.AuditEvents.Add(AuditEvent.Record(now, UserId.System, AuditActorKind.System, action, run.TenantId,
+        context.RecordAudit(AuditEvent.Record(now, UserId.System, AuditActorKind.System, action, run.TenantId,
             "backup_run", run.Id.ToString("D"), new Dictionary<string, object?>
             {
                 ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"),

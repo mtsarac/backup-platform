@@ -81,7 +81,7 @@ public static class StorageConnectionEndpoints
             var flags = services.GetRequiredService<FeatureFlags>();
             if (!flags.IsEnabled(Features.Smb) && Guid.TryParse(context.HttpContext.Request.RouteValues["id"]?.ToString(), out var id))
             {
-                var record = await services.GetRequiredService<IStorageConnectionStore>().FindAsync(id, null, context.HttpContext.RequestAborted);
+                var record = await services.GetRequiredService<IStorageConnectionPlatformStore>().FindAsync(id, null, context.HttpContext.RequestAborted);
                 if (record is not null && SmbOff(flags, record.Connection.ProviderType)) return FeatureDisabled;
             }
             return await next(context);
@@ -434,7 +434,7 @@ public static class StorageConnectionEndpoints
     }
 
     private static async Task<IResult> GetCapacityForPlatformAsync(
-        Guid id, IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+        Guid id, IStorageConnectionPlatformStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
     {
         var record = await store.FindAsync(id, null, cancellationToken);
         if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
@@ -443,7 +443,7 @@ public static class StorageConnectionEndpoints
     }
 
     private static async Task<IResult> ProbeForPlatformAsync(
-        Guid id, IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+        Guid id, IStorageConnectionPlatformStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
     {
         var record = await store.FindAsync(id, null, cancellationToken);
         if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
@@ -454,7 +454,7 @@ public static class StorageConnectionEndpoints
 
     private static async Task<IResult> GetCapacityV1Async(
         Guid id, ICurrentUser user, TenantResolutionService resolution, HttpContext context, IAuthorizationService authorization,
-        IStorageConnectionStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
+        IStorageConnectionPlatformStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         if (!user.IsAuthenticated || user.UserId is null) return Results.Unauthorized();
         var record = await store.FindAsync(id, null, cancellationToken);
@@ -472,7 +472,7 @@ public static class StorageConnectionEndpoints
 
     private static async Task<IResult> ProbeV1Async(
         Guid id, ICurrentUser user, TenantResolutionService resolution, HttpContext context, IAuthorizationService authorization,
-        IStorageConnectionStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
+        IStorageConnectionPlatformStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         if (!user.IsAuthenticated || user.UserId is null) return Results.Unauthorized();
         var record = await store.FindAsync(id, null, cancellationToken);

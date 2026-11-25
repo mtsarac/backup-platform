@@ -109,7 +109,7 @@ public sealed class DownloadAcceptanceEdgesTests(PostgreSqlFixture fixture) : IC
         var http = new DefaultHttpContext { RequestAborted = disconnected.Token };
         http.Response.Body = body;
         using var scope = scenario.World.Factory.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<DownloadStreamer>().StreamAsync(http, session);
+        await scope.ServiceProvider.ForTenant(session.TenantId).GetRequiredService<DownloadStreamer>().StreamAsync(http, session);
         var persisted = (await scenario.Store().GetAsync(session.TenantId, id, default))!;
         Assert.Equal(DownloadState.Cancelled, persisted.State);
         Assert.Equal("download_cancelled", persisted.FailureCode);

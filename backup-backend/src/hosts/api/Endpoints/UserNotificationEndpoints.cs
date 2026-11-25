@@ -19,7 +19,7 @@ public static class UserNotificationEndpoints
 
     private static async Task<IResult> ListAsync(ICurrentUser currentUser, DbContextOptions<PlatformDbContext> options, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var userId = currentUser.UserId!;
         var rows = await (from item in context.VisibleUserNotifications(userId).AsNoTracking()
             join notificationEvent in context.NotificationEvents.AsNoTracking() on item.EventId equals notificationEvent.Id
@@ -32,7 +32,7 @@ public static class UserNotificationEndpoints
 
     private static async Task<IResult> ReadAsync(Guid id, ICurrentUser currentUser, DbContextOptions<PlatformDbContext> options, TimeProvider time, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var userId = currentUser.UserId!;
         var query = context.VisibleUserNotifications(userId).Where(item => item.Id == id);
         var updated = await query.Where(item => item.ReadAt == null)

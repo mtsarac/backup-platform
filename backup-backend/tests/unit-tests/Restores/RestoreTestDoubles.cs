@@ -17,7 +17,7 @@ internal sealed class RestoreClock(DateTimeOffset start) : TimeProvider
 }
 
 /// <summary>An <see cref="IRestoreStore"/> whose answers are scripted by the test and whose every call is recorded.</summary>
-internal sealed class FakeRestoreStore : IRestoreStore
+internal sealed class FakeRestoreStore : IRestoreStore, IRestorePlatformStore
 {
     /// <summary>Every store member called, in order, by name.</summary>
     public List<string> Calls { get; } = [];

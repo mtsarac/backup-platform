@@ -25,7 +25,7 @@ public sealed class PostgreSqlStorageUsageService(
 {
     public async Task<TenantStorageUsageView?> GetUsageAsync(TenantId tenantId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
@@ -36,7 +36,7 @@ public sealed class PostgreSqlStorageUsageService(
 
     public async Task<TenantQuotaStatus?> GetQuotaStatusAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
@@ -112,7 +112,7 @@ public sealed class PostgreSqlStorageUsageService(
         StorageUsageFilter filter, ListQuery query, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filter);
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var rows = Standings(context, context.Tenants.AsNoTracking().ApplySearch(query, tenant => tenant.Name), now);
         if (filter.SubscriptionStatus is { } status) rows = rows.Where(row => row.Status == status);
         if (filter.State is { } state) rows = rows.Where(row => row.State == state);
@@ -188,7 +188,7 @@ public sealed class PostgreSqlStorageUsageService(
         List<TenantId> withExpired = [], withoutProjection = [], oldest = [];
         try
         {
-            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var context = PlatformOperationsDbContext.Create(options);
             var at = now.ToUniversalTime();
             // A reservation past its expiry whose run still holds a live lease is kept by the release itself; leaving it out here keeps such tenants
             // from taking batch slots every tick.
@@ -276,7 +276,7 @@ public sealed class PostgreSqlStorageUsageService(
 
     private async Task<int> ExpireReservationsAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await TenantUsageEngine.LockTenantAsync(context, tenantId, cancellationToken))
         {
@@ -294,7 +294,7 @@ public sealed class PostgreSqlStorageUsageService(
 
     private async Task<UsageReconciliation?> RecomputeAsync(TenantId tenantId, UserId? actor, DateTimeOffset now, bool rebuild, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await TenantUsageEngine.LockTenantAsync(context, tenantId, cancellationToken))
         {
@@ -317,7 +317,7 @@ public sealed class PostgreSqlStorageUsageService(
         }
         if (actor is not null && (rebuild || (drifted && previous is not null)))
         {
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin,
+            context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin,
                 rebuild ? ManagedServiceAuditActions.StorageUsageRebuilt : ManagedServiceAuditActions.StorageUsageCorrected, tenantId,
                 ManagedServiceAuditActions.StorageUsageTargetType, tenantId.Value.ToString("D"), new Dictionary<string, object?>
                 {

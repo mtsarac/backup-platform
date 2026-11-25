@@ -34,7 +34,7 @@ public sealed class GoogleDriveOAuthService(
     public async Task<string> CreateAuthorizationUrlAsync(
         TenantId tenantId, Guid connectionId, Guid userId, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+        await using var db = PlatformOperationsDbContext.Create(dbOptions);
         var connection = await db.StorageConnections
             .SingleOrDefaultAsync(c => c.TenantId == tenantId && c.Id == connectionId, cancellationToken);
 
@@ -84,7 +84,7 @@ public sealed class GoogleDriveOAuthService(
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
             return new(false, null, null, null, "Missing authorization code or state.");
 
-        await using var db = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+        await using var db = PlatformOperationsDbContext.Create(dbOptions);
         var now = time.GetUtcNow();
         var claimed = await db.GoogleDriveOAuthStates
             .Where(s => s.State == state && !s.Used && s.ExpiresAt > now)
@@ -181,7 +181,7 @@ public sealed class GoogleDriveOAuthService(
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
             timeout.CancelAfter(_platform.RequestTimeout);
-            await using var db = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+            await using var db = PlatformOperationsDbContext.Create(dbOptions);
             await using var transaction = await db.Database.BeginTransactionAsync(timeout.Token);
             await LockOwnerAsync(db, tenantId, timeout.Token);
             var connection = await db.StorageConnections.SingleOrDefaultAsync(
@@ -288,7 +288,7 @@ public sealed class GoogleDriveOAuthService(
         using var timeout = new CancellationTokenSource(operationTimeout);
         try
         {
-            await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var db = PlatformOperationsDbContext.Create(options);
             await using var transaction = await db.Database.BeginTransactionAsync(timeout.Token);
             await LockOwnerAsync(db, tenantId, timeout.Token);
             if (!await db.StorageConnections.AnyAsync(row => row.SecretReference == reference, timeout.Token))

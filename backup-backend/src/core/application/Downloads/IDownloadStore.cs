@@ -10,19 +10,27 @@ public sealed record DownloadRefusalCommand(TenantId TenantId, Guid ArtifactId, 
 public sealed record DownloadTransition(DownloadState ExpectedState, DownloadState State, string? ExpectedOwner, string? Owner,
     DateTimeOffset Now, TimeSpan? LeaseDuration = null, long Bytes = 0, string? FailureCode = null);
 
-/// <summary>Every lifecycle write is atomic with its audit. Create locks artifact then replica; transitions fence the session row.</summary>
+/// <summary>Download sessions of the request's tenant (browser downloads, shares), on the filtered tenant context.</summary>
 public interface IDownloadStore
 {
     Task<BackupArtifact?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);
     Task<DownloadSession?> CreateAsync(DownloadCreateCommand command, CancellationToken cancellationToken);
     Task<DownloadSession?> GetAsync(TenantId tenantId, Guid sessionId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<DownloadSession>> ListPreparingAsync(TenantId tenantId, Guid agentId, CancellationToken cancellationToken);
     Task<DownloadSession?> TransitionAsync(Guid sessionId, DownloadTransition transition, CancellationToken cancellationToken);
-    Task<int> ExpireAsync(DateTimeOffset now, CancellationToken cancellationToken);
     Task<DownloadSession?> ExpireSessionAsync(TenantId tenantId, Guid sessionId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<DownloadSession?> SwitchReplicaAsync(Guid sessionId, Guid currentReplicaId, string? expectedOwner, BackupReplica newReplica, CancellationToken cancellationToken);
     Task RecordRefusalAsync(DownloadRefusalCommand command, CancellationToken cancellationToken);
     Task<bool> IsShareRevokedAsync(TenantId tenantId, Guid shareId, CancellationToken cancellationToken) => Task.FromResult(false);
+}
+
+/// <summary>Direct downloads served through an agent and the session expiry sweep, unfiltered by tenant (the agent's identity or the row worked on names the tenant).</summary>
+public interface IDownloadPlatformStore
+{
+    Task<BackupArtifact?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);
+    Task<DownloadSession?> GetAsync(TenantId tenantId, Guid sessionId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DownloadSession>> ListPreparingAsync(TenantId tenantId, Guid agentId, CancellationToken cancellationToken);
+    Task<DownloadSession?> TransitionAsync(Guid sessionId, DownloadTransition transition, CancellationToken cancellationToken);
+    Task<int> ExpireAsync(DateTimeOffset now, CancellationToken cancellationToken);
 }
 
 /// <summary>Agent availability and control-plane selection. Direct browser sessions never expose a backend payload stream.</summary>

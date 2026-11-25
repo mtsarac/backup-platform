@@ -78,7 +78,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         };
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -138,7 +138,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         };
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -175,7 +175,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         };
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -205,7 +205,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         var provider = new FakeStorageProvider(ArtifactData, Checksum);
 
         var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
 
         var operationId = Guid.NewGuid();
         var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
@@ -294,7 +294,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         public IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class FakeRepairStore : IReplicaRepairStore
+    private sealed class FakeRepairStore : IReplicaRepairStore, IReplicaRepairPlatformStore
     {
         public Action? OnRenewLease { get; set; }
         public int RenewLeaseCallCount;

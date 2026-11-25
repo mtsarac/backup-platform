@@ -31,7 +31,7 @@ public sealed class StaleRestoreDetector(IServiceScopeFactory scopes, RestoreExe
     public async Task<RestoreSweepResult> SweepAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var store = scope.ServiceProvider.GetRequiredService<IRestoreStore>();
+        var store = scope.ServiceProvider.GetRequiredService<IRestorePlatformStore>();
         var now = time.GetUtcNow();
         var expired = await store.ExpireStaleAsync(now, cancellationToken);
         var withdrawn = await store.ExpireUnclaimedAsync(now, options.UnclaimedExpiry, cancellationToken);

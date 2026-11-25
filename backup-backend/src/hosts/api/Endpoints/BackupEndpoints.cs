@@ -296,18 +296,20 @@ public static class BackupEndpoints
             _ => Results.Conflict(new { error = "invalid_run_state" })
         };
 
-    private static Task<IResult> PauseBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
+    private static Task<IResult> PauseBrowserAsync(Guid runId, IBackupRunPlatformStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
         HttpContext context, IAuthorizationService authorization, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
         SetBrowserPauseAsync(runId, store, resolution, context, authorization, time, user, false, cancellationToken);
-    private static Task<IResult> ResumeBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
+    private static Task<IResult> ResumeBrowserAsync(Guid runId, IBackupRunPlatformStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
         HttpContext context, IAuthorizationService authorization, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
         SetBrowserPauseAsync(runId, store, resolution, context, authorization, time, user, true, cancellationToken);
-    private static async Task<IResult> SetBrowserPauseAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
+    private static async Task<IResult> SetBrowserPauseAsync(Guid runId, IBackupRunPlatformStore lookup, BackupPlatform.Tenancy.TenantResolutionService resolution,
         HttpContext context, IAuthorizationService authorization, TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken)
     {
-        var tenantId = await store.FindRunTenantAsync(runId, cancellationToken);
+        var tenantId = await lookup.FindRunTenantAsync(runId, cancellationToken);
         if (tenantId is null || !await BackupHealthEndpoints.AuthorizeResolvedTenantAsync(tenantId, resolution, context, authorization, cancellationToken))
             return Results.NotFound();
+        // Resolved only now: the scoped tenant context binds on first use, after membership is established above.
+        var store = context.RequestServices.GetRequiredService<IBackupRunStore>();
         return await store.SetPauseAsync(tenantId, runId, resume, time.GetUtcNow(), cancellationToken, user.UserId) switch
         {
             BackupMutationResult.Accepted => Results.Ok(),

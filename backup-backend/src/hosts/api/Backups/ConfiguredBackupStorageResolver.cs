@@ -121,7 +121,7 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
         {
             cancellationToken.ThrowIfCancellationRequested();
             await using var scope = scopes.CreateAsyncScope();
-            var store = scope.ServiceProvider.GetRequiredService<IStorageConnectionStore>();
+            var store = scope.ServiceProvider.GetRequiredService<IStorageConnectionPlatformStore>();
             var record = await store.FindAsync(connectionId, tenantId, cancellationToken);
             if (record is null || record.Connection.Id != connectionId || record.Connection.TenantId != tenantId
                 || record.Connection.ProviderType != StorageProviderTypes.Sftp)
@@ -168,7 +168,7 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
         {
             cancellationToken.ThrowIfCancellationRequested();
             await using var scope = scopes.CreateAsyncScope();
-            var store = scope.ServiceProvider.GetRequiredService<IStorageConnectionStore>();
+            var store = scope.ServiceProvider.GetRequiredService<IStorageConnectionPlatformStore>();
             var record = await store.FindAsync(connectionId, tenantId, cancellationToken);
             if (record is null || record.Connection.Id != connectionId || record.Connection.TenantId != tenantId
                 || record.Connection.ProviderType != StorageProviderTypes.GoogleDrive)
@@ -199,7 +199,7 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
         private async Task<T> ExecuteAsync<T>(Func<IStorageProvider, CancellationToken, Task<T>> operation, CancellationToken token)
         {
             await using var scope = scopes.CreateAsyncScope();
-            var record = await scope.ServiceProvider.GetRequiredService<IStorageConnectionStore>().FindAsync(connectionId, tenantId, token);
+            var record = await scope.ServiceProvider.GetRequiredService<IStorageConnectionPlatformStore>().FindAsync(connectionId, tenantId, token);
             if (record?.Connection is not { } connection || connection.TenantId != tenantId || connection.ProviderType != providerType)
                 throw new StorageException(StorageFailureKind.InvalidConfiguration, "The storage connection is unavailable.");
             return await operation(factory.Create(connection, scope.ServiceProvider.GetRequiredService<ISecretProvider>()), token);

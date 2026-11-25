@@ -80,7 +80,7 @@ public sealed class InAppNotificationFanout(
         {
             try
             {
-                await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+                await using var context = PlatformOperationsDbContext.Create(options);
                 var settings = new NpgsqlConnectionStringBuilder(context.Database.GetConnectionString() ?? throw new InvalidOperationException("The platform database connection is missing.")) { Pooling = false };
                 await using var connection = new NpgsqlConnection(settings.ConnectionString);
                 connection.Notification += (_, _) => _signals.Writer.TryWrite(true);
@@ -123,7 +123,7 @@ public sealed class InAppNotificationFanout(
             return;
         }
         var present = new HashSet<Guid>();
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         for (var offset = 0; ; offset += PageSize)
         {
             var page = await (from item in context.UserNotifications.AsNoTracking()
@@ -155,7 +155,7 @@ public sealed class InAppNotificationFanout(
 
     private async Task<bool> IsActiveAsync(Connection connection, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var session = await context.UserSessions.AsNoTracking().SingleOrDefaultAsync(
             row => row.Id == connection.SessionId && row.UserId == connection.UserId, cancellationToken);
         return session is { AuthenticationState: SessionAuthenticationState.FullyAuthenticated } && session.IsActive(time.GetUtcNow());

@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
@@ -39,7 +40,9 @@ internal sealed class QuartzNode : IAsyncDisposable
         services.AddSingleton(new DbContextOptionsBuilder<PlatformDbContext>()
             .UseNpgsql(new NpgsqlConnectionStringBuilder(database.ConnectionString) { MaxPoolSize = 12 }.ConnectionString).Options);
         services.AddSingleton<IBackupAdmissionPolicy>(AdmitAllBackupAdmission.Instance);
+        services.AddScoped<ITenantContext>(_ => new MutableTenantContext(null));
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
+        services.AddScoped<IBackupRunPlatformStore, PostgreSqlBackupRunPlatformStore>();
         services.AddSingleton(signal ?? new RecordingSignal());
         services.AddBackupScheduling();
         return new QuartzNode(services.BuildServiceProvider());

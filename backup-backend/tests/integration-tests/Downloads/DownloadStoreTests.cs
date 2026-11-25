@@ -16,7 +16,7 @@ public sealed class DownloadStoreTests(PostgreSqlFixture fixture) : IClassFixtur
     private readonly DateTimeOffset _now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
     private DateTimeOffset Now => _now;
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(3);
-    private PostgreSqlDownloadStore Store()
+    private DownloadStoreFacade Store()
     {
         var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(fixture.ConnectionString).Options;
         return new(options, new BackupPlatform.Infrastructure.Tenancy.PostgreSqlCentralAuthorizationService(options));

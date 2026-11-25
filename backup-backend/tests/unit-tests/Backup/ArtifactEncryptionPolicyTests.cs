@@ -66,7 +66,7 @@ public sealed class ArtifactEncryptionPolicyTests
     public async Task AnEncryptingPolicyWithoutAKeyStoreRefusesToHandOutWork()
     {
         var run = RunWith("Required");
-        var orchestrator = new BackupOrchestrator(new Store(run), TimeProvider.System);
+        var orchestrator = new BackupOrchestrator(new Store(run), new Store(run), TimeProvider.System);
         await Assert.ThrowsAsync<InvalidOperationException>(() => orchestrator.ClaimAsync(Identity(run), default));
     }
 
@@ -268,7 +268,7 @@ public sealed class ArtifactEncryptionPolicyTests
         var run = RunWith(policy, destinations);
         var keys = new Keys();
         var store = new Store(run);
-        return (new BackupOrchestrator(store, TimeProvider.System, wrapKeys: keys, recovery: recovery, tenantRecoveryKeys: new TenantRecovery(tenantKey), probeTrigger: probeTrigger), keys, Identity(run), store);
+        return (new BackupOrchestrator(store, store, TimeProvider.System, wrapKeys: keys, recovery: recovery, tenantRecoveryKeys: new TenantRecovery(tenantKey), probeTrigger: probeTrigger), keys, Identity(run), store);
     }
 
     private static AgentIdentity Identity(BackupRun run) => new(run.AgentId, run.TenantId, Guid.NewGuid(), 1);
@@ -313,7 +313,7 @@ public sealed class ArtifactEncryptionPolicyTests
         }]
     };
 
-    private sealed class Keys : ITenantWrapKeyStore
+    private sealed class Keys : ITenantWrapKeyPlatformStore
     {
         public int Ensured;
         public bool Owns = true;
@@ -329,14 +329,14 @@ public sealed class ArtifactEncryptionPolicyTests
         public Task<TenantWrapKeyRetirement> RetireAsync(TenantId tenantId, int version, UserId actor, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class TenantRecovery(TenantRecoveryKeyInfo? key) : ITenantRecoveryKeyStore
+    private sealed class TenantRecovery(TenantRecoveryKeyInfo? key) : ITenantRecoveryKeyPlatformStore
     {
         public Task<TenantRecoveryKeyInfo?> GetAsync(TenantId tenantId, CancellationToken cancellationToken) => Task.FromResult(key);
         public Task<TenantRecoveryKeyInfo> SetAsync(TenantId tenantId, UserId actor, string publicKeyPem, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> RemoveAsync(TenantId tenantId, UserId actor, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class Store(BackupRun run) : IBackupRunStore
+    private sealed class Store(BackupRun run) : IBackupRunStore, IBackupRunPlatformStore
     {
         public BackupRun Run => run;
         public Task<BackupJob?> FindJobByIdempotencyKeyAsync(TenantId tenantId, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();

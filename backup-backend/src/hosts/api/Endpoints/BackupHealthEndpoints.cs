@@ -28,21 +28,22 @@ public static class BackupHealthEndpoints
     private static async Task<IResult> GetSummaryAsync(ITenantContext tenant, BackupHealthEvaluator evaluator, CancellationToken cancellationToken) =>
         Results.Ok(await evaluator.GetSummaryAsync(tenant.TenantId!, cancellationToken));
 
-    private static async Task<IResult> GetJobV1Async(Guid id, IBackupHealthStore store, BackupHealthEvaluator evaluator,
+    private static async Task<IResult> GetJobV1Async(Guid id, IBackupHealthPlatformStore store,
         TenantResolutionService resolution, HttpContext context, IAuthorizationService authorization, CancellationToken cancellationToken)
     {
         var tenantId = await store.FindJobTenantAsync(id, cancellationToken);
         if (tenantId is null || !await AuthorizeResolvedTenantAsync(tenantId, resolution, context, authorization, cancellationToken)) return Results.NotFound();
-        var health = await evaluator.GetJobAsync(tenantId, id, cancellationToken);
+        // Resolved only now: the scoped tenant context binds on first use, after membership is established above.
+        var health = await context.RequestServices.GetRequiredService<BackupHealthEvaluator>().GetJobAsync(tenantId, id, cancellationToken);
         return health is null ? Results.NotFound() : Results.Ok(health);
     }
 
-    private static async Task<IResult> GetSummaryV1Async(Guid tenantId, BackupHealthEvaluator evaluator,
+    private static async Task<IResult> GetSummaryV1Async(Guid tenantId,
         TenantResolutionService resolution, HttpContext context, IAuthorizationService authorization, CancellationToken cancellationToken)
     {
         var target = new TenantId(tenantId);
         if (!await AuthorizeResolvedTenantAsync(target, resolution, context, authorization, cancellationToken)) return Results.NotFound();
-        return Results.Ok(await evaluator.GetSummaryAsync(target, cancellationToken));
+        return Results.Ok(await context.RequestServices.GetRequiredService<BackupHealthEvaluator>().GetSummaryAsync(target, cancellationToken));
     }
 
     internal static async Task<bool> AuthorizeResolvedTenantAsync(TenantId tenantId, TenantResolutionService resolution,

@@ -17,14 +17,14 @@ namespace BackupPlatform.Infrastructure.Platform;
 
 /// <summary>
 /// Cross-tenant administration under explicit platform operations. Tenant isolation is bypassed through
-/// <see cref="PlatformDbContext.CreateForPlatformOperations"/> only; the PlatformAdmin-only endpoints are the
+/// <see cref="PlatformOperationsDbContext.Create"/> only; the PlatformAdmin-only endpoints are the
 /// authorization boundary. Every write adds its <see cref="AuditEvent"/> to the same SaveChanges as the change itself.
 /// </summary>
 public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<PlatformDbContext> options) : IPlatformAdministrationStore
 {
     public async Task<PlatformCounts> GetCountsAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var since = now.AddHours(-24);
         return new PlatformCounts(
             await context.Tenants.LongCountAsync(cancellationToken),
@@ -51,7 +51,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
 
     public async Task<PagedResult<PlatformTenantItem>> ListTenantsAsync(ListQuery query, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var page = await TenantRows(context, context.Tenants.AsNoTracking())
             .ApplySearch(query, row => row.Name)
             .ApplySort(TenantSorts, query, "name", row => row.Id)
@@ -61,7 +61,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
 
     public async Task<PlatformTenantDetail?> GetTenantAsync(TenantId tenantId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var tenant = await context.Tenants.AsNoTracking().SingleOrDefaultAsync(row => row.Id == tenantId, cancellationToken);
         if (tenant is null)
         {
@@ -86,12 +86,12 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
 
     public async Task<PlatformChange<PlatformTenantItem>> CreateTenantAsync(string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (await NameTakenAsync(context, name, null, cancellationToken)) return new(PlatformChangeOutcome.TenantNameTaken);
         var tenant = new Tenant(TenantId.New(), name);
         context.Tenants.Add(tenant);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantCreated, tenant.Id,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantCreated, tenant.Id,
             "tenant", Id(tenant.Id), new Dictionary<string, object?> { ["name"] = tenant.Name }));
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateException exception) when (IsNameConflict(exception)) { return new(PlatformChangeOutcome.TenantNameTaken); }
@@ -102,7 +102,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformTenantItem>> RenameTenantAsync(
         TenantId tenantId, string name, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var tenant = await context.Tenants.SingleOrDefaultAsync(row => row.Id == tenantId, cancellationToken);
         if (tenant is null)
@@ -115,7 +115,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         var outcome = PlatformChangeOutcome.Unchanged;
         if (!string.Equals(previous, tenant.Name, StringComparison.Ordinal))
         {
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantRenamed, tenantId,
+            context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.TenantRenamed, tenantId,
                 "tenant", Id(tenantId), new Dictionary<string, object?> { ["previousName"] = previous, ["name"] = tenant.Name }));
             try { await context.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException exception) when (IsNameConflict(exception)) { return new(PlatformChangeOutcome.TenantNameTaken); }
@@ -151,7 +151,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
 
     public async Task<PagedResult<PlatformUserItem>> ListUsersAsync(ListQuery query, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var users = from user in context.Users.AsNoTracking()
                     join credential in context.PasswordCredentials.AsNoTracking() on user.Id equals credential.UserId into joined
                     from credential in joined.DefaultIfEmpty()
@@ -175,19 +175,19 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformUserItem>> CreateUserAsync(
         UserId userId, string displayName, string username, string email, string passwordHash, UserRole role, IReadOnlyList<TenantId> tenantIds, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (await context.Tenants.CountAsync(tenant => tenantIds.Contains(tenant.Id), cancellationToken) != tenantIds.Count)
             return new(PlatformChangeOutcome.TenantNotFound);
         var user = new User(userId, displayName, role);
         var credential = new PasswordCredential(userId, username, passwordHash, email, mustChangePassword: true);
         context.Users.Add(user);
         context.PasswordCredentials.Add(credential);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.UserCreated, null,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.UserCreated, null,
             "user", Id(userId), new Dictionary<string, object?> { ["displayName"] = displayName, ["username"] = username, ["email"] = email, ["role"] = role.ToString() }));
         foreach (var tenantId in tenantIds)
         {
             context.TenantMemberships.Add(new TenantMembership(tenantId, userId));
-            context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipAdded, tenantId,
+            context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipAdded, tenantId,
                 "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
         }
         try { await context.SaveChangesAsync(cancellationToken); }
@@ -199,7 +199,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformUserItem>> UpdateUserAsync(
         UserId userId, string displayName, string username, string email, UserRole role, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM users WHERE \"Id\" = {userId.Value} FOR UPDATE", cancellationToken);
         var user = await context.Users.SingleOrDefaultAsync(row => row.Id == userId, cancellationToken);
@@ -215,7 +215,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         user.Rename(displayName);
         user.ChangeRole(role);
         credential.UpdateIdentity(username, email);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.UserUpdated, null,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.UserUpdated, null,
             "user", Id(userId), new Dictionary<string, object?> { ["displayName"] = displayName, ["username"] = username, ["email"] = email, ["role"] = role.ToString() }));
         if (emailChanged) await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityEmailChanged, now, cancellationToken);
         try { await context.SaveChangesAsync(cancellationToken); }
@@ -228,7 +228,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformUserItem>> DisableUserAsync(
         UserId userId, string? reason, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         // Acquire an exclusive advisory lock to serialize platform admin disable operations globally
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext('platform_admin_disable_guard'))", cancellationToken);
@@ -261,7 +261,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         user.DisableManual(reason);
         // Immediately revoke all active sessions in the same transaction
         await context.UserSessions.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.disabled", null,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.disabled", null,
             "user", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId), ["reason"] = reason }));
         await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountDisabled, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
@@ -272,7 +272,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformUserItem>> EnableUserAsync(
         UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM users WHERE \"Id\" = {userId.Value} FOR UPDATE", cancellationToken);
@@ -287,7 +287,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         }
 
         user.EnableManual();
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.enabled", null,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.enabled", null,
             "user", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
         await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountEnabled, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
@@ -298,7 +298,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformUserItem>> AssignTemporaryPasswordAsync(
         UserId targetUserId, string passwordHash, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM users WHERE \"Id\" = {targetUserId.Value} FOR UPDATE", cancellationToken);
         var user = await context.Users.SingleOrDefaultAsync(row => row.Id == targetUserId, cancellationToken);
@@ -308,7 +308,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         credential.ReplacePasswordHash(passwordHash, mustChangePassword: true);
         // End all active sessions of the target user in the same transaction
         await context.UserSessions.Where(row => row.UserId == targetUserId).ExecuteDeleteAsync(cancellationToken);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.temporary_password_assigned", null,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.temporary_password_assigned", null,
             "user", Id(targetUserId), new Dictionary<string, object?> { ["targetUserId"] = Id(targetUserId) }));
         await SecurityNotifications.RecordAsync(context, targetUserId, NotificationEventTypes.SecurityTemporaryPassword, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
@@ -324,7 +324,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
 
     public async Task<PagedResult<PlatformMembershipItem>?> ListMembershipsAsync(TenantId tenantId, ListQuery query, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
         {
             return null;
@@ -339,7 +339,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformMembershipItem>> AddMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM users WHERE \"Id\" = {userId.Value} FOR UPDATE", cancellationToken);
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
@@ -366,7 +366,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             targetUser.SetNoMembershipDisabled(false);
             await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountEnabled, now, cancellationToken);
         }
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipAdded, tenantId,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipAdded, tenantId,
             "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
         try
         {
@@ -383,7 +383,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
     public async Task<PlatformChange<PlatformMembershipItem>> RemoveMembershipAsync(
         TenantId tenantId, UserId userId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM users WHERE \"Id\" = {userId.Value} FOR UPDATE", cancellationToken);
         var membership = await context.TenantMemberships.SingleOrDefaultAsync(row => row.TenantId == tenantId && row.UserId == userId, cancellationToken);
@@ -393,7 +393,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
         }
         var item = await ReadMembershipAsync(context, tenantId, userId, cancellationToken);
         context.TenantMemberships.Remove(membership);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipRemoved, tenantId,
+        context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, AuditActions.MembershipRemoved, tenantId,
             "membership", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId) }));
 
         var targetUser = await context.Users.SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
@@ -406,7 +406,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
                 await SecurityNotifications.RecordAsync(context, userId, NotificationEventTypes.SecurityAccountDisabled, now, cancellationToken);
                 // End all sessions of the user since no membership remains
                 await context.UserSessions.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
-                context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.disabled", null,
+                context.RecordAudit(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, "user.disabled", null,
                     "user", Id(userId), new Dictionary<string, object?> { ["userId"] = Id(userId), ["reason"] = "no_membership" }));
             }
         }
@@ -429,7 +429,7 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
 
     public async Task<PagedResult<PlatformAuditItem>> ListAuditAsync(TenantId? tenantId, ListQuery query, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var events = context.AuditEvents.AsNoTracking().AsQueryable();
         if (tenantId is not null)
         {

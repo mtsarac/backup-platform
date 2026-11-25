@@ -33,14 +33,14 @@ public static class BackupTaskEndpoints
     }
 
     private static async Task<IResult> CanReleaseRetainedTransferAsync(Guid attemptId, ICurrentAgent agent,
-        IBackupRunStore store, CancellationToken cancellationToken)
+        IBackupRunPlatformStore store, CancellationToken cancellationToken)
     {
         var claim = await store.GetAttemptAsync(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
         return claim is null ? Results.NotFound() : Results.Ok(claim.Attempt.IsTerminal);
     }
 
     private static async Task<IResult> StartAsync(Guid attemptId, BackupTaskStartRequest request, ICurrentAgent agent,
-        BackupOrchestrator service, IBackupRunStore store, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
+        BackupOrchestrator service, IBackupRunPlatformStore store, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
     {
         if (request.LeaseToken == Guid.Empty || !Bounded(request.SoftwareVersion) || !Bounded(request.ProtocolVersion) || !Bounded(request.Platform)) return Invalid();
         var command = service.Command(agent.Identity!, attemptId, request.LeaseToken) with
@@ -58,7 +58,7 @@ public static class BackupTaskEndpoints
     }
 
     private static async Task<IResult> RenewAsync(Guid attemptId, BackupTaskLeaseRequest request, ICurrentAgent agent,
-        BackupOrchestrator service, IBackupRunStore store, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
+        BackupOrchestrator service, IBackupRunPlatformStore store, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
     {
         if (request.LeaseToken == Guid.Empty) return Invalid();
         var command = service.Command(agent.Identity!, attemptId, request.LeaseToken);
@@ -71,7 +71,7 @@ public static class BackupTaskEndpoints
     }
 
     private static async Task<IResult> AdjustQuotaReservationAsync(Guid attemptId, BackupQuotaReservationRequest request, ICurrentAgent agent,
-        BackupOrchestrator service, IBackupRunStore store, CancellationToken cancellationToken)
+        BackupOrchestrator service, IBackupRunPlatformStore store, CancellationToken cancellationToken)
     {
         if (request.LeaseToken == Guid.Empty || request.SizeBytes < 0) return Invalid();
         var result = await store.AdjustQuotaReservationAsync(service.Command(agent.Identity!, attemptId, request.LeaseToken), request.SizeBytes, cancellationToken);
@@ -81,7 +81,7 @@ public static class BackupTaskEndpoints
     }
 
     private static async Task<IResult> ProgressAsync(Guid attemptId, BackupTaskProgressRequest request, ICurrentAgent agent,
-        BackupOrchestrator service, IBackupRunStore store, CancellationToken cancellationToken)
+        BackupOrchestrator service, IBackupRunPlatformStore store, CancellationToken cancellationToken)
     {
         if (!BackupInputValidation.IsValidProgress(request)) return Invalid();
         return Mutation(await store.ReportProgressAsync(service.Command(agent.Identity!, attemptId, request.LeaseToken), new BackupProgress(request.Stage, request.Percent) { Checkpoint = request.Checkpoint }, cancellationToken));
@@ -103,7 +103,7 @@ public static class BackupTaskEndpoints
 
     /// <summary>Releases the connection's access only to the agent that holds the live lease of this very removal; the client names neither connection nor key.</summary>
     private static async Task<IResult> GetDeletionStorageAccessAsync(Guid replicaId, HttpRequest request, ICurrentAgent agent, AgentReplicaDeletionService service,
-        IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+        IStorageConnectionPlatformStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty) return Invalid();
         var target = await service.AuthorizeStorageAsync(agent.Identity!, replicaId, lease, cancellationToken);

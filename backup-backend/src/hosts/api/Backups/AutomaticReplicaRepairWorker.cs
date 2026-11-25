@@ -108,7 +108,7 @@ public sealed class AutomaticReplicaRepairWorker(
     {
         var now = time.GetUtcNow();
         await using var scope = scopes.CreateAsyncScope();
-        var store = scope.ServiceProvider.GetRequiredService<IReplicaRepairStore>();
+        var store = scope.ServiceProvider.GetRequiredService<IReplicaRepairPlatformStore>();
 
         // 1. Stale recovery scan
         if (now - _lastStaleCheck >= StaleCheckInterval)
@@ -150,7 +150,7 @@ public sealed class AutomaticReplicaRepairWorker(
         var executed = 0;
         while (!cancellationToken.IsCancellationRequested && !_workerStoppingCts.IsCancellationRequested)
         {
-            if (_runningTasks.Count >= IReplicaRepairStore.MaxGlobalConcurrentRepairs)
+            if (_runningTasks.Count >= ReplicaRepairLimits.MaxGlobalConcurrentRepairs)
             {
                 break;
             }
@@ -184,13 +184,7 @@ public sealed class AutomaticReplicaRepairWorker(
             var repairService = taskScope.ServiceProvider.GetRequiredService<ReplicaRepairService>();
             try
             {
-                await repairService.ExecuteRepairAsync(
-                    claimed.TenantId,
-                    claimed.ArtifactId,
-                    claimed.Id,
-                    admission: null,
-                    externalToken: _workerStoppingCts.Token,
-                    claimedOperation: claimed);
+                await repairService.ExecuteClaimedRepairAsync(claimed, _workerStoppingCts.Token);
             }
             catch (OperationCanceledException) when (_workerStoppingCts.IsCancellationRequested)
             {

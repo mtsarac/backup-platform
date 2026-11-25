@@ -30,7 +30,7 @@ public sealed class RestoreServiceTests
         public Harness(RestoreExecutionOptions? options = null)
         {
             Options = options ?? new RestoreExecutionOptions();
-            Service = new RestoreService(Store, Options, Clock);
+            Service = new RestoreService(Store, Store, Options, Clock);
         }
 
         public FakeRestoreStore Store { get; } = new();

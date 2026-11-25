@@ -79,7 +79,7 @@ public sealed class RestoreRetentionPinTests(PostgreSqlFixture fixture) : IClass
     [Fact]
     public async Task EveryWayARestoreEndsReleasesThePinAndTheReplicaBecomesDeletable()
     {
-        var endings = new (string Name, Func<RestoreSeed, PostgreSqlRestoreStore, Guid, Task> End)[]
+        var endings = new (string Name, Func<RestoreSeed, RestoreStoreFacade, Guid, Task> End)[]
         {
             ("succeeded", async (seed, store, _) =>
             {

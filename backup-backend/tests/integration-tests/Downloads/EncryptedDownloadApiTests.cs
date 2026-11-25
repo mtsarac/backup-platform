@@ -73,7 +73,7 @@ public sealed class EncryptedDownloadApiTests(PostgreSqlFixture fixture) : IClas
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
         await scenario.EncryptAsync();
         using var scope = scenario.World.Factory.Services.CreateScope();
-        var keys = scope.ServiceProvider.GetRequiredService<ITenantWrapKeyStore>();
+        var keys = TenantWrapKeyStoreFacade.From(scope.ServiceProvider);
         var tenant = scenario.Backup.Backup.Setup.Tenant.Id;
         var rotation = await keys.RotateAsync(tenant, scenario.Backup.Backup.Setup.Account.UserId, default);
         Assert.Equal(TenantWrapKeyState.DecryptOnly, rotation.PreviousKey!.State);

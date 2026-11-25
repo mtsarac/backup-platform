@@ -28,7 +28,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
 {
     private const string UniqueViolation = "23505";
 
-    private PlatformDbContext Open() => PlatformDbContext.CreateForPlatformOperations(options);
+    private PlatformDbContext Open() => PlatformOperationsDbContext.Create(options);
 
     private static Task LockAsync(PlatformDbContext context, string scope, CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({scope}, 0))", cancellationToken);
@@ -110,7 +110,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
     {
         var details = new Dictionary<string, object?> { ["kind"] = channel.Kind.ToString(), ["name"] = channel.Name, ["enabled"] = channel.Enabled, ["authentication"] = channel.Authentication.ToString() };
         if (extra is not null) foreach (var (key, value) in extra) details[key] = value;
-        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, action, channel.TenantId, NotificationAuditActions.ChannelTarget, channel.Id.ToString("D"), details));
+        context.RecordAudit(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, action, channel.TenantId, NotificationAuditActions.ChannelTarget, channel.Id.ToString("D"), details));
     }
 
     /// <summary>Saves; a unique-index violation becomes the matching conflict outcome (any other failure propagates).</summary>
@@ -154,7 +154,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         var policy = existing ?? NotificationPolicy.Defaults(tenantId, time.GetUtcNow());
         if (!apply(policy)) return (policy, false);
         if (existing is null) context.NotificationPolicies.Add(policy);
-        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, NotificationAuditActions.PolicyUpdated, tenantId, NotificationAuditActions.PolicyTarget,
+        context.RecordAudit(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, NotificationAuditActions.PolicyUpdated, tenantId, NotificationAuditActions.PolicyTarget,
             policy.Id.ToString("D"), new Dictionary<string, object?>
             {
                 ["enabled"] = policy.Enabled, ["eventTypes"] = policy.EventTypes, ["minimumSeverity"] = policy.MinimumSeverity.ToString(),
@@ -239,7 +239,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
                 .SetProperty(delivery => delivery.UpdatedAt, now), cancellationToken);
         if (changed == 0) return false;
         var delivery = await context.NotificationDeliveries.AsNoTracking().SingleAsync(row => row.Id == id, cancellationToken);
-        context.AuditEvents.Add(AuditEvent.Record(now, actor.UserId, actor.Kind, NotificationAuditActions.DeliveryRetried, delivery.TenantId,
+        context.RecordAudit(AuditEvent.Record(now, actor.UserId, actor.Kind, NotificationAuditActions.DeliveryRetried, delivery.TenantId,
             "notification_delivery", id.ToString("D"), new Dictionary<string, object?>()));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -262,7 +262,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         if ((settings?.RetentionDays ?? 90) == days) return;
         if (settings is null) context.Set<NotificationHistorySettings>().Add(settings = new NotificationHistorySettings());
         settings.RetentionDays = days;
-        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, NotificationAuditActions.HistoryRetentionUpdated, null,
+        context.RecordAudit(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, NotificationAuditActions.HistoryRetentionUpdated, null,
             "notification_history", "retention", new Dictionary<string, object?> { ["retentionDays"] = days }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -287,7 +287,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         var change = mutate(settings);
         if (change is null) return new(NotificationOutcome.Unchanged, settings);
         if (existing is null) context.NotificationTransports.Add(settings);
-        context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, change.AuditAction, null, NotificationAuditActions.TransportTarget, key,
+        context.RecordAudit(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, change.AuditAction, null, NotificationAuditActions.TransportTarget, key,
             new Dictionary<string, object?> { ["enabled"] = settings.Enabled, ["hasSecret"] = settings.HasSecret }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -355,7 +355,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         public void AddDelivery(NotificationDelivery delivery) => context.NotificationDeliveries.Add(delivery);
 
         public void Audit(NotificationActor actor, string action, string targetType, string targetId, IReadOnlyDictionary<string, object?> details) =>
-            context.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, action, tenantId, targetType, targetId, details));
+            context.RecordAudit(AuditEvent.Record(time.GetUtcNow(), actor.UserId, actor.Kind, action, tenantId, targetType, targetId, details));
     }
 
     // ---- delivery -----------------------------------------------------------------------------------------------------------------------

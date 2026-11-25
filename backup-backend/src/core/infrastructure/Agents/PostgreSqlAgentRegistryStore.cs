@@ -23,7 +23,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
 {
     public async Task<AgentCredentialRecord?> FindCredentialAsync(Guid credentialId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var row = await (from credential in context.AgentCredentials.AsNoTracking()
                          join agent in context.Agents.AsNoTracking() on credential.AgentId equals agent.Id
                          where credential.Id == credentialId
@@ -35,7 +35,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
     public async Task<RotationBeginCommit> BeginRotationAsync(
         AgentIdentity caller, DateTimeOffset now, TimeSpan pendingLifetime, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var state = await LoadLockedAsync(context, caller.TenantId, caller.AgentId, cancellationToken);
         if (state is null)
@@ -54,7 +54,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
         }
         var issued = AgentCredential.IssuePending(state.Agent.Id, state.Agent.TenantId, decision.NextGeneration, now, pendingLifetime);
         context.AgentCredentials.Add(issued.Credential);
-        context.AuditEvents.Add(AuditEvent.Record(
+        context.RecordAudit(AuditEvent.Record(
             now, UserId.System, AuditActorKind.System, AuditActions.AgentCredentialRotationStarted, caller.TenantId,
             "agent", caller.AgentId.ToString(),
             new Dictionary<string, object?>
@@ -71,7 +71,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
 
     public async Task<RotationConfirmCommit> ConfirmRotationAsync(AgentIdentity caller, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var state = await LoadLockedAsync(context, caller.TenantId, caller.AgentId, cancellationToken);
         if (state is null)
@@ -89,7 +89,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
                 }
                 decision.Pending!.Activate(now);
                 state.Agent.RecordCredentialRotation();
-                context.AuditEvents.Add(AuditEvent.Record(
+                context.RecordAudit(AuditEvent.Record(
                     now, UserId.System, AuditActorKind.System, AuditActions.AgentCredentialRotationConfirmed, caller.TenantId,
                     "agent", caller.AgentId.ToString(),
                     new Dictionary<string, object?>
@@ -111,7 +111,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
 
     public async Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, UserId? actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var state = await LoadLockedAsync(context, tenantId, agentId, cancellationToken);
         if (state is null)
@@ -134,7 +134,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
             job.Disable();
             BackupAudit.AddJobEvent(context, job, actor, now, AuditActions.BackupJobDisabled);
         }
-        context.AuditEvents.Add(AuditEvent.Record(
+        context.RecordAudit(AuditEvent.Record(
             now, actor ?? UserId.System, actor is null ? AuditActorKind.System : AuditActorKind.UserAdmin,
             AuditActions.AgentRevoked, tenantId, "agent", agentId.ToString(),
             new Dictionary<string, object?> { ["credentialsRevoked"] = state.Credentials.Count, ["jobsDisabled"] = jobs.Count, ["result"] = "revoked" }));

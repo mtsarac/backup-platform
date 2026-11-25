@@ -135,7 +135,7 @@ public sealed class RetentionStorePruneTests
 
         public BackupStoreHarness Harness { get; } = harness;
 
-        public PostgreSqlBackupRetentionStore Store() => _retention.Store();
+        public RetentionStoreFacade Store() => _retention.Store();
 
         public async Task<(StoreAgent Agent, BackupJob Job)> NewJobAsync()
         {

@@ -59,7 +59,7 @@ internal sealed class InMemorySecretStore(EventLog? log = null) : ISecretStore
 /// A faithful in-memory store: case-insensitive name uniqueness per tenant, per-provider limit, tenant-scoped lookups, audit captured next to the
 /// change, and the mutation result handled the way the real store handles it (Rejected / Unchanged / Changed).
 /// </summary>
-internal sealed class InMemoryStorageConnectionStore(EventLog? log = null) : IStorageConnectionStore
+internal sealed class InMemoryStorageConnectionStore(EventLog? log = null) : IStorageConnectionStore, IStorageConnectionPlatformStore
 {
     private readonly Dictionary<Guid, StorageConnection> _connections = [];
 
@@ -254,7 +254,7 @@ internal sealed class ServiceHarness
         Secrets = new InMemorySecretStore(Log);
         Clock = new FakeClock(Start);
         Service = new StorageConnectionService(
-            Store, TestProviders.Catalog(), Secrets, testers, Clock, Logger);
+            Store, Store, TestProviders.Catalog(), Secrets, testers, Clock, Logger);
     }
 
     public EventLog Log { get; } = new();

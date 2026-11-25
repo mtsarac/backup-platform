@@ -7,7 +7,7 @@ using BackupPlatform.Storage;
 
 namespace BackupPlatform.Api.Backups;
 
-public sealed class AgentCapacityProbeService(IStorageCapacityTaskQueue queue, IStorageConnectionStore connections,
+public sealed class AgentCapacityProbeService(IStorageCapacityTaskQueue queue, IStorageConnectionPlatformStore connections,
     ISecretProvider secrets, TimeProvider time, ILogger<AgentCapacityProbeService> logger)
 {
     public async Task<CapacityProbeTaskRequest?> ClaimAsync(AgentIdentity identity, CancellationToken cancellationToken)

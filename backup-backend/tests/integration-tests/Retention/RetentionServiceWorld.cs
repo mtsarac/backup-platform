@@ -56,16 +56,16 @@ internal sealed class RetentionServiceWorld : IDisposable
         .UseNpgsql(new NpgsqlConnectionStringBuilder(Harness.Database.ConnectionString) { MaxPoolSize = MaxStoreConnections }.ConnectionString).Options;
 
     /// <summary>A store with its own options and pool: what another backend node would hold.</summary>
-    public PostgreSqlBackupRetentionStore Store(BackupRetentionOptions? options = null) => new(DbOptions(), options);
+    public RetentionStoreFacade Store(BackupRetentionOptions? options = null) => new(DbOptions(), options);
 
-    public BackupRetentionService Service(string node, TimeProvider clock, IBackupRetentionStore? store = null, BackupRetentionOptions? options = null) =>
+    public BackupRetentionService Service(string node, TimeProvider clock, IBackupRetentionPlatformStore? store = null, BackupRetentionOptions? options = null) =>
         new(store ?? Store(options), Resolver, options ?? new BackupRetentionOptions(), new BackupNodeIdentity(node), clock, NullLogger<BackupRetentionService>.Instance);
 
     public BackupStorageSweeper Sweeper(TimeProvider clock, BackupRetentionOptions? options = null) =>
         new(Store(), Resolver, options ?? new BackupRetentionOptions(), clock, NullLogger<BackupStorageSweeper>.Instance);
 
     public BackupArtifactService Artifacts(TimeProvider clock, BackupRetentionOptions? options = null) =>
-        new(Store(), new PostgreSqlBackupScheduleStore(DbOptions(), AdmitAllBackupAdmission.Instance), options ?? new BackupRetentionOptions(), clock);
+        new(Store(), new ScheduleStoreFacade(DbOptions(), AdmitAllBackupAdmission.Instance), options ?? new BackupRetentionOptions(), clock);
 
     public static void SetClock(MutableClock clock, DateTimeOffset at) => clock.Advance(at - clock.GetUtcNow());
 
@@ -256,7 +256,7 @@ internal sealed class CountingStorage(IStorageProvider inner) : IStorageProvider
 }
 
 /// <summary>Wraps the real store to make the commit of a finished delete fail, as a database outage between the physical delete and its record would.</summary>
-internal sealed class FlakyRetentionStore(IBackupRetentionStore inner) : IBackupRetentionStore
+internal sealed class FlakyRetentionStore(IBackupRetentionPlatformStore inner) : IBackupRetentionPlatformStore
 {
     private int _completeFailures;
 
@@ -287,20 +287,8 @@ internal sealed class FlakyRetentionStore(IBackupRetentionStore inner) : IBackup
     public Task<bool> FailDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, string failureCode, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken) =>
         inner.FailDeletionAsync(replicaId, leaseToken, now, failureCode, nextAttemptAt, cancellationToken);
 
-    public Task<BackupArtifactDeleteResult> RequestDeleteAsync(TenantId tenantId, Guid artifactId, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken) =>
-        inner.RequestDeleteAsync(tenantId, artifactId, requestedByUserId, now, cancellationToken);
-
-    public Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null) =>
-        inner.CancelDeleteAsync(tenantId, artifactId, now, cancellationToken, requestedByUserId);
-
     public Task<BackupArtifactRecord?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken) =>
         inner.GetArtifactAsync(tenantId, artifactId, cancellationToken);
-
-    public Task<IReadOnlyList<BackupArtifactRecord>> ListArtifactsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken) =>
-        inner.ListArtifactsAsync(tenantId, jobId, limit, cancellationToken);
-
-    public Task<PagedResult<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken) =>
-        inner.QueryArtifactsAsync(tenantId, query, cancellationToken);
 
     public Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken) =>
         inner.FindReferencedKeysAsync(storageProvider, keys, cancellationToken);

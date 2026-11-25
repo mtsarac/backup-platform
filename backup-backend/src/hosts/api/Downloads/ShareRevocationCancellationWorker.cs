@@ -46,7 +46,7 @@ public sealed class ShareRevocationCancellationWorker(
         var activeShareIds = registry.GetActiveShareIds();
         if (activeShareIds.Count == 0) return;
 
-        await using var context = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+        await using var context = PlatformOperationsDbContext.Create(dbOptions);
         var unrevokedShareIds = await context.BackupShares
             .AsNoTracking()
             .Where(s => activeShareIds.Contains(s.Id) && s.RevokedAtUtc == null)
@@ -135,7 +135,7 @@ public sealed class ShareRevocationCancellationWorker(
 
     private async Task<NpgsqlConnection> OpenListenerConnectionAsync(CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+        await using var context = PlatformOperationsDbContext.Create(dbOptions);
         var connectionString = context.Database.GetConnectionString()
             ?? throw new InvalidOperationException("PostgreSQL connection string is not configured.");
         var connection = new NpgsqlConnection(connectionString);

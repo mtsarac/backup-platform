@@ -42,10 +42,10 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
     public PostgreSqlBackupAdmissionPolicy Admission() => new(Options(), QuotaOptions, NullLogger<PostgreSqlBackupAdmissionPolicy>.Instance);
 
     /// <summary>A run store whose new-run gate is the real admission policy (or the one given, e.g. a counting wrapper).</summary>
-    public PostgreSqlBackupRunStore RunStore(IBackupAdmissionPolicy? admission = null, BackupExecutionOptions? limits = null) =>
+    public RunStoreFacade RunStore(IBackupAdmissionPolicy? admission = null, BackupExecutionOptions? limits = null) =>
         new(Options(), admission ?? Admission(), limits ?? BackupStoreHarness.Limits(), () => 0);
 
-    public PostgreSqlBackupScheduleStore ScheduleStore(IBackupAdmissionPolicy? admission = null) => new(Options(), admission ?? Admission());
+    public ScheduleStoreFacade ScheduleStore(IBackupAdmissionPolicy? admission = null) => new(Options(), admission ?? Admission());
 
     public PostgreSqlStorageUsageService Usage() => new(Options(), QuotaOptions, NullLogger<PostgreSqlStorageUsageService>.Instance);
 
@@ -114,7 +114,7 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
     /// New-run admission itself is exercised separately by the calling test.
     /// </summary>
     public async Task<(BackupRun Run, Guid ArtifactId)> PublishAsync(
-        PostgreSqlBackupRunStore store, StoreAgent agent, BackupJob job, long sizeBytes, IReadOnlyList<ReplicaSpec> replicas, DateTimeOffset at, string? key = null)
+        RunStoreFacade store, StoreAgent agent, BackupJob job, long sizeBytes, IReadOnlyList<ReplicaSpec> replicas, DateTimeOffset at, string? key = null)
     {
         await using (var capabilityContext = Database.CreatePlatformContext())
         {

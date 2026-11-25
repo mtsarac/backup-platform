@@ -15,7 +15,7 @@ internal sealed class AgentLogRetentionWorker(IServiceScopeFactory scopes, IConf
             try
             {
                 using var scope = scopes.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+                await using var db = PlatformOperationsDbContext.Create(scope.ServiceProvider.GetRequiredService<DbContextOptions<PlatformDbContext>>());
                 await db.Database.ExecuteSqlRawAsync("DELETE FROM agent_logs WHERE \"ReceivedAt\" < @cutoff",
                     [new NpgsqlParameter("cutoff", DateTime.UtcNow.AddDays(-days))], stoppingToken);
             }

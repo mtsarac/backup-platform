@@ -33,19 +33,12 @@ public enum UploadSliceAction
     Observe
 }
 
+/// <summary>Upload limits and bandwidth profiles of the request's tenant (filtered tenant context).</summary>
 public interface IUploadBandwidthStore
 {
     Task<UploadBandwidthSettings> GetAsync(TenantId tenantId, CancellationToken cancellationToken);
-
     /// <summary>Sets (or, with null, removes) one limit and audits the change in the same transaction. False when the agent or job is not the tenant's.</summary>
     Task<bool> SetAsync(TenantId tenantId, UploadBandwidthScope scope, Guid scopeId, long? bytesPerSecond, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Applies <paramref name="action"/> to this running attempt's slice of the tenant limit and returns the ceilings. A slice is decided in the database, serialized
-    /// per tenant, so any number of backend nodes agree; without a tenant limit nothing is locked. Null when the lease does not hold a running attempt of this agent.
-    /// </summary>
-    Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, UploadSliceAction action, TimeSpan grantTtl, CancellationToken cancellationToken);
-
     Task<IReadOnlyList<BandwidthProfileView>> ListProfilesAsync(TenantId tenantId, CancellationToken cancellationToken);
     Task<BandwidthProfileView?> GetProfileAsync(TenantId tenantId, Guid profileId, CancellationToken cancellationToken);
     Task<BandwidthProfileView> SaveProfileAsync(TenantId tenantId, Guid? profileId, string name, string timeZoneId, IEnumerable<TransferScheduleWindowDto> windows, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
@@ -53,11 +46,21 @@ public interface IUploadBandwidthStore
     Task<bool> AssignProfileAsync(TenantId tenantId, UploadBandwidthScope scope, Guid scopeId, Guid? profileId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 }
 
+/// <summary>The agent-driven upload slice grants, unfiltered by tenant (the lease names the tenant).</summary>
+public interface IUploadBandwidthPlatformStore
+{
+    /// <summary>
+    /// Applies <paramref name="action"/> to this running attempt's slice of the tenant limit and returns the ceilings. A slice is decided in the database, serialized
+    /// per tenant, so any number of backend nodes agree; without a tenant limit nothing is locked. Null when the lease does not hold a running attempt of this agent.
+    /// </summary>
+    Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, UploadSliceAction action, TimeSpan grantTtl, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Upload bandwidth policy. The limits are independent ceilings (tenant total, agent, job); the agent applies the most restrictive one to the bytes it
 /// uploads, wherever they go. Management is validated here; the share of the tenant ceiling that one upload may use is the store's, decided in the database.
 /// </summary>
-public sealed class UploadBandwidthService(IUploadBandwidthStore store, BackupExecutionOptions executionLimits, TimeProvider time)
+public sealed class UploadBandwidthService(IUploadBandwidthStore store, IUploadBandwidthPlatformStore platformStore, BackupExecutionOptions executionLimits, TimeProvider time)
 {
     /// <summary>How often a transfer under a tenant limit renews its slice; a limit change reaches it within this time.</summary>
     public static readonly TimeSpan RenewalInterval = TimeSpan.FromSeconds(3);
@@ -109,7 +112,7 @@ public sealed class UploadBandwidthService(IUploadBandwidthStore store, BackupEx
     /// <summary>The answer to an agent's policy call; null when the lease is not a running attempt of this agent.</summary>
     public async Task<UploadPolicyResponse?> PolicyAsync(BackupLeaseCommand lease, UploadSliceAction action, CancellationToken cancellationToken)
     {
-        var limits = await store.GrantAsync(lease, action, GrantTtl, cancellationToken);
+        var limits = await platformStore.GrantAsync(lease, action, GrantTtl, cancellationToken);
         if (limits is null) return null;
         var limited = limits is { Job: not null } or { Agent: not null } or { Tenant: not null };
         var refreshSeconds = (int)(limits.Tenant is null ? IdleRenewalInterval : RenewalInterval).TotalSeconds;

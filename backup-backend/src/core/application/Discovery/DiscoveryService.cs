@@ -17,15 +17,15 @@ public sealed record DiscoveryCredentialRequest(string? CredentialReference, boo
 /// Agent-facing scan claim/report and tenant-facing inventory operations. Authorization (tenant role, agent principal) happens at the endpoint;
 /// the tenant or agent identity always arrives from it, never from a request body.
 /// </summary>
-public sealed class DiscoveryService(IDiscoveryStore store, TimeProvider time)
+public sealed class DiscoveryService(IDiscoveryStore store, IDiscoveryPlatformStore platformStore, TimeProvider time)
 {
     private static readonly JsonSerializerOptions SourceJson = new(JsonSerializerDefaults.Web);
 
     public Task<string?> GetScanReasonAsync(AgentIdentity caller, CancellationToken cancellationToken) =>
-        store.GetDueReasonAsync(caller, time.GetUtcNow(), cancellationToken);
+        platformStore.GetDueReasonAsync(caller, time.GetUtcNow(), cancellationToken);
 
     public Task<AgentDiscoveryPlan?> ClaimAsync(AgentIdentity caller, CancellationToken cancellationToken) =>
-        store.ClaimAsync(caller, Guid.NewGuid(), time.GetUtcNow(), cancellationToken);
+        platformStore.ClaimAsync(caller, Guid.NewGuid(), time.GetUtcNow(), cancellationToken);
 
     public async Task<DiscoveryReportResult> ReportAsync(AgentIdentity caller, Guid scanId, AgentDiscoveryReport? report, CancellationToken cancellationToken)
     {
@@ -34,7 +34,7 @@ public sealed class DiscoveryService(IDiscoveryStore store, TimeProvider time)
             return new DiscoveryReportResult(ReportStatus.Invalid, invalidField);
         }
         var sources = JsonSerializer.Serialize(report!.Sources.Select(source => new DiscoverySourceView(source.Source, source.Status, source.ReasonCode)), SourceJson);
-        var status = await store.ApplyReportAsync(caller, scanId, report, sources, Random.Shared.NextDouble() * 2 - 1, time.GetUtcNow(), cancellationToken);
+        var status = await platformStore.ApplyReportAsync(caller, scanId, report, sources, Random.Shared.NextDouble() * 2 - 1, time.GetUtcNow(), cancellationToken);
         return new DiscoveryReportResult(status, null);
     }
 

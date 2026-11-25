@@ -136,7 +136,7 @@ public sealed class RecoveryKeyConfigurationAndStoreTests(PostgreSqlFixture fixt
 
     // ---- tenant recovery key store ------------------------------------------------------------------------------------------------------------
 
-    private PostgreSqlTenantRecoveryKeyStore Store() => new(fixture.Options, TimeProvider.System);
+    private TenantRecoveryKeyStoreFacade Store() => new(fixture.Options, TimeProvider.System);
 
     private async Task<TenantId> TenantAsync()
     {

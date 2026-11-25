@@ -17,7 +17,7 @@ public sealed class TenantWrapKeyStoreIntegrationTests(PostgreSqlFixture fixture
 {
     private readonly InMemorySecretStore _secrets = new();
 
-    private PostgreSqlTenantWrapKeyStore Store() => new(fixture.Options, _secrets, TimeProvider.System);
+    private TenantWrapKeyStoreFacade Store() => new(fixture.Options, _secrets, TimeProvider.System);
 
     private async Task<TenantId> TenantAsync()
     {

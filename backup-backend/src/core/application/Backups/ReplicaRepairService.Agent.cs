@@ -27,7 +27,7 @@ public sealed partial class ReplicaRepairService
     public async Task<ReplicaRepairTaskSnapshot?> ClaimForAgentAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
-        var claimed = await store.ClaimAgentRepairAsync(identity, now, DefaultLeaseDuration, cancellationToken);
+        var claimed = await platformStore.ClaimAgentRepairAsync(identity, now, DefaultLeaseDuration, cancellationToken);
         if (claimed is null) return null;
         var leaseToken = claimed.LeaseToken!.Value;
 
@@ -35,16 +35,16 @@ public sealed partial class ReplicaRepairService
         {
             if (claimed.StorageConnectionId == Guid.Empty)
             {
-                await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.DestinationNotConfigured,
+                await FailOrRetryAsync(platformStore, claimed, leaseToken, ReplicaRepairFailureCodes.DestinationNotConfigured,
                     "Destination storage connection is not configured.", CancellationToken.None);
                 return null;
             }
 
-            var admission = await store.AdmitRepairAsync(claimed.TenantId, claimed.ArtifactId, claimed.StorageConnectionId, claimed.StorageProvider,
+            var admission = await platformStore.AdmitRepairAsync(claimed.TenantId, claimed.ArtifactId, claimed.StorageConnectionId, claimed.StorageProvider,
                 now, cancellationToken, excludeOperationId: claimed.Id);
             if (!admission.Allowed || admission.Artifact is null || admission.TargetDestination is null)
             {
-                await FailOrRetryAsync(claimed, leaseToken, admission.DenialCode ?? ReplicaRepairFailureCodes.InternalError,
+                await FailOrRetryAsync(platformStore, claimed, leaseToken, admission.DenialCode ?? ReplicaRepairFailureCodes.InternalError,
                     admission.DenialReason ?? "Admission re-evaluation failed.", CancellationToken.None);
                 return null;
             }
@@ -61,7 +61,7 @@ public sealed partial class ReplicaRepairService
                 .ToList();
             if (sources.Count == 0)
             {
-                await FailOrRetryAsync(claimed, leaseToken,
+                await FailOrRetryAsync(platformStore, claimed, leaseToken,
                     candidates.Count > 0 ? ReplicaRepairFailureCodes.UnsupportedSource : ReplicaRepairFailureCodes.NoVerifiedSourceAvailable,
                     "No verified source replica is readable directly by an agent.", CancellationToken.None);
                 return null;
@@ -89,7 +89,7 @@ public sealed partial class ReplicaRepairService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Agent repair claim {OperationId} failed unexpectedly.", claimed.Id);
-            await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.InternalError, "Repair claim failed unexpectedly.", CancellationToken.None);
+            await FailOrRetryAsync(platformStore, claimed, leaseToken, ReplicaRepairFailureCodes.InternalError, "Repair claim failed unexpectedly.", CancellationToken.None);
             return null;
         }
     }
@@ -98,7 +98,7 @@ public sealed partial class ReplicaRepairService
     {
         var now = time.GetUtcNow();
         if (await LiveOperationAsync(identity, operationId, leaseToken, now, cancellationToken) is null) return null;
-        var renewal = await store.RenewLeaseAsync(identity.TenantId, operationId, leaseToken, now, DefaultLeaseDuration, cancellationToken);
+        var renewal = await platformStore.RenewLeaseAsync(identity.TenantId, operationId, leaseToken, now, DefaultLeaseDuration, cancellationToken);
         return renewal.Success
             ? new ReplicaRepairLeaseResponse { LeaseExpiresAt = now + DefaultLeaseDuration, CancellationRequested = renewal.CancellationRequested }
             : null;
@@ -110,7 +110,7 @@ public sealed partial class ReplicaRepairService
         var now = time.GetUtcNow();
         var operation = await LiveOperationAsync(identity, operationId, request.LeaseToken, now, cancellationToken);
         if (operation is null) return BackupMutationResult.Conflict;
-        var source = (await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken))?.Replicas
+        var source = (await platformStore.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken))?.Replicas
             .FirstOrDefault(replica => replica.Id == request.SourceReplicaId);
         if (source is null || !IsExternalSource(source) && !IsLocalSourceOf(source, identity.AgentId.Value))
             return BackupMutationResult.Conflict;
@@ -119,7 +119,7 @@ public sealed partial class ReplicaRepairService
         if (!string.Equals(request.TargetKey, expectedKey, StringComparison.Ordinal))
             throw new ArgumentException("The target key is not this repair's lease-specific key.", nameof(request));
 
-        return await store.PinSourceAsync(identity.TenantId, operationId, request.LeaseToken, source.Id, expectedKey, now, cancellationToken)
+        return await platformStore.PinSourceAsync(identity.TenantId, operationId, request.LeaseToken, source.Id, expectedKey, now, cancellationToken)
             ? BackupMutationResult.Accepted
             : BackupMutationResult.Conflict;
     }
@@ -131,7 +131,7 @@ public sealed partial class ReplicaRepairService
         var operation = await LiveOperationAsync(identity, operationId, request.LeaseToken, now, cancellationToken);
         if (operation is null) return BackupMutationResult.Conflict;
         var transferred = operation.TotalBytes > 0 ? Math.Min(request.TransferredBytes, operation.TotalBytes) : request.TransferredBytes;
-        return await store.UpdateProgressAsync(identity.TenantId, operationId, request.LeaseToken, transferred, operation.TotalBytes, now, cancellationToken)
+        return await platformStore.UpdateProgressAsync(identity.TenantId, operationId, request.LeaseToken, transferred, operation.TotalBytes, now, cancellationToken)
             ? BackupMutationResult.Accepted
             : BackupMutationResult.Conflict;
     }
@@ -141,7 +141,7 @@ public sealed partial class ReplicaRepairService
         if (string.IsNullOrWhiteSpace(request.TargetKey)) throw new ArgumentException("A target key is required.", nameof(request));
         var now = time.GetUtcNow();
         return await LiveOperationAsync(identity, operationId, request.LeaseToken, now, cancellationToken) is not null
-            && await store.CanCleanupTargetAsync(identity.TenantId, operationId, request.LeaseToken, request.TargetKey, now, cancellationToken);
+            && await platformStore.CanCleanupTargetAsync(identity.TenantId, operationId, request.LeaseToken, request.TargetKey, now, cancellationToken);
     }
 
     /// <summary>
@@ -168,18 +168,18 @@ public sealed partial class ReplicaRepairService
             case ReplicaRepairOutcomes.Failed:
                 var code = request.FailureCode is { } reported && KnownFailureCodes.Contains(reported) ? reported : ReplicaRepairFailureCodes.InternalError;
                 if (!await RecordAgentOrphanAsync(operation, request, now, cancellationToken)) return BackupMutationResult.Conflict;
-                return await FailOrRetryAsync(operation, leaseToken, code, Truncate(request.Reason), cancellationToken)
+                return await FailOrRetryAsync(platformStore, operation, leaseToken, code, Truncate(request.Reason), cancellationToken)
                     ? BackupMutationResult.Accepted
                     : BackupMutationResult.Conflict;
 
             case ReplicaRepairOutcomes.Cancelled:
                 if (!await RecordAgentOrphanAsync(operation, request, now, cancellationToken)) return BackupMutationResult.Conflict;
-                return await store.CancelOperationAsync(operation.TenantId, operationId, leaseToken, time.GetUtcNow(), cancellationToken)
+                return await platformStore.CancelOperationAsync(operation.TenantId, operationId, leaseToken, time.GetUtcNow(), cancellationToken)
                     ? BackupMutationResult.Accepted
                     : BackupMutationResult.Conflict;
 
             case ReplicaRepairOutcomes.TargetConflict:
-                return await store.FailTargetConflictAsync(operation.TenantId, operationId, leaseToken, now, cancellationToken)
+                return await platformStore.FailTargetConflictAsync(operation.TenantId, operationId, leaseToken, now, cancellationToken)
                     ? BackupMutationResult.Accepted
                     : BackupMutationResult.Conflict;
 
@@ -200,7 +200,7 @@ public sealed partial class ReplicaRepairService
 
         // The source is only reachable once the repair pinned it: the agent cannot ask for a replica it was never given.
         if (operation.TargetKey is null || operation.SourceReplicaId is not { } sourceId) return null;
-        var replica = (await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken))?.Replicas.FirstOrDefault(r => r.Id == sourceId);
+        var replica = (await platformStore.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken))?.Replicas.FirstOrDefault(r => r.Id == sourceId);
         return replica is { StorageConnectionId: var connectionId } && connectionId != Guid.Empty
             && replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && StorageProviderTypes.External(replica.StorageProvider)
             && operation.TargetKey == AgentTargetKey(replica.Key, operation.Id, leaseToken)
@@ -222,7 +222,7 @@ public sealed partial class ReplicaRepairService
         if (isDrive && string.IsNullOrWhiteSpace(request.DriveRecord?.FileId))
             throw new ArgumentException("A Google Drive target requires its object record.", nameof(request));
         if (string.IsNullOrEmpty(operation.TargetKey) || operation.StorageConnectionId == Guid.Empty) return BackupMutationResult.Conflict;
-        var artifact = await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken);
+        var artifact = await platformStore.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken);
         if (artifact is null) return BackupMutationResult.Conflict;
         var source = artifact.Replicas.FirstOrDefault(replica => replica.Id == operation.SourceReplicaId);
         if (source is null || operation.TargetKey != AgentTargetKey(source.Key, operation.Id, request.LeaseToken))
@@ -252,7 +252,7 @@ public sealed partial class ReplicaRepairService
             storageConnectionId: operation.StorageConnectionId);
         try
         {
-            await store.CompleteOperationAsync(operation.TenantId, operation.Id, operation.LeaseToken!.Value, newReplica, time.GetUtcNow(), cancellationToken);
+            await platformStore.CompleteOperationAsync(operation.TenantId, operation.Id, operation.LeaseToken!.Value, newReplica, time.GetUtcNow(), cancellationToken);
         }
         catch (InvalidOperationException)
         {
@@ -271,9 +271,9 @@ public sealed partial class ReplicaRepairService
         if (operation.TargetKey is null || (orphanKey != operation.TargetKey
             && (!ManagedBackupLayout.IsPartialSibling(operation.TargetKey, orphanKey) || !ManagedBackupLayout.IsManagedPartialName(orphanName))))
             throw new ArgumentException("The orphan key is not this repair's target.", nameof(request));
-        var artifact = await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken);
+        var artifact = await platformStore.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken);
         if (artifact is null) return false;
-        await store.RecordRepairOrphanAsync(operation.TenantId, artifact.Id, operation.StorageConnectionId, operation.StorageProvider,
+        await platformStore.RecordRepairOrphanAsync(operation.TenantId, artifact.Id, operation.StorageConnectionId, operation.StorageProvider,
             await ReplicaTargetAsync(operation, cancellationToken), orphanKey, artifact.SizeBytes, artifact.ArtifactChecksum, now, cancellationToken,
             quarantine: request.OrphanQuarantine);
         return true;
@@ -282,7 +282,7 @@ public sealed partial class ReplicaRepairService
     /// <summary>The operation when it is in progress under this lease, held by this very agent; one read serves every fenced call.</summary>
     private async Task<ReplicaRepairOperation?> LiveOperationAsync(AgentIdentity identity, Guid operationId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var operation = await store.FindOperationAsync(identity.TenantId, operationId, cancellationToken);
+        var operation = await platformStore.FindOperationAsync(identity.TenantId, operationId, cancellationToken);
         return operation is { Status: ReplicaRepairStatus.InProgress } && operation.TenantId == identity.TenantId
             && operation.LeaseOwner == ReplicaRepairOperation.AgentLeaseOwner(identity.AgentId.Value) && operation.HasLease(leaseToken, now)
                 ? operation
@@ -292,7 +292,7 @@ public sealed partial class ReplicaRepairService
     /// <summary>The replica's storage target: a connection id, or for a local copy the agent volume, which the run snapshot (not the agent) names.</summary>
     private async Task<string> ReplicaTargetAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken) =>
         operation.StorageProvider == StorageProviderTypes.Local
-            ? (await store.FindRunDestinationAsync(operation.TenantId, operation.ArtifactId, operation.StorageConnectionId, cancellationToken))?.StorageTarget ?? StorageProviderTypes.Local
+            ? (await platformStore.FindRunDestinationAsync(operation.TenantId, operation.ArtifactId, operation.StorageConnectionId, cancellationToken))?.StorageTarget ?? StorageProviderTypes.Local
             : operation.StorageConnectionId.ToString("D");
 
     private static bool IsExternalSource(BackupReplica replica) =>

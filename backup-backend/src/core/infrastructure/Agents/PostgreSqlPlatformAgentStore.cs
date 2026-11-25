@@ -39,7 +39,7 @@ public sealed class PostgreSqlPlatformAgentStore(DbContextOptions<PlatformDbCont
     public async Task<PagedResult<PlatformAgentRow>> ListAsync(
         PlatformAgentFilter filter, ListQuery listQuery, DateTimeOffset now, TimeSpan offlineTimeout, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var cutoff = (now - offlineTimeout).ToUniversalTime();
         var query = from agent in context.Agents.AsNoTracking()
                     join tenant in context.Tenants.AsNoTracking() on agent.TenantId equals tenant.Id
@@ -94,7 +94,7 @@ public sealed class PostgreSqlPlatformAgentStore(DbContextOptions<PlatformDbCont
     public async Task<AgentConnectivitySummary> SummarizeAsync(
         TenantId? tenantId, DateTimeOffset now, TimeSpan offlineTimeout, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var cutoff = (now - offlineTimeout).ToUniversalTime();
         var agents = context.Agents.AsNoTracking().AsQueryable();
         if (tenantId is not null)

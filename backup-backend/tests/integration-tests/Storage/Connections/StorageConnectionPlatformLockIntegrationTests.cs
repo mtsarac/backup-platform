@@ -112,6 +112,8 @@ public sealed class StorageConnectionPlatformLockIntegrationTests(PostgreSqlFixt
         {
             services.RemoveAll<IStorageConnectionStore>();
             services.AddSingleton<IStorageConnectionStore>(probe);
+            services.RemoveAll<IStorageConnectionPlatformStore>();
+            services.AddSingleton<IStorageConnectionPlatformStore>(probe);
         });
         var platform = await env.PlatformAdminAsync();
         var localId = await LocalIdAsync(env);

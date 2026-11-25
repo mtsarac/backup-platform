@@ -9,7 +9,7 @@ public sealed class PostgreSqlReplicaMissingReporter(DbContextOptions<PlatformDb
 {
     public async Task ReportMissingAsync(TenantId tenantId, Guid replicaId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var artifactId = await context.BackupReplicas.AsNoTracking().Where(r => r.TenantId == tenantId && r.Id == replicaId)
             .Select(r => (Guid?)r.ArtifactId).SingleOrDefaultAsync(cancellationToken);
         if (artifactId is not { } artifact) return;

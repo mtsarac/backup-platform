@@ -15,7 +15,7 @@ public sealed class StaleBackupDetector(IServiceScopeFactory scopes, TimeProvide
                 try
                 {
                     await using var scope = scopes.CreateAsyncScope();
-                    await scope.ServiceProvider.GetRequiredService<IBackupRunStore>().ExpireStaleAsync(time.GetUtcNow(), stoppingToken);
+                    await scope.ServiceProvider.GetRequiredService<IBackupRunPlatformStore>().ExpireStaleAsync(time.GetUtcNow(), stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
                 catch (Exception exception) { logger.LogError(exception, "Unable to expire stale backup leases."); }

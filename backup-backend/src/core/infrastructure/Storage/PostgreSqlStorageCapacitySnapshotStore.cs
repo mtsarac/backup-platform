@@ -15,7 +15,7 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
     public async Task<StorageCapacitySnapshot?> GetLatestAsync(TenantId tenantId, Guid connectionId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         return await db.StorageCapacitySnapshots
             .Where(snapshot => snapshot.TenantId == tenantId && snapshot.ConnectionId == connectionId)
             .OrderByDescending(snapshot => snapshot.ReportedAt)
@@ -26,7 +26,7 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
 
     public async Task<IReadOnlyList<StorageCapacitySnapshot>> GetHistoryAsync(TenantId tenantId, Guid connectionId, int limit, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         return await db.StorageCapacitySnapshots.AsNoTracking()
             .Where(snapshot => snapshot.TenantId == tenantId && snapshot.ConnectionId == connectionId)
             .OrderByDescending(snapshot => snapshot.ReportedAt).ThenByDescending(snapshot => snapshot.Id)
@@ -36,7 +36,7 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
     public async Task SaveAsync(StorageCapacitySnapshot snapshot, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var db = PlatformOperationsDbContext.Create(options);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await SaveInTransactionAsync(db, snapshot, notifications, time, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);

@@ -17,6 +17,7 @@ public sealed record ReplicaRepairStartResult(
 
 public sealed partial class ReplicaRepairService(
     IReplicaRepairStore store,
+    IReplicaRepairPlatformStore platformStore,
     IBackupStorageResolver storageResolver,
     TimeProvider time,
     ILogger<ReplicaRepairService> logger,
@@ -81,7 +82,22 @@ public sealed partial class ReplicaRepairService(
         return new(true, view);
     }
 
-    public async Task<ReplicaRepairOperationView?> ExecuteRepairAsync(
+    /// <summary>Manual repair of the request's tenant.</summary>
+    public Task<ReplicaRepairOperationView?> ExecuteRepairAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        Guid operationId,
+        ReplicaRepairAdmissionResult? admission = null,
+        CancellationToken externalToken = default,
+        ReplicaRepairOperation? claimedOperation = null) =>
+        ExecuteAsync(store, tenantId, artifactId, operationId, admission, externalToken, claimedOperation);
+
+    /// <summary>An automatic repair the worker has already claimed; runs on the platform-operations store because no tenant request is involved.</summary>
+    public Task<ReplicaRepairOperationView?> ExecuteClaimedRepairAsync(ReplicaRepairOperation claimed, CancellationToken externalToken) =>
+        ExecuteAsync(platformStore, claimed.TenantId, claimed.ArtifactId, claimed.Id, admission: null, externalToken, claimed);
+
+    private async Task<ReplicaRepairOperationView?> ExecuteAsync(
+        IReplicaRepairOperations ops,
         TenantId tenantId,
         Guid artifactId,
         Guid operationId,
@@ -93,7 +109,7 @@ public sealed partial class ReplicaRepairService(
         var leaseToken = claimedOperation?.LeaseToken ?? Guid.NewGuid();
         var leaseOwner = claimedOperation?.LeaseOwner ?? $"backend-repair-{Environment.ProcessId}";
 
-        var claimed = claimedOperation ?? await store.ClaimOperationAsync(
+        var claimed = claimedOperation ?? await ops.ClaimOperationAsync(
             tenantId,
             operationId,
             leaseToken,
@@ -104,7 +120,7 @@ public sealed partial class ReplicaRepairService(
         if (claimed is null)
         {
             logger.LogWarning("Failed to claim repair operation {OperationId} for tenant {TenantId}.", operationId, tenantId);
-            return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+            return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
         }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
@@ -115,7 +131,7 @@ public sealed partial class ReplicaRepairService(
         try
         {
             _activeLocalCts[operationId] = cts;
-            admission ??= await store.AdmitRepairAsync(
+            admission ??= await ops.AdmitRepairAsync(
                 tenantId,
                 artifactId,
                 claimed.StorageConnectionId == Guid.Empty ? null : claimed.StorageConnectionId,
@@ -128,8 +144,8 @@ public sealed partial class ReplicaRepairService(
             {
                 var code = admission.DenialCode ?? ReplicaRepairFailureCodes.InternalError;
                 var reason = admission.DenialReason ?? "Admission re-evaluation failed.";
-                await FailOrRetryAsync(claimed, leaseToken, code, reason, CancellationToken.None);
-                return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                await FailOrRetryAsync(ops, claimed, leaseToken, code, reason, CancellationToken.None);
+                return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
             }
 
             var artifact = admission.Artifact;
@@ -143,9 +159,9 @@ public sealed partial class ReplicaRepairService(
             var destinationProvider = storageResolver.Resolve(tenantId, targetDestination.StorageProvider, destinationTarget);
             if (destinationProvider is null)
             {
-                await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.DestinationNotConfigured,
+                await FailOrRetryAsync(ops, claimed, leaseToken, ReplicaRepairFailureCodes.DestinationNotConfigured,
                     "Destination storage provider is not configured or resolved.", CancellationToken.None);
-                return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
             }
 
             IStorageProvider? sourceProvider = null;
@@ -187,7 +203,7 @@ public sealed partial class ReplicaRepairService(
 
                 try
                 {
-                    if (!await store.PinSourceAsync(tenantId, operationId, leaseToken, candidate.Id, candidateTargetKey, time.GetUtcNow(), cts.Token)) continue;
+                    if (!await ops.PinSourceAsync(tenantId, operationId, leaseToken, candidate.Id, candidateTargetKey, time.GetUtcNow(), cts.Token)) continue;
                     sourceStream = await resolved.OpenReadAsync(new StorageObjectKey(candidate.Key), cts.Token);
                     sourceProvider = resolved;
                     sourceReplica = candidate;
@@ -208,9 +224,9 @@ public sealed partial class ReplicaRepairService(
                     ? ReplicaRepairFailureCodes.UnsupportedSource
                     : ReplicaRepairFailureCodes.SourceInaccessible;
 
-                await FailOrRetryAsync(claimed, leaseToken, failureCode,
+                await FailOrRetryAsync(ops, claimed, leaseToken, failureCode,
                     "Unable to open readable stream from any verified source replica.", CancellationToken.None);
-                return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
             }
 
             claimed.SetTargetIntent(sourceReplica.Id, targetKey);
@@ -228,7 +244,7 @@ public sealed partial class ReplicaRepairService(
                         if (Interlocked.CompareExchange(ref progressUpdating, 1, 0) == 0)
                         {
                             Volatile.Write(ref lastReportedBytes, bytes);
-                            progressTask = store.UpdateProgressAsync(tenantId, operationId, leaseToken, bytes, artifact.SizeBytes, time.GetUtcNow(), CancellationToken.None)
+                            progressTask = ops.UpdateProgressAsync(tenantId, operationId, leaseToken, bytes, artifact.SizeBytes, time.GetUtcNow(), CancellationToken.None)
                                 .ContinueWith(_ => Interlocked.Exchange(ref progressUpdating, 0), TaskScheduler.Default);
                         }
                     }
@@ -250,7 +266,7 @@ public sealed partial class ReplicaRepairService(
                             ReplicaRepairLeaseRenewal renewal;
                             try
                             {
-                                renewal = await store.RenewLeaseAsync(
+                                renewal = await ops.RenewLeaseAsync(
                                     tenantId, operationId, leaseToken, time.GetUtcNow(), DefaultLeaseDuration, heartbeatCts.Token);
                             }
                             catch (OperationCanceledException) when (heartbeatCts.IsCancellationRequested)
@@ -302,10 +318,10 @@ public sealed partial class ReplicaRepairService(
                         {
                             logger.LogError("Source replica {SourceReplicaId} checksum mismatch: computed {Actual}, expected {Expected}",
                                 sourceReplica.Id, actualSourceChecksum, artifact.ArtifactChecksum);
-                            await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
-                            await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.SourceChecksumMismatch,
+                            await TryCleanupOrRecordOrphanAsync(ops, destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                            await FailOrRetryAsync(ops, claimed, leaseToken, ReplicaRepairFailureCodes.SourceChecksumMismatch,
                                 "Source replica data failed SHA-256 integrity verification.", CancellationToken.None);
-                            return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                            return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                         }
                     }
                     else
@@ -319,10 +335,10 @@ public sealed partial class ReplicaRepairService(
                     if (verifyResult.Status != StorageVerificationStatus.Verified)
                     {
                         logger.LogError("Destination readback verification failed for repair {OperationId}: {Status}", operationId, verifyResult.Status);
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
-                        await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.DestinationReadbackFailed,
+                        await TryCleanupOrRecordOrphanAsync(ops, destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                        await FailOrRetryAsync(ops, claimed, leaseToken, ReplicaRepairFailureCodes.DestinationReadbackFailed,
                             "Destination readback verification failed.", CancellationToken.None);
-                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
 
                     // Complete operation and create verified replica
@@ -344,56 +360,56 @@ public sealed partial class ReplicaRepairService(
                         BackupStorageExecutionLocation.Backend,
                         owningAgentId: null,
                         storageConnectionId: targetDestination.StorageConnectionId ?? Guid.Empty);
-                    await store.CompleteOperationAsync(tenantId, operationId, leaseToken, newReplica, finishTime, CancellationToken.None);
+                    await ops.CompleteOperationAsync(tenantId, operationId, leaseToken, newReplica, finishTime, CancellationToken.None);
                     logger.LogInformation("Repair operation {OperationId} succeeded. Created replica {ReplicaId} on {Provider}:{Target}.",
                         operationId, newReplica.Id, newReplica.StorageProvider, newReplica.StorageTarget);
-                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
                 catch (OperationCanceledException)
                 {
                     if (leaseLost)
                     {
                         logger.LogWarning("Repair operation {OperationId} was cancelled due to lost lease. Skipping cleanup and terminal cancellation.", operationId);
-                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
 
                     if (heartbeatFailed)
                     {
                         logger.LogWarning("Repair operation {OperationId} was cancelled due to heartbeat failure. Skipping cleanup and terminal cancellation.", operationId);
-                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
 
                     if (externalToken.IsCancellationRequested)
                     {
                         logger.LogInformation("Repair operation {OperationId} stopped due to host shutdown.", operationId);
-                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
                     if (!cts.Token.IsCancellationRequested && !userCancellationRequested)
                     {
                         logger.LogWarning("Repair operation {OperationId} transfer timed out internally. Scheduling retry.", operationId);
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
-                        await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.OperationTimedOut,
+                        await TryCleanupOrRecordOrphanAsync(ops, destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                        await FailOrRetryAsync(ops, claimed, leaseToken, ReplicaRepairFailureCodes.OperationTimedOut,
                             "Transfer deadline exceeded.", CancellationToken.None);
-                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
 
                     logger.LogInformation("Repair operation {OperationId} was cancelled by user request (observedInHeartbeat={InHeartbeat}).", operationId, userCancellationRequested);
-                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
-                    await store.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
-                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    await TryCleanupOrRecordOrphanAsync(ops, destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                    await ops.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
+                    return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
                 catch (StorageException sex)
                 {
                     logger.LogError(sex, "Destination storage put/verify failed for repair {OperationId}: {Message}", operationId, sex.Message);
                     if (sex.Kind == StorageFailureKind.AlreadyExists)
                     {
-                        await store.FailTargetConflictAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
-                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        await ops.FailTargetConflictAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
+                        return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
                     var cleanupKey = sex.RemainingObjectKey?.Value ?? targetKey;
                     if (!putCompleted && !sex.ObjectMayRemain)
                     {
-                        await store.RecordRepairOrphanAsync(
+                        await ops.RecordRepairOrphanAsync(
                             tenantId,
                             artifact.Id,
                             targetDestination.StorageConnectionId ?? Guid.Empty,
@@ -408,7 +424,7 @@ public sealed partial class ReplicaRepairService(
                     }
                     else
                     {
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, cleanupKey);
+                        await TryCleanupOrRecordOrphanAsync(ops, destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, cleanupKey);
                     }
                     var code = sex.Kind switch
                     {
@@ -417,16 +433,16 @@ public sealed partial class ReplicaRepairService(
                         StorageFailureKind.NotFound or StorageFailureKind.AccessDenied or StorageFailureKind.Io => ReplicaRepairFailureCodes.StorageWriteFailed,
                         _ => ReplicaRepairFailureCodes.StorageUnavailable
                     };
-                    await FailOrRetryAsync(claimed, leaseToken, code, sex.Message, CancellationToken.None);
-                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    await FailOrRetryAsync(ops, claimed, leaseToken, code, sex.Message, CancellationToken.None);
+                    return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Unexpected error in repair execution {OperationId}: {Message}", operationId, ex.Message);
-                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey, recordOrphanIfCleanupFenced: putCompleted);
-                    await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.InternalError,
+                    await TryCleanupOrRecordOrphanAsync(ops, destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey, recordOrphanIfCleanupFenced: putCompleted);
+                    await FailOrRetryAsync(ops, claimed, leaseToken, ReplicaRepairFailureCodes.InternalError,
                         $"Internal error: {ex.GetType().Name}: {ex.Message}", CancellationToken.None);
-                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
                 finally
                 {
@@ -441,19 +457,19 @@ public sealed partial class ReplicaRepairService(
             {
                 logger.LogInformation("Repair operation {OperationId} stopped without user cancellation (leaseLost={LeaseLost}, heartbeatFailed={HeartbeatFailed}, hostShutdown={HostShutdown}).",
                     operationId, leaseLost, heartbeatFailed, externalToken.IsCancellationRequested);
-                return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
             }
 
             logger.LogInformation("Repair operation {OperationId} cancelled (observedInHeartbeat={InHeartbeat}).", operationId, userCancellationRequested);
-            await store.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
-            return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+            await ops.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
+            return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected error during repair operation {OperationId}: {Message}", operationId, ex.Message);
-            await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.InternalError,
+            await FailOrRetryAsync(ops, claimed, leaseToken, ReplicaRepairFailureCodes.InternalError,
                 $"Internal error: {ex.GetType().Name}: {ex.Message}", CancellationToken.None);
-            return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+            return await ops.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
         }
         finally
         {
@@ -493,6 +509,7 @@ public sealed partial class ReplicaRepairService(
         await store.FindArtifactAsync(tenantId, artifactId, cancellationToken) is null ? null : await store.ListOperationsAsync(tenantId, artifactId, cancellationToken);
 
     private async Task<bool> FailOrRetryAsync(
+        IReplicaRepairOperations ops,
         ReplicaRepairOperation claimed,
         Guid leaseToken,
         string failureCode,
@@ -506,17 +523,18 @@ public sealed partial class ReplicaRepairService(
             var nextRetryAt = now + delay;
             logger.LogInformation("Repair operation {OperationId} failed with transient code {Code}. Scheduling retry {Attempt}/{Max} at {NextRetryAt}.",
                 claimed.Id, failureCode, claimed.AttemptCount + 1, claimed.MaxAttempts, nextRetryAt);
-            return await store.ScheduleRetryAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, nextRetryAt, now, cancellationToken);
+            return await ops.ScheduleRetryAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, nextRetryAt, now, cancellationToken);
         }
         else
         {
             logger.LogWarning("Repair operation {OperationId} failed permanently or exhausted retries: {Code} - {Reason}.",
                 claimed.Id, failureCode, reason);
-            return await store.FailOperationAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, now, cancellationToken);
+            return await ops.FailOperationAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, now, cancellationToken);
         }
     }
 
     private async Task TryCleanupOrRecordOrphanAsync(
+        IReplicaRepairOperations ops,
         IStorageProvider destinationProvider,
         TenantId tenantId,
         Guid operationId,
@@ -527,7 +545,7 @@ public sealed partial class ReplicaRepairService(
         string targetKey,
         bool recordOrphanIfCleanupFenced = false)
     {
-        var canCleanup = await store.CanCleanupTargetAsync(
+        var canCleanup = await ops.CanCleanupTargetAsync(
             tenantId, operationId, leaseToken, targetKey, time.GetUtcNow(), CancellationToken.None);
         if (!canCleanup)
         {
@@ -535,7 +553,7 @@ public sealed partial class ReplicaRepairService(
                 operationId, targetKey);
             if (recordOrphanIfCleanupFenced)
             {
-                await store.RecordRepairOrphanAsync(
+                await ops.RecordRepairOrphanAsync(
                     tenantId,
                     artifact.Id,
                     targetDestination.StorageConnectionId ?? Guid.Empty,
@@ -567,7 +585,7 @@ public sealed partial class ReplicaRepairService(
         if (!deleted)
         {
             logger.LogWarning("Target key {Key} deletion unconfirmed after repair failure. Recording durable orphan replica.", targetKey);
-            await store.RecordRepairOrphanAsync(
+            await ops.RecordRepairOrphanAsync(
                 tenantId,
                 artifact.Id,
                 targetDestination.StorageConnectionId ?? Guid.Empty,

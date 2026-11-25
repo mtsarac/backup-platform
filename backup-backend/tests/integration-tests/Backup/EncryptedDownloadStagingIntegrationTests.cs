@@ -22,7 +22,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var bytes = await scenario.EncryptAsync(outcome == "source-hash" ? new string('a', 64) : null);
         if (outcome == "ciphertext") bytes[^1] ^= 1;
         using var scope = scenario.World.Factory.Services.CreateScope();
-        var keys = scope.ServiceProvider.GetRequiredService<ITenantWrapKeyStore>();
+        var keys = TenantWrapKeyStoreFacade.From(scope.ServiceProvider);
         var resolver = new FakeResolver();
         var provider = (InMemoryStorageProvider)resolver.Resolve(scenario.Backup.Backup.Setup.Tenant.Id, "central", "central")!;
         provider.Storage[scenario.Accepted.Key] = bytes;

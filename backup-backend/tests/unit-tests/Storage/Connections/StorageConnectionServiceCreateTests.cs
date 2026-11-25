@@ -143,7 +143,7 @@ public sealed class StorageConnectionServiceCreateTests
         var planned = new StorageProviderDescriptor("future", "Future", StorageProviderAvailability.Planned, null, null, [], [StorageOwnership.TenantManaged],
             tenantCreatable: true, platformCreatable: true, maxConnectionsPerTenant: null, [], [], StorageTestMode.None);
         var service = new StorageConnectionService(
-            _h.Store, new StorageProviderCatalog([planned]), _h.Secrets, [], _h.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<StorageConnectionService>.Instance);
+            _h.Store, _h.Store, new StorageProviderCatalog([planned]), _h.Secrets, [], _h.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<StorageConnectionService>.Instance);
 
         var exception = await Assert.ThrowsAsync<InvalidStorageConnectionException>(() => service.CreateAsync(
             StorageScope.Platform, _h.Tenant, Command("future"), _h.Actor, CancellationToken.None));

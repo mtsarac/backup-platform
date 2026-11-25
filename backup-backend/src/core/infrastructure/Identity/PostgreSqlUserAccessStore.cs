@@ -12,14 +12,14 @@ public sealed class PostgreSqlUserAccessStore(DbContextOptions<PlatformDbContext
 {
     public async Task<UserProfile?> GetUserAsync(UserId userId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.Users.Where(user => user.Id == userId)
             .Select(user => new UserProfile(user.Id, user.DisplayName, user.Role)).SingleOrDefaultAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<TenantAccess>> ListTenantsAsync(UserId userId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (user is null) return [];
         if (user.Role == UserRole.PlatformAdmin)
@@ -38,7 +38,7 @@ public sealed class PostgreSqlUserAccessStore(DbContextOptions<PlatformDbContext
 
     public async Task<TenantAccess?> GetMembershipAsync(UserId userId, TenantId tenantId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (user is null) return null;
         if (user.Role == UserRole.PlatformAdmin)
@@ -53,7 +53,7 @@ public sealed class PostgreSqlUserAccessStore(DbContextOptions<PlatformDbContext
     }
     public async Task<bool> IsPlatformAdminAsync(UserId userId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = PlatformOperationsDbContext.Create(options);
         return await context.Users.AnyAsync(admin => admin.Id == userId && admin.Role == UserRole.PlatformAdmin, cancellationToken);
     }
 }

@@ -53,8 +53,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             await context.SaveChangesAsync();
         }
         var artifact = await fixture.CreatePlatformContext().BackupArtifacts.SingleAsync(a => a.TenantId == agent.TenantId && a.AttemptId == claim.Attempt.Id);
-        var store = new PostgreSqlReplicaRepairStore(World.Options());
-        var service = new ReplicaRepairService(store, null!, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
+        var store = new ReplicaRepairStoreFacade(World.Options());
+        var service = new ReplicaRepairService(store, store, null!, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
 
         var start = await service.StartRepairAsync(agent.TenantId, artifact.Id, new(StorageConnectionId: local.Id), null, default);
         Assert.True(start.Success, start.Message);
@@ -108,7 +108,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             ]), T0);
         var artifact = await fixture.CreatePlatformContext().BackupArtifacts.SingleAsync(a => a.TenantId == agent.TenantId && a.AttemptId == claim.Attempt.Id);
 
-        var start = await new ReplicaRepairService(new PostgreSqlReplicaRepairStore(World.Options()), null!, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance)
+        var start = await new ReplicaRepairService(new ReplicaRepairStoreFacade(World.Options()), new ReplicaRepairStoreFacade(World.Options()), null!, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance)
             .StartRepairAsync(agent.TenantId, artifact.Id, new(StorageConnectionId: local.Id), null, default);
 
         Assert.False(start.Success);

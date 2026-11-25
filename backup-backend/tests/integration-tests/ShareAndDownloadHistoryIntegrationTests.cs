@@ -355,7 +355,7 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         async Task<AuditHistoryPruneResult> PruneAsync(DateTimeOffset at)
         {
             await using var scope = scenario.World.Factory.Services.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<IBackupShareStore>().PruneHistoryAsync(at, default);
+            return await scope.ServiceProvider.GetRequiredService<IBackupSharePlatformStore>().PruneHistoryAsync(at, default);
         }
 
         await PruneAsync(now);
@@ -394,8 +394,8 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
         var now = scenario.Backup.Clock.GetUtcNow();
         await using var firstScope = scenario.World.Factory.Services.CreateAsyncScope();
         await using var secondScope = second.Factory.Services.CreateAsyncScope();
-        var firstStore = firstScope.ServiceProvider.GetRequiredService<IBackupShareStore>();
-        var secondStore = secondScope.ServiceProvider.GetRequiredService<IBackupShareStore>();
+        var firstStore = firstScope.ServiceProvider.GetRequiredService<IBackupSharePlatformStore>();
+        var secondStore = secondScope.ServiceProvider.GetRequiredService<IBackupSharePlatformStore>();
         await firstStore.SaveAuditRetentionAsync(30, actor, now, default);
         var old = AuditEvent.Record(now.AddDays(-45), actor, AuditActorKind.PlatformAdmin, "test.lock_marker", null, "marker", "old", new Dictionary<string, object?>());
         await using (var seed = fixture.CreatePlatformContext())
@@ -438,14 +438,14 @@ public sealed class ShareAndDownloadHistoryIntegrationTests(PostgreSqlFixture fi
             .AddInterceptors(new BackupPlatform.Infrastructure.Persistence.AuditSigningInterceptor("prune-test-key", key.ExportPkcs8PrivateKeyPem())).Options;
         var old = AuditEvent.Record(now.AddDays(-400), actor, AuditActorKind.PlatformAdmin, "test.sealed_marker", null, "marker", "old", new Dictionary<string, object?>());
         var kept = AuditEvent.Record(now.AddDays(-5), actor, AuditActorKind.PlatformAdmin, "test.sealed_marker", null, "marker", "kept", new Dictionary<string, object?> { ["value"] = 1.5 });
-        await using (var writer = BackupPlatform.Infrastructure.Persistence.PlatformDbContext.CreateForPlatformOperations(signing))
+        await using (var writer = BackupPlatform.Infrastructure.Persistence.PlatformOperationsDbContext.Create(signing))
         {
             writer.AuditEvents.AddRange(old, kept);
             await writer.SaveChangesAsync();
         }
         await using (var scope = scenario.World.Factory.Services.CreateAsyncScope())
         {
-            var store = scope.ServiceProvider.GetRequiredService<IBackupShareStore>();
+            var store = scope.ServiceProvider.GetRequiredService<IBackupSharePlatformStore>();
             await store.SaveAuditRetentionAsync(365, actor, now, default);
             Assert.True((await store.PruneHistoryAsync(now, default)).AuditEventsRemoved >= 1);
         }

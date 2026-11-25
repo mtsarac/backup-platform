@@ -77,7 +77,7 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
         }
         var before = await world.ReplicaAsync(backup.ReplicaId);
         var target = action is AuditActions.BackupReplicaPhysicalDeleteCompleted or AuditActions.BackupReplicaPhysicalDeleteFailed ? backup.ReplicaId : backup.ArtifactId;
-        var failing = new PostgreSqlBackupRetentionStore(FailingOptions(fixture, action, target.ToString("D")));
+        var failing = new RetentionStoreFacade(FailingOptions(fixture, action, target.ToString("D")));
         await Assert.ThrowsAsync<AuditCommitFailure>(async () =>
         {
             switch (action)
@@ -171,11 +171,11 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
         var connectionId = (await world.ReplicaAsync(backup.ReplicaId)).StorageConnectionId;
         var action = quarantine ? AuditActions.BackupReplicaQuarantined : AuditActions.BackupReplicaOrphanRecorded;
         var key = $"secret/repair-target-{Guid.NewGuid():N}.bak";
-        var failing = new PostgreSqlReplicaRepairStore(FailingOptions(fixture, action));
+        var failing = new ReplicaRepairStoreFacade(FailingOptions(fixture, action));
         await Assert.ThrowsAsync<AuditCommitFailure>(() => failing.RecordRepairOrphanAsync(backup.TenantId, backup.ArtifactId, connectionId, "local", "local", key, 20, new string('a', 64), Now, default, quarantine));
         await using (var rolledBack = fixture.CreatePlatformContext())
             Assert.False(await rolledBack.BackupReplicas.AnyAsync(r => r.TenantId == backup.TenantId && r.Key == key));
-        var store = new PostgreSqlReplicaRepairStore(fixture.Options);
+        var store = new ReplicaRepairStoreFacade(fixture.Options);
         await store.RecordRepairOrphanAsync(TenantId.New(), backup.ArtifactId, connectionId, "local", "local", key, 20, new string('a', 64), Now, default, quarantine);
         await store.RecordRepairOrphanAsync(backup.TenantId, backup.ArtifactId, connectionId, "local", "local", key, 20, new string('a', 64), Now, default, quarantine);
         await store.RecordRepairOrphanAsync(backup.TenantId, backup.ArtifactId, connectionId, "local", "local", key, 20, new string('a', 64), Now.AddMinutes(1), default, quarantine);
@@ -286,7 +286,7 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
             serviceWorld.Place(key, modified: Now.AddDays(-2));
             Assert.True(ManagedBackupLayout.TryParseStorageKey(key, out var parsed));
 
-            var failingStore = new PostgreSqlBackupRetentionStore(FailingOptions(serviceWorld.Harness.Database, AuditActions.BackupStorageOrphanDeleteCompleted));
+            var failingStore = new RetentionStoreFacade(FailingOptions(serviceWorld.Harness.Database, AuditActions.BackupStorageOrphanDeleteCompleted));
             var claim = await failingStore.BeginSweptDeletionAsync("local", "local:default", null, parsed!, key, clock.GetUtcNow(), TimeSpan.FromMinutes(10), default);
             Assert.NotNull(claim);
 
@@ -331,10 +331,10 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
             setup.ReplicaRepairOperations.Add(operation);
             await setup.SaveChangesAsync();
         }
-        var store = new PostgreSqlReplicaRepairStore(fixture.Options);
+        var store = new ReplicaRepairStoreFacade(fixture.Options);
         Assert.False(await store.FailTargetConflictAsync(TenantId.New(), operation.Id, token, Now, default));
         Assert.False(await store.FailTargetConflictAsync(backup.TenantId, operation.Id, Guid.NewGuid(), Now, default));
-        var failing = new PostgreSqlReplicaRepairStore(FailingOptions(fixture, AuditActions.BackupReplicaQuarantined));
+        var failing = new ReplicaRepairStoreFacade(FailingOptions(fixture, AuditActions.BackupReplicaQuarantined));
         await Assert.ThrowsAsync<AuditCommitFailure>(() => failing.FailTargetConflictAsync(backup.TenantId, operation.Id, token, Now, default));
         await using (var rolledBack = fixture.CreatePlatformContext())
         {
@@ -370,11 +370,11 @@ public sealed class RetentionAuditIntegrationTests(PostgreSqlFixture fixture) : 
             await setup.SaveChangesAsync();
         }
         var action = owned ? AuditActions.BackupReplicaOrphanRecorded : AuditActions.BackupReplicaQuarantined;
-        var failing = new PostgreSqlReplicaRepairStore(FailingOptions(fixture, action));
+        var failing = new ReplicaRepairStoreFacade(FailingOptions(fixture, action));
         await Assert.ThrowsAsync<AuditCommitFailure>(() => failing.RecoverStaleRepairsAsync(Now, TimeSpan.FromMinutes(1), default));
         await using (var rolledBack = fixture.CreatePlatformContext())
             Assert.False(await rolledBack.BackupReplicas.AnyAsync(r => r.Key == key));
-        var store = new PostgreSqlReplicaRepairStore(fixture.Options);
+        var store = new ReplicaRepairStoreFacade(fixture.Options);
         await store.RecoverStaleRepairsAsync(Now, TimeSpan.FromMinutes(1), default);
         await store.RecoverStaleRepairsAsync(Now, TimeSpan.FromMinutes(1), default);
         await using var context = fixture.CreatePlatformContext();

@@ -111,6 +111,7 @@ public static class SecurityServiceCollectionExtensions
         AddAgentSecurity(services);
         AddAgentConnectivity(services);
         services.AddScoped<IDiscoveryStore, PostgreSqlDiscoveryStore>();
+        services.AddScoped<IDiscoveryPlatformStore, PostgreSqlDiscoveryPlatformStore>();
         services.AddSingleton<BackupPlatform.Application.Backups.IJobCredentialClaims, BackupPlatform.Infrastructure.Backups.PostgreSqlJobCredentialClaims>();
         services.AddSingleton<BackupPlatform.Application.Backups.IIdempotencyFingerprintKey, BackupPlatform.Api.Databases.IdempotencyFingerprintKey>();
         services.AddSingleton<BackupPlatform.Api.Databases.DatabaseCredentialVault>();
@@ -124,14 +125,19 @@ public static class SecurityServiceCollectionExtensions
             return options;
         });
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
+        services.AddScoped<IBackupRunPlatformStore, PostgreSqlBackupRunPlatformStore>();
         services.AddScoped<IBackupUiStore, PostgreSqlBackupUiStore>();
         services.AddScoped<IBackupHealthStore, PostgreSqlBackupHealthStore>();
+        services.AddScoped<IBackupHealthPlatformStore, PostgreSqlBackupHealthPlatformStore>();
         services.AddScoped<BackupHealthEvaluator>();
         services.AddScoped<ITenantWrapKeyStore, PostgreSqlTenantWrapKeyStore>();
+        services.AddScoped<ITenantWrapKeyPlatformStore, PostgreSqlTenantWrapKeyPlatformStore>();
         services.AddScoped<ITenantRecoveryKeyStore, PostgreSqlTenantRecoveryKeyStore>();
+        services.AddScoped<ITenantRecoveryKeyPlatformStore, PostgreSqlTenantRecoveryKeyPlatformStore>();
         services.TryAddSingleton(provider => BackupPlatform.Api.Backups.ArtifactRecoveryConfiguration.Load(provider.GetRequiredService<IConfiguration>()));
         services.AddScoped<BackupOrchestrator>();
         services.AddScoped<IUploadBandwidthStore, PostgreSqlUploadBandwidthStore>();
+        services.AddScoped<IUploadBandwidthPlatformStore, PostgreSqlUploadBandwidthPlatformStore>();
         services.AddScoped<UploadBandwidthService>();
         services.AddHostedService<StaleBackupDetector>();
         services.AddSingleton<BackupRetryWorker>();
@@ -150,6 +156,7 @@ public static class SecurityServiceCollectionExtensions
         });
         services.TryAddSingleton<ActiveDownloadRegistry>();
         services.AddScoped<IDownloadStore, PostgreSqlDownloadStore>();
+        services.AddScoped<IDownloadPlatformStore, PostgreSqlDownloadPlatformStore>();
         services.AddScoped<DownloadService>();
         services.AddScoped<DownloadStreamer>();
         services.AddHostedService<DownloadExpiryWorker>();
@@ -211,6 +218,7 @@ public static class SecurityServiceCollectionExtensions
         services.TryAddSingleton<ISecretStore, DataProtectionSecretStore>();
         services.TryAddSingleton<ISecretProvider>(provider => provider.GetRequiredService<ISecretStore>());
         services.AddScoped<IStorageConnectionStore, PostgreSqlStorageConnectionStore>();
+        services.AddScoped<IStorageConnectionPlatformStore, PostgreSqlStorageConnectionPlatformStore>();
         services.AddScoped<IStorageConnectionTester>(provider => new CentralConnectionTester(provider.GetRequiredService<IBackupStorageResolver>()));
         services.AddScoped<IStorageConnectionTester>(_ => new AgentSideConnectionTester(StorageProviderTypes.Local));
         services.AddScoped<IStorageConnectionTester>(provider =>
@@ -353,16 +361,20 @@ public static class SecurityServiceCollectionExtensions
         services.TryAddSingleton(provider => new BackupNodeIdentity(provider.GetRequiredService<BackupRetentionOptions>().ResolveNodeId()));
         services.TryAddSingleton<IBackupStorageResolver, ConfiguredBackupStorageResolver>();
         services.AddScoped<IBackupRetentionStore, PostgreSqlBackupRetentionStore>();
+        services.AddScoped<IBackupRetentionPlatformStore, PostgreSqlBackupRetentionPlatformStore>();
         services.AddScoped<IAgentReplicaDeletionStore, PostgreSqlAgentReplicaDeletionStore>();
         services.AddScoped<AgentReplicaDeletionService>();
         services.AddScoped<BackupRetentionService>();
         services.AddScoped<BackupStorageSweeper>();
         services.AddScoped<BackupArtifactService>();
         services.AddScoped<IBackupShareStore, PostgreSqlBackupShareStore>();
+        services.AddScoped<IBackupSharePlatformStore, PostgreSqlBackupSharePlatformStore>();
         services.AddScoped<BackupShareService>();
         services.AddSingleton<AuditAndShareHistoryPruningWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<AuditAndShareHistoryPruningWorker>());
         services.AddScoped<IReplicaRepairStore, PostgreSqlReplicaRepairStore>();
+        services.AddScoped<IReplicaRepairPlatformStore, PostgreSqlReplicaRepairPlatformStore>();
+        services.AddScoped<IReplicaRepairPlatformStore, PostgreSqlReplicaRepairPlatformStore>();
         services.AddScoped<IReplicaMissingReporter, PostgreSqlReplicaMissingReporter>();
         services.AddScoped<ReplicaRepairService>();
         services.AddSingleton<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>();
@@ -381,6 +393,7 @@ public static class SecurityServiceCollectionExtensions
             return options;
         });
         services.AddScoped<IRestoreStore, PostgreSqlRestoreStore>();
+        services.AddScoped<IRestorePlatformStore, PostgreSqlRestorePlatformStore>();
         services.AddScoped<RestoreService>();
         services.AddScoped<RestoreTargetsReader>();
         services.AddSingleton<StaleRestoreDetector>();

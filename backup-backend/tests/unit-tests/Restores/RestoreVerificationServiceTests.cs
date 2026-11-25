@@ -23,7 +23,7 @@ public sealed class RestoreVerificationServiceTests
         store.OnCreate = command => new RestoreCreateResult(RestoreCreateOutcome.Created, new RestoreOperation(Guid.NewGuid(), command.TenantId, command.ArtifactId, Guid.NewGuid(),
             RestoreSourceAccess.CentralStorage, command.AgentId, command.Target, command.DatabaseName, command.Mode, command.OverwriteConfirmed, command.Options, command.IdempotencyKey,
             command.RequestFingerprint, command.RequestedByUserId, command.Now, command.Purpose));
-        return (new RestoreService(store, options ?? new RestoreExecutionOptions(), new RestoreClock(Now)), store);
+        return (new RestoreService(store, store, options ?? new RestoreExecutionOptions(), new RestoreClock(Now)), store);
     }
 
     [Fact]
