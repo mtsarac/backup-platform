@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <RestorePackagesWithLockFile Condition="'$(AgentPlatform)' != 'Windows' and '$(SelfContained)' != 'true' and '$(RuntimeIdentifier)' == '' and '$(RuntimeIdentifiers)' == ''">true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(RestorePackagesWithLockFile)' != 'true'">$(BaseIntermediateOutputPath)packages.transient.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+</Project>

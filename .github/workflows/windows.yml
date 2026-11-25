@@ -34,7 +34,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/Directory.Build.targets', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj', 'backup-backend/**/packages.lock.json') }}
           restore-keys: nuget-${{ runner.os }}-
       - name: Restore
         run: dotnet restore BackupPlatform.sln
