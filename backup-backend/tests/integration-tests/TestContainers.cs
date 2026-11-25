@@ -145,7 +145,7 @@ internal static class TestContainers
             .WithNetwork(Network)
             .WithPortBinding(22, assignRandomHostPort: true)
             .WithCommand($"{SftpUser}:{SftpPassword}:::upload")
-            .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes("#!/bin/sh\necho 'PerSourcePenalties no' >> /etc/ssh/sshd_config\n"), "/etc/sftp.d/10-no-penalties.sh",
+            .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes("#!/bin/sh\necho 'PerSourcePenalties no' >> /etc/ssh/sshd_config\n"), FilePath.Of("/etc/sftp.d/10-no-penalties.sh"),
                 fileMode: UnixFileModes.UserRead | UnixFileModes.UserWrite | UnixFileModes.UserExecute | UnixFileModes.GroupRead | UnixFileModes.OtherRead) // the entrypoint only runs executable scripts
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Server listening on"))
             .Build();
