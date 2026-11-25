@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Lists;
 using BackupPlatform.Domain.Backups;
@@ -9,17 +10,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Backups;
 
-public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> options) : IBackupUiStore
+public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> options, ITenantContext tenant) : IBackupUiStore
 {
     public async Task<IReadOnlyList<BackupJobView>> ListJobsAsync(TenantId tenantId, DateTimeOffset now, bool includeArchived, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = new PlatformDbContext(options, tenant);
         return await ReadJobsAsync(context, tenantId, null, includeArchived, now, cancellationToken);
     }
 
     public async Task<BackupJobView?> GetJobAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = new PlatformDbContext(options, tenant);
         return (await ReadJobsAsync(context, tenantId, jobId, true, now, cancellationToken)).SingleOrDefault();
     }
 
@@ -51,7 +52,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
 
     public async Task<BackupRunPage> ListRunsAsync(TenantId tenantId, BackupRunQuery filter, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = new PlatformDbContext(options, tenant);
         var rows = Filter(context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId), filter).Select(run => new RunRow
         {
             Id = run.Id, CreatedAt = run.CreatedAt, StartedAt = run.StartedAt, Status = run.Status, Database = run.Configuration.Database,
@@ -73,14 +74,14 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
 
     public async Task<BackupRunView?> GetRunAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = new PlatformDbContext(options, tenant);
         var run = await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().SingleOrDefaultAsync(run => run.TenantId == tenantId && run.Id == runId, cancellationToken);
         return run is null ? null : (await RunViewsAsync(context, tenantId, [run], cancellationToken)).Single();
     }
 
     public async Task<BackupDashboardView> GetDashboardAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = new PlatformDbContext(options, tenant);
         // A revoked computer's jobs no longer protect anything: they stay in the job list, not in the dashboard numbers.
         var jobs = (await ReadJobsAsync(context, tenantId, null, false, now, cancellationToken)).Where(job => !job.AgentRevoked).ToList();
         var runs = context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId);
@@ -117,7 +118,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
     // shortcut: one narrow row per run of the last ~16 days is read and bucketed in memory (a zone's midnights cannot be cut in SQL portably); push it into SQL if a tenant's run count makes this heavy.
     public async Task<BackupHealthTimelineView> GetHealthTimelineAsync(TenantId tenantId, TimeZoneInfo zone, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var context = new PlatformDbContext(options, tenant);
         var jobs = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.ArchivedAt == null
                 && !context.Agents.Any(agent => agent.TenantId == tenantId && agent.Id == job.AgentId && agent.Status == AgentStatus.Revoked))
             .OrderBy(job => job.Name).ThenBy(job => job.Id).Select(job => new HealthTimelineJobRow(job.Id, job.Name, job.CreatedAt)).ToListAsync(cancellationToken);
