@@ -17,7 +17,7 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
-  # Fast CI includes integration tests; Windows validation and scheduled E2E are separate workflows.
+  # Fast CI includes integration tests; Windows validation and E2E remain separate.
   ci:
     name: Fast CI
     uses: ./.github/workflows/ci.yml

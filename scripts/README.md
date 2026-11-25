@@ -62,8 +62,11 @@ External stores receive **Data Protection ciphertext**, not plaintext credential
 ## Full-system e2e (`scripts/e2e`)
 
 GitHub Fast CI runs the integration project and E2E typecheck/lint on pull requests.
-The separate E2E workflow runs the VM-independent Playwright S1, S2 and S5 slices
-nightly and on manual dispatch; VM-dependent S3/S4 remain lab-only.
+The VM-independent Playwright slices are not yet scheduled: S2's ordinary tests
+expect SMS/SMB disabled and email delivery off, while its real-sink stack enables
+them; S5 real-download tests have ambiguous button selectors and replica repair
+does not reach its expected success state. These failures must be resolved before
+the S1/S2/S5 suite can provide a reliable nightly gate.
 
 A Python scenario harness for a lab with the real stack and agents: Linux and Windows agents, MinIO (HTTPS), Samba, SFTP, PostgreSQL and SQL Server sources. It enrolls agents, creates tenants, users, plans and storage connections, then runs backup, restore and compare matrices plus pause/resume, kill, outage, quota, revoke, authorization, notification and UI scenarios. Results go to `docs/test-environment/results.jsonl` (git-ignored, with the lab state and credentials).
 
