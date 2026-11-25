@@ -36,7 +36,6 @@ for (const engine of engines) {
   })
 
   test(`manual ${engine} job form accepts a database login`, async ({ page }) => {
-    test.fail(true, engine === 'postgresql' ? 'https://github.com/mtsarac/backup-platform/issues/256' : 'https://github.com/mtsarac/backup-platform/issues/259')
     test.setTimeout(240_000)
     const [active, credential] = await Promise.all([activeAgent(), dbCredential(engine)])
     const database = `e2es4_manual_${engine}_${Date.now()}`
@@ -51,6 +50,8 @@ for (const engine of engines) {
       await page.getByRole('radio', { name: engine === 'postgresql' ? 'PostgreSQL' : 'Microsoft SQL Server' }).check()
       await page.getByRole('textbox', { name: engine === 'postgresql' ? 'PostgreSQL ana bilgisayarı' : /SQL Server ana bilgisayarı/ }).fill('127.0.0.1')
       await page.getByLabel('Veritabanı', { exact: true }).fill(database)
+      if (engine === 'mssql') await page.getByRole('radio', { name: 'SQL Server oturumu (kullanıcı adı ve parola)' }).check()
+      await page.getByRole('checkbox', { name: 'Bağlantıyı şifrele' }).uncheck()
       await page.getByLabel('Veritabanı kullanıcı adı').fill(credential.user, { timeout: 5_000 })
       await page.getByLabel('Veritabanı parolası').fill(credential.password)
       await page.getByRole('button', { name: 'İleri' }).click()

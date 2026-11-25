@@ -49,7 +49,6 @@ test('backup source wizard validates Windows file and database fields', async ({
 })
 
 test('file backup wizard explains snapshot sources when VSS is enabled', async ({ page }) => {
-  test.fixme(true, "windowsVss stack'te kapalı")
   await page.goto('/login')
   await page.locator('input[autocomplete="username"], input[type="text"]').first().fill(account.login)
   await page.locator('input[type="password"]').fill(account.password)

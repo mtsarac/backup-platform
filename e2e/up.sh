@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f .env.e2e ] || { cp .env.example .env.e2e; sed -i 's/^POSTGRES_PORT=.*/POSTGRES_PORT=5433/' .env.e2e; }  # 5432 is commonly taken on dev laptops
 while IFS="=" read -r k v; do [[ "$k" =~ ^[A-Z_]+$ ]] && export "$k=$v"; done < .env.e2e  # not `source`: values may hold spaces
+export E2E_FEATURE_WINDOWSVSS=true
 DC="docker compose -p bpe2e --env-file .env.e2e"
 $DC up -d --build ${BUILD_FLAGS:-}
 

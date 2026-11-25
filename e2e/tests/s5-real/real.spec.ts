@@ -14,7 +14,7 @@ const runUrl = (id: string) => tenantUrl(w.t, `/backup-runs/${id}`)
 async function openDownload(page: Page, runId: string) {
   await page.goto(runUrl(runId))
   await page.getByText('More', { exact: true }).click()
-  await page.getByRole('button', { name: 'Download', exact: true }).click()
+  await page.getByRole('tabpanel', { name: 'Summary' }).getByRole('button', { name: 'Download', exact: true }).click()
 }
 
 test.describe('download with SHA-256 check', () => {
@@ -64,9 +64,7 @@ test.describe('download integrity', () => {
     const a = await w.mk()
     for (const d of w.dests) removeObject(d.bucket, objectKey(w.t, d, a.key))
     await signIn(page, w.t.account)
-    await page.goto(runUrl(a.runId))
-    await page.getByText('More', { exact: true }).click()
-    await page.getByRole('button', { name: 'Download', exact: true }).click()
+    await openDownload(page, a.runId)
     await expect(page.getByText(/Download unavailable|No verified replicas/i).first()).toBeVisible()
   })
 })

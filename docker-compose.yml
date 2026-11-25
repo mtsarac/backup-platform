@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Features__windowsVss: ${E2E_FEATURE_WINDOWSVSS:-false}
       BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform_dev;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
       AgentDistribution__PackagesDirectory: /app/agent-dist
       AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:-192.168.122.1}:${API_PORT:-5252}
