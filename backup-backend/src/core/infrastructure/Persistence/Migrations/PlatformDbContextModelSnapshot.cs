@@ -1988,7 +1988,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferScheduleWindow", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<long>("BytesPerSecond")

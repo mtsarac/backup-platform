@@ -5,6 +5,11 @@ import type { DiscoveryAgentStatus, DiscoveryDatabase, DiscoveryInstanceSummary 
 
 export const DISCOVERY_CAPABILITY = 'discovery.database-inventory'
 export const SCAN_POLL_MS = 3000
+/** The backend refuses a manual rescan this soon after the last one (5 s), with a margin for clock skew. */
+const RESCAN_COOLDOWN_MS = 10_000
+/** An automatic rescan on screen load is pointless (and a logged 429) while the previous scan is still queued, running or just finished. */
+export const isRescanCoolingDown = (status: Pick<DiscoveryAgentStatus, 'scanState' | 'lastScanAt'> | undefined) =>
+  Boolean(status && (status.scanState !== 'Idle' || (status.lastScanAt && Date.now() - Date.parse(status.lastScanAt) < RESCAN_COOLDOWN_MS)))
 export const sourceLabels: Record<string, string> = { get Service() { return tx("Servis") }, get Listener() { return tx("Dinleyici (port)") }, Docker: 'Docker' }
 /** Reason code: "encrypt" is on but the PostgreSQL server offers no (verifiable) TLS. */
 export const TLS_UNAVAILABLE = 'server_tls_unavailable'

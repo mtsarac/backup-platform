@@ -4,7 +4,7 @@ import { getAgents } from '@/features/agents/api'
 import { agentQueryKeys } from '@/features/agents/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { getDiscoveryAgents, getDiscoveryInstance, getDiscoveryInstances, rescanDiscoveryAgent, saveDiscoveryCredential, verifyDiscoveryInstance } from './api'
-import { isScanActive, SCAN_POLL_MS } from './status'
+import { isRescanCoolingDown, isScanActive, SCAN_POLL_MS } from './status'
 import type { DiscoveryAgentStatus, DiscoveryCredentialInput, DiscoveryInstanceFilters } from './types'
 
 export const discoveryKeys = {
@@ -69,6 +69,18 @@ export function useRescanAgent() {
   const { tenantId } = useTenant()
   const invalidate = useInvalidateDiscovery()
   return useMutation({ mutationFn: (agentId: string) => rescanDiscoveryAgent(tenantId, agentId), onSuccess: invalidate, onError: invalidate })
+}
+/** One automatic scan per computer when a screen opens, once its scan status is known and only if no scan is queued or just done; `deciding` stays true until then. */
+export function useAutoRescan(agentId: string, enabled: boolean, statuses: DiscoveryAgentStatus[] | undefined) {
+  const rescan = useRescanAgent()
+  const started = useRef('')
+  const skip = isRescanCoolingDown(statuses?.find(status => status.agentId === agentId))
+  useEffect(() => {
+    if (!enabled || !agentId || !statuses || started.current === agentId) return
+    started.current = agentId
+    if (!skip) rescan.mutate(agentId)
+  }, [enabled, agentId, statuses, skip]) // oxlint-disable-line react-hooks/exhaustive-deps -- rescan is a fresh object per render
+  return { rescan, deciding: enabled && agentId !== '' && (!statuses || rescan.isPending || (rescan.isIdle && !skip)) }
 }
 export function useVerifyInstance() {
   const { tenantId } = useTenant()

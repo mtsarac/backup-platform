@@ -797,6 +797,8 @@ public static class AuthenticationEndpoints
                     Results.Json(new { id = credential.Id, name = credential.Name, createdAt = credential.CreatedAt, recoveryCodes = result.RecoveryCodes ?? [] }, statusCode: StatusCodes.Status201Created),
                 PasskeyManagementStatus.InvalidPassword =>
                     Results.BadRequest(new { error = "invalid_password", message = "Current password is incorrect." }),
+                PasskeyManagementStatus.Throttled =>
+                    Results.Json(new { error = "too_many_attempts", message = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests),
                 _ =>
                     Results.BadRequest(new { error = "authentication_failed", message = "Security verification failed or invalid challenge." })
             };
@@ -818,6 +820,7 @@ public static class AuthenticationEndpoints
         {
             PasskeyManagementStatus.Succeeded => Results.NoContent(),
             PasskeyManagementStatus.InvalidPassword => Results.BadRequest(new { error = "invalid_password", message = "Current password is incorrect." }),
+            PasskeyManagementStatus.Throttled => Results.Json(new { error = "too_many_attempts", message = "Too many failed attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests),
             _ => Results.BadRequest(new { error = "authentication_failed", message = "Security verification failed." })
         };
     }

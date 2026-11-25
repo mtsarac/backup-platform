@@ -18,6 +18,7 @@ public enum PasskeyManagementStatus
 {
     Succeeded,
     InvalidPassword,
+    Throttled,
     VerificationFailed
 }
 
@@ -437,7 +438,11 @@ public sealed class PasskeyService(
         if (credential is null) return PasskeyManagementStatus.InvalidPassword;
         var ip = context.Connection.RemoteIpAddress?.ToString();
         var account = credential.LoginIdentifier;
-        if (await throttle.RetryAfterAsync("login", account, ip, cancellationToken) is not null) return PasskeyManagementStatus.InvalidPassword;
+        if (await throttle.RetryAfterAsync("login", account, ip, cancellationToken) is { } wait)
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return PasskeyManagementStatus.Throttled;
+        }
         if (string.IsNullOrEmpty(password) || passwordHashService.Verify(userId, credential.PasswordHash, password) == PasswordVerificationResult.Failed)
         {
             await throttle.FailedAsync("login", account, ip, cancellationToken);

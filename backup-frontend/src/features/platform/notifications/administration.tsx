@@ -41,7 +41,7 @@ export function NotificationAdministration() {
 
   return <>
     <Section title={tx('Bildirim geçmişi saklama süresi')} description={tx('Bildirim geçmişi bu süreden sonra silinir; denetim geçmişi etkilenmez.')}>
-      <QueryState isPending={retention.isPending} error={retention.error}>{retention.data && <RetentionForm key={retention.data.retentionDays} retention={retention.data} />}</QueryState>
+      <QueryState isPending={retention.isPending} error={retention.error}>{retention.data && <RetentionForm retention={retention.data} />}</QueryState>
     </Section>
     <Section title={tx('Başarısız bildirim gönderimleri')}>
       <div className="space-y-4">

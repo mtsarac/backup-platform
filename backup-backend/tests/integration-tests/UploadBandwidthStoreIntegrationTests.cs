@@ -171,6 +171,20 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
     }
 
     [Fact]
+    public async Task Updating_a_profile_replaces_its_windows()
+    {
+        var tenant = await _kit.AddTenantAsync();
+        var morning = new TransferScheduleWindowDto(DayOfWeek.Monday, new TimeOnly(0, 0), new TimeOnly(12, 0), 200_000);
+        var profile = await Bandwidth.SaveProfileAsync(tenant, null, "before", "UTC", [morning], UserId.New(), T0, default);
+
+        var evening = new TransferScheduleWindowDto(DayOfWeek.Tuesday, new TimeOnly(18, 0), new TimeOnly(23, 0), 300_000);
+        var updated = await Bandwidth.SaveProfileAsync(tenant, profile.Id, "after", "UTC", [morning, evening], UserId.New(), T0, default);
+
+        Assert.Equal("after", updated.Name);
+        Assert.Equal(2, updated.Windows.Count);
+    }
+
+    [Fact]
     public async Task Two_uploads_of_one_tenant_never_hold_more_than_the_tenant_limit_and_converge_on_equal_slices()
     {
         var tenant = await _kit.AddTenantAsync();

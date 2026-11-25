@@ -175,11 +175,20 @@ describe('discovery page', () => {
     })
 
     it('scans the computer once and says it is scanning', async () => {
-      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Running' })] })
       mount(added)
       expect(await screen.findByText('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')).toBeInTheDocument()
       await waitFor(() => expect(rescanDiscoveryAgent).toHaveBeenCalledWith('tenant-a', 'agent-a'))
       expect(rescanDiscoveryAgent).toHaveBeenCalledTimes(1)
+    })
+    it.each([
+      ['queued', { scanState: 'Requested' as const }],
+      ['just finished', { lastScanAt: new Date().toISOString() }],
+    ])('does not request another scan on reload while the previous one is %s', async (_, status) => {
+      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus(status)] })
+      mount(added)
+      await waitFor(() => expect(getDiscoveryAgents).toHaveBeenCalled())
+      await screen.findByRole('region', { name: 'SQL Agent' })
+      expect(rescanDiscoveryAgent).not.toHaveBeenCalled()
     })
     it('waits for the computer to report what it can do before scanning', async () => {
       vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, capabilities: [], capabilitiesReportedAt: null }] as never)
@@ -244,14 +253,6 @@ describe('discovery page', () => {
       mount(added)
       await screen.findByText(/veritabanı bulunamadı; dosya yedeklemek/)
       expect(screen.getByRole('link', { name: 'İlk yedeği almaya devam et' })).toHaveAttribute('href', '/tenants/tenant-a/first-backup')
-    })
-    it('does not turn a throttled automatic scan into an error', async () => {
-      vi.mocked(rescanDiscoveryAgent).mockRejectedValue(new ApiError(429, { error: 'rescan_too_soon' }))
-      vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Running' })] })
-      mount(added)
-      expect(await screen.findByText('Bilgisayar eklendi. Veritabanları taranıyor, birkaç saniye sürer.')).toBeInTheDocument()
-      await waitFor(() => expect(rescanDiscoveryAgent).toHaveBeenCalled())
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
     it.each([
       ['a scan that is running', { items: [makeStatus({ scanState: 'Running', lastScanAt: null, lastOutcome: null })] }],

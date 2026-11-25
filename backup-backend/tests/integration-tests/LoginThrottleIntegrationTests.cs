@@ -45,6 +45,24 @@ public sealed class LoginThrottleIntegrationTests(PostgreSqlFixture fixture) : I
         Assert.Equal(LoginThrottle.MaxWait, await throttle.RetryAfterAsync(Kind, null, ip, default));
     }
 
+    [Theory]
+    [InlineData("totp")]
+    [InlineData("recovery")]
+    public async Task Second_factor_failures_are_per_account_so_a_shared_ip_never_locks_other_accounts(string kind)
+    {
+        var throttle = Instance(new MutableClock());
+        var ip = NewIp();
+        for (var i = 0; i < LoginThrottle.MaxFailures * 2; i++) await throttle.FailedAsync(kind, NewIdentifier(), ip, default);
+
+        Assert.Null(await throttle.RetryAfterAsync(kind, NewIdentifier(), ip, default));
+
+        var account = NewIdentifier();
+        for (var i = 0; i < LoginThrottle.MaxFailures; i++) await throttle.FailedAsync(kind, account, ip, default);
+        Assert.NotNull(await throttle.RetryAfterAsync(kind, account, ip, default));
+        await throttle.SucceededAsync(kind, account, ip, default);
+        Assert.Null(await throttle.RetryAfterAsync(kind, account, ip, default));
+    }
+
     [Fact]
     public async Task Ip_history_is_shared_across_accounts_and_account_history_across_ips()
     {

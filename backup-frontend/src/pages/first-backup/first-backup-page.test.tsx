@@ -80,12 +80,11 @@ describe('first backup flow', () => {
     expect(screen.getByRole('button', { name: 'İleri' })).toBeEnabled()
   })
 
-  it('treats a throttled automatic scan as a scan that was just requested: no notice, and it keeps waiting for that scan', async () => {
-    vi.mocked(rescanDiscoveryAgent).mockRejectedValue(new ApiError(429, { error: 'rescan_too_soon' }))
+  it('does not request a scan while one is already queued: no request, no notice, and it keeps waiting for that scan', async () => {
     vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus({ scanState: 'Requested' })] })
     mount()
     expect(await screen.findByText('Bilgisayar taranıyor…')).toBeVisible()
-    await waitFor(() => expect(rescanDiscoveryAgent).toHaveBeenCalledTimes(1))
+    expect(rescanDiscoveryAgent).not.toHaveBeenCalled()
     expect(screen.queryByText(/Az önce tarama istendi/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()

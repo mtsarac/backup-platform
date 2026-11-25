@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries } from '@tanstack/react-query'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -13,7 +13,7 @@ import { QueryState } from '@/components/data/query-state'
 import type { Agent } from '@/features/agents/types'
 import { getDiscoveryInstance } from '@/features/discovery/api'
 import { discoveryInstancePath } from '@/lib/routes'
-import { discoveryKeys, useDiscoveryAgents, useDiscoveryInstances, useRescanAgent } from '@/features/discovery/hooks'
+import { discoveryKeys, useDiscoveryAgents, useDiscoveryInstances, useAutoRescan } from '@/features/discovery/hooks'
 import { foldSearch } from '@/features/lists/fold-search'
 import { canCreateJob, databaseSelectable, engineLabels, isRescanThrottled, isScanActive, supportsDiscovery } from '@/features/discovery/status'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -32,20 +32,14 @@ export function DataStep({ agents, names, onNames, picked, onPicked, onNext }: {
   // Derived on every render: a computer whose capabilities arrive later must be adopted, not skipped.
   const computer = capable.find(agent => agent.agentId === chosen) ?? capable.find(agent => agent.connectivity === 'online') ?? capable[0]
   const agentId = computer?.agentId ?? ''
-  const rescan = useRescanAgent()
-  const scanned = useRef('')
-  useEffect(() => {
-    if (!agentId || scanned.current === agentId) return
-    scanned.current = agentId
-    rescan.mutate(agentId)
-  }, [agentId]) // oxlint-disable-line react-hooks/exhaustive-deps -- one automatic scan per computer, not per render
   // Only this computer's own scan counts: another computer (or a revoked one) with a pending scan must not keep this list waiting.
   const statuses = useDiscoveryAgents(Boolean(agentId), agentId)
+  const { rescan, deciding } = useAutoRescan(agentId, Boolean(agentId), statuses.data?.items)
   const online = computer?.connectivity === 'online'
   const queued = isScanActive(statuses.data?.items.filter(status => status.agentId === agentId))
   // An offline computer only queues the scan: say so instead of waiting for it.
-  const scanning = Boolean(agentId) && online && (rescan.isIdle || rescan.isPending || queued)
-  const waitingOffline = Boolean(agentId) && !online && (rescan.isIdle || rescan.isPending || queued)
+  const scanning = Boolean(agentId) && online && (deciding || queued)
+  const waitingOffline = Boolean(agentId) && !online && (deciding || queued)
   const instances = useDiscoveryInstances({ agentId }, Boolean(agentId))
   const usable = (instances.data?.items ?? []).filter(canCreateJob)
   const needLogin = (instances.data?.items ?? []).filter(item => item.presence === 'Present' && item.access !== 'Authenticated')

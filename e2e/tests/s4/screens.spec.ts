@@ -52,8 +52,7 @@ async function inspect(page: Page, path: string, errors: string[]) {
   expect.soft(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${path} horizontal overflow`).toBe(true)
   await page.reload()
   await expect.soft(page, `${path} after reload`).toHaveURL(new RegExp(`${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`))
-  // #288: the discovery screen's rescan answers 429 inside the cooldown; the console error surfaces on whichever screen is open then.
-  expect.soft(errors.filter(item => !/429|Too Many Requests/.test(item)), `${path} console and network`).toEqual([])
+  expect.soft(errors, `${path} console and network`).toEqual([])
   errors.length = 0
 }
 
