@@ -42,8 +42,7 @@ public static class AgentAdministrationEndpoints
         settings.MapGet("", GetAgentSettingsAsync);
         settings.MapPut("", UpdateAgentSettingsAsync);
 
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}")
-            .WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.MapGet("/agent-enrollment", GetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPut("/agent-enrollment", SetTenantPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);

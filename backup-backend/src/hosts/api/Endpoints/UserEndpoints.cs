@@ -11,9 +11,7 @@ public static class UserEndpoints
     {
         endpoints.MapGet("/api/me", GetCurrentUserAsync).RequireAuthorization();
         endpoints.MapGet("/api/me/tenants", GetTenantsAsync).RequireAuthorization();
-        endpoints.MapGet("/api/tenants/{tenantId:guid}/context", GetTenantContext)
-            .WithMetadata(new TenantScopedEndpoint())
-            .RequireAuthorization(AuthorizationPolicies.TenantAccess);
+        endpoints.MapTenantGroup().MapGet("/context", GetTenantContext);
         return endpoints;
     }
 

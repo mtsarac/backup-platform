@@ -25,7 +25,7 @@ public static class DiscoveryEndpoints
         agent.MapPost("", ClaimAsync).WithMetadata(new RequestSizeLimitAttribute(1024));
         agent.MapPut("{scanId:guid}", ReportAsync).WithMetadata(new RequestSizeLimitAttribute(DiscoveryProtocol.MaximumReportBytes));
 
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}/discovery").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup("/discovery");
         tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/instances", ListInstancesAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/instances/{instanceId:guid}", GetInstanceAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);

@@ -21,7 +21,7 @@ public static class RestoreEndpoints
 {
     public static IEndpointRouteBuilder MapRestoreEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore", StartAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-precheck", PrecheckAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-verifications", VerifyAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);

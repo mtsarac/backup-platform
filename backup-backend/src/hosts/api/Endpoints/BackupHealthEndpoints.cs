@@ -11,7 +11,7 @@ public static class BackupHealthEndpoints
 {
     public static IEndpointRouteBuilder MapBackupHealthEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.MapGet("/backup-jobs/{jobId:guid}/health", GetJobAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         tenant.MapGet("/observability/health-summary", GetSummaryAsync).RequireAuthorization(AuthorizationPolicies.TenantAccess);
         endpoints.MapGet("/api/v1/backups/jobs/{id:guid}/health", GetJobV1Async).RequireAuthorization();

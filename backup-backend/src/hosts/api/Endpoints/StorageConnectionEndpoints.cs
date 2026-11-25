@@ -41,7 +41,7 @@ public static class StorageConnectionEndpoints
 {
     public static IEndpointRouteBuilder MapStorageConnectionEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        var tenant = endpoints.MapTenantGroup();
         tenant.AddEndpointFilter(async (context, next) =>
         {
             var services = context.HttpContext.RequestServices;
