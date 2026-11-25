@@ -126,7 +126,7 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
         const page = await context.newPage();
         page.on('console', message => { if (message.text() === 'OFFER') console.log('OFFER'); });
         await page.goto(origin + '/api/auth/antiforgery');
-        const result = await page.evaluate(async ({ url, csrf }) => {
+        const result = await page.evaluate(async ({ url, statusUrl, csrf }) => {
         const peer = new RTCPeerConnection({ iceServers: [] });
         const channel = peer.createDataChannel('backup-download-v1', { ordered: true });
         channel.binaryType = 'arraybuffer';
@@ -184,9 +184,14 @@ public sealed class RealBrowserDirectDownloadSmokeTests(PostgreSqlFixture fixtur
         await peer.setRemoteDescription({ type: 'answer', sdp: answer });
 
         const result = await done;
+        for (let i = 0; i < 150; i++) {
+          const response = await fetch(statusUrl);
+          if (response.ok && (await response.json()).state === 'Completed') break;
+          await new Promise(r => setTimeout(r, 100));
+        }
         peer.close();
         return result;
-        }, { url: {{JsonSerializer.Serialize(downloadUrl)}}, csrf: {{JsonSerializer.Serialize(csrf)}} });
+        }, { url: {{JsonSerializer.Serialize(downloadUrl)}}, statusUrl: {{JsonSerializer.Serialize(scenario.ArtifactPath + $"/downloads/{sessionId}")}}, csrf: {{JsonSerializer.Serialize(csrf)}} });
         console.log(JSON.stringify(result));
         } finally { await browser.close(); }
         """;

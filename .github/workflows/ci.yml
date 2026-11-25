@@ -81,13 +81,13 @@ jobs:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
           restore-keys: nuget-${{ runner.os }}-
-      - name: Install PostgreSQL clients
+      - name: Install PostgreSQL tools
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-18 postgresql-client-16
+          sudo apt-get install -y postgresql-18 postgresql-client-16
       - name: Install browser dependencies
         working-directory: backup-frontend
         run: |
