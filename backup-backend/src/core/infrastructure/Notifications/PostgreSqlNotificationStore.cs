@@ -43,9 +43,13 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         if (!await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken)) return null;
         var channels = await context.NotificationChannels.AsNoTracking().Where(channel => channel.TenantId == tenantId)
             .OrderBy(channel => channel.NormalizedName).ThenBy(channel => channel.Id).ToListAsync(cancellationToken);
-        var records = new List<NotificationChannelRecord>(channels.Count);
-        foreach (var channel in channels) records.Add(new(channel, await LastAsync(context, tenantId, channel.Id, cancellationToken)));
-        return records;
+        // One round trip: a LATERAL top-1 per channel keeps each lookup on ix_notification_deliveries_channel, so a long history costs nothing extra.
+        var ids = channels.Select(channel => channel.Id).ToArray();
+        var latest = (await context.NotificationDeliveries.FromSqlInterpolated($"""
+            SELECT d.* FROM unnest({ids}) AS c(id)
+            CROSS JOIN LATERAL (SELECT *, xmin FROM notification_deliveries WHERE "TenantId" = {tenantId.Value} AND "ChannelId" = c.id ORDER BY "CreatedAt" DESC, "Id" DESC LIMIT 1) AS d
+            """).AsNoTracking().ToListAsync(cancellationToken)).ToDictionary(delivery => delivery.ChannelId);
+        return channels.Select(channel => new NotificationChannelRecord(channel, latest.TryGetValue(channel.Id, out var last) ? Summary(last) : null)).ToList();
     }
 
     public async Task<NotificationChannelRecord?> GetChannelAsync(TenantId tenantId, Guid id, CancellationToken cancellationToken)
@@ -59,8 +63,10 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
     {
         var last = await context.NotificationDeliveries.AsNoTracking().Where(delivery => delivery.TenantId == tenantId && delivery.ChannelId == channelId)
             .OrderByDescending(delivery => delivery.CreatedAt).ThenByDescending(delivery => delivery.Id).FirstOrDefaultAsync(cancellationToken);
-        return last is null ? null : new(last.Status, last.SentAt ?? last.CompletedAt ?? last.UpdatedAt, last.ErrorCode);
+        return last is null ? null : Summary(last);
     }
+
+    private static LastDeliverySummary Summary(NotificationDelivery last) => new(last.Status, last.SentAt ?? last.CompletedAt ?? last.UpdatedAt, last.ErrorCode);
 
     public async Task<ChannelMutationResult> CreateChannelAsync(NotificationChannel channel, NotificationActor actor, int maximumChannels, CancellationToken cancellationToken)
     {

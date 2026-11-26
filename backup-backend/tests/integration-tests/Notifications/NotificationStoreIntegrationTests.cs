@@ -55,6 +55,44 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Listing_channels_returns_each_channels_newest_delivery_and_nothing_across_tenants()
+    {
+        var tenant = await TenantAsync();
+        var other = await TenantAsync();
+        Assert.True((await _world.Transports().UpdateAsync(NotificationTransports.Sms, new TransportCommand(true, new Dictionary<string, string?>
+        {
+            ["provider"] = "generic-http", ["endpoint"] = "https://sms.example.com/send", ["authentication"] = "none"
+        }), _world.PlatformActor, default)).Succeeded);
+        var ids = new List<Guid>();
+        for (var i = 0; i < 3; i++)
+        {
+            var created = await _world.Admin().CreateChannelAsync(tenant, new CreateChannelCommand("sms", "Kanal " + i, "+1555123400" + i, null, null), _world.Actor, default);
+            ids.Add(created.Value!.Id);
+        }
+        var foreign = await _world.Admin().CreateChannelAsync(other, new CreateChannelCommand("sms", "Yabancı", "+15551234999", null, null), _world.Actor, default);
+        // Channel 0 gets three deliveries at different times, channel 1 one, channel 2 none.
+        foreach (var channel in new[] { ids[0], ids[0], ids[1], ids[0] })
+        {
+            _world.Clock.Advance(TimeSpan.FromMinutes(1));
+            Assert.True((await _world.Admin().RequestTestAsync(tenant, channel, _world.Actor, default)).Succeeded);
+        }
+        Assert.True((await _world.Admin().RequestTestAsync(other, foreign.Value!.Id, _world.Actor, default)).Succeeded);
+
+        var store = _world.Store();
+        var listed = (await store.ListChannelsAsync(tenant, default))!;
+        Assert.Equal(3, listed.Count);
+        foreach (var record in listed)
+        {
+            var single = (await store.GetChannelAsync(tenant, record.Channel.Id, default))!;
+            Assert.Equal(single.Last, record.Last);
+        }
+        Assert.NotNull(listed.Single(record => record.Channel.Id == ids[0]).Last);
+        Assert.NotNull(listed.Single(record => record.Channel.Id == ids[1]).Last);
+        Assert.Null(listed.Single(record => record.Channel.Id == ids[2]).Last);
+        Assert.DoesNotContain(listed, record => record.Channel.Id == foreign.Value!.Id);
+    }
+
+    [Fact]
     public async Task A_tenant_never_sees_or_changes_another_tenants_channels_or_history()
     {
         var a = await TenantAsync();
