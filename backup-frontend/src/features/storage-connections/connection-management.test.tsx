@@ -454,7 +454,7 @@ describe('Enablement, test, deletion and editing', () => {
     localStorage.setItem('bp_language', 'en')
     syncLanguagePreference()
     mount(detail('conn-local', 'manage'))
-    const button = await screen.findByRole('button', { name: /^Delete — / })
+    const button = await screen.findByRole('button', { name: /^Delete \u2014 / })
     expect(button).toHaveTextContent('Delete')
   })
 
