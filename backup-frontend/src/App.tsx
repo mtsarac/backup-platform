@@ -19,6 +19,7 @@ import { SessionsPage } from './pages/login/sessions-page'
 import { SecurityPage } from './pages/login/security-page'
 import { PasskeysPage } from './pages/login/passkeys-page'
 import { Button } from './components/ui/button'
+import { RouteError } from './components/layout/route-error'
 import { platformRoutes, tenantRoutes } from './route-tables'
 
 export function AppRoutes() {
@@ -50,7 +51,7 @@ export function AppRoutes() {
     </Route>
   </Routes>
 }
-const router = createBrowserRouter([{ path: '*', element: <AppRoutes /> }])
+const router = createBrowserRouter([{ path: '*', element: <AppRoutes />, errorElement: <RouteError /> }])
 
 export default function App() {
   useLanguage()
