@@ -59,7 +59,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:aac50ceef10391e78a899e3d2ccd00b
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh && mkdir -p /app/dp-keys /app/gdrive-staging && chown app:app /app/dp-keys /app/gdrive-staging
+RUN chmod +x /app/docker-entrypoint.sh && chmod -R a+rX /app && mkdir -p /app/dp-keys /app/gdrive-staging && chown app:app /app/dp-keys /app/gdrive-staging
 
 ENV ASPNETCORE_URLS=http://+:5000 \
     ASPNETCORE_ENVIRONMENT=Production \

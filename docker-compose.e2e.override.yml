@@ -24,7 +24,7 @@ services:
       # Central (platform-managed) storage: the share is also mounted on the Fedora agent (configure-agents.py), so agent and backend see one tree.
       - Backups__Storage__Central__RootDirectory=/central-share/central
       - Backups__Storage__Central__TenantScopes__${E2E_TENANT_A:-00000000000000000000000000000001}=e2e-a
-      # Agent mTLS needs Kestrel to terminate TLS itself (client certificates from a proxy are not trusted): a second, https endpoint on 5001 published as :5253.
+      # Internal https endpoint on 5001, not published: only the second-node and isolated lab helpers (api-replica.py, docker-compose.e2e-isolated.yml) publish it. Agents reach the API only through nginx on the single HTTPS port.
       - ASPNETCORE_URLS=http://+:5000;https://+:5001
       - ASPNETCORE_Kestrel__Certificates__Default__Path=/etc/e2e-tls/cert.pem
       - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/etc/e2e-tls/key.pem
@@ -33,8 +33,6 @@ services:
       - AGENT_MTLS_ISSUER_PASSWORD=${E2E_MTLS_ISSUER_PASSWORD:-unset}
       # Agent self-update: the public key release manifests must verify against (scripts/e2e/lab-selfupdate.py writes it; empty = no key trusted).
       - AgentUpdates__TrustedKeys__e2e=${E2E_UPDATE_PUBLIC_KEY:-}
-    ports:
-      - "${PUBLIC_HOST:-192.168.122.1}:5253:5001"
     volumes:
       - ./docs/test-environment/certs/ca-bundle.pem:/etc/ssl/e2e-ca-bundle.pem:ro
       - ./docs/test-environment/certs/mtls:/etc/e2e-mtls:ro

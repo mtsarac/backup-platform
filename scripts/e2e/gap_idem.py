@@ -1,4 +1,4 @@
-"""#54 job creation idempotency across both API nodes (:5252 and :5255)."""
+"""#54 job creation idempotency across both API nodes (:5173 and :5255)."""
 import concurrent.futures as cf, json, time, uuid
 import api, lib, gap_common as g, gap_job as gj, flows
 

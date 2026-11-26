@@ -1,0 +1,90 @@
+# Production: `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d`.
+# Required in .env.prod: POSTGRES_PASSWORD, PUBLIC_HOST (the public DNS name), TLS_CERT_FILE and TLS_KEY_FILE (host paths of a certificate chain and key for PUBLIC_HOST; the stack never generates one).
+# First administrator (once): `docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm bootstrap` with BOOTSTRAP_ADMIN_LOGIN and BOOTSTRAP_ADMIN_PASSWORD set.
+# Everything (UI, API, agent paths, agent hub, OAuth callback) is served on https://PUBLIC_HOST:443 by nginx. PostgreSQL and the API are not published on the host.
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: backup_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d backup_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backup-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      AgentDistribution__PackagesDirectory: /app/agent-dist
+      AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:?set PUBLIC_HOST in .env.prod}
+      # nginx terminates TLS; the API honours X-Forwarded-* and the forwarded agent client certificate only from this address.
+      Authentication__TrustedProxies__0: 172.29.0.10
+      Secrets__DataProtection__KeysDirectory: /app/dp-keys
+      GoogleDrive__ClientId: ${GOOGLE_CLIENT_ID:-}
+      GoogleDrive__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      GoogleDrive__RedirectUri: ${GOOGLE_REDIRECT_URI:-}
+      GoogleDrive__FrontendOrigin: https://${PUBLIC_HOST}
+      GoogleDrive__StagingDirectory: /app/gdrive-staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - api_dp_keys:/app/dp-keys
+      - api_gdrive_staging:/app/gdrive-staging
+
+  bootstrap:
+    profiles: ["bootstrap"]
+    build:
+      context: ./backup-backend
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      BACKUP_PLATFORM_BOOTSTRAP_LOGIN: ${BOOTSTRAP_ADMIN_LOGIN:-}
+      BACKUP_PLATFORM_BOOTSTRAP_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+      BACKUP_PLATFORM_BOOTSTRAP_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+    command: ["--bootstrap-user"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./backup-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST}
+    ports:
+      - "443:443"
+    depends_on:
+      - api
+    networks:
+      default:
+        ipv4_address: 172.29.0.10
+    volumes:
+      - ${TLS_CERT_FILE:?set TLS_CERT_FILE in .env.prod}:/etc/nginx/certs/cert.pem:ro
+      - ${TLS_KEY_FILE:?set TLS_KEY_FILE in .env.prod}:/etc/nginx/certs/key.pem:ro
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+
+volumes:
+  postgres_data:
+  api_dp_keys:
+  api_gdrive_staging:

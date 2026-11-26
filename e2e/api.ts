@@ -3,7 +3,7 @@ import { request, type APIRequestContext } from '@playwright/test'
 import type { Account } from './state'
 
 const host = process.env.PUBLIC_HOST ?? '192.168.122.1'
-export const apiUrl = process.env.E2E_API_URL ?? `https://${host}:5252`
+export const apiUrl = process.env.E2E_API_URL ?? process.env.E2E_BASE_URL ?? `https://${host}:5173`
 
 export class Api {
   private constructor(private ctx: APIRequestContext, readonly baseUrl = apiUrl) {}

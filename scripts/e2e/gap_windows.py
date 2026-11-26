@@ -264,9 +264,9 @@ def agt12(t):
     try:
         rc, before = winx(AGENT_STATE_PS)
         assert before.count("file|") > 50 and "service|Running" in before, before[:300]
-        dl = winx(r"""Invoke-WebRequest -UseBasicParsing -Uri 'https://192.168.122.1:5252/api/agent-dist/install.ps1' -OutFile C:\e2e\gap-win\install.ps1; (Get-FileHash C:\e2e\gap-win\install.ps1).Hash + ' ' + (Get-Item C:\e2e\gap-win\install.ps1).Length""") if winx(r"New-Item -ItemType Directory -Force C:\e2e\gap-win | Out-Null")[0] == 0 else None
+        dl = winx(r"""Invoke-WebRequest -UseBasicParsing -Uri 'https://192.168.122.1:5173/api/agent-dist/install.ps1' -OutFile C:\e2e\gap-win\install.ps1; (Get-FileHash C:\e2e\gap-win\install.ps1).Hash + ' ' + (Get-Item C:\e2e\gap-win\install.ps1).Length""") if winx(r"New-Item -ItemType Directory -Force C:\e2e\gap-win | Out-Null")[0] == 0 else None
         script_sha = dl[1].strip().splitlines()[-1]
-        rc, run = winx(f"powershell -NoProfile -ExecutionPolicy Bypass -File C:\\e2e\\gap-win\\install.ps1 -Server https://192.168.122.1:5252 -Token {secret} -AgentName gap-win-reinstall -NonInteractive; 'exit=' + $LASTEXITCODE")
+        rc, run = winx(f"powershell -NoProfile -ExecutionPolicy Bypass -File C:\\e2e\\gap-win\\install.ps1 -Server https://192.168.122.1:5173 -Token {secret} -AgentName gap-win-reinstall -NonInteractive; 'exit=' + $LASTEXITCODE")
         run = run.replace(secret, "<token>")
         rc, after = winx(AGENT_STATE_PS)
         assert before == after, "installer changed the installed state:\n" + "\n".join(l for l in set(before.splitlines()) ^ set(after.splitlines()))[:1500]

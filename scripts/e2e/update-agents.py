@@ -1,6 +1,6 @@
 """Replace the agent binaries on both VMs with the packages the (rebuilt) API serves; identity and configuration are kept."""
 import lib
-U = "https://192.168.122.1:5252/api/agent-dist/packages"
+U = "https://192.168.122.1:5173/api/agent-dist/packages"
 print(lib.fedora(f"""set -e
 sudo systemctl stop backup-agent
 cd /tmp && rm -rf agent-new && mkdir agent-new && curl -s {U}/linux-x64 | tar xz -C agent-new

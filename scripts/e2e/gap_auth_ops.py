@@ -285,7 +285,7 @@ def start_local_agent(tag, tenant_key, source, files_dir):
     (d / "identity").chmod(0o700)
     tok = subprocess.run(["python3", str(api.ROOT / "scripts/e2e/enroll.py"), tenant_key], capture_output=True, text=True, check=True).stdout.strip()
     env = {**os.environ, "SSL_CERT_FILE": str(api.ROOT / "docs/test-environment/certs/cert.pem")}
-    r = subprocess.run([f"{AGENT_BIN}/BackupPlatform.Agent.Host", "enroll", "--server", BASE.replace(":5252", ":5252"), "--token", tok, "--store-directory", str(d / "identity"), "--name", f"{PFX}{tag}", "--non-interactive"], capture_output=True, text=True, env=env)
+    r = subprocess.run([f"{AGENT_BIN}/BackupPlatform.Agent.Host", "enroll", "--server", BASE, "--token", tok, "--store-directory", str(d / "identity"), "--name", f"{PFX}{tag}", "--non-interactive"], capture_output=True, text=True, env=env)
     check(r.returncode == 0, f"enroll {r.stdout[-200:]}{r.stderr[-200:]}")
     unit = f"gap-authops-{tag}"
     props = {"Agent__Backend__BaseUri": BASE, "SSL_CERT_FILE": env["SSL_CERT_FILE"], "Agent__Backup__Staging__Mapping": "SameHost", "Agent__Backup__Staging__AgentDirectory": str(d / "staging"),

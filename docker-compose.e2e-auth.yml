@@ -20,7 +20,6 @@ services:
     ports: !override
       - "6273:443"
       - "6274:80"
-      - "6352:5252"
     networks:
       default:
         ipv4_address: 172.30.0.10

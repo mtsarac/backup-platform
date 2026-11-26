@@ -90,11 +90,13 @@ docker compose run --build --rm bootstrap
 docker compose up --build
 ```
 
-Open `https://localhost:5173` on the Docker host, or `https://<PUBLIC_HOST>:5173` from another machine (use `FRONTEND_PORT` if changed). The frontend generates a self-signed certificate; trust it only after verifying it for your environment.
+Open `https://localhost:5173` on the Docker host, or `https://<PUBLIC_HOST>:5173` from another machine (use `FRONTEND_PORT` if changed; it is the single port for the UI, API and agents). The frontend generates a self-signed certificate; trust it only after verifying it for your environment.
 
 The bootstrap command reads `BOOTSTRAP_ADMIN_LOGIN`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_NAME`, and `BOOTSTRAP_ADMIN_EMAIL` from `.env`. Use a unique password of at least 12 characters and protect `.env`; the example credentials are public. It refuses to run if a PlatformAdmin already exists and does not change existing credentials. The bootstrap service is not started by normal `docker compose up`.
 
-This Compose stack is for local development: port 5174 currently serves plaintext HTTP, not a redirect. Do not expose it or use it to sign in. The nginx proxy at `172.29.0.10` is trusted by the API on the dedicated Compose network; ensure the subnet does not overlap existing networks.
+**Production** uses `docker-compose.prod.yml` (see its header): `POSTGRES_PASSWORD`, `PUBLIC_HOST`, `TLS_CERT_FILE` and `TLS_KEY_FILE` are required, the environment is `Production`, PostgreSQL and the API are not published, and the TLS certificate is supplied from outside (nothing is generated). Everything, including agents (`/api/agent/`, `/api/agent-dist/`, `/hubs/agent`), the Google Drive OAuth callback (`https://<PUBLIC_HOST>/api/platform/google-drive/oauth/callback`, register it in the Google Cloud Console) and agent mTLS, is served by nginx on port 443. nginx requests an optional client certificate (`ssl_verify_client optional_no_ca`), deletes any client-supplied `X-Client-Cert` header on every request and rewrites it from the TLS handshake; the API accepts that header only from `Authentication:TrustedProxies` and validates the certificate against its own agent CA (`AgentSecurity:Mtls`).
+
+This Compose stack (`docker-compose.yml`) is for local development only: port 5174 currently serves plaintext HTTP, not a redirect. Do not expose it or use it to sign in. The nginx proxy at `172.29.0.10` is trusted by the API on the dedicated Compose network; ensure the subnet does not overlap existing networks.
 
 The API container applies EF Core migrations before it starts (up to 30 attempts, 2 seconds apart). If they never succeed it exits with an error instead of serving against an unmigrated database, and the Compose restart policy retries it. The `bootstrap` service uses the same image and entrypoint, so it migrates before it creates the admin. Only the nginx address `172.29.0.10` (subnet `172.29.0.0/24`) is listed in `Authentication__TrustedProxies__0`; the forwarded-header rules are in the [backend README](backup-backend/README.md#request-boundary).
 

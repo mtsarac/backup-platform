@@ -10,7 +10,7 @@ Not to be confused with `scripts/e2e/` (older Python API/CLI lab harness with Mi
 |---|---|
 | Compose project | `bpe2e` (containers `bp-postgres`, `bp-api`, `bp-frontend`) |
 | Frontend (UI) | `https://192.168.122.1:5173` (self-signed; `http://…:5174` serves plain HTTP and does not redirect) |
-| API for agents | `https://192.168.122.1:5252` (nginx → api:5000; same cert) |
+| API and agents | same origin as the UI, `https://192.168.122.1:5173` (nginx -> api:5000; agent paths, hub and mTLS certificate forwarding included; API port 5252 is no longer published) |
 | PostgreSQL | `127.0.0.1:5433` (`postgres`/`postgres`, db `backup_platform_dev`) |
 | PlatformAdmin | `admin` / `PlatformAdmin123!` (from `.env.e2e`) |
 | Tenant | `E2E Tenant`, one `UserAdmin` member `e2e.useradmin` / `E2e-Passw0rd!2026`, unlimited plan, enrollment enabled |
@@ -45,7 +45,7 @@ Reset to empty: `docker compose -p bpe2e --env-file .env.e2e down -v && bash e2e
 | Fedora 44 | `ssh virtual-fedora` (user `test-user`, passwordless sudo) | `192.168.122.115` | PostgreSQL 18 server + `psql`/`pg_dump`; no MSSQL, no docker, no agent installed |
 | Windows 11 | `ssh virtual-win11` (`windows-test\test-user`) | `192.168.122.218` | MSSQL (`MSSQL$MSSQLSERVER25`) + PostgreSQL 18 running; no `BackupAgent` service; helpers in `scripts/windows/` |
 
-Both reach the stack (verified: UI :5173, API :5252, `/api/agent-dist/install.sh`, `http://…:5174/cert.crt` all answer 200 from Fedora; TCP and cert download OK from Windows). The stack certificate must be trusted on the VM (`https://192.168.122.1:5174/cert.crt`); agent installers are served by the API (`/api/agent-dist/install.sh|install.ps1`, packages built into the API image). Do not delete VM snapshots.
+Both reach the stack (verified: UI and API :5173, `/api/agent-dist/install.sh`, `http://…:5174/cert.crt` all answer 200 from Fedora; TCP and cert download OK from Windows). The stack certificate must be trusted on the VM (`https://192.168.122.1:5174/cert.crt`); agent installers are served by the API (`/api/agent-dist/install.sh|install.ps1`, packages built into the API image). Do not delete VM snapshots.
 
 ## Flow inventory
 

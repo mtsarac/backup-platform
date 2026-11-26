@@ -10,7 +10,7 @@ import path from 'node:path'
 
 const here = import.meta.dirname
 const env = process.env
-const API = (env.DL_API ?? 'https://192.168.122.1:5252').replace(/\/$/, '')
+const API = (env.DL_API ?? 'https://192.168.122.1:5173').replace(/\/$/, '')
 const UI = env.DL_UI?.replace(/\/$/, '')
 const PEER = env.DL_PEER_API?.replace(/\/$/, '')
 const NODE = env.DL_NODE ?? new URL(API).port
