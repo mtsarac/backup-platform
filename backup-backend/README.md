@@ -39,6 +39,7 @@ The architecture tests enforce the dependency direction between these layers, so
 - Agents authenticate with an enrolled identity, poll for tasks, and renew a lease while they work. A stale agent cannot change a run that a newer one owns.
 - Backup and restore engines sit behind provider interfaces. Adding an engine means adding a provider and an agent capability, not changing the pipeline.
 - Secrets are stored encrypted with ASP.NET Data Protection and are not logged or returned by the API.
+- Tenant data and platform-wide work use separate stores and database contexts (ADR [0003](../docs/adr/0003-tenant-and-platform-operations-contexts.md)). Tenant requests go through a tenant store on `PlatformDbContext`, bound to the request's tenant with global query filters and a write guard. Workers, agent identity and leases, authentication and platform administration use a platform-operations store on `PlatformOperationsDbContext`, which is unfiltered. Stores that served both kinds of caller are split into one interface per side. This is application-level isolation, not PostgreSQL row-level security: `PlatformOperationsContextTests` in `tests/architecture-tests` pins which files may name `PlatformOperationsDbContext` or call the `PlatformCompanion`/`PlatformSide` helpers, so a new use is a visible, reviewed allow-list change. Tenant members are all tenant administrators ([ADR 0002](../docs/adr/0002-tenant-members-are-administrators.md)).
 - Successful runs also record advisory size metadata (`sizeAnomalyStatus`, `sizeAnomalyDeviationRatio`, `sizeAnomalyBaselineBytes`, and derived `isSizeAnomaly`) in run list/detail responses. The first three successes establish a baseline; later runs compare against the last ten successful runs of that tenant/job. Only deviations greater than both 30% and two standard deviations raise `SizeAnomalyWarning`. Artifacts, checksums, and success status are unchanged. The warning audit entry and policy-admitted `backup_size_anomaly` event/deliveries commit with completion; email/webhook delivery stays asynchronous through the existing N1 outbox.
 
 ### Agent logs
@@ -96,6 +97,8 @@ leases, execution, or completion.
 
 `POST /api/tenants/{id}/backup-jobs` **requires exactly one valid `Idempotency-Key`** (1-128 printable ASCII); a missing, repeated or malformed header answers `400` (`field: Idempotency-Key`) before anything is read or written. The job stores the key and a fingerprint of the normalised request: an HMAC-SHA256 over tenant, key and request, a typed database login included, keyed with a platform secret (`platform-job-idempotency-key-v1`: 32 random bytes in the shared secret store, created once under a PostgreSQL advisory lock, so every API node and restart uses the same key). A leaked job row therefore lets nobody test password guesses offline. An unconditional unique index on (tenant, key) backs it, so a disabled job keeps its key. Same key and same request answers `200` with the original job (no credential exchange, audit entry or schedule synchronisation happens again); same key and another request answers `409 idempotency_conflict`. Concurrent identical requests on any API node produce exactly one job.
 
+The web UI keeps the key of a job-create request across a page reload: it is stored in `sessionStorage` under `bp_idem:` plus the SHA-256 of the request body (tenant included), written before the request is sent, removed once the outcome is known (success or a definite rejection) and cleared when the session ends. A lost response followed by a reload therefore retries with the same key; a different body gets a new key, and a re-login after a lost response can still create a duplicate.
+
 `DELETE /api/tenants/{id}/backup-jobs/{jobId}` archives a job ("Korunan veriyi kaldır"): `204`, tenant `UserAdmin` only (a platform administrator or non-member gets `403`). The job is disabled for good (its schedule stops, nothing starts again), leaves `GET .../backup-jobs` (unless `?includeArchived=true`, which lists it with `archivedAt`, to feed history filters), `/dashboard` and the health summary, and answers `409 job_archived` to a second archive or to any update, schedule, retention, enable or disable request; there is no way back. The row is never deleted: runs, backup files, restores and shares stay readable (`GET .../backup-jobs/{jobId}` and `/backup-runs` still carry the job name), and an archived job's backup files expire through normal retention.
 
 Archiving also ends the job's unfinished runs in the same transaction: queued, retry-pending and paused runs become `Cancelled` and keep their earlier attempts as history. An attempt already leased or running is not interrupted; if it then fails or is lost, its run ends `Cancelled` instead of scheduling a retry (a success stays a success). Manual retries of an archived job's runs answer `409 retry_not_allowed` (`reason: job_archived`), and nothing of an archived job is dispatched to an agent.
@@ -128,8 +131,11 @@ Hostile input is refused at the edge with a controlled `400`, after authenticati
 
 - **NUL characters.** PostgreSQL text cannot store U+0000, so a NUL in any JSON string or dictionary key (`NulFreeStringConverter`, registered for every JSON body of a user-facing route; `/api/agent/` bodies are validated by their own handlers, which name the offending field) or in any query-string name or value (`RequestBoundaryMiddleware`) answers `400`. Kestrel itself already refuses a NUL in the path. Sign-in accepts a 3–128 character ASCII username or a valid ASCII email; an identifier no account can have is answered `401` like an unknown user and still counts against the source IP.
 - **All-zero ids.** The all-zero Guid is never issued and every typed id rejects it, so it answers `400` (`field` names the route or query parameter) in any route or query value, on every route, agent routes included. A resource that merely does not exist, or belongs to another tenant, still answers `404`. Ids inside a JSON body (agent, plan, user, job, artifact…) are checked by their handlers and never answer `500`.
+- **Restore request size.** The tenant restore routes accept a body of at most 512 KiB (`RestoreEndpoints.MaximumRequestBytes`); a larger one answers `413`. The JSON is bound once, with no second parse. A `shareId` in the query string, in the `X-Share-Id` header or in the body (including `null`) answers `400` with `field: shareId`: restore never takes a share. Malformed JSON answers `400`.
 
 Browser sessions are stored server-side. Normal sessions expire after 12 hours idle or seven days from creation; remember-me sessions expire after 30 days without an idle limit. Last activity is written at most once per minute, so idle expiry can occur up to a minute early. `GET /api/auth/sessions` lists the caller's active sessions; `DELETE /api/auth/sessions/{id}` and `DELETE /api/auth/sessions` end one or all, respectively. These writes require antiforgery tokens. Login failures are progressively delayed per normalized account and source IP, starting after five failures and capped at 15 minutes; counters age out after 24 hours. To prevent anonymous callers from probing whether a username and email belong to the same account, account-level lockouts return a generic 401 without exposing alias linkage, while IP-level lockouts return 429 with `Retry-After`.
+
+A successful password verification clears the login failure counters of that account and of the source IP; other accounts' counters are kept. Trade-off: a caller who holds one valid credential can reset the failure count its IP shares with other users; per-account limits remain. Second-factor (`totp`, `recovery`) attempts are counted per account only, never per IP, so a shared IP cannot lock out unrelated accounts.
 
 The API accepts `X-Forwarded-For` and `X-Forwarded-Proto` only from the immediate TCP peer listed in `Authentication:TrustedProxies`; by default no proxy is trusted. Set individual IP addresses, for example `Authentication__TrustedProxies__0=192.0.2.10` and `Authentication__TrustedProxies__1=2001:db8::10`. Use the address the API actually sees (including any Docker/NAT translation), not a hostname or CIDR. Invalid entries prevent startup. Do not list addresses from which untrusted clients can directly connect. Restrict API access to the proxy and other explicitly authorized peers.
 
@@ -240,6 +246,10 @@ dotnet run --project src/hosts/api
 dotnet run --project src/hosts/agent
 ```
 
+Package restore is locked: each project has a committed `packages.lock.json` (enabled in `Directory.Build.targets`, except for the Windows agent platform and RID-specific or self-contained publishes, which write their lock file under `obj/`). CI and the `Dockerfile` run `dotnet restore --locked-mode`, so a package version change must come with an updated lock file (a plain `dotnet restore` rewrites it). The Dockerfile base images are pinned by digest.
+
+In the container image `docker-entrypoint.sh` runs the EF migration bundle (`/app/efbundle`) before the API, retrying up to 30 times two seconds apart when `BACKUP_PLATFORM_CONNECTION_STRING` is set and the bundle exists. If it never succeeds the script exits with status 1 and does not start the API; `EFBUNDLE` points the script at another bundle (`DockerEntrypointTests` uses this). The release archive's backend never migrates by itself, see `deploy/release/README-backend.txt`.
+
 Apply migrations before starting the updated API: the Quartz migration adds `fixed_delay`
 without replacing existing jobs or triggers; rollback is refused if `fixed_delay` contains values.
 Legacy platform connection strings may still
@@ -273,7 +283,7 @@ hourly; active shares and running downloads are never pruned. The security model
 
 To enroll an agent, see "Connecting an agent" in the [root README](../README.md).
 
-The `Dockerfile` builds the API image. `docker-compose.yml` in the repository root starts it with PostgreSQL, SQL Server, and the frontend.
+The `Dockerfile` builds the API image. `docker-compose.yml` in the repository root starts it with PostgreSQL and the frontend (nginx, TLS); the one-time first-admin step is `docker compose run --build --rm bootstrap` (see the [root README](../README.md#quick-start)).
 
 ### Email notifications
 
@@ -429,7 +439,7 @@ Other integration test variables:
 - `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: required absolute directory containing older `pg_dump` and `pg_restore` for compatibility-refusal tests (PostgreSQL 16 clients work against the test server).
 - Physical tests also require remote replication access for the test login in `pg_hba.conf`. Limit collection parallelism on high-core hosts to avoid exhausting the database connection limit.
 
-CI runs the unit, architecture, and a fast subset of the agent tests. For the helper scripts that start disposable databases and run the integration suites, see [scripts/README.md](../scripts/README.md).
+CI runs the unit, architecture and a fast subset of the agent tests in the Backend job, and the whole integration project in the Integration job; Windows tests run only through the manual `windows.yml`. For the helper scripts that start disposable databases and run the integration suites, see [scripts/README.md](../scripts/README.md).
 
 ## Windows file permissions
 

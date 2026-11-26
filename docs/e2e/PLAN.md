@@ -9,7 +9,7 @@ Not to be confused with `scripts/e2e/` (older Python API/CLI lab harness with Mi
 | What | Value |
 |---|---|
 | Compose project | `bpe2e` (containers `bp-postgres`, `bp-api`, `bp-frontend`) |
-| Frontend (UI) | `https://192.168.122.1:5173` (self-signed; `http://…:5174` redirects to it) |
+| Frontend (UI) | `https://192.168.122.1:5173` (self-signed; `http://…:5174` serves plain HTTP and does not redirect) |
 | API for agents | `https://192.168.122.1:5252` (nginx → api:5000; same cert) |
 | PostgreSQL | `127.0.0.1:5433` (`postgres`/`postgres`, db `backup_platform_dev`) |
 | PlatformAdmin | `admin` / `PlatformAdmin123!` (from `.env.e2e`) |
