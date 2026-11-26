@@ -14,6 +14,23 @@ updates:
         patterns: ["Microsoft.*", "System.*"]
       nuget-minor-patch:
         update-types: [minor, patch]
+    # Pinned to .NET 10: majors of packages versioned with the .NET release are ignored. Minor and patch still flow.
+    # Microsoft.NET.Test.Sdk and Microsoft.Data.SqlClient version independently and are deliberately not listed.
+    ignore:
+      - dependency-name: "Microsoft.AspNetCore.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.EntityFrameworkCore.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "System.Security.Cryptography.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "System.Formats.Cbor"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet-ef"
+        update-types: ["version-update:semver-major"]
     labels: [dependencies, nuget]
 
   - package-ecosystem: bun
@@ -44,6 +61,10 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 3
+    # Pinned to .NET 10: no dotnet/sdk or dotnet/aspnet tags above 10.
+    ignore:
+      - dependency-name: "dotnet/*"
+        update-types: ["version-update:semver-major"]
     labels: [dependencies, docker]
 
   - package-ecosystem: docker

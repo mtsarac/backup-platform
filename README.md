@@ -133,4 +133,17 @@ The API container applies EF Core migrations before it starts (up to 30 attempts
 - **Manual only**: `windows.yml` (Windows validation) and `release.yml` (archive build, no publishing during pre-v1) run on `workflow_dispatch`.
 - **Reproducible builds**: NuGet restores use committed `packages.lock.json` files (`--locked-mode` in CI and in the backend `Dockerfile`), base images in the Dockerfiles are pinned by digest, and Dependabot proposes weekly updates for NuGet, Bun, GitHub Actions and Docker.
 
+### Dependency updates (Dependabot)
+
+Dependabot opens the pull requests; we never merge them. The workflow:
+
+1. Review the Dependabot PR (what moves, release notes).
+2. Try it locally: `dotnet restore --locked-mode` (regenerate `packages.lock.json` only when a package really changed), build, then the targeted tests for the touched area. For Bun: install, typecheck, test.
+3. If it is fine, apply the same change ourselves on our own branch, commit, and open our own PR using the repository PR template.
+4. Close the Dependabot PR with a short comment pointing to ours. Dependabot then stops tracking that update.
+
+**.NET is pinned to 10.** `.github/dependabot.yml` ignores `version-update:semver-major` for the packages versioned with the .NET release (`Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`, `Microsoft.Extensions.*`, `System.Security.Cryptography.*`, `System.Formats.Cbor`, `Npgsql.EntityFrameworkCore.PostgreSQL`, `dotnet-ef`) and for the `dotnet/*` Docker images in `backup-backend`. Minor and patch updates inside .NET 10 still arrive. `Microsoft.NET.Test.Sdk` and `Microsoft.Data.SqlClient` have their own version lines and are not pinned.
+
+To move to a newer .NET deliberately: remove the two `ignore` blocks for `/backup-backend` in `dependabot.yml`, then upgrade by hand in one PR (Dockerfile tags and digests, `TargetFramework`, `dotnet-version` in `.github/workflows/*.yml`, the packages above, `dotnet-tools.json`, lock files). Dependabot only reads the file from the default branch, so the change takes effect after merge.
+
 Detailed test execution instructions are documented in [`backup-backend/README.md`](backup-backend/README.md) and [`backup-frontend/README.md`](backup-frontend/README.md).
