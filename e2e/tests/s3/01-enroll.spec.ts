@@ -59,8 +59,12 @@ test('restarting backup-platform-agent.service preserves AgentId and Online stat
   await expect(page).toHaveURL(new RegExp(`/agents/${agentIdBefore}$`))
   await expect(page.getByText('Çevrimiçi').first()).toBeVisible({ timeout: 30_000 })
 
-  const refusal = vm(`curl --fail --silent --proto '=https' --tlsv1.2 '${apiUrl}/api/agent-dist/install-agent.sh' | sudo -n bash -s -- --server '${apiUrl}' --token '11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' --name 'dup' --language tr 2>&1 || true`)
-  expect(refusal).toContain('Mevcut bir ajan kurulumu bulundu')
+  const refusal = vm(`set -o pipefail
+before=$(sudo -n sha256sum /var/lib/backup-platform-agent/identity/agent-identity.json)
+if curl --fail --silent --proto '=https' --tlsv1.2 '${apiUrl}/api/agent-dist/install-agent.sh' | sudo -n bash -s -- --server '${apiUrl}' --token '11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' --name 'dup' --language tr >/dev/null 2>&1; then exit 1; fi
+after=$(sudo -n sha256sum /var/lib/backup-platform-agent/identity/agent-identity.json)
+test "$before" = "$after" && sudo -n systemctl is-active --quiet backup-platform-agent.service && echo refused`)
+  expect(refusal.trim()).toBe('refused')
   w.expectClean()
 })
 
