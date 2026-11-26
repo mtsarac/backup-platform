@@ -159,3 +159,5 @@ jobs:
         run: bun run test
       - name: Production build
         run: bun run build
+      - name: Nginx headers smoke
+        run: ./scripts/nginx-smoke.sh
