@@ -1,17 +1,20 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePageTitle } from '@/hooks/use-page-title'
+import { useFocusOnNavigation } from '@/hooks/use-focus-on-navigation'
 
 export interface Crumb { label: string; to?: string }
 
-/** The one page heading: breadcrumb trail, title, one-line purpose, and the page's primary actions. */
+/** The one page heading: breadcrumb trail, title, one-line purpose, and the page's primary actions. A heading that mounts because the user navigated takes focus, so keyboard and screen reader users land on the new page instead of the link they activated; the first page load keeps the normal focus order. */
 export function PageHeader({ title, description, crumbs, actions, meta }: {
   title: ReactNode; description?: ReactNode; crumbs?: readonly Crumb[]; actions?: ReactNode; meta?: ReactNode
 }) {
   useLanguage()
   usePageTitle(typeof title === 'string' ? title : undefined)
+  const heading = useRef<HTMLHeadingElement>(null)
+  useFocusOnNavigation(heading)
   return <header className="space-y-2 pb-1">
     {crumbs && crumbs.length > 0 && <nav aria-label={tx("Sayfa yolu")}><ol className="flex flex-wrap items-center gap-1 text-sm text-text-muted">
       {crumbs.map((crumb, index) => <li key={`${crumb.label}-${index}`} className="inline-flex min-w-0 max-w-full items-center gap-1">
@@ -21,7 +24,7 @@ export function PageHeader({ title, description, crumbs, actions, meta }: {
     </ol></nav>}
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0 max-w-3xl space-y-1">
-        <h1 className="break-words text-xl font-semibold text-text-heading">{title}</h1>
+        <h1 ref={heading} tabIndex={-1} className="break-words outline-none text-xl font-semibold text-text-heading">{title}</h1>
         {description && <p className="break-words text-body text-text-muted">{description}</p>}
         {meta && <div data-slot="page-meta" className="flex flex-wrap items-center gap-2 pt-1">{meta}</div>}
       </div>
