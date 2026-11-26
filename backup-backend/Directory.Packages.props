@@ -7,7 +7,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Identity.Core" Version="10.0.15" />
     <PackageVersion Include="Fido2" Version="4.3.3" />
     <PackageVersion Include="Fido2.Models" Version="4.3.3" />
@@ -25,7 +25,7 @@
     <!-- Transitive via Fido2; pinned to the patched release (GHSA-vmv3-wvjp-wqpj). -->
     <PackageVersion Include="System.Formats.Cbor" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
-    <PackageVersion Include="Npgsql" Version="11.0.0" />
+    <PackageVersion Include="Npgsql" Version="10.0.4" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.4" />
     <PackageVersion Include="MailKit" Version="5.0.0" />
     <PackageVersion Include="Cronos" Version="0.13.0" />
