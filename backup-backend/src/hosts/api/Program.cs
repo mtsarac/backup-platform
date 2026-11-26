@@ -11,7 +11,7 @@ var isBootstrap = args.Contains("--bootstrap-user", StringComparer.Ordinal);
 var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => argument != "--bootstrap-user").ToArray() : args);
 // Hosting's request-start messages include the query string: OAuth callback credentials and the one-click unsubscribe token (NotificationRecipientApiIntegrationTests pins this).
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
-builder.Services.AddPlatformSecurity();
+builder.Services.AddPlatformSecurity(builder.Configuration, builder.Environment);
 builder.Services.AddHostedService<AgentLogRetentionWorker>();
 var featureFlags = new FeatureFlags(key => builder.Configuration.GetValue<bool?>($"Features:{key}"));
 builder.Services.AddSingleton(featureFlags);

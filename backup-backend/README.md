@@ -285,6 +285,26 @@ To enroll an agent, see "Connecting an agent" in the [root README](../README.md)
 
 The `Dockerfile` builds the API image. The image runs as the non-root `app` user (uid 1654) and has a `HEALTHCHECK` that requests `/api/features` on port 5000. `/app/dp-keys` and `/app/gdrive-staging` belong to `app`; a volume created by an older root-run image keeps root ownership and must be fixed once, for example `docker run --rm -u 0 -v <volume>:/v alpine chown -R 1654:1654 /v`. `docker-compose.yml` in the repository root starts it with PostgreSQL and the frontend (nginx, TLS); the one-time first-admin step is `docker compose run --build --rm bootstrap` (see the [root README](../README.md#quick-start)).
 
+### Data Protection key ring encryption
+
+The key ring (`Secrets__DataProtection__KeysDirectory`) protects stored storage credentials, so it is encrypted at rest with a certificate (`ProtectKeysWithCertificate`). In `Production` the API refuses to start without one.
+
+| Setting | Meaning |
+|---|---|
+| `Secrets__DataProtection__CertificatePath` | PKCS#12 (`.pfx`) file, mounted read-only into the container (file or orchestrator secret). Required in `Production`. |
+| `Secrets__DataProtection__CertificatePassword` | Password of the file, if it has one. |
+| `Secrets__DataProtection__PreviousCertificatePaths__0` | Old certificate(s), used only to read keys during rotation. |
+
+```sh
+openssl req -x509 -newkey rsa:3072 -nodes -days 3650 -subj "/CN=bp-dataprotection" -keyout dp.key -out dp.crt
+openssl pkcs12 -export -inkey dp.key -in dp.crt -out dp.pfx -passout pass:CHANGE_ME
+```
+
+Existing installs: configure the certificate and restart. On the first start every `key-*.xml` that still holds its master key in clear text is rewrapped in place (one time; encrypted files are skipped). Keep a backup of the key ring and the certificate first: without the certificate the ring, and every credential sealed by it, is unreadable. Key ids do not change, so existing sessions and sealed credentials keep working; the restart itself is the only interruption.
+
+Rotation: mount the new certificate, set it as `CertificatePath` and move the old one to `PreviousCertificatePaths__0`. Keys already wrapped with the old certificate keep working; new keys use the new one. Drop the old certificate only after every key has been replaced (default key lifetime is 90 days).
+
+
 ### Email notifications
 
 Email notifications stay off until three things are set. `Notifications:PublicBaseUrl` (environment `Notifications__PublicBaseUrl`) is the absolute http(s) URL recipients reach the API at; confirmation and unsubscribe links are built from it, and without it the policy reports `transports.email.available=false`, channel tests answer `409 transport_not_configured` and deliveries fail with `public_url_not_configured`. The platform email transport (SMTP host, port, security, sender and optional login) must be saved by a PlatformAdmin under `/platform/notification-transports`; credentials require TLS (plain SMTP is accepted only without them). `Notifications:AllowedPrivateNetworks` (array of CIDR ranges, for example `Notifications__AllowedPrivateNetworks__0=192.168.0.0/16`) is needed whenever the SMTP relay or a webhook/SMS target sits on a private, loopback or link-local address: such addresses are refused with `network_denied` before any connection, and the list is empty by default.
