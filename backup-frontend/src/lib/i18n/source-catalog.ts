@@ -3392,4 +3392,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Kopyala: {0}": {"tr":"Kopyala: {0}","en":"Copy: {0}"},
   "{0} — {1}": {"tr":"{0} — {1}","en":"{0} — {1}"},
   "{0} tarihinde oluşturulan kayıt anahtarı": {"tr":"{0} tarihinde oluşturulan kayıt anahtarı","en":"registration token created on {0}"},
+  "Sayfa yüklenemedi.": {"tr":"Sayfa yüklenemedi.","en":"The page could not be loaded."},
+  "Beklenmeyen bir hata oluştu. Sayfayı yeniden yükleyin; sürerse destek ekibine bildirin.": {"tr":"Beklenmeyen bir hata oluştu. Sayfayı yeniden yükleyin; sürerse destek ekibine bildirin.","en":"An unexpected error occurred. Reload the page; if it continues, tell the support team."},
+  "Sayfayı yeniden yükle": {"tr":"Sayfayı yeniden yükle","en":"Reload the page"},
 }
