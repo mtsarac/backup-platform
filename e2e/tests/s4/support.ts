@@ -206,5 +206,5 @@ export async function configureFileSource() {
 
 /** The installer refuses to replace an agent whose credential store holds anything but identity files; agent logs live there. */
 export async function clearAgentLogs() {
-  await windows("$s = Get-Service BackupAgent -ErrorAction SilentlyContinue; if ($s) { Stop-Service BackupAgent -Force }; Remove-Item 'C:\\ProgramData\\BackupAgent\\logs' -Recurse -Force -ErrorAction SilentlyContinue")
+  await windows("$s = Get-Service BackupAgent -ErrorAction SilentlyContinue; if ($s) { Stop-Service BackupAgent -Force }; if (Test-Path 'C:\\ProgramData\\BackupAgent\\logs') { Remove-Item 'C:\\ProgramData\\BackupAgent\\logs' -Recurse -Force }")
 }
