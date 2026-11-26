@@ -84,7 +84,7 @@ Legend: **UI** = doable fully in UI; **API** = needs API/CLI for part; **VM** = 
 ### C. Agent enrollment (VM)
 | Flow | Steps | Expected |
 |---|---|---|
-| Add computer — Linux | `/tenants/:t/enrollment` → token + one-line `install-agent.sh` command → run on Fedora over SSH | agent appears Online in `/agents`; token cleared/consumed; same AgentId after restart |
+| Add computer - Linux | `/tenants/:t/enrollment` → token + one-line `install-agent.sh` command → run on Fedora over SSH | agent appears Online in `/agents`; token cleared/consumed; same AgentId after restart |
 | Add computer — Windows | same with `install.ps1` (elevated PowerShell) / setup wizard `.exe` (not built on Linux) | Online; service `BackupAgent` Running |
 | Token errors | reused/expired token, enrollment disabled | clear error |
 | Agent detail | `/agents/:id` profile rename, settings, rescan, revoke, connectivity | UI |
