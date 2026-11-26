@@ -1,0 +1,57 @@
+name: Dependency scan
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  pull_request:
+    paths:
+      - 'backup-frontend/package.json'
+      - 'backup-frontend/bun.lock'
+      - 'backup-backend/Directory.Packages.props'
+      - 'backup-backend/**/packages.lock.json'
+      - '.github/workflows/security-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backup-frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.x
+      - name: Production dependencies (high or critical fails the job)
+        run: bun audit --prod --audit-level=high
+      - name: All dependencies, including dev tools (reported, not blocking)
+        run: bun audit --audit-level=high
+        continue-on-error: true
+
+  backend:
+    name: NuGet advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      # dotnet list exits 0 even when it finds advisories, so fail on its report line.
+      - name: Vulnerable packages, direct and transitive
+        run: |
+          dotnet list BackupPlatform.sln package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q 'has the following vulnerable packages' vulnerable.txt; then exit 1; fi
