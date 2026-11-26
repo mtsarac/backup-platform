@@ -202,7 +202,7 @@ public sealed class AutomaticReplicaRepairWorker(
 
     public override void Dispose()
     {
-        try { _workerStoppingCts.Cancel(); } catch { }
+        try { _workerStoppingCts.Cancel(); } catch (Exception ex) { logger.LogDebug(ex, "Replica repair worker was already stopped or a cancellation callback failed."); }
         _workerStoppingCts.Dispose();
         _wakeSignal.Dispose();
         base.Dispose();
