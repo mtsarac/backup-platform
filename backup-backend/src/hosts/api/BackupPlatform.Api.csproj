@@ -25,7 +25,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="../../../deploy/windows/install.ps1" LogicalName="BackupPlatform.AgentInstallers.install.ps1" />
-    <EmbeddedResource Include="../../../deploy/linux/install.sh" LogicalName="BackupPlatform.AgentInstallers.install.sh" />
+    <EmbeddedResource Include="../../../deploy/linux/install-agent.sh" LogicalName="BackupPlatform.AgentInstallers.install-agent.sh" />
   </ItemGroup>
 
 

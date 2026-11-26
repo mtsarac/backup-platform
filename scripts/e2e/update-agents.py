@@ -2,10 +2,10 @@
 import lib
 U = "https://192.168.122.1:5173/api/agent-dist/packages"
 print(lib.fedora(f"""set -e
-sudo systemctl stop backup-agent
+sudo systemctl stop backup-platform-agent
 cd /tmp && rm -rf agent-new && mkdir agent-new && curl -s {U}/linux-x64 | tar xz -C agent-new
-sudo cp -a agent-new/*/bin/. /opt/backup-agent/bin/ && sudo chown -R backup-agent: /opt/backup-agent && sudo restorecon -RF /opt/backup-agent
-sudo systemctl start backup-agent; sleep 3; systemctl is-active backup-agent"""))
+sudo cp -a agent-new/*/bin/. /opt/backup-platform-agent/current/ && sudo chown -R backup-agent: /opt/backup-platform-agent/releases && sudo restorecon -RF /opt/backup-platform-agent
+sudo systemctl start backup-platform-agent; sleep 3; systemctl is-active backup-platform-agent"""))
 print(lib.win(f"""$ErrorActionPreference='Stop'
 Stop-Service BackupAgent
 $z='C:\\Users\\test-user\\agent-new.zip'; $d='C:\\Users\\test-user\\agent-new'

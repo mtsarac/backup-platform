@@ -22,7 +22,7 @@ def final(t, rid, timeout=900):
     return t.wait(f"/backup-runs/{rid}", timeout=timeout, stop_on=lib.TERMINAL)
 
 def staging_leftovers():
-    return lib.fedora("sudo find /var/lib/backup-agent/staging -type f | head -5; sudo find /tmp -maxdepth 1 -name 'bp-smb-*' | head")[1].strip()
+    return lib.fedora("sudo find /var/lib/backup-platform-agent/staging -type f | head -5; sudo find /tmp -maxdepth 1 -name 'bp-smb-*' | head")[1].strip()
 
 @scenario("res/agent-killed-mid-upload-recovers")
 def agent_kill(t):

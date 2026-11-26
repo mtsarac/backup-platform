@@ -32,7 +32,7 @@ test.beforeAll(async () => {
   const token = await createEnrollmentToken(tenant, tenantId)
 
   // Install the target stack's TLS cert into Fedora CA trust and launch an isolated BackupPlatform.Agent.Host unit in /tmp
-  // so we never disturb the shared backup-agent.service on Fedora.
+  // so we never disturb the shared backup-platform-agent.service on Fedora.
   vm(`set -e
 openssl s_client -connect '${hostPort}' -servername '${parsed.hostname}' </dev/null 2>/dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo -n tee /etc/pki/ca-trust/source/anchors/e2e-s3-logs.pem >/dev/null
 sudo -n update-ca-trust

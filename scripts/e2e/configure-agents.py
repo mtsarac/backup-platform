@@ -6,8 +6,8 @@ def ssh(host, cmd, inp=None):
 
 linux = {
     "Agent__Backup__Staging__Mapping": "SameHost",
-    "Agent__Backup__Staging__AgentDirectory": "/var/lib/backup-agent/staging",
-    "Agent__Backup__LocalStorage__RootDirectory": "/var/lib/backup-agent/local-store",
+    "Agent__Backup__Staging__AgentDirectory": "/var/lib/backup-platform-agent/staging",
+    "Agent__Backup__LocalStorage__RootDirectory": "/var/lib/backup-platform-agent/local-store",
     "Agent__Backup__LocalStorage__Volumes__vol2": "/srv/e2e/volume2",
     "Agent__Backup__FileSources__e2efiles__RootDirectory": "/srv/e2e/files",
     # Central storage: the Samba share is mounted below; the backend sees the same tree at /central-share (docker-compose.e2e.override.yml).
@@ -31,12 +31,12 @@ mkdir -p /mnt/e2e-share
 grep -q ' /mnt/e2e-share ' /etc/fstab || echo '//{api.env['PUBLIC_HOST']}/Data /mnt/e2e-share cifs credentials=/etc/e2e-smb.cred,uid=backup-agent,gid=backup-agent,file_mode=0660,dir_mode=0770,vers=3.1.1,_netdev,nofail 0 0' >> /etc/fstab
 systemctl daemon-reload; mountpoint -q /mnt/e2e-share || mount /mnt/e2e-share
 mkdir -p /mnt/e2e-share/central && chown backup-agent: /mnt/e2e-share/central
-mkdir -p /var/lib/backup-agent/staging /var/lib/backup-agent/local-store /srv/e2e/volume2 /srv/e2e/restore
-chown -R backup-agent: /var/lib/backup-agent/staging /var/lib/backup-agent/local-store /srv/e2e
-mkdir -p /etc/systemd/system/backup-agent.service.d
-cat > /etc/systemd/system/backup-agent.service.d/e2e.conf <<'EOT'
+mkdir -p /var/lib/backup-platform-agent/staging /var/lib/backup-platform-agent/local-store /srv/e2e/volume2 /srv/e2e/restore
+chown -R backup-agent: /var/lib/backup-platform-agent/staging /var/lib/backup-platform-agent/local-store /srv/e2e
+mkdir -p /etc/systemd/system/backup-platform-agent.service.d
+cat > /etc/systemd/system/backup-platform-agent.service.d/e2e.conf <<'EOT'
 {unit}EOT
-printf '[Service]\\nAmbientCapabilities={caps}\\n' > /etc/systemd/system/backup-agent.service.d/snapshots.conf
+printf '[Service]\\nAmbientCapabilities={caps}\\n' > /etc/systemd/system/backup-platform-agent.service.d/snapshots.conf
 systemctl daemon-reload && systemctl restart backup-agent && sleep 2 && systemctl is-active backup-agent
 """)
 

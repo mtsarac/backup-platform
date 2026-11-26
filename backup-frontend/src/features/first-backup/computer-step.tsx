@@ -103,7 +103,7 @@ export function ComputerStep({ tenantId, onOnline }: { tenantId: string; onOnlin
           <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/win-x64-setup`} download>{tx('Kurulum sihirbazını indir (.exe)')}</a></p>
           <p className="text-text-muted">{tx('Sihirbaz yalnızca yukarıdaki anahtarı ve bilgisayarın adını sorar.')} {tx('Program henüz dijital olarak imzalı olmadığından Windows SmartScreen bir uyarı gösterebilir; “Ek bilgi” ve “Yine de çalıştır” ile devam edin.')}</p>
         </div>}
-        <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
+        <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install-agent.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
         <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/${packageKey}`} download>{platform === 'Windows' ? tx('Windows zip paketini indir') : tx('Linux tar.gz paketini indir')}</a></p>
       </div>
     </details>}

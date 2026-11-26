@@ -10,13 +10,13 @@ export const REPLICA_ROOT = '/srv/e2e-s3/replica2'
 /** Registers the file source and secondary local volume on the agent (restarts the service only when the drop-in changed) and (re)creates the tree. */
 export async function seedFileSource(tenant?: Api, tenantId?: string) {
   const changed = vm(`set -e
-sudo -n mkdir -p /etc/systemd/system/backup-agent.service.d ${SOURCE_ROOT}/docs/nested ${REPLICA_ROOT}
+sudo -n mkdir -p /etc/systemd/system/backup-platform-agent.service.d ${SOURCE_ROOT}/docs/nested ${REPLICA_ROOT}
 sudo -n chown backup-agent:backup-agent ${REPLICA_ROOT}
 sudo -n chmod 700 ${REPLICA_ROOT}
 want='[Service]
 Environment="Agent__Backup__FileSources__${FILE_SOURCE}__RootDirectory=${SOURCE_ROOT}"
 Environment="Agent__Backup__LocalStorage__Volumes__${REPLICA_VOLUME}=${REPLICA_ROOT}"'
-conf=/etc/systemd/system/backup-agent.service.d/e2e-s3.conf
+conf=/etc/systemd/system/backup-platform-agent.service.d/e2e-s3.conf
 if [ "$(sudo -n cat $conf 2>/dev/null)" != "$want" ]; then printf '%s\\n' "$want" | sudo -n tee $conf >/dev/null; sudo -n systemctl daemon-reload; sudo -n systemctl restart backup-agent; echo restarted; fi
 sudo -n rm -rf ${SOURCE_ROOT}/docs ${SOURCE_ROOT}/restored
 sudo -n mkdir -p ${SOURCE_ROOT}/docs/nested

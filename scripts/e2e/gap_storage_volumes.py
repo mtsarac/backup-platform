@@ -5,7 +5,7 @@ import lib, flows
 @lib.scenario('gap/STO-01/local-default-and-volume2-physical-scope')
 def main():
     t=lib.Tenant('a'); a=t.agents()['fedora-e2e']; results=[]
-    for volume, root in [('default','/var/lib/backup-agent/local-store'),('vol2','/srv/e2e/volume2')]:
+    for volume, root in [('default','/var/lib/backup-platform-agent/local-store'),('vol2','/srv/e2e/volume2')]:
         job=None; art=None; conn=None
         try:
             if volume == 'vol2':

@@ -84,7 +84,7 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-  vm('sudo -n systemctl start postgresql && sudo -n systemctl start backup-agent.service')
+  vm('sudo -n systemctl start postgresql && sudo -n systemctl start backup-platform-agent.service')
   revokeAgent?.cleanup()
   offlineAgent?.cleanup()
   if (offlineAgent?.agentId) {
@@ -156,7 +156,7 @@ test('stopping backup-agent lets UserAdmin cancel a queued run in UI, and restar
   const w = watch(page)
   await signIn(page); w.reset()
   await page.goto(tenantPath(tenantId, `backup-jobs/${cancelJobId}`))
-  vm('sudo -n systemctl stop backup-agent.service')
+  vm('sudo -n systemctl stop backup-platform-agent.service')
   try {
     await page.getByRole('button', { name: 'Şimdi yedekle' }).click()
     await page.getByRole('link', { name: 'Denemeyi aç' }).click()
@@ -164,7 +164,7 @@ test('stopping backup-agent lets UserAdmin cancel a queued run in UI, and restar
     await page.getByRole('dialog').getByRole('button', { name: 'İptali onayla' }).click()
     await expect(page.getByText('Yedekleme denemesi iptal edildi.')).toBeVisible({ timeout: 30_000 })
   } finally {
-    vm('sudo -n systemctl start backup-agent.service')
+    vm('sudo -n systemctl start backup-platform-agent.service')
     await waitOnline(tenant, tenantId, AGENT_NAME, 60_000)
   }
   w.expectClean()

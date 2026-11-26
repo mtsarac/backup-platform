@@ -9,10 +9,10 @@ def revoked_view(t):
 @scenario("agents/revoke-cuts-off-agent-immediately")
 def revoke(t):
     tok = subprocess.run(["python3", str(api.ROOT / "scripts/e2e/enroll.py"), "a"], capture_output=True, text=True, check=True).stdout.strip()
-    lib.fedora("sudo systemctl stop bp-agent2 2>/dev/null; sudo rm -rf /var/lib/backup-agent/agent2; sudo -u backup-agent mkdir -m 700 /var/lib/backup-agent/agent2")
-    rc, out = lib.fedora(f"sudo -u backup-agent /opt/backup-agent/bin/BackupPlatform.Agent.Host enroll --server https://192.168.122.1:5173 --token '{tok}' --store-directory /var/lib/backup-agent/agent2 --name revoke-e2e --non-interactive 2>&1 | tail -3")
+    lib.fedora("sudo systemctl stop bp-agent2 2>/dev/null; sudo rm -rf /var/lib/backup-platform-agent/agent2; sudo -u backup-agent mkdir -m 700 /var/lib/backup-platform-agent/agent2")
+    rc, out = lib.fedora(f"sudo -u backup-agent /opt/backup-platform-agent/current/BackupPlatform.Agent.Host enroll --server https://192.168.122.1:5173 --token '{tok}' --store-directory /var/lib/backup-platform-agent/agent2 --name revoke-e2e --non-interactive 2>&1 | tail -3")
     assert rc == 0, out
-    rc, out = lib.fedora("sudo systemd-run --unit=bp-agent2 --uid=backup-agent --gid=backup-agent -p WorkingDirectory=/opt/backup-agent/bin -p Environment=Agent__Backend__BaseUri=https://192.168.122.1:5173 /opt/backup-agent/bin/BackupPlatform.Agent.Host --store-directory /var/lib/backup-agent/agent2 2>&1 | tail -2")
+    rc, out = lib.fedora("sudo systemd-run --unit=bp-agent2 --uid=backup-agent --gid=backup-agent -p WorkingDirectory=/opt/backup-platform-agent/current -p Environment=Agent__Backend__BaseUri=https://192.168.122.1:5173 /opt/backup-platform-agent/current/BackupPlatform.Agent.Host --store-directory /var/lib/backup-platform-agent/agent2 2>&1 | tail -2")
     try:
         ag = None
         for _ in range(30):
@@ -31,7 +31,7 @@ def revoke(t):
         assert after["status"] == "Revoked" and after["lastSeenAt"] == frozen["lastSeenAt"], (after["status"], frozen["lastSeenAt"], after["lastSeenAt"], log)
         return {"status": after["status"], "operationalStatus": after["operationalStatus"], "lastSeenAt": after["lastSeenAt"]}
     finally:
-        lib.fedora("sudo systemctl stop bp-agent2; sudo rm -rf /var/lib/backup-agent/agent2")
+        lib.fedora("sudo systemctl stop bp-agent2; sudo rm -rf /var/lib/backup-platform-agent/agent2")
 
 if __name__ == "__main__":
     revoke(lib.Tenant("a"))

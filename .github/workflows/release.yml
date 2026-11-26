@@ -71,7 +71,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        component: [agent-win-x64, agent-linux-x64, backend-linux-x64, frontend]
+        component: [agent-win-x64, agent-linux-x64, agent-linux-arm64, backend-linux-x64, frontend]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -188,7 +188,7 @@ jobs:
           |---|---|
           | \`backup-agent-win-x64-${VERSION}.zip\` | Windows Agent (self-contained) with service install/uninstall scripts |
           | \`backup-agent-win-x64-setup-${VERSION}.exe\` | Windows setup wizard: asks only for the one-time enrollment key and the computer name. Not code-signed, so SmartScreen warns. Serve it from the backend as \`backup-agent-win-x64-setup.exe\` in the packages directory; the backend adds its server address on download. |
-          | \`backup-agent-linux-x64-${VERSION}.tar.gz\` | Linux Agent (self-contained). **No official installer or systemd unit yet.** |
+          | \`backup-agent-linux-x64-${VERSION}.tar.gz\`, \`backup-agent-linux-arm64-${VERSION}.tar.gz\` | Linux Agent (self-contained) with \`install/install-agent.sh\`, the one Linux installer (versioned releases, supervisor, systemd unit). Serve each as \`backup-agent-linux-<arch>.tar.gz\` in the packages directory; the one-line command from the Add computer dialog picks the CPU architecture itself. |
           | \`backup-backend-linux-x64-${VERSION}.tar.gz\` | Backend API (self-contained) with the PostgreSQL migration script |
           | \`backup-frontend-${VERSION}.tar.gz\` | Static web UI; serve it on the same origin as the backend |
 

@@ -16,7 +16,7 @@ test.beforeAll(async () => {
 })
 test.afterAll(async () => { await tenant.dispose() })
 
-test('Add computer dialog validates input, enrolls the Fedora agent via install.sh, clears the secret, and shows Online', async ({ page }) => {
+test('Add computer dialog validates input, enrolls the Fedora agent via install-agent.sh, clears the secret, and shows Online', async ({ page }) => {
   const w = watch(page)
   await signIn(page)
   w.reset()
@@ -30,7 +30,7 @@ test('Add computer dialog validates input, enrolls the Fedora agent via install.
   await dialog.getByRole('button', { name: 'İleri' }).click()
   await dialog.getByRole('button', { name: 'Kayıt anahtarı oluştur' }).click()
   const command = await dialog.getByLabel('Tek kullanımlık kurulum komutu').inputValue()
-  expect(command).toContain('install.sh')
+  expect(command).toContain('install-agent.sh')
   expect(command).toContain(`--name '${AGENT_NAME}'`)
   const tokenMatch = command.match(/--token '([^']+)'/)
   expect(tokenMatch?.[1]).toBeTruthy()
@@ -44,7 +44,7 @@ test('Add computer dialog validates input, enrolls the Fedora agent via install.
   w.expectClean()
 })
 
-test('restarting backup-agent.service preserves AgentId and Online state; non-interactive install.sh refuses overwrite', async ({ page }) => {
+test('restarting backup-platform-agent.service preserves AgentId and Online state; install-agent.sh refuses overwrite', async ({ page }) => {
   const w = watch(page)
   await signIn(page)
   w.reset()
@@ -54,13 +54,17 @@ test('restarting backup-agent.service preserves AgentId and Online state; non-in
   const agentIdBefore = page.url().split('/').at(-1)!
   await expect(page.getByText('Çevrimiçi').first()).toBeVisible()
 
-  vm('sudo -n systemctl restart backup-agent.service && sleep 2 && sudo -n systemctl is-active --quiet backup-agent.service')
+  vm('sudo -n systemctl restart backup-platform-agent.service && sleep 2 && sudo -n systemctl is-active --quiet backup-platform-agent.service')
   await page.reload()
   await expect(page).toHaveURL(new RegExp(`/agents/${agentIdBefore}$`))
   await expect(page.getByText('Çevrimiçi').first()).toBeVisible({ timeout: 30_000 })
 
-  const refusal = vm(`curl --fail --silent --proto '=https' --tlsv1.2 '${apiUrl}/api/agent-dist/install.sh' | sudo -n bash -s -- --server '${apiUrl}' --token '11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' --name 'dup' --language tr 2>&1 || true`)
-  expect(refusal).toContain('Mevcut bir ajan kurulumu bulundu')
+  const refusal = vm(`set -o pipefail
+before=$(sudo -n sha256sum /var/lib/backup-platform-agent/identity/agent-identity.json)
+if curl --fail --silent --proto '=https' --tlsv1.2 '${apiUrl}/api/agent-dist/install-agent.sh' | sudo -n bash -s -- --server '${apiUrl}' --token '11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' --name 'dup' --language tr >/dev/null 2>&1; then exit 1; fi
+after=$(sudo -n sha256sum /var/lib/backup-platform-agent/identity/agent-identity.json)
+test "$before" = "$after" && sudo -n systemctl is-active --quiet backup-platform-agent.service && echo refused`)
+  expect(refusal.trim()).toBe('refused')
   w.expectClean()
 })
 
@@ -69,7 +73,7 @@ test('reused enrollment token is rejected, pending tokens can be revoked, and di
   const reusedOut = vm(`set +e
 dir=/tmp/e2e-s3-reused-$$
 sudo -n install -d -m 700 -o backup-agent -g backup-agent "$dir"
-sudo -n BACKUP_AGENT_ENROLLMENT_TOKEN='${consumedToken}' runuser --user backup-agent --preserve-environment -- /opt/backup-agent/bin/BackupPlatform.Agent.Host enroll --server '${apiUrl}' --store-directory "$dir" --name 'reused-agent' --non-interactive 2>&1
+sudo -n BACKUP_AGENT_ENROLLMENT_TOKEN='${consumedToken}' runuser --user backup-agent --preserve-environment -- /opt/backup-platform-agent/current/BackupPlatform.Agent.Host enroll --server '${apiUrl}' --store-directory "$dir" --name 'reused-agent' --non-interactive 2>&1
 rc=$?
 sudo -n rm -rf "$dir"
 echo "EXIT:$rc"`)

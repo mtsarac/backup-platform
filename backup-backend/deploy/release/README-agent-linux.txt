@@ -1,4 +1,4 @@
-Backup Platform Agent @VERSION@ - Linux x64
+Backup Platform Agent @VERSION@ - Linux
 ===========================================
 
 Self-contained build: no .NET runtime has to be installed.
@@ -23,10 +23,17 @@ Use a trusted HTTPS certificate; validation is never disabled.
 Backup-specific configuration uses Agent__... environment variables or bin/appsettings.json. SQL Server credentials
 are supplied as BACKUP_AGENT_SECRET_<reference> environment variables (JSON {"userName":"...","password":"..."}).
 
+Install as a service (recommended)
+  The archive carries install/install-agent.sh, the one Linux installer. As root, from this archive's root:
+       bash install/install-agent.sh "$PWD/bin" <version>
+  then enroll as the service account and start it:
+       runuser -u backup-agent -- /opt/backup-platform-agent/current/BackupPlatform.Agent.Host enroll --server 'https://backup.example.com' --store-directory /var/lib/backup-platform-agent/identity
+       systemctl start backup-platform-agent.service
+  A backend that sets AgentDistribution__PackagesDirectory serves the same installer as a one-liner (Agents -> Add Agent) that also
+  downloads this archive for the machine's CPU (x64 or arm64), enrolls and starts the service. An enrollment key is single-use; if
+  enrollment fails, create a new key. There is no uninstall script yet.
+
 Limitations of this release
-  - This archive alone has no installer or systemd unit; the foreground run command above needs a service manager you maintain.
-    A backend that sets AgentDistribution__PackagesDirectory serves a systemd one-line installer (guided or automatic) that installs
-    this archive under /opt/backup-agent as the unprivileged backup-agent account. There is no uninstall script yet.
   - The binaries and installer scripts are not code-signed.
 
 Verify the download with the SHA256SUMS.txt file attached to the release.
