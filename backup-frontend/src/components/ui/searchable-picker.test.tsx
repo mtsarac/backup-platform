@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SearchablePicker, type PickerOption } from './searchable-picker'
@@ -63,8 +63,22 @@ describe('SearchablePicker', () => {
   it('says so when nothing matches and picks nothing on Enter', async () => {
     render(<Harness />)
     await userEvent.type(screen.getByRole('combobox', { name: 'Yedek dosyası' }), 'zzz{Enter}')
-    expect(screen.getByText('Eşleşen sonuç yok')).toBeInTheDocument()
+    expect(screen.getByText('Eşleşen sonuç yok')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Yedek dosyası' })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByLabelText('seçili')).toHaveTextContent('')
+  })
+
+  it('scrolls the option the arrow keys moved to into view and names the list by the field label', async () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    render(<Harness />)
+    screen.getByRole('combobox', { name: 'Yedek dosyası' }).focus()
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' })
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(screen.getByRole('option', { name: /Satış/ }))
+    expect(screen.getByRole('listbox')).toHaveAccessibleName('Yedek dosyası')
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
   })
 
   it('shows the current choice and lets the user clear it', async () => {
