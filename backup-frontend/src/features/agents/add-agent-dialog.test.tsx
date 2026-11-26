@@ -186,6 +186,7 @@ describe('Adding a backup computer', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
     expect(api.getEnrollmentTokenStatus).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: "Yeni kayıt anahtarı oluştur" })).toBeEnabled()
+    expect(screen.getByText(/Kayıt tamamlanmadı.*yeni bir anahtar üretin/)).toBeInTheDocument()
   })
   it('revokes the old active token before creating its replacement', async () => {
     mount(); await issue()

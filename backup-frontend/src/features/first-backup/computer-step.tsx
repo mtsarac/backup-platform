@@ -88,6 +88,7 @@ export function ComputerStep({ tenantId, onOnline }: { tenantId: string; onOnlin
     {ticket && <div className="space-y-2">
       <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text">{labels[monitor.phase]}</p>
       {monitor.phase === 'Waiting' && <p className="text-sm text-text-muted">{tx('Komutu hedef bilgisayarda çalıştırın. Kayıt ve ilk bağlantı bekleniyor; bu sayfayı açık bırakın.')}</p>}
+      {ended && <p className="text-sm text-text-muted">{tx('Kayıt tamamlanmadı. Kayıt anahtarı tek kullanımlıktır ve kurtarılamaz; yeni bir anahtar üretin ve komutu yeniden çalıştırın. Bilgisayarda yarım kalan bir kurulum varsa önce kaldırın.')}</p>}
       {slow && !ended && monitor.phase !== 'Online' && <p className="text-sm text-text-muted">{tx('Beklenenden uzun sürüyor. Komutun bilgisayarda hata vermeden bittiğinden ve bilgisayarın bu sunucuya erişebildiğinden emin olun; bu sayfa beklemeye devam eder.')}</p>}
       {ended && <Button type="button" variant="outline" disabled={pending} onClick={() => void create()}>{tx('Yeni komut oluştur')}</Button>}
       {monitor.paused && <Button type="button" variant="outline" onClick={monitor.retry}>{tx('Takibi tekrar dene')}</Button>}
