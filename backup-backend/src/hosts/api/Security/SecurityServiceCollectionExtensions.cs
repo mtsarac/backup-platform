@@ -57,7 +57,7 @@ namespace BackupPlatform.Api.Security;
 
 public static class SecurityServiceCollectionExtensions
 {
-    public static IServiceCollection AddPlatformSecurity(this IServiceCollection services)
+    public static IServiceCollection AddPlatformSecurity(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         services.AddHttpContextAccessor();
         services.AddOptions<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>().PostConfigure<IConfiguration>((options, configuration) =>
@@ -143,7 +143,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<BackupRetryWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
         AddBackupRetention(services);
-        AddStorageConnections(services);
+        AddStorageConnections(services, configuration, environment);
         AddRestores(services);
         AddNotifications(services);
         services.AddSingleton<InAppNotificationFanout>();
@@ -182,9 +182,9 @@ public static class SecurityServiceCollectionExtensions
     /// <summary>
     /// Storage connections: the provider catalog (one descriptor per provider type; adding a provider adds a descriptor and a tester here), the secret
     /// store credentials go through (Data Protection encryption over PostgreSQL ciphertext), the persistence and the service the endpoints use.
-    /// Data Protection keeps its host-level defaults unless <c>Secrets:DataProtection:KeysDirectory</c> names a key ring directory (shared across nodes).
+    /// Data Protection keeps its host-level defaults unless <c>Secrets:DataProtection:KeysDirectory</c> names a key ring directory (shared across nodes); the ring is encrypted by <see cref="DataProtectionKeyRing"/>.
     /// </summary>
-    private static void AddStorageConnections(IServiceCollection services)
+    private static void AddStorageConnections(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         services.AddSingleton(provider =>
         {
@@ -198,7 +198,7 @@ public static class SecurityServiceCollectionExtensions
             };
             return new BackupPlatform.Api.Backups.SftpConnectionProviderFactory(network);
         });
-        services.AddDataProtection();
+        DataProtectionKeyRing.Configure(services.AddDataProtection(), configuration, environment);
         services.AddSingleton<IConfigureOptions<DataProtectionOptions>>(provider => new ConfigureOptions<DataProtectionOptions>(options =>
         {
             var applicationName = provider.GetRequiredService<IConfiguration>()["Secrets:DataProtection:ApplicationName"];
