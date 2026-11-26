@@ -4,6 +4,7 @@ public static class SecurityApplicationBuilderExtensions
 {
     public static WebApplication UsePlatformSecurity(this WebApplication app)
     {
+        app.UseProxyClientCertificate();
         app.UseForwardedHeaders(app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>>().Value);
         app.Use(async (context, next) =>
         {

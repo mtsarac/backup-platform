@@ -21,24 +21,20 @@ jobs:
           - slice: S1
             state: .state-auth.json
             frontend: 6273
-            api: 6352
           - slice: S2
             state: .state.json
             frontend: 5173
-            api: 5252
           - slice: S2-sinks
             state: .state-s2.json
             frontend: 7473
-            api: 7552
           - slice: S5
             state: .state-s5.json
             frontend: 7273
-            api: 7352
     env:
       PUBLIC_HOST: localhost
       E2E_STATE_FILE: ${{ matrix.state }}
       E2E_BASE_URL: https://localhost:${{ matrix.frontend }}
-      E2E_API_URL: https://localhost:${{ matrix.api }}
+      E2E_API_URL: https://localhost:${{ matrix.frontend }}
     steps:
       - uses: actions/checkout@v7
         with:

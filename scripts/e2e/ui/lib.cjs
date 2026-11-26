@@ -6,7 +6,7 @@ const ROOT = path.resolve(__dirname, '../../..');
 const ST = JSON.parse(fs.readFileSync(ROOT + '/docs/test-environment/state.json', 'utf8'));
 const OUT = ROOT + '/docs/test-environment/run-20261105/screenshots-ui';
 const BASE = 'https://192.168.122.1:5173';
-const API = 'https://192.168.122.1:5252';
+const API = 'https://192.168.122.1:5173';
 const RES = ROOT + '/docs/test-environment/run-20261105/ui-results.jsonl';
 fs.mkdirSync(OUT, { recursive: true });
 

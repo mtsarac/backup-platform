@@ -1,3 +1,4 @@
+# DEVELOPMENT ONLY: default credentials, Development environment, self-signed TLS and Postgres published on the host. Deploy with docker-compose.prod.yml.
 services:
   postgres:
     image: postgres:18-alpine
@@ -28,7 +29,7 @@ services:
       Features__windowsVss: ${E2E_FEATURE_WINDOWSVSS:-false}
       BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform_dev;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
       AgentDistribution__PackagesDirectory: /app/agent-dist
-      AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:-192.168.122.1}:${API_PORT:-5252}
+      AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:-192.168.122.1}:${FRONTEND_PORT:-5173}
       # nginx terminates TLS; the API only honours X-Forwarded-Proto from this address (antiforgery cookies are Secure-only).
       Authentication__TrustedProxies__0: 172.29.0.10
       Secrets__DataProtection__KeysDirectory: /app/dp-keys
@@ -73,7 +74,6 @@ services:
     ports:
       - "${FRONTEND_PORT:-5173}:443"
       - "${FRONTEND_HTTP_PORT:-5174}:80"
-      - "${API_PORT:-5252}:5252"
     depends_on:
       - api
     networks:

@@ -9,9 +9,9 @@ DC="docker compose -p bpe2e --env-file .env.e2e"
 $DC up -d --build ${BUILD_FLAGS:-}
 
 host="${PUBLIC_HOST:-192.168.122.1}"
-echo "waiting for API at https://$host:${API_PORT:-5252} ..."
+echo "waiting for API at https://$host:${FRONTEND_PORT:-5173} ..."
 for _ in $(seq 1 90); do
-  [ "$(curl -sk -o /dev/null -w '%{http_code}' "https://$host:${API_PORT:-5252}/api/auth/antiforgery")" = 200 ] && break; sleep 2
+  [ "$(curl -sk -o /dev/null -w '%{http_code}' "https://$host:${FRONTEND_PORT:-5173}/api/auth/antiforgery")" = 200 ] && break; sleep 2
 done
 
 # Idempotent: the CLI refuses when a platform admin already exists.
@@ -25,4 +25,4 @@ $DC exec -T \
 cd e2e
 bun install --frozen-lockfile 2>/dev/null || bun install
 bun seed.ts
-echo "Frontend https://$host:${FRONTEND_PORT:-5173}   API https://$host:${API_PORT:-5252}   run: cd e2e && bun run test"
+echo "Frontend https://$host:${FRONTEND_PORT:-5173}   run: cd e2e && bun run test"

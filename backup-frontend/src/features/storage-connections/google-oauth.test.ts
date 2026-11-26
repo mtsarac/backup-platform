@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openGoogleOAuthPopup } from './google-oauth'
 
-const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5252/api/platform/google-drive/oauth/callback')}`
+const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5173/api/platform/google-drive/oauth/callback')}`
 const completed = { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED', success: true }
 
 function post(data: unknown, origin: string, source: unknown) {
@@ -39,10 +39,10 @@ describe('openGoogleOAuthPopup', () => {
 
   it('ignores a message from another origin, a stranger window or another type', async () => {
     const { popup, isConnected, settled } = setup()
-    post(completed, 'https://localhost:5252', popup)
+    post(completed, 'https://localhost:5173', popup)
     post(completed, 'https://evil.example', popup)
-    post(completed, 'http://localhost:5252', window)
-    post({ type: 'other' }, 'http://localhost:5252', popup)
+    post(completed, 'http://localhost:5173', window)
+    post({ type: 'other' }, 'http://localhost:5173', popup)
     await vi.advanceTimersByTimeAsync(0)
     expect(isConnected).not.toHaveBeenCalled()
     expect(settled).not.toHaveBeenCalled()
@@ -50,7 +50,7 @@ describe('openGoogleOAuthPopup', () => {
 
   it('treats a message from the callback origin and popup as a hint that checks at once', async () => {
     const { popup, isConnected, settled } = setup(() => true)
-    post(completed, 'http://localhost:5252', popup)
+    post(completed, 'http://localhost:5173', popup)
     await vi.advanceTimersByTimeAsync(0)
     expect(isConnected).toHaveBeenCalledTimes(1)
     expect(settled).toHaveBeenCalledExactlyOnceWith(true)
@@ -94,7 +94,7 @@ describe('openGoogleOAuthPopup', () => {
   it('stops everything when cancelled', async () => {
     const { popup, isConnected, settled, cancel } = setup(() => true)
     cancel()
-    post(completed, 'http://localhost:5252', popup)
+    post(completed, 'http://localhost:5173', popup)
     await vi.advanceTimersByTimeAsync(60_000)
     expect(isConnected).not.toHaveBeenCalled()
     expect(settled).not.toHaveBeenCalled()

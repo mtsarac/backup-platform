@@ -1,10 +1,10 @@
-"""Agent mTLS: a throwaway Fedora agent gets a client certificate from the platform issuer and talks to the backend's own TLS endpoint (:5253, where Kestrel
-sees the client certificate; the :5252 nginx endpoint cannot). Valid identity works; a foreign certificate and a forged-identity certificate are rejected;
+"""Agent mTLS: a throwaway Fedora agent gets a client certificate from the platform issuer and talks to the single public endpoint (nginx forwards the TLS client
+certificate to the API, which trusts it only from the proxy and validates it against its own CA). Valid identity works; a foreign certificate and a forged-identity certificate are rejected;
 the agent's own certificate stops working the moment the agent is revoked. Needs scripts/e2e/lab-central-mtls.py and the compose override. One pass, no retries."""
 import json, secrets, subprocess, time, uuid, api, lib
 from lib import scenario
 
-MTLS = "https://192.168.122.1:5253"
+MTLS = "https://192.168.122.1:5173"
 DIR = "/var/lib/backup-agent/mtls"
 HOST = "/opt/backup-agent/bin/BackupPlatform.Agent.Host"
 IDENTITY_OID = "1.3.6.1.4.1.57264.1.1"  # AgentCertificateAuthority: the agent/tenant/credential/generation JSON the backend trusts only when the chain is its own
@@ -20,7 +20,7 @@ def me(pem=None):
 def enroll_agent(t, name):
     tok = subprocess.run(["python3", str(api.ROOT / "scripts/e2e/enroll.py"), "a"], capture_output=True, text=True, check=True).stdout.strip()
     lib.fedora(f"sudo systemctl stop bp-agent-mtls 2>/dev/null; sudo rm -rf {DIR}; sudo -u backup-agent mkdir -m 700 {DIR}")
-    rc, out = lib.fedora(f"sudo -u backup-agent {HOST} enroll --server https://192.168.122.1:5252 --token '{tok}' --store-directory {DIR} --name {name} --non-interactive 2>&1 | tail -3")
+    rc, out = lib.fedora(f"sudo -u backup-agent {HOST} enroll --server https://192.168.122.1:5173 --token '{tok}' --store-directory {DIR} --name {name} --non-interactive 2>&1 | tail -3")
     assert rc == 0, out
 
 

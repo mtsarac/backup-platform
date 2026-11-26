@@ -4,7 +4,7 @@ Covers `docs/e2e/PLAN.md` Slice S3 (`#236`) and the `#228` screen checklist for 
 
 ## Prerequisites & Repeatability
 
-1. Shared stack running (`bash e2e/up.sh`, Docker Compose project `bpe2e` on `192.168.122.1:5173` / `:5252`). Do **not** stop or reset the shared stack while other slices run.
+1. Shared stack running (`bash e2e/up.sh`, Docker Compose project `bpe2e` on `192.168.122.1:5173`, one port for UI, API and agents). Do **not** stop or reset the shared stack while other slices run.
 2. `virtual-fedora` reachable over SSH (`ssh virtual-fedora`) with passwordless `sudo` and PostgreSQL 18 installed. Do **not** delete VM snapshots.
 3. Every spec (`01`–`08`) is idempotent and repeatable:
    - Full slice run (`cd e2e && bunx playwright test tests/s3`): `01-enroll.spec.ts` revokes any old agents in `e2e-s3 tenant`, cleans prior `/opt/backup-agent` + `backup-agent.service` on Fedora, and enrolls `e2e-s3-fedora` from empty state through the UI `Add computer` one-liner (`install.sh`).

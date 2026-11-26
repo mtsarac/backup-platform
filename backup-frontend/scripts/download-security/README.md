@@ -27,17 +27,17 @@ Limits worth knowing: for the CORS `fetch`, Chromium blocks the response before 
 cd backup-frontend
 bun install
 export DL_STATE=/path/to/docs/test-environment/state.json   # git-ignored lab credentials, read only
-# node 1: API through nginx :5252, UI :5173; the peer is node 2
-DL_NODE=bp-api  DL_API=https://192.168.122.1:5252 DL_UI=https://192.168.122.1:5173 DL_PEER_API=https://192.168.122.1:5255 bun scripts/download-security/run.mjs
+# node 1: API through nginx, UI :5173; the peer is node 2
+DL_NODE=bp-api  DL_API=https://192.168.122.1:5173 DL_UI=https://192.168.122.1:5173 DL_PEER_API=https://192.168.122.1:5255 bun scripts/download-security/run.mjs
 # node 2 (no UI in front of it)
-DL_NODE=bp-api2 DL_API=https://192.168.122.1:5255 DL_PEER_API=https://192.168.122.1:5252 bun scripts/download-security/run.mjs
+DL_NODE=bp-api2 DL_API=https://192.168.122.1:5255 DL_PEER_API=https://192.168.122.1:5173 bun scripts/download-security/run.mjs
 ```
 
 The two runs can go in parallel. Exit code 1 if any non-informational test fails. Results: `results/<DL_NODE>.json` (`meta`, `summary`, one entry per test with its evidence; no passwords or cookie values are written).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `DL_API` | `https://192.168.122.1:5252` | API origin under test |
+| `DL_API` | `https://192.168.122.1:5173` | API origin under test |
 | `DL_UI` | unset | UI origin that proxies to `DL_API`; enables the UI-button download |
 | `DL_PEER_API` | unset | Second API node for the cross-node replay |
 | `DL_NODE` | API port | Label and result file name |

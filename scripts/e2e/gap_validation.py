@@ -29,7 +29,7 @@ def admin(base):
 @scenario("gap/AUTH-01b/nul-and-control-in-login-and-free-text")
 def nul():
     out = {}
-    for name, base in (("node1", "https://192.168.122.1:5252"), ("node2", "https://192.168.122.1:5255")):
+    for name, base in (("node1", "https://192.168.122.1:5173"), ("node2", "https://192.168.122.1:5255")):
         s = anon(base); codes = []
         for ident in BAD_TEXT:
             r = s.post(f"{base}/api/auth/login", data=json.dumps({"loginIdentifier": ident, "password": "x"}, ensure_ascii=False).encode("utf-8", "surrogatepass") if "\ud800" not in ident else b'{"loginIdentifier":"ad\\ud800min","password":"x"}',
@@ -46,7 +46,7 @@ def nul():
 @scenario("gap/AGT/all-zero-ids-never-500")
 def zero():
     out = {}
-    for name, base in (("node1", "https://192.168.122.1:5252"), ("node2", "https://192.168.122.1:5255")):
+    for name, base in (("node1", "https://192.168.122.1:5173"), ("node2", "https://192.168.122.1:5255")):
         a = admin(base); res = {}
         tid = a.get(f"{base}/api/platform/tenants").json()
         tid = (tid["items"] if isinstance(tid, dict) else tid)[0]

@@ -75,7 +75,7 @@ describe('Google Drive storage destination', () => {
   })
 
   describe('completion without the callback message', () => {
-    const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5252/api/platform/google-drive/oauth/callback')}`
+    const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5173/api/platform/google-drive/oauth/callback')}`
     const reconnect = async (overrides: Partial<ConnectionView>, popup: { close: () => void; closed: boolean }) => {
       vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl })
       vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
@@ -119,7 +119,7 @@ describe('Google Drive storage destination', () => {
   })
 
   describe('reauthorization notice on the overview tab', () => {
-    const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5252/api/platform/google-drive/oauth/callback')}`
+    const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5173/api/platform/google-drive/oauth/callback')}`
     const reauthorize = { hasSecret: true, secretUpdatedAt: '2026-10-01T08:00:00Z', configuration: { accountEmail: 'old@example.com', reauthorizationRequired: 'true' } }
     const notice = async () => within((await screen.findByText('Google hesabının yeniden yetkilendirilmesi gerekiyor')).closest('[role=status]') as HTMLElement)
 

@@ -298,7 +298,7 @@ describe('Storage connection wizard: result', () => {
 })
 
 describe('Storage connection wizard: Google Drive', () => {
-  const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5252/api/platform/google-drive/oauth/callback')}`
+  const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5173/api/platform/google-drive/oauth/callback')}`
   const drive = () => makeConnection({ id: 'drive-new', name: 'Google Drive', providerType: 'google-drive', providerDisplayName: 'Google Drive', hasSecret: false, permissions: { ...tenantAdminPermissions } })
 
   async function start(popup: { close: () => void; closed: boolean }) {
@@ -326,7 +326,7 @@ describe('Storage connection wizard: Google Drive', () => {
     const connected = { ...connection, hasSecret: true, secretUpdatedAt: '2026-10-30T10:00:00Z', configuration: { accountEmail: 'ofis@firma.com', accountName: 'Ofis', reauthorizationRequired: 'false' } }
     vi.mocked(api.getTenantConnections).mockResolvedValue({ items: [connected] })
     vi.mocked(api.testTenantConnection).mockResolvedValue(tested(connected, 'Succeeded'))
-    act(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED' }, origin: 'http://localhost:5252', source: popup as unknown as Window })))
+    act(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED' }, origin: 'http://localhost:5173', source: popup as unknown as Window })))
     expect(await screen.findByText('Bağlantı çalışıyor')).toBeInTheDocument()
     expect(api.testTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', 'drive-new')
     await waitFor(() => expect(api.updateTenantConnection).toHaveBeenCalledWith('tenant-a', 'drive-new', { name: 'Google Drive (ofis@firma.com)', configuration: undefined }))

@@ -13,5 +13,5 @@ COPY snippets/ /etc/nginx/snippets/
 COPY docker-entrypoint.sh /docker-entrypoint-custom.sh
 RUN chmod +x /docker-entrypoint-custom.sh
 
-EXPOSE 80 443 5252
+EXPOSE 80 443
 ENTRYPOINT ["/docker-entrypoint-custom.sh"]

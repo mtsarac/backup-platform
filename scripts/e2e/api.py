@@ -4,7 +4,7 @@ urllib3.disable_warnings()
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 ENV_FILE = ROOT / ".env.e2e"
 env = dict(l.split("=", 1) for l in ENV_FILE.read_text().splitlines() if "=" in l and not l.startswith("#")) if ENV_FILE.exists() else {}
-BASE = f"https://{env.get('PUBLIC_HOST', '192.168.122.1')}:{env.get('API_PORT', '5252')}"
+BASE = f"https://{env.get('PUBLIC_HOST', '192.168.122.1')}:{env.get('FRONTEND_PORT', '5173')}"
 
 
 def wait_ready(timeout=120, interval=1.0, base_url=None):

@@ -81,12 +81,12 @@ A Python scenario harness for a lab with the real stack and agents: Linux and Wi
 
 | Slice | Stack script (compose project) | Specs | `E2E_STATE_FILE`, `E2E_BASE_URL`, `E2E_API_URL` |
 |---|---|---|---|
-| S1 auth | `bash e2e/auth-stack.sh` (`bps1`) | `tests/s1` (also set `E2E_MAILPIT_URL=http://127.0.0.1:8026`) | `.state-auth.json`, `https://localhost:6273`, `https://localhost:6352` |
-| S2 default | `bash e2e/up.sh` (`bpe2e`; creates `.env.e2e` with `POSTGRES_PORT=5433` if missing) | `tests/s2/pages.spec.ts tests/s2/platform.spec.ts tests/s2/settings.spec.ts tests/s2/storage.spec.ts` | `.state.json` (default), `https://<PUBLIC_HOST>:5173`, `https://<PUBLIC_HOST>:5252` |
-| S2 sinks | `bash e2e/s2-stack.sh` (`bps2`) | `tests/s2/s2-sinks.spec.ts` | `.state-s2.json`, `https://localhost:7473`, `https://localhost:7552` |
-| S5 | `bash e2e/s5-stack.sh` (`bps5`) | `tests/s5 tests/s5-real` | `.state-s5.json`, `https://localhost:7273`, `https://localhost:7352` |
+| S1 auth | `bash e2e/auth-stack.sh` (`bps1`) | `tests/s1` (also set `E2E_MAILPIT_URL=http://127.0.0.1:8026`) | `.state-auth.json`, `https://localhost:6273` |
+| S2 default | `bash e2e/up.sh` (`bpe2e`; creates `.env.e2e` with `POSTGRES_PORT=5433` if missing) | `tests/s2/pages.spec.ts tests/s2/platform.spec.ts tests/s2/settings.spec.ts tests/s2/storage.spec.ts` | `.state.json` (default), `https://<PUBLIC_HOST>:5173` |
+| S2 sinks | `bash e2e/s2-stack.sh` (`bps2`) | `tests/s2/s2-sinks.spec.ts` | `.state-s2.json`, `https://localhost:7473` |
+| S5 | `bash e2e/s5-stack.sh` (`bps5`) | `tests/s5 tests/s5-real` | `.state-s5.json`, `https://localhost:7273` |
 
-Run a slice as, for example, `E2E_STATE_FILE=.state-s5.json E2E_BASE_URL=https://localhost:7273 E2E_API_URL=https://localhost:7352 PUBLIC_HOST=localhost bun run test tests/s5 tests/s5-real`. The S2 default stack takes its admin password from `BOOTSTRAP_ADMIN_PASSWORD` in `.env.e2e`; CI writes `PUBLIC_HOST=localhost` there. The CI job for S2 sinks first runs `sudo ip address add 192.168.122.1/32 dev lo`; the stack script's certificate also names that address. `e2e/tests/s3` and `e2e/tests/s4` need the lab VMs and are not run by the workflow; see [`docs/e2e/PLAN.md`](../docs/e2e/PLAN.md). A failed CI run uploads `e2e/playwright-report/` and `e2e/test-results/` as the `playwright-<slice>` artifact.
+Run a slice as, for example, `E2E_STATE_FILE=.state-s5.json E2E_BASE_URL=https://localhost:7273 E2E_API_URL=https://localhost:7273 PUBLIC_HOST=localhost bun run test tests/s5 tests/s5-real`. The S2 default stack takes its admin password from `BOOTSTRAP_ADMIN_PASSWORD` in `.env.e2e`; CI writes `PUBLIC_HOST=localhost` there. The CI job for S2 sinks first runs `sudo ip address add 192.168.122.1/32 dev lo`; the stack script's certificate also names that address. `e2e/tests/s3` and `e2e/tests/s4` need the lab VMs and are not run by the workflow; see [`docs/e2e/PLAN.md`](../docs/e2e/PLAN.md). A failed CI run uploads `e2e/playwright-report/` and `e2e/test-results/` as the `playwright-<slice>` artifact.
 
 ## `/tmp` policy
 

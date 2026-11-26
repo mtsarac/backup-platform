@@ -78,4 +78,48 @@ public sealed class AgentCertificateIntegrationTests(PostgreSqlFixture fixture) 
             return response.Response.StatusCode;
         }
     }
+
+    [Fact]
+    public async Task ProxyForwardedCertificateIsHonouredOnlyFromTheTrustedProxyAndStillValidatedAgainstTheIssuer()
+    {
+        using var issuerKey = RSA.Create(2048);
+        var issuerRequest = new CertificateRequest("CN=proxy-ca", issuerKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        issuerRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        using var issuer = issuerRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(30));
+        await using var world = await AgentWorld.CreateAsync(fixture,
+            configuration: new Dictionary<string, string?> { ["Authentication:TrustedProxies:0"] = "10.9.8.7" },
+            configureServices: services => services.AddSingleton(new AgentCertificateAuthority(issuer, TimeProvider.System, TimeSpan.FromDays(7))));
+        var setup = await world.CreateTenantAsync();
+        var agent = await world.EnrollAsync(setup);
+        using var key = RSA.Create(2048);
+        var csr = new CertificateRequest("CN=ignored", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1).CreateSigningRequestPem();
+        using var enrolled = await world.SendAgentAsync(HttpMethod.Post, "/api/agent/certificate/enroll", agent.CredentialId, agent.Secret, body: new { signingRequestPem = csr });
+        var valid = AgentWorld.ReadJson(enrolled).GetProperty("certificatePem").GetString()!;
+        using var foreignKey = RSA.Create(2048);
+        var foreignRequest = new CertificateRequest("CN=foreign", foreignKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        foreignRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        using var foreign = foreignRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
+
+        // nginx sends URL-escaped PEM in X-Client-Cert.
+        Assert.Equal(200, await ForwardedAsync(valid, "10.9.8.7"));
+        // A client reaching the API directly (or through anything but the trusted proxy) cannot assert an identity, even with a genuine certificate.
+        Assert.Equal(401, await ForwardedAsync(valid, "203.0.113.5"));
+        Assert.Equal(401, await ForwardedAsync(valid, null));
+        // Trusted proxy, but the certificate does not chain to the issuer (nginx does not verify the chain).
+        Assert.Equal(401, await ForwardedAsync(foreign.ExportCertificatePem(), "10.9.8.7"));
+        Assert.Equal(401, await ForwardedAsync("not a certificate", "10.9.8.7"));
+
+        async Task<int> ForwardedAsync(string pem, string? peer)
+        {
+            var response = await world.Factory.Server.SendAsync(context =>
+            {
+                context.Request.Scheme = "https";
+                context.Request.Method = "GET";
+                context.Request.Path = "/api/agent/me";
+                context.Request.Headers[ProxyClientCertificate.HeaderName] = Uri.EscapeDataString(pem);
+                if (peer is not null) context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(peer);
+            });
+            return response.Response.StatusCode;
+        }
+    }
 }

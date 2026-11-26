@@ -5,7 +5,7 @@ import type { Account, State } from './state'
 
 const host = process.env.PUBLIC_HOST ?? '192.168.122.1'
 const baseUrl = process.env.E2E_BASE_URL ?? `https://${host}:5173`
-const apiUrl = process.env.E2E_API_URL ?? `https://${host}:5252`
+const apiUrl = process.env.E2E_API_URL ?? baseUrl
 const pw = process.env.E2E_PASSWORD ?? 'E2e-Passw0rd!2026'
 const admin: Account = { login: process.env.BOOTSTRAP_ADMIN_LOGIN ?? 'admin', password: process.env.BOOTSTRAP_ADMIN_PASSWORD ?? 'PlatformAdmin123!' }
 const TENANT = 'E2E Tenant'
