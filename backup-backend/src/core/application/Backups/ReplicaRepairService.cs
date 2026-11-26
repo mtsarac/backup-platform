@@ -447,7 +447,9 @@ public sealed partial class ReplicaRepairService(
                 finally
                 {
                     heartbeatCts.Cancel();
-                    try { await heartbeatTask; } catch { /* ignore */ }
+                    try { await heartbeatTask; }
+                    catch (OperationCanceledException) { }
+                    catch (Exception ex) { logger.LogDebug(ex, "Heartbeat of repair {OperationId} ended with an error.", operationId); }
                 }
             }
         }
@@ -488,7 +490,7 @@ public sealed partial class ReplicaRepairService(
 
         if (_activeLocalCts.TryGetValue(operationId, out var cts))
         {
-            try { cts.Cancel(); } catch { /* ignore */ }
+            try { cts.Cancel(); } catch (Exception ex) { logger.LogDebug(ex, "Repair {OperationId} already finished or its cancellation callback failed when cancellation was requested.", operationId); }
         }
 
         return true;
