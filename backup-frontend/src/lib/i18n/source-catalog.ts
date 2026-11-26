@@ -1861,6 +1861,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Kayıt anahtarının süresi doldu": {"tr":"Kayıt anahtarının süresi doldu","en":"Token expired"},
   "Kayıt anahtarı iptal edildi": {"tr":"Kayıt anahtarı iptal edildi","en":"Token revoked"},
   "Yeni kayıt anahtarı oluştur": {"tr":"Yeni kayıt anahtarı oluştur","en":"Create new enrollment key"},
+  "Kayıt tamamlanmadı. Kayıt anahtarı tek kullanımlıktır ve kurtarılamaz; yeni bir anahtar üretin ve komutu yeniden çalıştırın. Bilgisayarda yarım kalan bir kurulum varsa önce kaldırın.": {"tr":"Kayıt tamamlanmadı. Kayıt anahtarı tek kullanımlıktır ve kurtarılamaz; yeni bir anahtar üretin ve komutu yeniden çalıştırın. Bilgisayarda yarım kalan bir kurulum varsa önce kaldırın.","en":"Enrollment did not complete. The enrollment key is single-use and cannot be recovered; create a new key and run the command again. If the computer has a half-finished install, remove it first."},
   "Kayıt anahtarı oluştur": {"tr":"Kayıt anahtarı oluştur","en":"Create enrollment key"},
   "capability": {"tr":"yetenek","en":"capability"},
   "Tek kullanımlık kayıt anahtarı": {"tr":"Tek kullanımlık kayıt anahtarı","en":"Single-use enrollment token"},

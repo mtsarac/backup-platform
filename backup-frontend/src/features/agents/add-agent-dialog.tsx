@@ -133,6 +133,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           </div>}
           {ticket && <>
             <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text">{labels[monitor.phase]}</p>
+            {(monitor.phase === 'Expired' || monitor.phase === 'Revoked' || monitor.phase === 'Consumed') && <p className="text-sm text-text-muted">{tx('Kayıt tamamlanmadı. Kayıt anahtarı tek kullanımlıktır ve kurtarılamaz; yeni bir anahtar üretin ve komutu yeniden çalıştırın. Bilgisayarda yarım kalan bir kurulum varsa önce kaldırın.')}</p>}
             {monitor.phase === 'Waiting' && <p className="text-sm text-text-muted">{tx("Komutu hedef bilgisayarda çalıştırın. Kayıt ve ilk bağlantı bekleniyor; bu sayfayı açık bırakın.")}</p>}
           </>}
           <TechnicalDetails items={[]}><p>{tx('Sunucunun TLS sertifikası hedef bilgisayarda güvenilir olmalıdır. Sertifika doğrulamasını asla devre dışı bırakmayın.')}</p></TechnicalDetails>
