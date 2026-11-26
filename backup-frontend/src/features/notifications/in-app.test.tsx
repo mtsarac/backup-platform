@@ -44,12 +44,28 @@ function mount() {
 }
 
 describe('in-app notifications', () => {
+  it('closes on Escape and on an outside click, returns focus to the button, and is not a live region', async () => {
+    const user = userEvent.setup()
+    render(<QueryClientProvider client={new QueryClient()}><button>dışarısı</button><InAppNotifications userId="user-a" /></QueryClientProvider>)
+    const trigger = await screen.findByRole('button', { name: /Bildirimler/ })
+    await user.click(trigger)
+    const panel = await screen.findByRole('dialog', { name: 'Bildirimler' })
+    expect(panel.querySelector('[aria-live]')).toBeNull()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(trigger).toHaveFocus()
+    await user.click(trigger)
+    await screen.findByRole('dialog', { name: 'Bildirimler' })
+    await user.click(screen.getByRole('button', { name: 'dışarısı' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
   it('shows a security notification as mandatory, with no control to switch it off', async () => {
     records = [{ ...first, type: 'security_suspicious_login', subjectName: 'Account security' }]
     const user = userEvent.setup()
     mount()
     await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
-    const panel = await screen.findByRole('region', { name: 'Bildirimler' })
+    const panel = await screen.findByRole('dialog', { name: 'Bildirimler' })
     expect(within(panel).getByText('Hesap güvenliği')).toBeInTheDocument()
     expect(within(panel).getByText(/Şüpheli giriş etkinliği/)).toBeInTheDocument()
     expect(within(panel).getByText('Zorunlu güvenlik bildirimi')).toBeInTheDocument()
@@ -93,7 +109,7 @@ describe('in-app notifications', () => {
       throw new Error('Network error')
     })
     await user.click(screen.getByRole('button', { name: 'Okundu olarak işaretle' }))
-    expect(await within(screen.getByRole('region', { name: 'Bildirimler' })).findByRole('alert')).toBeInTheDocument()
+    expect(await within(screen.getByRole('dialog', { name: 'Bildirimler' })).findByRole('alert')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Okundu olarak işaretle' })).toBeInTheDocument()
   })
 
