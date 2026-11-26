@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from 'react'
 import { HubConnectionBuilder } from '@microsoft/signalr'
 import { QueryClientContext, useMutation, useQuery, type QueryClient } from '@tanstack/react-query'
+import { Popover } from '@base-ui/react/popover'
 import { Bell } from 'lucide-react'
 import { Link, useInRouterContext } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -81,14 +82,14 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
   }, [client, userId])
 
   const unread = list.data?.filter((item) => !item.readAt).length ?? 0
-  return <div className="relative">
-    <Button variant="outline" size="sm" aria-expanded={open} aria-controls="in-app-notifications" onClick={() => setOpen(!open)}>
+  return <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Trigger render={<Button variant="outline" size="sm" />}>
       <Bell aria-hidden="true" className="size-4" />{tx('Bildirimler')} {unread > 0 && <span>({unread})</span>}
-    </Button>
-    {open && <section id="in-app-notifications" aria-label={tx('Bildirimler')} tabIndex={0} className="absolute right-0 z-20 mt-2 max-h-[min(70vh,32rem)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-surface-raised p-4 shadow-overlay">
+    </Popover.Trigger>
+    <Popover.Portal><Popover.Positioner align="end" sideOffset={8} className="z-50"><Popover.Popup aria-label={tx('Bildirimler')} className="max-h-[min(70vh,32rem)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-surface-raised p-4 shadow-overlay outline-none">
       <QueryState isPending={list.isPending} error={list.error} empty={list.data?.length === 0} emptyState={<EmptyState message={tx("Henüz bildiriminiz yok.")} action={<Button disabled={list.isFetching} onClick={() => void list.refetch()}>{tx('Yenile')}</Button>} />}>
         {markRead.error && <ErrorNotice error={markRead.error} />}
-        <ul className="space-y-3" aria-live="polite">{list.data?.map((item) => {
+        <ul className="space-y-3">{list.data?.map((item) => {
           const href = shareHref(item, auth?.user?.role, tenant?.tenantId)
           return <li key={item.id} className="space-y-1 border-b border-border pb-3 last:border-0">
             <p className="font-medium">
@@ -104,6 +105,6 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
           </li>
         })}</ul>
       </QueryState>
-    </section>}
-  </div>
+    </Popover.Popup></Popover.Positioner></Popover.Portal>
+  </Popover.Root>
 }
