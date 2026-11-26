@@ -22,6 +22,6 @@ export default class DiagReporter implements Reporter {
   onEnd(result: FullResult) {
     this.mon?.kill()
     if (result.status === 'passed') rmSync(diagDir, { recursive: true, force: true })
-    else console.log(`network diagnostics kept in ${diagDir} (netlink.log, netlog.json, clock.txt)`)
+    else console.log(`network diagnostics kept in ${diagDir} (netlink.log, netlog.json.<pid> per browser launch, *.ns.log, clock.txt)`)
   }
 }
