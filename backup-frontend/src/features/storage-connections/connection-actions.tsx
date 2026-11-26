@@ -62,7 +62,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
           {permissions.canManageSecret && connection.hasSecret && <Button variant="outline" size="sm" aria-label={label(tx('kimlik bilgisini temizle'))} onClick={() => open('clearSecret', ops.clearSecret.reset)}>{tx("Kimlik bilgisini temizle")}</Button>}
         </>
       )}
-      {show.includes('delete') && permissions.canDelete && <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => open('delete', ops.remove.reset)}>{tx("Sil")}</Button>}
+      {show.includes('delete') && permissions.canDelete && <Button variant="destructive" size="sm" aria-label={label(tx('sil'))} onClick={() => open('delete', ops.remove.reset)}>{tx("Sil")}</Button>}
     </div>
     {show.includes('test') && testError && <p role="alert" className="text-sm text-error">{testError}</p>}
     {show.includes('credentials') && Boolean(connectGoogle.error) && <p role="alert" className="text-sm text-error">{errorMessage(connectGoogle.error, 'storageConnection')}</p>}
