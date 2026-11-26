@@ -1,33 +1,34 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:8c6edfb26c85153f236d26efebd9ad349aec403583f343f201ee67838b23658d AS build
 RUN apt-get update && apt-get install -y --no-install-recommends zip && rm -rf /var/lib/apt/lists/*
-COPY --from=golang:1.25 /usr/local/go /usr/local/go
+COPY --from=golang:1.25@sha256:699337d620559a59b4a2bb298ad59611e535d2ee755a34cf2d2a98f37578dc80 /usr/local/go /usr/local/go
 ENV PATH="/usr/local/go/bin:${PATH}"
 WORKDIR /src
 
-COPY Directory.Build.props .
-COPY Directory.Packages.props .
-COPY dotnet-tools.json .
+COPY Directory.Build.props Directory.Build.targets Directory.Packages.props dotnet-tools.json ./
 
-COPY src/core/contracts/BackupPlatform.Contracts.csproj src/core/contracts/
-COPY src/core/domain/BackupPlatform.Domain.csproj src/core/domain/
-COPY src/core/application/BackupPlatform.Application.csproj src/core/application/
-COPY src/core/infrastructure/BackupPlatform.Infrastructure.csproj src/core/infrastructure/
-COPY src/modules/identity/BackupPlatform.Identity.csproj src/modules/identity/
-COPY src/modules/tenancy/BackupPlatform.Tenancy.csproj src/modules/tenancy/
-COPY src/modules/agents/BackupPlatform.Agents.csproj src/modules/agents/
-COPY src/modules/managed-service/BackupPlatform.ManagedService.csproj src/modules/managed-service/
-COPY src/modules/storage/BackupPlatform.Storage.csproj src/modules/storage/
-COPY src/modules/notifications/BackupPlatform.Notifications.csproj src/modules/notifications/
-COPY src/providers/secret/abstractions/BackupPlatform.SecretProviders.Abstractions.csproj src/providers/secret/abstractions/
-COPY src/providers/secret/data-protection/BackupPlatform.SecretProviders.DataProtection.csproj src/providers/secret/data-protection/
-COPY src/providers/storage/abstractions/BackupPlatform.StorageProviders.Abstractions.csproj src/providers/storage/abstractions/
-COPY src/providers/storage/local/BackupPlatform.StorageProviders.Local.csproj src/providers/storage/local/
-COPY src/providers/storage/central/BackupPlatform.StorageProviders.Central.csproj src/providers/storage/central/
-COPY src/providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj src/providers/storage/sftp/
-COPY src/providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj src/providers/storage/google-drive/
-COPY src/hosts/api/BackupPlatform.Api.csproj src/hosts/api/
+COPY src/core/contracts/BackupPlatform.Contracts.csproj src/core/contracts/packages.lock.json src/core/contracts/
+COPY src/core/domain/BackupPlatform.Domain.csproj src/core/domain/packages.lock.json src/core/domain/
+COPY src/core/encryption/BackupPlatform.Encryption.csproj src/core/encryption/packages.lock.json src/core/encryption/
+COPY src/core/application/BackupPlatform.Application.csproj src/core/application/packages.lock.json src/core/application/
+COPY src/core/infrastructure/BackupPlatform.Infrastructure.csproj src/core/infrastructure/packages.lock.json src/core/infrastructure/
+COPY src/modules/identity/BackupPlatform.Identity.csproj src/modules/identity/packages.lock.json src/modules/identity/
+COPY src/modules/tenancy/BackupPlatform.Tenancy.csproj src/modules/tenancy/packages.lock.json src/modules/tenancy/
+COPY src/modules/agents/BackupPlatform.Agents.csproj src/modules/agents/packages.lock.json src/modules/agents/
+COPY src/modules/managed-service/BackupPlatform.ManagedService.csproj src/modules/managed-service/packages.lock.json src/modules/managed-service/
+COPY src/modules/storage/BackupPlatform.Storage.csproj src/modules/storage/packages.lock.json src/modules/storage/
+COPY src/modules/notifications/BackupPlatform.Notifications.csproj src/modules/notifications/packages.lock.json src/modules/notifications/
+COPY src/providers/secret/abstractions/BackupPlatform.SecretProviders.Abstractions.csproj src/providers/secret/abstractions/packages.lock.json src/providers/secret/abstractions/
+COPY src/providers/secret/data-protection/BackupPlatform.SecretProviders.DataProtection.csproj src/providers/secret/data-protection/packages.lock.json src/providers/secret/data-protection/
+COPY src/providers/storage/abstractions/BackupPlatform.StorageProviders.Abstractions.csproj src/providers/storage/abstractions/packages.lock.json src/providers/storage/abstractions/
+COPY src/providers/storage/local/BackupPlatform.StorageProviders.Local.csproj src/providers/storage/local/packages.lock.json src/providers/storage/local/
+COPY src/providers/storage/central/BackupPlatform.StorageProviders.Central.csproj src/providers/storage/central/packages.lock.json src/providers/storage/central/
+COPY src/providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj src/providers/storage/sftp/packages.lock.json src/providers/storage/sftp/
+COPY src/providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj src/providers/storage/google-drive/packages.lock.json src/providers/storage/google-drive/
+COPY src/providers/storage/s3/BackupPlatform.StorageProviders.S3.csproj src/providers/storage/s3/packages.lock.json src/providers/storage/s3/
+COPY src/providers/storage/smb/BackupPlatform.StorageProviders.Smb.csproj src/providers/storage/smb/packages.lock.json src/providers/storage/smb/
+COPY src/hosts/api/BackupPlatform.Api.csproj src/hosts/api/packages.lock.json src/hosts/api/
 
-RUN dotnet restore src/hosts/api/BackupPlatform.Api.csproj
+RUN dotnet restore --locked-mode src/hosts/api/BackupPlatform.Api.csproj
 
 COPY deploy/ deploy/
 COPY src/ src/
@@ -54,7 +55,7 @@ RUN mkdir -p /app/publish/agent-dist && \
     tar -C /tmp/linux-stage -czf /app/publish/agent-dist/backup-agent-linux-x64.tar.gz backup-agent-linux-x64-1.0.0 && \
     rm -rf /tmp/linux-stage
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:aac50ceef10391e78a899e3d2ccd00bbafa2dcb56ccf4586cbccf00edb84fc21 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY docker-entrypoint.sh /app/
