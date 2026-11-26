@@ -27,6 +27,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "System.Formats.Cbor"
         update-types: ["version-update:semver-major"]
+      # Npgsql 11 requires Microsoft.Extensions.Logging.Abstractions 11, which is off the .NET 10 line.
+      - dependency-name: "Npgsql"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
         update-types: ["version-update:semver-major"]
       - dependency-name: "dotnet-ef"
