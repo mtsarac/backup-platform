@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api/client'
+import { syncLanguagePreference } from '@/lib/i18n/runtime'
 import * as api from './api'
 import { catalog, fakeProvider, makeConnection, makeManaged, tenantAdminPermissions } from './test-fixtures'
 import { ConnectionList } from './connection-list'
@@ -447,6 +448,14 @@ describe('Enablement, test, deletion and editing', () => {
     await userEvent.click(within(local).getByRole('button', { name: 'Test et — Yerel disk' }))
     expect(await within(screen.getByRole('article', { name: 'Yerel disk' })).findByText('Test yedekleme bilgisayarında yapılır')).toBeInTheDocument()
     expect(within(screen.getByRole('article', { name: 'Yerel disk' })).queryByText('Test edilmedi')).not.toBeInTheDocument()
+  })
+
+  it('names the delete button in the interface language, starting with its visible text (WCAG 2.5.3)', async () => {
+    localStorage.setItem('bp_language', 'en')
+    syncLanguagePreference()
+    mount(detail('conn-local', 'manage'))
+    const button = await screen.findByRole('button', { name: /^Delete \u2014 / })
+    expect(button).toHaveTextContent('Delete')
   })
 
   it('blocks deletion until the exact name is typed, then deletes', async () => {
