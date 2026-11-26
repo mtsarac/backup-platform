@@ -50,6 +50,8 @@ bun run build
 
 The `Dockerfile` serves the production build with nginx. `docker-compose.yml` in the repository root runs it next to the API.
 
+`nginx.conf` sets the SPA security headers (`snippets/security-headers.conf`) and overwrites `X-Forwarded-For` with the peer address (`snippets/proxy-headers.conf`). `scripts/nginx-smoke.sh` runs the real config in Docker against a stub API and checks both; CI runs it.
+
 ## Tests
 
 `bun run test` runs the whole suite on two `vmThreads` workers. To check one area while you work, pass a path:
