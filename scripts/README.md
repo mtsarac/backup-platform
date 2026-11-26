@@ -62,7 +62,7 @@ External stores receive **Data Protection ciphertext**, not plaintext credential
 ## Full-system e2e (`scripts/e2e`)
 
 GitHub Fast CI runs the integration project and E2E typecheck/lint on pull requests.
-The Playwright E2E workflow runs S1, S2 and S5 nightly and on manual dispatch.
+The Playwright E2E workflow runs S1, S2 (default and sinks) and S5 nightly and on manual dispatch.
 S2 uses separate default and real-sink stacks, keeping their feature flags and
 mail transport isolated; S3 and S4 still require the lab VMs.
 
@@ -74,6 +74,19 @@ A Python scenario harness for a lab with the real stack and agents: Linux and Wi
 - Windows self-update has a separate opt-in scenario: `E2E_WINDOWS_SELFUPDATE_HOST=<disposable-elevated-ssh-host> E2E_WINDOWS_SELFUPDATE_ISOLATED=yes python3 scripts/e2e/selfupdate.py --windows`. It requires a dedicated backend with an empty Windows release store, the e2e signing key trusted by that backend, a Windows host that trusts its TLS certificate and has no `BackupAgent` service or update task, and a local .NET SDK able to publish `win-x64`. It installs and removes a throwaway service and checks signed activation and identity continuity; afterwards it deletes the release it published, so it can be repeated. This scenario does not cover tampered manifests on Windows.
   The dedicated backend is `docker-compose.e2e-isolated.yml` layered last under its own project name (own containers, host ports, database and volumes). Its own checkout (or worktree) needs a `.env.e2e` copied from the lab one with different `POSTGRES_PORT`, `API_PORT`, `FRONTEND_PORT`, `FRONTEND_HTTP_PORT` and new `E2E_MTLS_PORT` and `E2E_API_CONTAINER` (the container `selfupdate.py` runs `docker exec` in), and its own `docs/test-environment/state.json`. Run `docker compose -p bpe2e-iso --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.override.yml -f docker-compose.e2e-isolated.yml up --no-start --build`, copy the lab's `cert.pem` and `key.pem` into the new `frontend_certs` volume so the Windows host's existing trust applies, `up -d`, then `bootstrap.py` and `plans.py` there. Remove it with `down -v` afterwards. The ssh host must allow PowerShell scripts (`-ExecutionPolicy Bypass` is passed) and run elevated.
 - `gdrive.py` runs connect (prints a Google consent URL and waits for a human), test, capacity, backup + restore with tree hash compare, multi-destination, retention delete and disconnect against the connection "E2E Google Drive" (OAuth client of type Web, redirect `http://localhost:5252/api/platform/google-drive/oauth/callback`, test user added on the consent screen). Without a platform OAuth client it exits 2 with `MISSING PREREQUISITE`; setup steps are in ticket 15.
+
+## Playwright E2E (`e2e/`)
+
+`e2e/` holds the Playwright UI suites (not the Python harness above). Install once with `cd e2e && bun install --frozen-lockfile && bunx playwright install chromium`; the config launches `/usr/bin/chromium` unless `CHROMIUM_PATH` is set, runs one worker with no retries, and trusts the self-signed certificate. Each stack script brings up its own Compose project and seeds a state file; the specs read it through `E2E_STATE_FILE`. `.github/workflows/playwright.yml` (nightly at 02:17 UTC and on manual dispatch) is the reference for the exact environment of each slice. Run the stack script from the repository root, then the specs from `e2e/`:
+
+| Slice | Stack script (compose project) | Specs | `E2E_STATE_FILE`, `E2E_BASE_URL`, `E2E_API_URL` |
+|---|---|---|---|
+| S1 auth | `bash e2e/auth-stack.sh` (`bps1`) | `tests/s1` (also set `E2E_MAILPIT_URL=http://127.0.0.1:8026`) | `.state-auth.json`, `https://localhost:6273`, `https://localhost:6352` |
+| S2 default | `bash e2e/up.sh` (`bpe2e`; creates `.env.e2e` with `POSTGRES_PORT=5433` if missing) | `tests/s2/pages.spec.ts tests/s2/platform.spec.ts tests/s2/settings.spec.ts tests/s2/storage.spec.ts` | `.state.json` (default), `https://<PUBLIC_HOST>:5173`, `https://<PUBLIC_HOST>:5252` |
+| S2 sinks | `bash e2e/s2-stack.sh` (`bps2`) | `tests/s2/s2-sinks.spec.ts` | `.state-s2.json`, `https://localhost:7473`, `https://localhost:7552` |
+| S5 | `bash e2e/s5-stack.sh` (`bps5`) | `tests/s5 tests/s5-real` | `.state-s5.json`, `https://localhost:7273`, `https://localhost:7352` |
+
+Run a slice as, for example, `E2E_STATE_FILE=.state-s5.json E2E_BASE_URL=https://localhost:7273 E2E_API_URL=https://localhost:7352 PUBLIC_HOST=localhost bun run test tests/s5 tests/s5-real`. The S2 default stack takes its admin password from `BOOTSTRAP_ADMIN_PASSWORD` in `.env.e2e`; CI writes `PUBLIC_HOST=localhost` there. The CI job for S2 sinks first runs `sudo ip address add 192.168.122.1/32 dev lo`; the stack script's certificate also names that address. `e2e/tests/s3` and `e2e/tests/s4` need the lab VMs and are not run by the workflow; see [`docs/e2e/PLAN.md`](../docs/e2e/PLAN.md). A failed CI run uploads `e2e/playwright-report/` and `e2e/test-results/` as the `playwright-<slice>` artifact.
 
 ## `/tmp` policy
 

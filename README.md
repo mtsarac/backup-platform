@@ -39,7 +39,7 @@ Detailed guides and implementation notes live in the respective subdirectories:
 | **Backend** | .NET 10, ASP.NET Core, EF Core, Quartz.NET | Multi-tenant Web API, scheduler, leases, telemetry, providers | [`backup-backend/README.md`](backup-backend/README.md) |
 | **Frontend** | React 19, TypeScript, Tailwind 4, TanStack Query | Web dashboard, Passkey/WebAuthn auth, design system, i18n (TR/EN) | [`backup-frontend/README.md`](backup-frontend/README.md) |
 | **Automation & Scripts** | Bash, PowerShell, Docker Compose | Dev environment harnesses, E2E runner, agent package builders | [`scripts/README.md`](scripts/README.md) |
-| **Architecture & Domain** | Markdown, ADR | Ubiquitous vocabulary, naming constraints, architectural decisions | [`GLOSSARY.md`](GLOSSARY.md), [`docs/adr/`](docs/adr/) |
+| **Architecture & Domain** | Markdown, ADR | Ubiquitous vocabulary, naming constraints, architectural decisions (tenant administrators, tenant vs platform-operations data contexts) | [`GLOSSARY.md`](GLOSSARY.md), [`docs/adr/`](docs/adr/) |
 | **Agent Engineering Skills**| Markdown | Issue tracker workflows, triage labels, and domain rules for AI tools | [`docs/agents/`](docs/agents/) |
 
 ---
@@ -96,6 +96,8 @@ The bootstrap command reads `BOOTSTRAP_ADMIN_LOGIN`, `BOOTSTRAP_ADMIN_PASSWORD`,
 
 This Compose stack is for local development: port 5174 currently serves plaintext HTTP, not a redirect. Do not expose it or use it to sign in. The nginx proxy at `172.29.0.10` is trusted by the API on the dedicated Compose network; ensure the subnet does not overlap existing networks.
 
+The API container applies EF Core migrations before it starts (up to 30 attempts, 2 seconds apart). If they never succeed it exits with an error instead of serving against an unmigrated database, and the Compose restart policy retries it. The `bootstrap` service uses the same image and entrypoint, so it migrates before it creates the admin. Only the nginx address `172.29.0.10` (subnet `172.29.0.0/24`) is listed in `Authentication__TrustedProxies__0`; the forwarded-header rules are in the [backend README](backup-backend/README.md#request-boundary).
+
 > For native development (running .NET and Bun locally without containers) or launching the local E2E stack, consult [`backup-backend/README.md`](backup-backend/README.md) and [`scripts/README.md`](scripts/README.md).
 
 ---
@@ -125,7 +127,10 @@ This Compose stack is for local development: port 5174 currently serves plaintex
 
 ## Testing & Continuous Integration
 
-- **Fast CI**: Automated pull-request verification running unit tests, architectural boundary enforcement, and frontend linter/typecheck/tests.
-- **Full Integration**: Target tests for MSSQL, PostgreSQL, and storage provider drivers run on scheduled or manually dispatched runners.
+- **Fast CI** (`.github/workflows/ci.yml`): runs on pull requests (non-draft for the integration job) and on pushes to `main`, and is skipped when only `*.md` or `docs/` files change. Jobs: backend (locked restore, release build with warnings as errors, unit, architecture and fast agent tests), integration (the whole `tests/integration-tests` project against Testcontainers PostgreSQL, SQL Server and SFTP), E2E typecheck and lint, and frontend (install, typecheck, lint, test, build).
+- **Architecture tests** enforce the layer dependency direction and, per [ADR 0003](docs/adr/0003-tenant-and-platform-operations-contexts.md), which files may use the unfiltered `PlatformOperationsDbContext` or its companion helpers. This is a code-review guard, not PostgreSQL row-level security.
+- **Nightly Playwright** (`.github/workflows/playwright.yml`): runs daily at 02:17 UTC and on manual dispatch, as four disposable Compose stacks: S1 (authentication), S2 (default settings), S2 sinks (MinIO, SFTP, mail, webhook) and S5 (artifact and real-byte flows). Fast CI also calls it on `workflow_dispatch`. S3 and S4 need the lab VMs and are not part of it. Local commands are in [`scripts/README.md`](scripts/README.md#playwright-e2e-e2e).
+- **Manual only**: `windows.yml` (Windows validation) and `release.yml` (archive build, no publishing during pre-v1) run on `workflow_dispatch`.
+- **Reproducible builds**: NuGet restores use committed `packages.lock.json` files (`--locked-mode` in CI and in the backend `Dockerfile`), base images in the Dockerfiles are pinned by digest, and Dependabot proposes weekly updates for NuGet, Bun, GitHub Actions and Docker.
 
 Detailed test execution instructions are documented in [`backup-backend/README.md`](backup-backend/README.md) and [`backup-frontend/README.md`](backup-frontend/README.md).
