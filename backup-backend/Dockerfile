@@ -59,7 +59,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:aac50ceef10391e78a899e3d2ccd00b
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh && mkdir -p /app/dp-keys
+RUN chmod +x /app/docker-entrypoint.sh && mkdir -p /app/dp-keys /app/gdrive-staging && chown app:app /app/dp-keys /app/gdrive-staging
 
 ENV ASPNETCORE_URLS=http://+:5000 \
     ASPNETCORE_ENVIRONMENT=Production \
@@ -67,4 +67,8 @@ ENV ASPNETCORE_URLS=http://+:5000 \
     AgentDistribution__PackagesDirectory=/app/agent-dist
 
 EXPOSE 5000
+USER app
+# The runtime image has no curl or wget; bash's /dev/tcp is enough to see the anonymous features endpoint answer 200.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+    CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000 && printf 'GET /api/features HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

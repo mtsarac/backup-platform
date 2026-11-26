@@ -283,7 +283,7 @@ hourly; active shares and running downloads are never pruned. The security model
 
 To enroll an agent, see "Connecting an agent" in the [root README](../README.md).
 
-The `Dockerfile` builds the API image. `docker-compose.yml` in the repository root starts it with PostgreSQL and the frontend (nginx, TLS); the one-time first-admin step is `docker compose run --build --rm bootstrap` (see the [root README](../README.md#quick-start)).
+The `Dockerfile` builds the API image. The image runs as the non-root `app` user (uid 1654) and has a `HEALTHCHECK` that requests `/api/features` on port 5000. `/app/dp-keys` and `/app/gdrive-staging` belong to `app`; a volume created by an older root-run image keeps root ownership and must be fixed once, for example `docker run --rm -u 0 -v <volume>:/v alpine chown -R 1654:1654 /v`. `docker-compose.yml` in the repository root starts it with PostgreSQL and the frontend (nginx, TLS); the one-time first-admin step is `docker compose run --build --rm bootstrap` (see the [root README](../README.md#quick-start)).
 
 ### Email notifications
 
