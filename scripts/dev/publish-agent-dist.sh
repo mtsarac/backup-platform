@@ -10,7 +10,7 @@ make_runtime_dir
 # Enrollment currently accepts numeric System.Version values, not prerelease labels.
 version="${BP_AGENT_VERSION:-0.0.0}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'BP_AGENT_VERSION must be a numeric major.minor.patch version.'
-for platform in win-x64 linux-x64; do
+for platform in win-x64 linux-x64 linux-arm64; do
     bash "$REPO_ROOT/.github/scripts/package-release.sh" "agent-$platform" "$version" "$RUNTIME_DIR"
     extension=tar.gz
     [[ "$platform" != win-x64 ]] || extension=zip

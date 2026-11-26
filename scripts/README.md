@@ -6,20 +6,21 @@ Reusable local and test automation lives under `scripts/`. This is the canonical
 
 ## Linux agent packages and platform providers
 
-Publish the Linux agent before packaging (the package builder does not download tools or credentials):
+`backup-backend/deploy/linux/install-agent.sh` is the only Linux installer (there are no deb or rpm packages). Two ways to run it, both as root:
 
 ```bash
+# Online: downloads backup-agent-linux-<x64|arm64> from the server, installs, enrolls and starts the service.
+sudo bash install-agent.sh --server https://backup.example.com --token '<one-time-token>' --name "$(hostname)"
+# Local build (no enrollment): enroll afterwards as backup-agent, then start the service.
 dotnet publish backup-backend/src/hosts/agent/BackupPlatform.Agent.Host.csproj -c Release -r linux-x64 --self-contained true -p:AgentPlatform=Linux -o /tmp/backup-agent-publish
-bash backup-backend/deploy/linux/package-agent.sh deb /tmp/backup-agent-publish 1.0.0 x64 /tmp/backup-agent-packages
-# Or use rpm (requires rpmbuild); arm64 is also supported.
-sudo dpkg -i /tmp/backup-agent-packages/backup-platform-agent_1.0.0_amd64.deb
+sudo bash backup-backend/deploy/linux/install-agent.sh /tmp/backup-agent-publish 1.0.0
 sudo runuser -u backup-agent -- /opt/backup-platform-agent/current/BackupPlatform.Agent.Host enroll --server https://backup.example/ --store-directory /var/lib/backup-platform-agent/identity
 sudo systemctl start backup-platform-agent.service
 ```
 
-Enrollment prompts for the token without echoing it. Do not pass tokens on the command line. A package does not enroll automatically. The equivalent direct installer is `sudo bash backup-backend/deploy/linux/install-agent.sh /absolute/publish 1.0.0`; its payload must be readable by the service account.
+An enrollment key is single-use and cannot be recovered: if the command fails after the key was sent, create a new key. The online mode refuses a host that is already enrolled and a host with the old `install.sh` layout (`backup-agent.service`, `/opt/backup-agent`); remove that one first. Archives are built per architecture by `.github/scripts/package-release.sh agent-linux-x64|agent-linux-arm64 <version> <dir>`. The direct local-build installer's payload must be readable by the service account.
 
-The unprivileged `backup-agent` account owns `/opt/backup-platform-agent/releases` and the atomic `current` symlink, allowing signed self-update without root. Package installation never overwrites an existing release; upgrades preserve state and earlier releases. Configuration is root-owned `/etc/backup-platform-agent/agent.env` (0640, group `backup-agent`); identity, staging and update directories are owner-only under `/var/lib/backup-platform-agent`. Removing a package stops/disables the service but intentionally retains identity, artifacts and releases. The systemd sandbox only permits writes to the install and state trees; grant additional backup-source/storage paths explicitly with a service override.
+The unprivileged `backup-agent` account owns `/opt/backup-platform-agent/releases` and the atomic `current` symlink, allowing signed self-update without root. The installer never overwrites an existing release; upgrades preserve state and earlier releases. Configuration is root-owned `/etc/backup-platform-agent/agent.env` (0640, group `backup-agent`); identity, staging and update directories are owner-only under `/var/lib/backup-platform-agent`. Removing a package stops/disables the service but intentionally retains identity, artifacts and releases. The systemd sandbox only permits writes to the install and state trees; grant additional backup-source/storage paths explicitly with a service override.
 
 On a **fresh disposable systemd VM only**, exercise the real installer with `sudo BACKUP_AGENT_DISPOSABLE_HOST=1 bash backup-backend/deploy/linux/test-installer.sh /absolute/publish`. It verifies service identity, secure permissions, no automatic enrollment, state preservation and the release switch.
 
@@ -344,7 +345,7 @@ Needs a connected Drive connection (`ACCEPTANCE_CONNECTION_NAME` selects one by 
 ### Installer packages on the persistent dev stack
 
 ```bash
-scripts/dev/publish-agent-dist.sh        # stages backup-agent-win-x64.zip and backup-agent-linux-x64.tar.gz (official release layout, numeric version 0.0.0; BP_AGENT_VERSION overrides) in $BP_DEV_HOME/agent-dist
+scripts/dev/publish-agent-dist.sh        # stages backup-agent-win-x64.zip and backup-agent-linux-x64/arm64.tar.gz (official release layout, numeric version 0.0.0; BP_AGENT_VERSION overrides) in $BP_DEV_HOME/agent-dist
 BP_DEV_PUBLIC_HOST=192.168.122.1 scripts/dev/start.sh   # start.sh passes AgentDistribution__PackagesDirectory and __PublicBaseUrl to the API
 ```
 

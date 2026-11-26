@@ -13,7 +13,7 @@ public static class AgentDistributionEndpoints
     {
         var dist = endpoints.MapGroup("/api/agent-dist").AllowAnonymous();
         dist.MapMethods("/install.ps1", ["GET", "HEAD"], () => Installer("install.ps1"));
-        dist.MapMethods("/install.sh", ["GET", "HEAD"], () => Installer("install.sh"));
+        dist.MapMethods("/install-agent.sh", ["GET", "HEAD"], () => Installer("install-agent.sh"));
         dist.MapMethods("/packages/{platform}", ["GET", "HEAD"], GetPackage);
         dist.MapGet("/status", async (IConfiguration configuration, PlatformAgentSettingsService settings, CancellationToken cancellationToken) => Results.Ok(new
         {
@@ -22,6 +22,7 @@ public static class AgentDistributionEndpoints
             {
                 ["win-x64"] = PackagePath("win-x64", configuration) is not null,
                 ["linux-x64"] = PackagePath("linux-x64", configuration) is not null,
+                ["linux-arm64"] = PackagePath("linux-arm64", configuration) is not null,
                 ["win-x64-setup"] = PackagePath("win-x64-setup", configuration) is not null
             }
         }));
@@ -38,7 +39,7 @@ public static class AgentDistributionEndpoints
 
     private static async Task<IResult> GetPackage(string platform, IConfiguration configuration, PlatformAgentSettingsService settings, CancellationToken cancellationToken)
     {
-        if (platform is not ("win-x64" or "linux-x64" or "win-x64-setup"))
+        if (platform is not ("win-x64" or "linux-x64" or "linux-arm64" or "win-x64-setup"))
             return Results.BadRequest(new { error = "invalid_platform" });
         var path = PackagePath(platform, configuration);
         if (path is null) return Results.NotFound(new { error = "package_not_found" });
@@ -55,7 +56,7 @@ public static class AgentDistributionEndpoints
     {
         var directory = configuration["AgentDistribution:PackagesDirectory"];
         if (string.IsNullOrWhiteSpace(directory) || !Path.IsPathFullyQualified(directory)) return null;
-        var fileName = platform switch { "win-x64" => "backup-agent-win-x64.zip", "win-x64-setup" => "backup-agent-win-x64-setup.exe", _ => "backup-agent-linux-x64.tar.gz" };
+        var fileName = platform switch { "win-x64" => "backup-agent-win-x64.zip", "win-x64-setup" => "backup-agent-win-x64-setup.exe", _ => $"backup-agent-{platform}.tar.gz" };
         var path = Path.Combine(directory, fileName);
         return File.Exists(path) && new FileInfo(path).Length > 0 ? path : null;
     }

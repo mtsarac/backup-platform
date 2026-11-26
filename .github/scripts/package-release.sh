@@ -3,7 +3,7 @@
 #
 #   package-release.sh <component> <version> <output-dir>
 #
-# component   agent-win-x64 | agent-linux-x64 | backend-linux-x64 | frontend
+# component   agent-win-x64 | agent-linux-x64 | agent-linux-arm64 | backend-linux-x64 | frontend
 # version     semantic version without the leading v, e.g. 0.2.0 or 0.2.0-rc.1. It is stamped into the assemblies
 #             (-p:Version), which is what Agent.Host reports as its software version in every heartbeat.
 #
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
-  echo "usage: $0 <agent-win-x64|agent-linux-x64|backend-linux-x64|frontend> <version> <output-dir>" >&2
+  echo "usage: $0 <agent-win-x64|agent-linux-x64|agent-linux-arm64|backend-linux-x64|frontend> <version> <output-dir>" >&2
   exit 2
 fi
 component="$1"
@@ -61,10 +61,12 @@ case "${component}" in
     readme README-agent-windows.txt
     archive=zip
     ;;
-  agent-linux-x64)
-    publish src/hosts/agent/BackupPlatform.Agent.Host.csproj linux-x64 -p:AgentPlatform=Linux
+  agent-linux-x64|agent-linux-arm64)
+    publish src/hosts/agent/BackupPlatform.Agent.Host.csproj "${component#agent-}" -p:AgentPlatform=Linux
     check_version "${stage}/bin/BackupPlatform.Agent.Host.dll"
-    mkdir "${stage}/config"
+    # install-agent.sh is the only Linux installer; it reads its unit and environment template from install/.
+    mkdir "${stage}/config" "${stage}/install"
+    cp "${backend}/deploy/linux/install-agent.sh" "${backend}/deploy/linux/backup-platform-agent.service" "${backend}/deploy/linux/agent-environment.example" "${stage}/install/"
     cp "${templates}/agent.settings.example.json" "${stage}/config/"
     readme README-agent-linux.txt
     archive=tar

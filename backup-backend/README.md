@@ -419,6 +419,7 @@ Signed self-update is supported for `linux-x64`, `linux-arm64`, and `win-x64` us
 Updates are deferred whenever active work is queued or executing (backup, restore, download, cleanup, deletion, or probe); active jobs are never interrupted.
 
 ### Linux (systemd)
+- Installer: `deploy/linux/install-agent.sh` is the only one (online one-liner or local build, see [`scripts/README.md`](../scripts/README.md)); archives exist for `linux-x64` and `linux-arm64`, there are no deb/rpm packages.
 - Executable: `/opt/backup-platform-agent/supervisor/BackupPlatform.Agent.Host --supervise-update /etc/backup-platform-agent/update-settings.json`
 - Service account: unprivileged `backup-agent:backup-agent` with `Restart=always`
 - Releases: `/opt/backup-platform-agent/releases/{version}`

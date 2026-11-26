@@ -21,6 +21,6 @@ export function enrollmentCommands(platform: AgentPlatform, server: string, toke
     const parameters = `-Token ${quote(token)} -AgentName ${quote(name.trim())} -NonInteractive`
     return `Invoke-RestMethod -Uri ${quote(`${origin}/api/agent-dist/install.ps1`)} -OutFile "$env:TEMP\\install.ps1"; powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\\install.ps1" -Server ${quote(origin)} ${parameters} -Language ${language}`
   }
-  const parameters = `--token ${quote(token)} --name ${quote(name.trim())} --non-interactive`
-  return `(set -e; script=$(mktemp); trap 'rm -f "$script"' EXIT; curl --proto '=https' --tlsv1.2 -fsSL ${quote(`${origin}/api/agent-dist/install.sh`)} -o "$script"; sudo bash "$script" --server ${quote(origin)} ${parameters} --language ${language})`
+  const parameters = `--token ${quote(token)} --name ${quote(name.trim())}`
+  return `(set -e; script=$(mktemp); trap 'rm -f "$script"' EXIT; curl --proto '=https' --tlsv1.2 -fsSL ${quote(`${origin}/api/agent-dist/install-agent.sh`)} -o "$script"; sudo bash "$script" --server ${quote(origin)} ${parameters} --language ${language})`
 }

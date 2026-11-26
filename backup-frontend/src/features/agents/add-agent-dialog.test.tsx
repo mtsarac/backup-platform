@@ -47,7 +47,7 @@ describe('Enrollment commands', () => {
   it('uses HTTPS one-line installers and shell-escapes names and keys for both platforms', () => {
     expect(enrollmentCommands('Windows', 'https://backend.example', 'token', 'Office')).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\\install.ps1"')
     expect(enrollmentCommands('Windows', 'https://backend.example', "token'$()", "O'Brien")).toContain("-Token 'token''$()' -AgentName 'O''Brien' -NonInteractive -Language tr")
-    expect(enrollmentCommands('Linux', 'https://backend.example', 'token', "O'Brien")).toContain("--name 'O'\\''Brien' --non-interactive --language tr")
+    expect(enrollmentCommands('Linux', 'https://backend.example', 'token', "O'Brien")).toContain("--name 'O'\\''Brien' --language tr")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', "O'Brien")).toContain("curl --proto '=https'")
     expect(enrollmentCommands('Linux', 'https://backend.example', 'token', '')).toBe('')
     expect(enrollmentCommands('Windows', 'https://backend.example', 'token', '  ')).toBe('')

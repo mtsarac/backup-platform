@@ -45,7 +45,7 @@ Reset to empty: `docker compose -p bpe2e --env-file .env.e2e down -v && bash e2e
 | Fedora 44 | `ssh virtual-fedora` (user `test-user`, passwordless sudo) | `192.168.122.115` | PostgreSQL 18 server + `psql`/`pg_dump`; no MSSQL, no docker, no agent installed |
 | Windows 11 | `ssh virtual-win11` (`windows-test\test-user`) | `192.168.122.218` | MSSQL (`MSSQL$MSSQLSERVER25`) + PostgreSQL 18 running; no `BackupAgent` service; helpers in `scripts/windows/` |
 
-Both reach the stack (verified: UI and API :5173, `/api/agent-dist/install.sh`, `http://…:5174/cert.crt` all answer 200 from Fedora; TCP and cert download OK from Windows). The stack certificate must be trusted on the VM (`https://192.168.122.1:5174/cert.crt`); agent installers are served by the API (`/api/agent-dist/install.sh|install.ps1`, packages built into the API image). Do not delete VM snapshots.
+Both reach the stack (verified: UI and API :5173, `/api/agent-dist/install-agent.sh`, `http://…:5174/cert.crt` all answer 200 from Fedora; TCP and cert download OK from Windows). The stack certificate must be trusted on the VM (`https://192.168.122.1:5174/cert.crt`); agent installers are served by the API (`/api/agent-dist/install-agent.sh|install.ps1`, packages built into the API image). Do not delete VM snapshots.
 
 ## Flow inventory
 
@@ -84,7 +84,7 @@ Legend: **UI** = doable fully in UI; **API** = needs API/CLI for part; **VM** = 
 ### C. Agent enrollment (VM)
 | Flow | Steps | Expected |
 |---|---|---|
-| Add computer — Linux | `/tenants/:t/enrollment` → token + one-line `install.sh` command → run on Fedora over SSH | agent appears Online in `/agents`; token cleared/consumed; same AgentId after restart |
+| Add computer — Linux | `/tenants/:t/enrollment` → token + one-line `install-agent.sh` command → run on Fedora over SSH | agent appears Online in `/agents`; token cleared/consumed; same AgentId after restart |
 | Add computer — Windows | same with `install.ps1` (elevated PowerShell) / setup wizard `.exe` (not built on Linux) | Online; service `BackupAgent` Running |
 | Token errors | reused/expired token, enrollment disabled | clear error |
 | Agent detail | `/agents/:id` profile rename, settings, rescan, revoke, connectivity | UI |
@@ -164,7 +164,7 @@ Each slice has its own `e2e/tests/<slice>/` directory and unique object names (`
 - **Acceptance:** each provider creates, tests, edits and deletes through the UI against a real target; notification test sends arrive at the sinks; validation and error states per form; checklist covered for `/storage*`, `/settings*`, `/platform/storage*`, `/platform/notification-transports`.
 
 ### S3. Linux agent: enrollment, backup, restore, sharing
-- **Scope:** flow C (Linux), discovery, E, F, G with PostgreSQL and file sources on Fedora: Add computer dialog and one-line `install.sh`, Online state, restart keeps AgentId, token errors, agent detail/rename/rescan/revoke; job wizard, run now, pause/resume/cancel/retry, schedule occurrence, retention, multi-destination, artifacts; DB and file restore, restore verification, cleanup retry; share + download with SHA-256 check; agent logs in the UI (#230).
+- **Scope:** flow C (Linux), discovery, E, F, G with PostgreSQL and file sources on Fedora: Add computer dialog and one-line `install-agent.sh`, Online state, restart keeps AgentId, token errors, agent detail/rename/rescan/revoke; job wizard, run now, pause/resume/cancel/retry, schedule occurrence, retention, multi-destination, artifacts; DB and file restore, restore verification, cleanup retry; share + download with SHA-256 check; agent logs in the UI (#230).
 - **Environment:** Fedora VM (PG18 present; install no other DB), stack from this PR, central or local storage connection.
 - **Depends on:** harness; `createEnrollmentToken` helper.
 - **Acceptance:** from empty state a UI-driven run enrolls the Fedora agent, backs up a PostgreSQL database and a directory, restores both into new targets with matching data/hash, downloads an artifact; failure paths (revoked agent, stopped DB, bad credential) show clear UI errors; checklist covered for `/agents*`, `/enrollment`, `/first-backup`, `/backup-jobs*`, `/backup-runs*`, `/restores*`.

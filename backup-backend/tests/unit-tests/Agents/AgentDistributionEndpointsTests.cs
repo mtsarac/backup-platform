@@ -51,7 +51,7 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
 
     [Theory]
     [InlineData("install.ps1")]
-    [InlineData("install.sh")]
+    [InlineData("install-agent.sh")]
     public async Task Anonymous_get_and_head_serve_installers(string script)
     {
         using var response = await _client.GetAsync($"/api/agent-dist/{script}");
@@ -66,6 +66,7 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
     [Theory]
     [InlineData("win-x64", "backup-agent-win-x64.zip", "application/zip")]
     [InlineData("linux-x64", "backup-agent-linux-x64.tar.gz", "application/gzip")]
+    [InlineData("linux-arm64", "backup-agent-linux-arm64.tar.gz", "application/gzip")]
     public async Task Package_get_and_head_serve_only_the_configured_file(string platform, string fileName, string contentType)
     {
         byte[] bytes = [1, 2, 3, 4];
@@ -179,12 +180,11 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         }
     }
     // The refusal names how to proceed on each platform; Windows also names the uninstall script because a plain uninstall keeps the identity store, which still counts as an installation.
-    // The Windows script cannot run here, so both are compared as text; the Linux checks all end in one helper so no other wording can reach the operator.
+    // The Windows script cannot run here, so it is compared as text.
     private const string ExistingInstallEnglish = "An existing agent installation was found; nothing was replaced. ";
     private const string ExistingInstallTurkish = "Mevcut bir ajan kurulumu bulundu; hicbir sey degistirilmedi. ";
 
     [Theory]
-    [InlineData("install.sh", "refuse_existing() { fail ", "Run it in a terminal to be asked, or add ", "Sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin ", "--replace-existing")]
     [InlineData("install.ps1", "function Refuse-Existing { Fail ", "Run Uninstall-BackupAgentService.ps1 -RemoveIdentity first, then run this installer again. Alternatively run it in a terminal to be asked, or add ", "Once Uninstall-BackupAgentService.ps1 -RemoveIdentity calistirin, ardindan bu kurulumu yeniden calistirin. Ya da sorulmasi icin bir terminalde calistirin, veya sormadan kaldirip yeniden kurmak icin ", "-ReplaceExisting")]
     public async Task Installers_refuse_an_existing_install_without_consent_with_platform_advice_and_name_the_switch(string script, string call, string englishAdvice, string turkishAdvice, string option)
     {
@@ -198,7 +198,6 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("install.sh", "--replace-existing", "Invalid archive root", "\n    remove_existing\n", "[[ \"$confirm\" =~ $accepted ]] || refuse_existing")]
     [InlineData("install.ps1", "-ReplaceExisting", "Invalid release layout", "\n        Remove-ExistingAgent $installPath $storePath\n", "if ($answer -notmatch $accepted) { Refuse-Existing }")]
     public async Task Installers_ask_before_replacing_default_to_no_and_remove_only_after_the_package_is_validated(string script, string option, string packageCheck, string removeCall, string declined)
     {
@@ -217,23 +216,6 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         Assert.True(validated >= 0 && removed > validated, "the old installation must be removed only after the new package was downloaded and validated");
         Assert.True(text.IndexOf(declined, StringComparison.Ordinal) < removed, "the consent question must precede the removal");
         Assert.DoesNotMatch(@"[^\x00-\x7F]", text.TrimStart('\uFEFF'));
-    }
-
-    [Fact]
-    public async Task Linux_installer_configures_staging_and_the_backup_folder_outside_the_state_folder_that_replacing_deletes()
-    {
-        var text = await _client.GetStringAsync("/api/agent-dist/install.sh");
-
-        Assert.Contains("DATA_DIR=/var/lib/backup-agent-data", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("STATE_DIR=/var/lib/backup-agent-data", text, StringComparison.Ordinal);
-        foreach (var line in new[]
-        {
-            "Environment=\"Agent__Backup__Staging__Mapping=SameHost\"",
-            "Environment=\"Agent__Backup__Staging__AgentDirectory=$DATA_DIR/staging\"",
-            "Environment=\"Agent__Backup__LocalStorage__RootDirectory=$DATA_DIR/backups\""
-        })
-            Assert.Contains(line, text, StringComparison.Ordinal);
-        Assert.DoesNotContain("rm -rf -- \"$INSTALL_DIR\" \"$STATE_DIR\" \"$DATA_DIR\"", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -327,18 +309,16 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("--non-interactive", "Server and enrollment token are required")]
-    [InlineData("--non-interactive --server", "Missing option value")]
-    [InlineData("--non-interactive --server https://backup.example --token invalid", "Invalid enrollment token")]
-    [InlineData("--interactive --non-interactive", "Choose only one interaction mode")]
+    [InlineData("--language en", "Server and enrollment token are required")]
+    [InlineData("--server", "Missing option value")]
+    [InlineData("--server https://backup.example --token invalid", "Invalid enrollment token")]
     [InlineData("--insecure", "Unknown installer option")]
-    [InlineData("--server https://one.example --server https://two.example", "Duplicate installer option")]
-    [InlineData("--non-interactive --language tr", "Sunucu ve kayit anahtari zorunludur")]
-    [InlineData("--non-interactive --server http://backup.example --token 11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Invalid HTTPS server address")]
+    [InlineData("--language tr", "Sunucu ve kayit anahtari zorunludur")]
+    [InlineData("--server http://backup.example --token 11111111111111111111111111111111.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Invalid HTTPS server address")]
     public async Task Linux_installer_rejects_invalid_automatic_arguments_without_terminal_reads(string arguments, string expectedError)
     {
         if (!OperatingSystem.IsLinux()) return;
-        var script = await _client.GetStringAsync("/api/agent-dist/install.sh");
+        var script = await _client.GetStringAsync("/api/agent-dist/install-agent.sh");
         var start = new ProcessStartInfo("bash", "-s -- " + arguments)
         {
             RedirectStandardInput = true,

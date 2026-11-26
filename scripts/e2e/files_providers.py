@@ -752,7 +752,7 @@ import subprocess
 
 def phys(prov, fname):
     """Physical locations of a stored object, found by file name."""
-    if prov == "local": rc, o = lib.fedora(f"sudo find /var/lib/backup-agent/local-store -name '{fname}'")
+    if prov == "local": rc, o = lib.fedora(f"sudo find /var/lib/backup-platform-agent/local-store -name '{fname}'")
     elif prov == "sftp": rc, o = lib.fedora(f"sudo find /home/e2e-sftp/backups -name '{fname}'")
     elif prov == "smb":
         r = subprocess.run(["docker", "exec", "bpe2e-samba", "find", "/storage", "-name", fname], capture_output=True, text=True); o = r.stdout

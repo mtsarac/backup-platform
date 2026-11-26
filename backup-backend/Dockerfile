@@ -39,7 +39,7 @@ RUN dotnet publish src/hosts/api/BackupPlatform.Api.csproj -c Release -o /app/pu
 ENV BACKUP_PLATFORM_CONNECTION_STRING="Host=dummy"
 RUN dotnet ef migrations bundle --context PlatformDbContext --project src/core/infrastructure --startup-project src/core/infrastructure -o /app/publish/efbundle --no-build --configuration Release
 
-# Build agent release packages (Windows zip & Linux tar.gz)
+# Build agent release packages (Windows zip & Linux x64/arm64 tar.gz)
 RUN mkdir -p /app/publish/agent-dist && \
     mkdir -p /tmp/win-stage/backup-agent-win-x64-1.0.0/bin /tmp/win-stage/backup-agent-win-x64-1.0.0/config && \
     dotnet publish src/hosts/agent/BackupPlatform.Agent.Host.csproj -c Release -r win-x64 --self-contained true -p:AgentPlatform=Windows -p:Version=1.0.0 -o /tmp/win-stage/backup-agent-win-x64-1.0.0/bin && \
@@ -48,11 +48,15 @@ RUN mkdir -p /app/publish/agent-dist && \
     sed "s/@VERSION@/1.0.0/g" deploy/release/README-agent-windows.txt > /tmp/win-stage/backup-agent-win-x64-1.0.0/README.txt && \
     (cd /tmp/win-stage && zip -qr /app/publish/agent-dist/backup-agent-win-x64.zip backup-agent-win-x64-1.0.0) && \
     rm -rf /tmp/win-stage && \
-    mkdir -p /tmp/linux-stage/backup-agent-linux-x64-1.0.0/bin /tmp/linux-stage/backup-agent-linux-x64-1.0.0/config && \
-    dotnet publish src/hosts/agent/BackupPlatform.Agent.Host.csproj -c Release -r linux-x64 --self-contained true -p:AgentPlatform=Linux -p:Version=1.0.0 -o /tmp/linux-stage/backup-agent-linux-x64-1.0.0/bin && \
-    cp deploy/release/agent.settings.example.json /tmp/linux-stage/backup-agent-linux-x64-1.0.0/config/ && \
-    sed "s/@VERSION@/1.0.0/g" deploy/release/README-agent-linux.txt > /tmp/linux-stage/backup-agent-linux-x64-1.0.0/README.txt && \
-    tar -C /tmp/linux-stage -czf /app/publish/agent-dist/backup-agent-linux-x64.tar.gz backup-agent-linux-x64-1.0.0 && \
+    for arch in x64 arm64; do \
+      stage=/tmp/linux-stage/backup-agent-linux-$arch-1.0.0 && \
+      mkdir -p $stage/bin $stage/config $stage/install && \
+      dotnet publish src/hosts/agent/BackupPlatform.Agent.Host.csproj -c Release -r linux-$arch --self-contained true -p:AgentPlatform=Linux -p:Version=1.0.0 -o $stage/bin && \
+      cp deploy/release/agent.settings.example.json $stage/config/ && \
+      cp deploy/linux/install-agent.sh deploy/linux/backup-platform-agent.service deploy/linux/agent-environment.example $stage/install/ && \
+      sed "s/@VERSION@/1.0.0/g" deploy/release/README-agent-linux.txt > $stage/README.txt && \
+      tar -C /tmp/linux-stage -czf /app/publish/agent-dist/backup-agent-linux-$arch.tar.gz backup-agent-linux-$arch-1.0.0 || exit 1; \
+    done && \
     rm -rf /tmp/linux-stage
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:aac50ceef10391e78a899e3d2ccd00bbafa2dcb56ccf4586cbccf00edb84fc21 AS final

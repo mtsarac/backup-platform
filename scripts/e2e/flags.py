@@ -145,7 +145,7 @@ def agent_start(host, kind):
     env = {"Agent__Backup__FileSources__flagtest__RootDirectory": "/srv/e2e/files" if host == "fedora" else r"C:\e2e\files", "Agent__Backup__FileSources__flagtest__SnapshotKind": kind}
     if host == "fedora":
         exports = " ".join(f"{k}='{v}'" for k, v in env.items())
-        return lib.fedora(f"cd /opt/backup-agent/bin && sudo -u backup-agent env {exports} timeout 60 ./BackupPlatform.Agent.Host 2>&1 | head -40")[1]
+        return lib.fedora(f"cd /opt/backup-platform-agent/current && sudo -u backup-agent env {exports} timeout 60 ./BackupPlatform.Agent.Host 2>&1 | head -40")[1]
     # The service account is a virtual one and the agent refuses to read its identity as anyone else, so the service itself is restarted with the extra
     # environment (put back in finally) and the refusal is read from the Application event log. The lab service has Features__windowsVss=true for the VSS tests, so that entry is left out while the flag-off case runs.
     extra = ",".join(f"'{k}={v}'" for k, v in env.items())

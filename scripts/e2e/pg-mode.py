@@ -13,7 +13,7 @@ rpm -q postgresql-contrib >/dev/null || dnf install -y -q postgresql-contrib
 sudo -u postgres psql -qc "alter role bp_e2e replication"
 grep -q 'bp_e2e.*e2e-replication' /var/lib/pgsql/data/pg_hba.conf || sed -i '1i host replication bp_e2e 127.0.0.1/32 scram-sha-256 # e2e-replication' /var/lib/pgsql/data/pg_hba.conf
 sudo -u postgres psql -qc "select pg_reload_conf()" >/dev/null
-f=/etc/systemd/system/backup-agent.service.d/pgmode.conf
+f=/etc/systemd/system/backup-platform-agent.service.d/pgmode.conf
 printf '[Service]\\nEnvironment="Agent__Backup__PostgreSql__BackupMode={mode}"\\n' > $f
 systemctl daemon-reload && systemctl restart backup-agent && sleep 2 && systemctl is-active backup-agent
 """)

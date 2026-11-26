@@ -42,19 +42,19 @@ export async function resetFedoraForEnrollment(tenant: Api, tenantId: string) {
   for (const agent of agents) await tenant.call('POST', `/api/tenants/${tenantId}/agents/${agent.agentId}/revoke`, {}, [200, 204])
   vm(`set -e
 sudo -n systemctl start postgresql
-if sudo -n systemctl cat backup-agent.service >/dev/null 2>&1; then
-  sudo -n systemctl disable --now backup-agent.service || true
+if sudo -n systemctl cat backup-platform-agent.service >/dev/null 2>&1; then
+  sudo -n systemctl disable --now backup-platform-agent.service || true
 fi
-sudo -n rm -rf /etc/systemd/system/backup-agent.service /etc/systemd/system/backup-agent.service.d /opt/backup-agent /var/lib/backup-agent
+sudo -n rm -rf /etc/systemd/system/backup-platform-agent.service /etc/systemd/system/backup-platform-agent.service.d /opt/backup-platform-agent /var/lib/backup-platform-agent /etc/backup-platform-agent
 sudo -n systemctl daemon-reload
-sudo -n systemctl reset-failed backup-agent.service 2>/dev/null || true
+sudo -n systemctl reset-failed backup-platform-agent.service 2>/dev/null || true
 if getent passwd backup-agent >/dev/null; then sudo -n userdel backup-agent || true; fi
 if getent group backup-agent >/dev/null; then sudo -n groupdel backup-agent || true; fi`)
 }
 
 /** Ensures AGENT_NAME is installed and online (allows running any 02..07 spec standalone without running 01-enroll first). */
 export async function ensureAgent(tenant: Api, tenantId: string): Promise<string> {
-  vm('sudo -n systemctl start postgresql && if sudo -n systemctl cat backup-agent.service >/dev/null 2>&1; then sudo -n systemctl start backup-agent.service || true; fi')
+  vm('sudo -n systemctl start postgresql && if sudo -n systemctl cat backup-platform-agent.service >/dev/null 2>&1; then sudo -n systemctl start backup-platform-agent.service || true; fi')
   const existing: any[] = await tenant.call('GET', `/api/tenants/${tenantId}/agents`)
   const online = existing.find(a => a.hostName === AGENT_NAME && a.connectivity === 'online')
   if (online) return online.agentId
@@ -62,18 +62,18 @@ export async function ensureAgent(tenant: Api, tenantId: string): Promise<string
     await tenant.call('POST', `/api/tenants/${tenantId}/agents/${a.agentId}/revoke`, {}, [200, 204])
   }
   const token = await createEnrollmentToken(tenant, tenantId)
-  vm(`curl --fail --silent --show-error --proto '=https' --tlsv1.2 --location '${apiUrl}/api/agent-dist/install.sh' | sudo -n bash -s -- --server '${apiUrl}' --token '${token}' --name '${AGENT_NAME}' --replace-existing --language tr`)
+  vm(`curl --fail --silent --show-error --proto '=https' --tlsv1.2 --location '${apiUrl}/api/agent-dist/install-agent.sh' | sudo -n bash -s -- --server '${apiUrl}' --token '${token}' --name '${AGENT_NAME}' --language tr`)
   return waitOnline(tenant, tenantId, AGENT_NAME, 90_000)
 }
 
-/** Enrolls an isolated temporary agent identity in /tmp on Fedora without touching backup-agent.service (for revoke/offline failure tests). */
+/** Enrolls an isolated temporary agent identity in /tmp on Fedora without touching backup-platform-agent.service (for revoke/offline failure tests). */
 export async function enrollTransientAgent(tenant: Api, tenantId: string, name: string, opts: { sendHeartbeat?: boolean } = {}) {
   const token = await createEnrollmentToken(tenant, tenantId)
   const dir = `/tmp/e2e-s3-agent-${randomUUID().slice(0, 8)}`
   vm(`set -e
 sudo -n install -d -m 700 -o backup-agent -g backup-agent ${dir}
-sudo -n BACKUP_AGENT_ENROLLMENT_TOKEN='${token}' runuser --user backup-agent --preserve-environment -- /opt/backup-agent/bin/BackupPlatform.Agent.Host enroll --server '${apiUrl}' --store-directory '${dir}' --name '${name}' --non-interactive
-${opts.sendHeartbeat ? `sudo -n timeout 5s runuser --user backup-agent -- env Agent__Backend__BaseUri='${apiUrl}' Agent__CredentialStoreDirectory='${dir}' /opt/backup-agent/bin/BackupPlatform.Agent.Host >/dev/null 2>&1 || true` : ''}`)
+sudo -n BACKUP_AGENT_ENROLLMENT_TOKEN='${token}' runuser --user backup-agent --preserve-environment -- /opt/backup-platform-agent/current/BackupPlatform.Agent.Host enroll --server '${apiUrl}' --store-directory '${dir}' --name '${name}' --non-interactive
+${opts.sendHeartbeat ? `sudo -n timeout 5s runuser --user backup-agent -- env Agent__Backend__BaseUri='${apiUrl}' Agent__CredentialStoreDirectory='${dir}' /opt/backup-platform-agent/current/BackupPlatform.Agent.Host >/dev/null 2>&1 || true` : ''}`)
   const agents: any[] = await tenant.call('GET', `/api/tenants/${tenantId}/agents`)
   const agent = agents.find(a => a.hostName === name)
   if (!agent) throw new Error(`Transient agent ${name} not found after enroll`)

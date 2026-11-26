@@ -123,7 +123,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
                     <p className="text-text-muted">{tx('Sihirbaz yalnızca yukarıdaki anahtarı ve bilgisayarın adını sorar.')} {tx('Program henüz dijital olarak imzalı olmadığından Windows SmartScreen bir uyarı gösterebilir; “Ek bilgi” ve “Yine de çalıştır” ile devam edin.')}</p>
                   </div>
                   : <ErrorNotice what={tx('Windows kurulum sihirbazı (.exe) yayımlanmamış.')} action={tx('Şimdilik yukarıdaki PowerShell komutunu ya da aşağıdaki script ve zip paketini kullanın.')} />)}
-                <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
+                <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install-agent.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
                 <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/${platform === 'Windows' ? 'win-x64' : 'linux-x64'}`} download>{platform === 'Windows' ? tx('Windows zip paketini indir') : tx('Linux tar.gz paketini indir')}</a></p>
               </div>
             </details>
