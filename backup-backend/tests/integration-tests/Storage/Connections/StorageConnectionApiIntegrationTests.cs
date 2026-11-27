@@ -234,6 +234,45 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
     }
 
     [Fact]
+    public async Task PlatformAdminCannotCreateOrMutateConnectionsThroughTenantRoutes()
+    {
+        await using var env = await ApiWorld.CreateAsync(fixture);
+        var platform = await env.PlatformAdminAsync();
+
+        using var tenantList = await platform.GetAsync(env.TenantRoot + "/storage-connections");
+        Assert.Equal(HttpStatusCode.OK, tenantList.StatusCode);
+        var items = AgentWorld.ReadJson(tenantList).GetProperty("items").EnumerateArray().ToList();
+        var localId = items.Single(item => item.GetProperty("providerType").GetString() == "local").GetProperty("id").GetGuid();
+        foreach (var item in items)
+        {
+            var permissions = item.GetProperty("permissions");
+            Assert.False(permissions.GetProperty("canEdit").GetBoolean());
+            Assert.False(permissions.GetProperty("canSetQuotaScope").GetBoolean());
+            Assert.False(permissions.GetProperty("canToggle").GetBoolean());
+            Assert.False(permissions.GetProperty("canDelete").GetBoolean());
+            Assert.False(permissions.GetProperty("canManageSecret").GetBoolean());
+            Assert.False(permissions.GetProperty("canTest").GetBoolean());
+        }
+
+        using var create = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + "/storage-connections",
+            new { providerType = "google-drive", name = "Platform Drive" });
+        using var update = await platform.SendAsync(HttpMethod.Put, env.TenantRoot + $"/storage-connections/{localId}", new { name = "Renamed" });
+        using var setSecret = await platform.SendAsync(HttpMethod.Put, env.TenantRoot + $"/storage-connections/{localId}/secret", new { values = new { password = "x" } });
+        using var clearSecret = await platform.SendAsync(HttpMethod.Delete, env.TenantRoot + $"/storage-connections/{localId}/secret");
+        using var test = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/test");
+        using var disable = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/disable");
+        using var delete = await platform.SendAsync(HttpMethod.Delete, env.TenantRoot + $"/storage-connections/{localId}");
+        using var oauthStart = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/google-drive/authorize-url");
+        using var oauthDisconnect = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/google-drive/disconnect");
+
+        foreach (var response in new[] { create, update, setSecret, clearSecret, test, disable, delete, oauthStart, oauthDisconnect })
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal("tenant_member_required", AgentWorld.ReadJson(response).GetProperty("code").GetString());
+        }
+    }
+
+    [Fact]
     public async Task QuotaScopeInATenantBodyIsRejectedAsNotAllowed()
     {
         await using var env = await ApiWorld.CreateAsync(fixture);

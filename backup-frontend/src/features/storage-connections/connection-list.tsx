@@ -1,5 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { useContext } from 'react'
 import { Link } from 'react-router-dom'
+import { AuthContext } from '@/features/auth/auth-context'
 import { Cable } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
@@ -58,6 +60,7 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
 export function ConnectionList() {
   useLanguage()
   const { tenantId } = useTenant()
+  const canCreateConnection = useContext(AuthContext)?.user?.role !== 'PlatformAdmin'
   const connections = useTenantConnections()
   const ops = useTenantConnectionOps()
   const list = connections.data?.items ?? []
@@ -65,7 +68,7 @@ export function ConnectionList() {
   return <QueryState isPending={connections.isPending} error={connections.error} onRetry={() => void connections.refetch()}>
     <Section title={tx("Depolama bağlantıları")} description={tx("Yedeklerinizin yazıldığı yerler.")} flush>
       {list.length === 0
-        ? <EmptyState icon={Cable} message={tx("Henüz depolama bağlantısı yok.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/storage/connections/new`}>{tx("Depolama bağlantısı ekle")}</Link>} />
+        ? <EmptyState icon={Cable} message={tx("Henüz depolama bağlantısı yok.")} action={canCreateConnection ? <Link className={buttonVariants()} to={`/tenants/${tenantId}/storage/connections/new`}>{tx("Depolama bağlantısı ekle")}</Link> : undefined} />
         : <>
           <ul className="divide-y divide-border">{list.map((connection) => <ConnectionCard key={connection.id} connection={connection} tenantId={tenantId} total={total}
             testing={ops.test.isPending && ops.test.variables?.id === connection.id} testError={ops.test.error && ops.test.variables?.id === connection.id ? errorMessage(ops.test.error, 'storageConnection') : undefined} onTest={() => ops.test.mutate(connection)} />)}</ul>

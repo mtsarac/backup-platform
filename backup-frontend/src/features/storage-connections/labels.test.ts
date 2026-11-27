@@ -64,6 +64,17 @@ describe('presentation helpers', () => {
     expect(configurationSummary(makeConnection())).toEqual([])
   })
 
+  it('labels reauthorizationRequired in Turkish and omits internal 3-2-1 site/mediaClass fields', () => {
+    const connection = makeConnection({
+      providerType: 'google-drive',
+      configuration: { accountEmail: 'owner@example.com', reauthorizationRequired: 'false', site: 'dc-1', mediaClass: 'object-storage' },
+    })
+    expect(configurationSummary(connection, { configFields: [{ name: 'accountEmail', label: 'Google hesabı', kind: 'Text', required: false, maxLength: 256 }] })).toEqual([
+      { name: 'accountEmail', label: 'Google hesabı', value: 'owner@example.com' },
+      { name: 'reauthorizationRequired', label: 'Yeniden yetkilendirme gerekli', value: 'Hayır' },
+    ])
+  })
+
   it('words concurrent_update for connections, not plans', () => {
     expect(errorMessage(new ApiError(409, { error: 'concurrent_update' }), 'storageConnection')).toMatch(/^Bağlantı başka bir işlemle/)
     expect(errorMessage(new ApiError(409, { error: 'connection_in_use' }), 'storageConnection')).toMatch(/kullanılıyor/)

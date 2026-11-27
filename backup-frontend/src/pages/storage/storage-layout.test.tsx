@@ -12,6 +12,7 @@ import { makeConnection, makeManaged } from '@/features/storage-connections/test
 import { formatBytes } from '@/lib/format'
 import { StorageLayout } from './storage-layout'
 import { ConnectionList } from '@/features/storage-connections/connection-list'
+import { AuthContext, type AuthContextValue } from '@/features/auth/auth-context'
 
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a' }) }))
 vi.mock('@/features/storage/api')
@@ -112,5 +113,12 @@ describe('Depolama', () => {
     mount()
     expect(await screen.findByRole('article', { name: 'Ofis diski' })).toBeInTheDocument()
     expect(screen.getByText('Varsayılan')).toBeInTheDocument()
+  })
+  it('hides tenant storage creation actions for PlatformAdmin', async () => {
+    const auth = { user: { userId: 'admin-1', displayName: 'Admin', role: 'PlatformAdmin', isPlatformAdmin: true } } as unknown as AuthContextValue
+    vi.mocked(connectionApi.getTenantConnections).mockResolvedValue({ items: [makeConnection()] })
+    render(<AuthContext.Provider value={auth}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/tenants/tenant-a/storage']}><Routes><Route path="/tenants/tenant-a/storage" element={<StorageLayout />}><Route index element={<ConnectionList />} /></Route></Routes></MemoryRouter></QueryClientProvider></AuthContext.Provider>)
+    expect(await screen.findByRole('article', { name: 'Yerel disk' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Depolama bağlantısı ekle' })).not.toBeInTheDocument()
   })
 })
