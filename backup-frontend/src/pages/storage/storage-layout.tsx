@@ -1,5 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { useContext } from 'react'
 import { Link, Outlet } from 'react-router-dom'
+import { AuthContext } from '@/features/auth/auth-context'
 import { Plus } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { PageHeader } from '@/components/ui/page-header'
@@ -41,13 +43,14 @@ const failedColumns = (base: string): Column<BackupArtifact>[] => [
 export function StorageLayout() {
   useLanguage()
   const { tenantId } = useTenant()
+  const canCreateConnection = useContext(AuthContext)?.user?.role !== 'PlatformAdmin'
   const base = `/tenants/${tenantId}`
   const connections = useTenantConnections()
   const quota = useTenantStorageQuota()
   const failedState = useListState(failedListConfig)
   const failed = useArtifacts(tenantId, { ...toServerQuery(failedState), state: 'DeleteFailed' })
   return <div className="space-y-6">
-    <PageHeader title={tx('Depolama')} actions={connections.data?.items.length ? <Link to={`${base}/storage/connections/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx('Depolama bağlantısı ekle')}</Link> : undefined} />
+    <PageHeader title={tx('Depolama')} actions={canCreateConnection && connections.data?.items.length ? <Link to={`${base}/storage/connections/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx('Depolama bağlantısı ekle')}</Link> : undefined} />
     <QueryState isPending={quota.isPending} error={quota.error} onRetry={() => void quota.refetch()}>
       {quota.data && <Section title={tx('Depolama kullanımı')}>
         <p>{tx('Toplam boyut')}: {formatBytes(quota.data.usedBytes)}{quota.data.limitBytes !== null && <> · {tx('Kota')}: {formatBytes(quota.data.limitBytes)}</>}</p>

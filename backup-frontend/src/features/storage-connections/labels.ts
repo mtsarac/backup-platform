@@ -140,16 +140,23 @@ function configurationValue(value: ConfigurationValue, kind?: string) {
   return String(value)
 }
 
+const implicitConfigLabels: Record<string, string> = {
+  reauthorizationRequired: 'Yeniden yetkilendirme gerekli',
+}
+
 /** Label/value pairs of the safe configuration, labelled from the descriptor when it is known. Never touches secrets: the API carries none. */
 export function configurationSummary(connection: Pick<ConnectionView, 'configuration'>, descriptor?: Pick<ProviderDescriptor, 'configFields'>) {
-  return Object.entries(connection.configuration ?? {}).map(([name, value]) => {
-    const field = descriptor?.configFields.find((f) => f.name === name)
-    return {
-      name,
-      label: tx(field?.label) ?? name,
-      value: configurationValue(value, field?.kind),
-    }
-  })
+  return Object.entries(connection.configuration ?? {})
+    .filter(([name]) => name !== 'site' && name !== 'mediaClass')
+    .map(([name, value]) => {
+      const field = descriptor?.configFields.find((f) => f.name === name)
+      const labelKey = field?.label ?? (Object.hasOwn(implicitConfigLabels, name) ? implicitConfigLabels[name] : undefined)
+      return {
+        name,
+        label: tx(labelKey) ?? name,
+        value: configurationValue(value, field?.kind),
+      }
+    })
 }
 
 

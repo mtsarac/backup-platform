@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
-import { activeSecretFields, configurationComplete, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
+import { activeSecretFields, configurationComplete, editableConfigFields, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
 import { useCreatePlatformConnection, usePlatformProviders } from './hooks'
 import { errorField, isPlatformCreatable } from './labels'
@@ -33,13 +33,13 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
   function chooseProvider(next: string) {
     setProviderType(next)
     const selected = creatable.find((item) => item.providerType === next)
-    setConfig(initialFieldValues(selected?.configFields ?? [], {}, next))
+    setConfig(initialFieldValues(editableConfigFields(next, selected?.configFields ?? []), {}, next))
     setSecret({})
   }
 
   function submit() {
     if (!provider) return
-    const input = { ...providerPayload(provider, name, config, secret), ownership: 'PlatformManaged' as const, ...(quotaScope.trim() ? { quotaScope: quotaScope.trim() } : {}) }
+    const input = { ...providerPayload({ ...provider, configFields: editableConfigFields(provider.providerType, provider.configFields) }, name, config, secret), ownership: 'PlatformManaged' as const, ...(quotaScope.trim() ? { quotaScope: quotaScope.trim() } : {}) }
     setSecret({})
     create.mutate({ tenantId, input }, { onSuccess: () => { reset(); onClose() } })
   }
@@ -47,7 +47,7 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
   return <FormDialog title={tenant ? tx("Yönetilen hedef ekle: {0}", { "0": tenant.name }) : tx('Yönetilen hedef ekle')}
     description={tx("Seçtiğiniz çalışma alanı için platformun işlettiği bir depolama hedefi oluşturur.")}
     submitLabel={tx("Yönetilen hedef ekle")} pendingLabel={tx("Ekleniyor…")} pending={create.isPending}
-    disabled={!tenantId || !provider || !name.trim() || quotaScopeInvalid || !configurationComplete(provider.configFields, config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
+    disabled={!tenantId || !provider || !name.trim() || quotaScopeInvalid || !configurationComplete(editableConfigFields(provider.providerType, provider.configFields), config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
     error={create.error ?? providers.error} errorScope="storageConnection" onSubmit={submit} onClose={onClose}>
     {tenant ? <p className="text-sm text-text-muted">{tx("Çalışma alanı:")}{' '}<span className="font-medium text-text">{tenant.name}</span></p> : <TenantPicker value={tenantId} onChange={setTenantId} />}
     <label className="block text-sm text-text-muted">{tx("Depolama sağlayıcısı")}<Select className="mt-1" value={providerType} onChange={(event) => chooseProvider(event.target.value)} disabled={providers.isPending}>

@@ -501,4 +501,54 @@ describe('Enablement, test, deletion and editing', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(api.updateTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local', { name: 'Yerel', configuration: undefined }))
   })
+
+  it('hides physical site and media class in edit dialog while preserving API-set values and labelling reauthorizationRequired', async () => {
+    const user = userEvent.setup()
+    const providerWith321 = {
+      ...fakeProvider,
+      configFields: [
+        ...fakeProvider.configFields,
+        { name: 'site', label: 'Physical site / failure domain', kind: 'Text' as const, required: false, maxLength: 64 },
+        { name: 'mediaClass', label: 'Media class (disk, object-storage, tape)', kind: 'Text' as const, required: false, maxLength: 32 },
+      ],
+    }
+    const driveProvider = {
+      ...catalog[3],
+      availability: 'Available' as const,
+      tenantCreatable: true,
+      configFields: [
+        { name: 'accountEmail', label: 'Google hesabı', kind: 'Text' as const, required: false, maxLength: 256 },
+        { name: 'site', label: 'Physical site / failure domain', kind: 'Text' as const, required: false, maxLength: 64 },
+        { name: 'mediaClass', label: 'Media class (disk, object-storage, tape)', kind: 'Text' as const, required: false, maxLength: 32 },
+      ],
+    }
+    const drive = makeConnection({
+      id: 'conn-drive', name: 'Drive Hedefi', providerType: 'google-drive', providerDisplayName: 'Google Drive',
+      isDefault: false, permissions: { ...tenantAdminPermissions },
+      configuration: { accountEmail: 'owner@example.com', reauthorizationRequired: 'false' },
+    })
+    serve([s3({ configuration: { bucket: 'old-bucket', site: 'dc-offsite', mediaClass: 'object-storage' } }), drive], [providerWith321, driveProvider])
+    vi.mocked(api.updateTenantConnection).mockResolvedValue(s3({ configuration: { bucket: 'new-bucket', site: 'dc-offsite', mediaClass: 'object-storage' } }))
+
+    const first = mount(detail('conn-s3', 'configuration'))
+    await user.click(await screen.findByRole('button', { name: /^Düzenle/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByLabelText(/Fiziksel site|Physical site|Medya s|Media class/i)).not.toBeInTheDocument()
+    await user.clear(within(dialog).getByLabelText('Kova'))
+    await user.type(within(dialog).getByLabelText('Kova'), 'new-bucket')
+    await user.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(api.updateTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-s3', {
+      configuration: { bucket: 'new-bucket', site: 'dc-offsite', mediaClass: 'object-storage', useTls: 'false' },
+    }))
+    first.unmount()
+
+    mount(detail('conn-drive', 'configuration'))
+    const panel = await screen.findByRole('tabpanel')
+    expect(panel).toHaveTextContent('Yeniden yetkilendirme gerekliHayır')
+    expect(panel).not.toHaveTextContent('reauthorizationRequired')
+    await user.click(screen.getByRole('button', { name: /^Düzenle/ }))
+    const driveDialog = await screen.findByRole('dialog')
+    expect(within(driveDialog).queryByLabelText(/Fiziksel site|Physical site|Medya s|Media class/i)).not.toBeInTheDocument()
+    expect(within(driveDialog).getAllByRole('textbox')).toHaveLength(1)
+  })
 })
