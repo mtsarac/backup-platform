@@ -38,9 +38,12 @@ beforeEach(() => {
   })
 })
 
+let unmountAll = () => undefined as void
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<QueryClientProvider client={client}><InAppNotifications userId="user-a" /></QueryClientProvider>)
+  const view = render(<QueryClientProvider client={client}><InAppNotifications userId="user-a" /></QueryClientProvider>)
+  unmountAll = view.unmount
+  return view
 }
 
 describe('in-app notifications', () => {
@@ -71,7 +74,7 @@ describe('in-app notifications', () => {
     expect(within(panel).getByText('Zorunlu güvenlik bildirimi')).toBeInTheDocument()
     expect(within(panel).queryByRole('checkbox')).not.toBeInTheDocument()
     expect(within(panel).queryByRole('switch')).not.toBeInTheDocument()
-    expect(within(panel).getAllByRole('button').map((button) => button.textContent)).toEqual(['Okundu olarak işaretle'])
+    expect(within(panel).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual(['Tümünü okundu işaretle', 'Okundu olarak işaretle: Hesap güvenliği'])
   })
 
   it('loads the durable list and marks a notification as read', async () => {
@@ -79,10 +82,12 @@ describe('in-app notifications', () => {
     mount()
     await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
     expect(await screen.findByText('Sunucu A')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Okundu olarak işaretle' }))
-    expect(await screen.findByText('Okundu')).toBeInTheDocument()
+    records = [{ ...first, readAt: '2026-01-01T12:05:00Z' }]
+    await user.click(screen.getByRole('button', { name: 'Okundu olarak işaretle: Sunucu A' }))
+    expect(await screen.findByRole('region', { name: 'Daha eski' })).toBeInTheDocument()
     expect(apiRequest).toHaveBeenCalledWith('notifications/in-app/1/read', { method: 'POST' })
-    expect(screen.queryByRole('button', { name: 'Okundu olarak işaretle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Okundu olarak işaretle/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tümünü okundu işaretle' })).not.toBeInTheDocument()
   })
 
   it('shows real-time arrivals once and reloads the durable list on reconnect', async () => {
@@ -108,9 +113,9 @@ describe('in-app notifications', () => {
       if (path === 'notifications/in-app') return [...records] as never
       throw new Error('Network error')
     })
-    await user.click(screen.getByRole('button', { name: 'Okundu olarak işaretle' }))
+    await user.click(screen.getByRole('button', { name: 'Okundu olarak işaretle: Sunucu A' }))
     expect(await within(screen.getByRole('dialog', { name: 'Bildirimler' })).findByRole('alert')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Okundu olarak işaretle' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Okundu olarak işaretle: Sunucu A' })).toBeInTheDocument()
   })
 
   it('displays share notification labels and links to the related share screen for UserAdmin and PlatformAdmin', async () => {
@@ -141,5 +146,74 @@ describe('in-app notifications', () => {
     )
     await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
     expect(await screen.findByRole('link', { name: 'ProductionDb' })).toHaveAttribute('href', '/platform/shares')
+  })
+
+  it('groups unread first by severity, marks all as read, and shows the unread count on the button', async () => {
+    const user = userEvent.setup()
+    records = [
+      { ...first, id: 'a', type: 'backup_share_created', subjectName: 'Paylasim' },
+      { ...first, id: 'b', type: 'backup_stale', subjectName: 'Eski' },
+      { ...first, id: 'c', type: 'agent_offline', subjectName: 'Kritik' },
+      { ...first, id: 'd', type: 'backup_failed', subjectName: 'Okunmus', readAt: '2026-01-01T12:01:00Z' },
+    ]
+    mount()
+    expect(await screen.findByRole('button', { name: 'Bildirimler, 3 okunmamış' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Bildirimler/ }))
+    const unreadGroup = await screen.findByRole('region', { name: 'Okunmamış' })
+    expect(within(unreadGroup).getAllByRole('listitem').map((li) => li.textContent)).toEqual([expect.stringContaining('Kritik'), expect.stringContaining('Eski'), expect.stringContaining('Paylasim')])
+    expect(within(screen.getByRole('region', { name: 'Daha eski' })).getByText('Okunmus')).toBeInTheDocument()
+    records = records.map((item) => ({ ...item, readAt: item.readAt ?? '2026-01-01T12:05:00Z' }))
+    await user.click(screen.getByRole('button', { name: 'Tümünü okundu işaretle' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Okunmamış' })).not.toBeInTheDocument())
+    for (const id of ['a', 'b', 'c']) expect(apiRequest).toHaveBeenCalledWith(`notifications/in-app/${id}/read`, { method: 'POST' })
+    expect(apiRequest).not.toHaveBeenCalledWith('notifications/in-app/d/read', { method: 'POST' })
+  })
+
+  it('links job, connection and agent notifications to their screens and marks the item read on click', async () => {
+    const user = userEvent.setup()
+    const base = { ...first, tenantId: 'tenant-a' }
+    records = [
+      { ...base, id: 'j', subjectName: 'Gece yedegi', subjectKind: 'backup_job', subjectId: 'job-1' },
+      { ...base, id: 'c', type: 'quota_critical', subjectName: 'Depo', subjectKind: 'storage_connection', subjectId: 'conn-1' },
+      { ...base, id: 'g', type: 'agent_offline', subjectName: 'host-1', subjectKind: 'agent', subjectId: 'agent-1' },
+    ]
+    mount()
+    await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
+    expect(await screen.findByRole('link', { name: 'Gece yedegi' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-1')
+    expect(screen.getByRole('link', { name: 'Depo' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/conn-1')
+    expect(screen.getByRole('link', { name: 'host-1' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-1')
+    await user.click(screen.getByRole('link', { name: 'Gece yedegi' }))
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('notifications/in-app/j/read', { method: 'POST' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('shows an empty state, and an error state with a retry that recovers', async () => {
+    const user = userEvent.setup()
+    records = []
+    mount()
+    await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
+    expect(await screen.findByText('Henüz bildiriminiz yok.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tümünü okundu işaretle' })).not.toBeInTheDocument()
+    unmountAll()
+
+    vi.mocked(apiRequest).mockImplementation(async () => { throw new Error('Network error') })
+    mount()
+    await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
+    const panel = await screen.findByRole('dialog', { name: 'Bildirimler' })
+    expect(await within(panel).findByRole('alert')).toBeInTheDocument()
+    records = [first]
+    vi.mocked(apiRequest).mockImplementation(async (path) => (path === 'notifications/in-app' ? [...records] : undefined) as never)
+    await user.click(within(panel).getByRole('button', { name: 'Yeniden dene' }))
+    expect(await within(panel).findByText('Sunucu A')).toBeInTheDocument()
+  })
+
+  it('shows relative time with the exact time in a tooltip', async () => {
+    const user = userEvent.setup()
+    mount()
+    await user.click(await screen.findByRole('button', { name: /Bildirimler/ }))
+    const time = (await screen.findByText('Sunucu A')).closest('li')!.querySelector('time')!
+    expect(time).toHaveAttribute('datetime', first.occurredAt)
+    expect(time.textContent).toMatch(/önce/)
+    expect(time.getAttribute('title')).toBeTruthy()
   })
 })
