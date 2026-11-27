@@ -52,6 +52,8 @@ public static class BackupHealthEndpoints
         var access = await resolution.ResolveAsync(tenantId, cancellationToken);
         if (access is null) return false;
         context.Features.Set(new ResolvedTenantContext(access));
-        return (await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAccess)).Succeeded;
+        if (!(await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAccess)).Succeeded) return false;
+        await PlatformTenantAudit.RecordAsync(context, tenantId);
+        return true;
     }
 }

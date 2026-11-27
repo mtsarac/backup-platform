@@ -36,7 +36,7 @@ public sealed class CentralAuthorizationIntegrationTests(PostgreSqlFixture fixtu
     }
 
     [Fact]
-    public async Task AuthorizationMatrix_PlatformAdmin_CanAccessPlatformAndTenantManagement_DeniedContent()
+    public async Task AuthorizationMatrix_PlatformAdmin_ChoosesTenantWithoutMembership()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var tenantA = await world.CreateTenantAsync();
@@ -54,6 +54,13 @@ public sealed class CentralAuthorizationIntegrationTests(PostgreSqlFixture fixtu
         using var tenantAgents = await platformSession.GetAsync($"/api/tenants/{aId}/agents");
         Assert.Equal(HttpStatusCode.OK, tenantAgents.StatusCode);
 
+        using var tenants = await platformSession.GetAsync("/api/me/tenants");
+        Assert.Empty(AgentWorld.ReadJson(tenants).EnumerateArray());
+        await using var database = fixture.CreatePlatformContext();
+        var events = await database.AuditEvents.Where(e => e.ActorUserId == platformUser.UserId && e.TenantId == tenantA.Tenant.Id && e.Action == "tenant.support_request").ToListAsync();
+        Assert.Contains(events, e => e.ActorKind == BackupPlatform.Domain.Audit.AuditActorKind.PlatformAdmin && e.TargetId.Contains("/context"));
+        Assert.Contains(events, e => e.ActorKind == BackupPlatform.Domain.Audit.AuditActorKind.PlatformAdmin && e.TargetId.Contains("/agents"));
+
         using var downloadAvail = await platformSession.GetAsync($"/api/tenants/{aId}/backup-artifacts/{Guid.NewGuid()}/download-availability");
         Assert.Equal(HttpStatusCode.Forbidden, downloadAvail.StatusCode);
 
@@ -62,6 +69,23 @@ public sealed class CentralAuthorizationIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(HttpStatusCode.BadRequest, addMember.StatusCode);
         var errorJson = AgentWorld.ReadJson(addMember);
         Assert.Equal("platform_admin_membership_not_allowed", errorJson.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PlatformAdminCanCreateAndRunBackupInChosenTenantWithAudit()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var account = await scenario.World.SeedUserAsync(platformAdmin: true);
+        var platform = await scenario.World.SignInAsync(account);
+        using var create = await scenario.CreateJobRawAsync(BackupApiScenario.JobBody(scenario.Agent.AgentId), platform);
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var job = AgentWorld.ReadJson(create).GetProperty("id").GetGuid();
+        using var run = await scenario.StartRawAsync(job, Guid.NewGuid().ToString("N"), platform);
+        Assert.Equal(HttpStatusCode.OK, run.StatusCode);
+        await using var db = fixture.CreatePlatformContext();
+        var audit = await db.AuditEvents.Where(e => e.ActorUserId == account.UserId && e.TenantId == scenario.Setup.Tenant.Id && e.Action == "tenant.support_request").ToListAsync();
+        Assert.Contains(audit, e => e.ActorKind == BackupPlatform.Domain.Audit.AuditActorKind.PlatformAdmin && e.TargetId.EndsWith("/backup-jobs") && e.DetailsJson.Contains("POST"));
+        Assert.Contains(audit, e => e.ActorKind == BackupPlatform.Domain.Audit.AuditActorKind.PlatformAdmin && e.TargetId.EndsWith("/runs") && e.DetailsJson.Contains("POST"));
     }
 
     [Theory]

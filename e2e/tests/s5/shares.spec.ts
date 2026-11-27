@@ -99,6 +99,20 @@ test.describe('tenant shares', () => {
 })
 
 test.describe('platform shares', () => {
+  test('platform admin creates a time-limited share in the customer workspace', async ({ page }) => {
+    await signIn(page, state().accounts.platformAdmin)
+    await page.goto(tenantUrl(w.populated, `/backup-runs/${w.runs.share}`))
+    await page.getByText('More', { exact: true }).click()
+    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    await page.getByRole('button', { name: 'Create share' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('textbox').fill(reason('support-self'))
+    await dialog.getByRole('button', { name: /^(Create|Share|Create share)$/ }).click()
+    const row = page.getByRole('row').filter({ hasText: reason('support-self') })
+    await expect(row.getByText('Active')).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Download' })).toBeVisible()
+  })
+
   test('platform admin sees tenant shares with Download, and can open download attempts', async ({ page }) => {
     await apiShare('platform')
     const health = watch(page)

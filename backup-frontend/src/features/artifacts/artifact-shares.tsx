@@ -14,6 +14,7 @@ import { useCreateShare, useShares } from '@/features/shares/hooks'
 import { canExtendShare, canManageShare, SHARE_DURATION_HOURS, type BackupShareView } from '@/features/shares/types'
 import { ShareDurationSelect } from '@/features/shares/share-duration-select'
 import { ShareActionDialogs } from '@/features/shares/share-dialogs'
+import { ShareDownload } from '@/features/shares/share-download'
 import type { BackupArtifact } from './types'
 
 export function ArtifactSharesSection({
@@ -57,19 +58,16 @@ export function ArtifactSharesSection({
     <Section
       title={tx('Paylaşımlar')}
       actions={
-        // Only a tenant UserAdmin may create a share (the API answers 403 to a PlatformAdmin); a PlatformAdmin creates shares on the platform shares page.
-        user?.role === 'PlatformAdmin' ? undefined : (
-          <Button
-            size="sm"
-            disabled={!canCreate}
-            onClick={() => {
-              createMutation.reset()
-              setDialogOpen(true)
-            }}
-          >
-            {tx('Paylaşım oluştur')}
-          </Button>
-        )
+        <Button
+          size="sm"
+          disabled={!canCreate}
+          onClick={() => {
+            createMutation.reset()
+            setDialogOpen(true)
+          }}
+        >
+          {tx('Paylaşım oluştur')}
+        </Button>
       }
     >
       <div className="space-y-4">
@@ -116,6 +114,7 @@ export function ArtifactSharesSection({
                     <td className="py-2 text-right">
                       {canManageShare(share, user?.role) ? (
                         <div className="flex justify-end gap-2">
+                          {user?.role === 'PlatformAdmin' && share.status === 'Active' && <ShareDownload share={share} />}
                           {canExtendShare(share, user?.role) && (
                             <Button
                               size="sm"

@@ -131,7 +131,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task PlatformAdminManagesAnyTenantWithoutMembership()
+    public async Task PlatformAdminManagesCustomerAgentsWithoutMembership()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();

@@ -17,12 +17,12 @@ public sealed class PostgreSqlCentralAuthorizationService(DbContextOptions<Platf
         {
             return null;
         }
-
         if (user.Role == UserRole.PlatformAdmin)
         {
             var tenant = await context.Tenants.AsNoTracking().SingleOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
             return tenant is null ? null : new TenantAccess(tenant.Id, tenant.Name);
         }
+
 
         return await (from membership in context.TenantMemberships.AsNoTracking()
                       join tenant in context.Tenants.AsNoTracking() on membership.TenantId equals tenant.Id

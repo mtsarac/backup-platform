@@ -109,7 +109,6 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         Assert.Contains(first.Id.Value, ids);
         Assert.Contains(second.Id.Value, ids);
 
-        // A PlatformAdmin has access to tenant-scoped management endpoints without any membership row.
         Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Get, $"/api/tenants/{first.Id.Value}/context")).Status);
         Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Get, $"/api/platform/tenants/{Guid.NewGuid()}")).Status);
     }

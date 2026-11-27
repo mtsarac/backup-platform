@@ -81,6 +81,38 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
     }
 
     [Fact]
+    public async Task PlatformAdminSelfIssuesTenantShareAndDownloadsWithAuditUntilExpiry()
+    {
+        await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
+        var account = await scenario.World.SeedUserAsync(platformAdmin: true);
+        var platform = await scenario.World.SignInAsync(account);
+        using var direct = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/downloads", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, direct.StatusCode);
+
+        using var create = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/shares", new { durationHours = 1, reason = "Support investigation" });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var share = AgentWorld.ReadJson(create);
+        Assert.Equal("PlatformAdmin", share.GetProperty("createdByRole").GetString());
+        var shareId = share.GetProperty("id").GetGuid();
+        using var prepare = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/downloads", new { shareId });
+        Assert.Equal(HttpStatusCode.OK, prepare.StatusCode);
+        using var content = await platform.Client.GetAsync(AgentWorld.ReadJson(prepare).GetProperty("downloadUrl").GetString()!);
+        Assert.Equal(HttpStatusCode.OK, content.StatusCode);
+        Assert.Equal(scenario.Bytes, await content.Content.ReadAsByteArrayAsync());
+
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            var audit = await db.AuditEvents.Where(e => e.ActorUserId == account.UserId && e.TenantId == scenario.Backup.Backup.Setup.Tenant.Id).ToListAsync();
+            Assert.Contains(audit, e => e.Action == AuditActions.BackupShareCreated && e.ActorKind == AuditActorKind.PlatformAdmin && e.DetailsJson.Contains(scenario.Accepted.ArtifactId.ToString(), StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(audit, e => e.Action == "download.requested" && e.ActorKind == AuditActorKind.PlatformAdmin && e.DetailsJson.Contains(scenario.Accepted.ArtifactId.ToString(), StringComparison.OrdinalIgnoreCase));
+        }
+        scenario.World.Clock.Advance(TimeSpan.FromHours(2));
+        using var expired = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/downloads", new { shareId });
+        Assert.Equal(HttpStatusCode.Forbidden, expired.StatusCode);
+        Assert.Equal("share_expired", AgentWorld.ReadJson(expired).GetProperty("error").GetString());
+    }
+
+    [Fact]
     public async Task PlatformAdmin_WithActiveMatchingShare_CanDownload_ByteIdentical_WhenPlain()
     {
         var (scenario, shareId) = await SetupScenarioWithShareAsync(fixture, encrypt: false);
@@ -248,7 +280,7 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
     }
 
     [Fact]
-    public async Task RestoreBoundary_RejectsShareId_ReturnsNoBytesOrKey_AuditsPlatformAdmin()
+    public async Task RestoreBoundary_RejectsShareIdForPlatformAdmin()
     {
         var (scenario, shareId) = await SetupScenarioWithShareAsync(fixture);
         await using (scenario)
@@ -256,21 +288,19 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
             var platformAccount = await scenario.World.SeedUserAsync(platformAdmin: true);
             var platform = await scenario.World.SignInAsync(platformAccount);
 
-            // Restore request with query param ShareId must be rejected (400)
             using var queryReject = await platform.SendAsync(
                 HttpMethod.Post,
                 $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore?shareId={shareId}",
                 new { agentId = scenario.Backup.Agent.AgentId, databaseName = "RestoreDb", target = new { mode = "mssql-credential", credentialId = Guid.NewGuid() } });
             Assert.Equal(HttpStatusCode.BadRequest, queryReject.StatusCode);
 
-            // Restore request with body ShareId must be rejected (400) specifically because Restore does not accept a ShareId
             using var bodyReject = await platform.SendAsync(
                 HttpMethod.Post,
                 $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore",
                 new { shareId, agentId = scenario.Backup.Agent.AgentId, databaseName = "RestoreDb", target = new { host = "localhost", databaseCredentialReference = "test-cred" } });
             Assert.Equal(HttpStatusCode.BadRequest, bodyReject.StatusCode);
             Assert.Equal("Restore does not accept a ShareId.", AgentWorld.ReadJson(bodyReject).GetProperty("message").GetString());
-            // PlatformAdmin restore without ShareId (valid admin management operation)
+            // A tenant member may restore without a share.
             var idempotencyKey = $"restore-{Guid.NewGuid():N}";
             using var validMsg = new HttpRequestMessage(HttpMethod.Post, $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore")
             {

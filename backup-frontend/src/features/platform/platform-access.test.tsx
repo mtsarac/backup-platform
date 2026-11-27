@@ -38,10 +38,11 @@ describe('Platform Administration entry points', () => {
     expect(screen.getAllByText(/Yedeklemeler/).length).toBeGreaterThan(0)
   })
 
-  it('tenant picker links PlatformAdmin users and hides it for others', () => {
+  it('redirects PlatformAdmin users to platform management instead of the tenant picker', async () => {
     const tenants = [{ tenantId: 't1', name: 'Bir' }, { tenantId: 't2', name: 'İki' }]
-    const { unmount } = renderPlatform(<TenantSelectPage />, { user: platformAdmin, tenants })
-    expect(screen.getByRole('link', { name: /Platform Administration|Platform yönetimi/ })).toHaveAttribute('href', '/platform')
+    const routes = <><Route path="/" element={<TenantSelectPage />} /><Route path="/platform" element={<p>Platform home</p>} /></>
+    const { unmount } = renderPlatform(null, { path: '/', routes, user: platformAdmin, tenants })
+    expect(await screen.findByText('Platform home')).toBeInTheDocument()
     unmount()
     renderPlatform(<TenantSelectPage />, { user: tenantOwner, tenants })
     expect(screen.queryByRole('link', { name: /Platform Administration|Platform yönetimi/ })).not.toBeInTheDocument()

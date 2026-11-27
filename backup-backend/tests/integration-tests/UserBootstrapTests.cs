@@ -54,6 +54,7 @@ public sealed class UserBootstrapTests(PostgreSqlFixture fixture) : IClassFixtur
             Assert.Equal(userId, user.Id);
             Assert.Equal("Initial local user", user.DisplayName);
             Assert.Empty(await database.TenantMemberships.ToListAsync());
+            Assert.Empty(await database.Tenants.ToListAsync());
             var audit = await database.AuditEvents.SingleAsync();
             Assert.Equal(UserId.System, audit.ActorUserId);
             Assert.Equal(AuditActorKind.System, audit.ActorKind);

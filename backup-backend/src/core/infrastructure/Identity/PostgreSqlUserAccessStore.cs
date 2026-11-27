@@ -21,14 +21,7 @@ public sealed class PostgreSqlUserAccessStore(DbContextOptions<PlatformDbContext
     {
         await using var context = PlatformOperationsDbContext.Create(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user is null) return [];
-        if (user.Role == UserRole.PlatformAdmin)
-        {
-            return await context.Tenants.AsNoTracking()
-                .OrderBy(tenant => tenant.Name).ThenBy(tenant => tenant.Id)
-                .Select(tenant => new TenantAccess(tenant.Id, tenant.Name))
-                .ToListAsync(cancellationToken);
-        }
+        if (user is null || user.Role == UserRole.PlatformAdmin) return [];
         return await (from membership in context.TenantMemberships
                       join tenant in context.Tenants on membership.TenantId equals tenant.Id
                       where membership.UserId == userId
@@ -40,12 +33,7 @@ public sealed class PostgreSqlUserAccessStore(DbContextOptions<PlatformDbContext
     {
         await using var context = PlatformOperationsDbContext.Create(options);
         var user = await context.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user is null) return null;
-        if (user.Role == UserRole.PlatformAdmin)
-        {
-            var tenant = await context.Tenants.AsNoTracking().SingleOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
-            return tenant is null ? null : new TenantAccess(tenant.Id, tenant.Name);
-        }
+        if (user is null || user.Role == UserRole.PlatformAdmin) return null;
         return await (from membership in context.TenantMemberships
                       join tenant in context.Tenants on membership.TenantId equals tenant.Id
                       where membership.UserId == userId && membership.TenantId == tenantId

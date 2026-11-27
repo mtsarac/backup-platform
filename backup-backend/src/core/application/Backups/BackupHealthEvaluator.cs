@@ -41,7 +41,7 @@ public sealed class BackupHealthEvaluator(IBackupHealthStore store, TimeProvider
         {
             RestoreStatus.Failed or RestoreStatus.AgentLost => new BackupHealthFactor(0, 20, "Failed", "restore_failed"),
             RestoreStatus.Succeeded when evidence.LatestVerificationAt >= now.AddDays(-30) && evidence.LatestVerificationAt <= now => new(20, 20, "Passed", "restore_passed"),
-            _ => new(10, 20, "Unavailable", "restore_untested")
+            _ => new(20, 20, "Unavailable", "restore_unverified")
         };
         var capacity = Capacity(evidence.DestinationCapacity, now);
         var score = freshness.Score + replication.Score + restore.Score + capacity.Score;

@@ -116,6 +116,16 @@ test.describe('route guards', () => {
     expect(w.problems.filter((p) => p.startsWith('pageerror'))).toEqual([])
   })
 
+  test('PlatformAdmin chooses a customer workspace from platform administration', async ({ page }) => {
+    await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
+    await expect(page).toHaveURL(/\/platform$/)
+    await page.goto('/platform/tenants')
+    const workspace = page.getByRole('row').filter({ hasText: s.tenantName })
+    await workspace.getByRole('link', { name: 'Yönet' }).click()
+    await expect(page).toHaveURL(new RegExp(`/tenants/${s.tenantId}$`))
+    await expect(page.getByRole('heading', { name: 'Ana sayfa' })).toBeVisible()
+  })
+
   test('PlatformAdmin reaches /platform; sign-out from there lands on /login; Back stays signed out', async ({ page }) => {
     await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
     await page.waitForURL((u) => u.pathname !== '/login')

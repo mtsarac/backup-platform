@@ -11,7 +11,7 @@ Authorization is decided in the backend by the central authorization service; th
 
 ## Reading backup content: BackupShare
 
-A PlatformAdmin can download a tenant's artifact only through a **BackupShare**: a time-limited, revocable grant for one artifact, created with a reason by a UserAdmin of the tenant or by a PlatformAdmin.
+A PlatformAdmin can download a tenant's artifact only through a **BackupShare**: a time-limited, revocable grant for one artifact, created by a UserAdmin of the tenant or by a PlatformAdmin. A PlatformAdmin can create a share from the customer workspace without tenant approval.
 
 - The share is checked when the download session is created and again when the stream starts. A stream that has started is not cut by expiry.
 - Revoking a share cancels downloads in progress on every API node.
@@ -23,7 +23,7 @@ A UserAdmin downloads the artifacts of its own tenants without a share, optional
 
 ## Restore boundary
 
-Restore is a tenant management operation and is available to both roles.
+Restore is a tenant management operation available to tenant members and platform administrators.
 
 - A restore request never accepts a share id and never returns backup bytes or keys to the caller.
 - Restoring to a target writes the plaintext to that target. Whoever controls the target can read it, so a restore to a controlled target exposes plaintext.

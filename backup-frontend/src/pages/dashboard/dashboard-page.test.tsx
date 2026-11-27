@@ -167,10 +167,11 @@ describe('rows', () => {
     expect(await screen.findByText('1 veri korunuyor · 1 güncel · 0 dikkat gerekiyor')).toBeVisible()
   })
 
-  it('puts the one-sentence notes on the row and raises no band for them', async () => {
-    healths = [health('job-a', 'restore_untested', { state: 'Degraded', score: 80 }, 'restoreVerification')]
+  it('shows a successful backup as current when restore verification is unavailable', async () => {
+    healths = [health('job-a', 'restore_unverified', { state: 'Healthy', score: 90 }, 'restoreVerification')]
     mount()
-    expect(await within(await row('Muhasebe')).findByText('Yedek henüz geri yükleme ile denenmedi.')).toBeVisible()
+    expect(await within(await row('Muhasebe')).findByText('Güncel')).toBeVisible()
+    expect(screen.queryByText('Yedek henüz geri yükleme ile denenmedi.')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Dikkat gerekiyor' })).not.toBeInTheDocument()
   })
 })

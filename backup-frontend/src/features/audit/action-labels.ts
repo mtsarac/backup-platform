@@ -4,6 +4,7 @@ import { tx } from '@/lib/i18n'
 const actionLabels: Record<string, string> = {
   get 'tenant.created'() { return tx("Tenant oluşturuldu") },
   get 'tenant.renamed'() { return tx("Tenant yeniden adlandırıldı") },
+  get 'tenant.support_request'() { return tx("Destek işlemi") },
   get 'membership.added'() { return tx("Üyelik eklendi") },
   get 'membership.role_changed'() { return tx("Üyelik rolü değiştirildi") },
   get 'membership.removed'() { return tx("Üyelik kaldırıldı") },

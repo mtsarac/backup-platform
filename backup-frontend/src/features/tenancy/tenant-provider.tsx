@@ -27,9 +27,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       cache.removeQueries({ queryKey: ['tenant', oldId] })
     }
   }, [cache, tenantId])
-  if (!membership && user?.role === 'PlatformAdmin' && context.isFetching) {
-    return <QueryState isPending error={null} />
-  }
+  if (!membership && user?.role === 'PlatformAdmin' && context.isFetching) return <QueryState isPending error={null} />
   if (!tenant) return <NotFound standalone />
   async function switchTenant(id: string) {
     if (id === tenantId) return

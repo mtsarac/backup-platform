@@ -16,7 +16,7 @@ export interface JobStatusInput {
 }
 
 // Freshness and schedule penalties mean nothing for manual and paused jobs; the other reasons still do.
-const scheduleReasons = ['backup_missing', 'backup_stale', 'schedule_unavailable', 'restore_untested', 'capacity_warning', 'capacity_unavailable']
+const scheduleReasons = ['backup_missing', 'backup_stale', 'schedule_unavailable', 'capacity_warning', 'capacity_unavailable']
 
 /** The row status of the spec's table, first match wins; shared by the job panel and the home page. */
 export function jobStatus({ job, health, failedRecently, hasSucceeded, offline, running }: JobStatusInput): JobStatus {

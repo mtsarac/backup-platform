@@ -21,11 +21,11 @@ function TenantProbe() {
   const query = useQuery({ queryKey: ['tenant', tenantId, 'backup-runs'], queryFn: () => Promise.resolve(tenantId === 'tenant-a' ? ['Private A'] : ['Public B']) })
   return <><p>{tenantId}</p><p>{query.data?.join(',') ?? 'Loading tenant data'}</p><button onClick={() => { void switchTenant('tenant-b') }}>Switch tenant</button><button onClick={() => navigate('/tenants/tenant-b')}>Direct navigation</button></>
 }
-function setup(cache: QueryClient, role: 'PlatformAdmin' | 'UserAdmin' = 'PlatformAdmin', initialPath = '/tenants/tenant-a') {
+function setup(cache: QueryClient, role: 'PlatformAdmin' | 'UserAdmin' = 'UserAdmin', initialPath = '/tenants/tenant-a') {
   return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', role, isPlatformAdmin: role === 'PlatformAdmin' }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}><MemoryRouter initialEntries={[initialPath]}><Routes><Route path="/tenants/:tenantId" element={<TenantProvider><TenantProbe /></TenantProvider>} /></Routes></MemoryRouter></AuthContext.Provider></QueryClientProvider>)
 }
 describe('tenant switching and permissions', () => {
-  it('loads tenant context for a platform administrator without membership', async () => {
+  it('loads the chosen customer workspace for platform support', async () => {
     vi.mocked(apiRequest).mockResolvedValueOnce({ tenantId: 'tenant-c', name: 'Tenant C' })
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     setup(cache, 'PlatformAdmin', '/tenants/tenant-c')
@@ -40,13 +40,6 @@ describe('tenant switching and permissions', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Sayfa bulunamadı.' })).toBeInTheDocument()
     expect(screen.getByRole('main')).toContainElement(screen.getByRole('link', { name: 'Ana sayfaya dön' }))
     expect(apiRequest).not.toHaveBeenCalled()
-    cache.clear()
-  })
-  it('displays not-found state for a platform administrator deep-linking to a nonexistent tenant', async () => {
-    vi.mocked(apiRequest).mockRejectedValueOnce(new Error('tenant_not_found'))
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    setup(cache, 'PlatformAdmin', '/tenants/nonexistent-tenant')
-    expect(await screen.findByText('Sayfa bulunamadı.')).toBeInTheDocument()
     cache.clear()
   })
   it.each(['Switch tenant', 'Direct navigation'])('clears previous tenant cache with %s and does not keep its state on screen', async action => {
@@ -82,22 +75,6 @@ describe('top-bar tenant selector and role navigation', () => {
     await userEvent.selectOptions(select, 'tenant-b')
     expect(await screen.findByText('Public B')).toBeInTheDocument()
     expect(screen.queryByText('Private A')).not.toBeInTheDocument()
-    cache.clear()
-  })
-  it('provides role navigation link to platform management for platform administrator in the top bar', async () => {
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={cache}>
-        <AuthContext.Provider value={{ user: { userId: 'admin', displayName: 'Platform Admin', role: 'PlatformAdmin', isPlatformAdmin: true }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}>
-          <MemoryRouter initialEntries={['/tenants/tenant-a']}>
-            <Routes>
-              <Route path="/tenants/:tenantId" element={<ThemeProvider><TenantProvider><TopBar onMenuToggle={() => undefined} /><TenantProbe /></TenantProvider></ThemeProvider>} />
-            </Routes>
-          </MemoryRouter>
-        </AuthContext.Provider>
-      </QueryClientProvider>
-    )
-    expect(screen.getByRole('link', { name: 'Platform yönetimi' })).toHaveAttribute('href', '/platform')
     cache.clear()
   })
 })

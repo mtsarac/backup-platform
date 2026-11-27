@@ -23,12 +23,12 @@ public sealed class BackupShareService(
         CancellationToken cancellationToken)
     {
         var profile = await userStore.GetUserAsync(actor, cancellationToken);
-        if (profile is null || profile.Role != UserRole.UserAdmin)
+        if (profile is null || profile.Role is not (UserRole.UserAdmin or UserRole.PlatformAdmin))
         {
             return new BackupShareCreateResult(
                 BackupShareCreateOutcome.Forbidden,
                 ErrorCode: "forbidden",
-                ErrorMessage: "Only a UserAdmin of the tenant can create a share.");
+                ErrorMessage: "A tenant administrator or platform administrator is required to create a share.");
         }
 
         var now = timeProvider.GetUtcNow();

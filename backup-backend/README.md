@@ -66,8 +66,8 @@ periodically and download the displayed (up to 1,000) records as JSON.
 Tenant members and platform administrators can read `GET /api/tenants/{tenantId}/backup-jobs/{jobId}/health`
 and `GET /api/tenants/{tenantId}/observability/health-summary`. The versioned
 equivalents are `GET /api/v1/backups/jobs/{id}/health` and
-`GET /api/v1/observability/health-summary?tenantId={tenantId}`; membership (or
-platform administrator access) is checked before reading that tenant's data.
+`GET /api/v1/observability/health-summary?tenantId={tenantId}`; tenant membership
+or platform administrator access is checked before reading that tenant's data.
 
 The deterministic score weights freshness (40), usable verified replicas of the
 latest successful backup (30), latest isolated restore verification (20), and
@@ -80,7 +80,7 @@ the same thresholds: below 80% earns ten points, 80% up to (but excluding) 90%
 earns five, and 90% or above is Critical and earns zero.
 
 Scores of at least 80 are Healthy, 50–79 Degraded, and below 50 Critical.
-Untested or expired (over 30 days) successful restore verification earns ten
+Untested or expired (over 30 days) successful restore verification earns twenty
 points; a failed latest test earns zero. Empty tenants return null average and
 state rather than a fabricated healthy score. Summaries batch latest evidence
 per job/connection and include tenant-owned capacity risks. `recentSizeAnomalies`
@@ -263,6 +263,8 @@ email, initial password and role; `UserAdmin` accounts also require at least one
 `PlatformAdmin` accounts cannot have memberships. Usernames and email addresses are case-insensitively
 unique, and either can be used to sign in. Existing bootstrap credentials without an email can be
 updated by a platform administrator. Account and membership changes are audited without passwords.
+
+For the Google Drive test on the deployed instance, sign in as PlatformAdmin, create a customer workspace under Platform administration, and create a separate UserAdmin under Users with that workspace selected. Supply the initial password privately; do not put it in a command, issue, or log. Sign out, sign in as the new UserAdmin, change the initial password when prompted, and configure Google Drive in that workspace. Existing backups remain in their current workspace; grant the customer user membership in that workspace if those backups must remain accessible.
 
 A PlatformAdmin can assign a temporary password (`POST /api/platform/users/{id}/temporary-password`), which ends the
 user's sessions and forces a change at the next sign-in, and can disable or enable an account
