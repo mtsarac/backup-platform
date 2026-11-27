@@ -475,14 +475,14 @@ describe('first backup flow', () => {
       expect(await screen.findByRole('link', { name: 'Ayrıntı' })).toHaveAttribute('href', '/tenants/tenant-a/restores/ver-1')
     })
 
-    it('skipping the trial restore says the home page keeps a reminder', async () => {
+    it('skipping the trial restore confirms the choice without starting a restore', async () => {
       vi.mocked(getBackup).mockImplementation(async (_tenant, id) => succeeded(id))
       vi.mocked(getRestoreTargets).mockResolvedValue({ artifactId: 'artifact-1', sourceDatabase: 'Muhasebe', backupType: 'Full', sizeBytes: 1, agents: [], targets: [] })
       const user = userEvent.setup()
       mount()
       await start(user)
       await user.click((await screen.findAllByRole('button', { name: 'Atla' }))[0])
-      expect(screen.getByText(/Atlandı\. Ana sayfada .* hatırlatma kalır/)).toBeVisible()
+      expect(screen.getByText('Atlandı.')).toBeVisible()
       expect(startRestoreVerification).not.toHaveBeenCalled()
     })
   })

@@ -97,13 +97,12 @@ function ItemProgress({ runId, name, where, onFinished }: { runId: string; name:
   </div>
 }
 
-/** Optional: restores the copy into a new database (never over the real one); skipping leaves the home page reminder, which the server derives from the missing trial. */
 function TrialRestore({ tenantId, artifact }: { tenantId: string; artifact: NonNullable<BackupRun['attempts'][number]['artifacts'][number]> }) {
   useLanguage()
   const [choice, setChoice] = useState<{ skipped: true } | { restoreId: string } | null>(null)
   const blocked = restoreIneligibility(artifact)
   return <Section title={tx('Deneme geri yüklemesi')} description={tx('Yedeği yeni bir veritabanı olarak geri yükler; asıl verinize dokunmaz.')}>
-    {choice && 'skipped' in choice ? <p className="text-sm text-text-muted">{tx('Atlandı. Ana sayfada bu verinin satırında geri yükleme ile denenmediğine dair hatırlatma kalır.')}</p>
+    {choice && 'skipped' in choice ? <p className="text-sm text-text-muted">{tx('Atlandı.')}</p>
       : choice ? <RestoreOutcome tenantId={tenantId} restoreId={choice.restoreId} />
       : blocked ? <p className="text-sm text-text-muted">{blocked}</p>
       : <div className="flex flex-wrap items-end gap-3">

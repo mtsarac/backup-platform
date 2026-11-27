@@ -3383,7 +3383,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "İlk yedeğiniz alındı ve doğrulandı": { tr: "İlk yedeğiniz alındı ve doğrulandı", en: "Your first backup was taken and verified" },
   "Deneme geri yüklemesi": { tr: "Deneme geri yüklemesi", en: "Trial restore" },
   "Yedeği yeni bir veritabanı olarak geri yükler; asıl verinize dokunmaz.": { tr: "Yedeği yeni bir veritabanı olarak geri yükler; asıl verinize dokunmaz.", en: "Restores the backup as a new database; your real data is not touched." },
-  "Atlandı. Ana sayfada bu verinin satırında geri yükleme ile denenmediğine dair hatırlatma kalır.": { tr: "Atlandı. Ana sayfada bu verinin satırında geri yükleme ile denenmediğine dair hatırlatma kalır.", en: "Skipped. The home page row for this data keeps a reminder that it was not tried with a restore." },
+  "Atlandı.": { tr: "Atlandı.", en: "Skipped." },
   "Geri yüklemeyi dene": { tr: "Geri yüklemeyi dene", en: "Try a restore" },
   "Atla": { tr: "Atla", en: "Skip" },
   "Başlatıldı": { tr: "Başlatıldı", en: "Started" },
