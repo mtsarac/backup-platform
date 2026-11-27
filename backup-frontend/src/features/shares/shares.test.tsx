@@ -277,19 +277,24 @@ describe('BackupShare frontend', () => {
     })
   })
 
-  it('does not offer share creation to a PlatformAdmin on the backup detail page', async () => {
+  it('lets a PlatformAdmin create and download an active share from the customer backup', async () => {
     permissions.role = 'PlatformAdmin'
-    request.mockImplementation(async (path: string) => {
-      if (path.includes('backup-shares') || path.includes('/shares')) return []
+    let created = false
+    request.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (options?.method === 'POST' && path.endsWith('/shares')) { created = true; return platformAdminShare }
+      if (path.includes('backup-shares') || path.includes('/shares')) return created ? [platformAdminShare] : []
       if (path.includes('repairs')) return []
       if (path.endsWith('backup-artifacts/artifact-1')) return testArtifact
       return path.includes('download-attempts') ? { items: [], totalCount: 0, page: 1, pageSize: 25 } : []
     })
-
     await renderDetailPage()
-
-    await screen.findByText('Paylaşımlar')
-    expect(screen.queryByRole('button', { name: 'Paylaşım oluştur' })).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Paylaşım oluştur' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Paylaşım oluştur' }))
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      'tenants/tenant-a/backup-artifacts/artifact-1/shares',
+      expect.objectContaining({ method: 'POST', json: { durationHours: 24, reason: undefined } })
+    ))
+    expect(await screen.findByRole('button', { name: 'İndir' })).toBeVisible()
   })
 
   it('creates a share from artifact detail with default duration', async () => {

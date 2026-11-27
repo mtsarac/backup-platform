@@ -81,6 +81,38 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
     }
 
     [Fact]
+    public async Task PlatformAdminSelfIssuesTenantShareAndDownloadsWithAuditUntilExpiry()
+    {
+        await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
+        var account = await scenario.World.SeedUserAsync(platformAdmin: true);
+        var platform = await scenario.World.SignInAsync(account);
+        using var direct = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/downloads", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, direct.StatusCode);
+
+        using var create = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/shares", new { durationHours = 1, reason = "Support investigation" });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var share = AgentWorld.ReadJson(create);
+        Assert.Equal("PlatformAdmin", share.GetProperty("createdByRole").GetString());
+        var shareId = share.GetProperty("id").GetGuid();
+        using var prepare = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/downloads", new { shareId });
+        Assert.Equal(HttpStatusCode.OK, prepare.StatusCode);
+        using var content = await platform.Client.GetAsync(AgentWorld.ReadJson(prepare).GetProperty("downloadUrl").GetString()!);
+        Assert.Equal(HttpStatusCode.OK, content.StatusCode);
+        Assert.Equal(scenario.Bytes, await content.Content.ReadAsByteArrayAsync());
+
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            var audit = await db.AuditEvents.Where(e => e.ActorUserId == account.UserId && e.TenantId == scenario.Backup.Backup.Setup.Tenant.Id).ToListAsync();
+            Assert.Contains(audit, e => e.Action == AuditActions.BackupShareCreated && e.ActorKind == AuditActorKind.PlatformAdmin && e.DetailsJson.Contains(scenario.Accepted.ArtifactId.ToString(), StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(audit, e => e.Action == "download.requested" && e.ActorKind == AuditActorKind.PlatformAdmin && e.DetailsJson.Contains(scenario.Accepted.ArtifactId.ToString(), StringComparison.OrdinalIgnoreCase));
+        }
+        scenario.World.Clock.Advance(TimeSpan.FromHours(2));
+        using var expired = await platform.SendAsync(HttpMethod.Post, scenario.ArtifactPath + "/downloads", new { shareId });
+        Assert.Equal(HttpStatusCode.Forbidden, expired.StatusCode);
+        Assert.Equal("share_expired", AgentWorld.ReadJson(expired).GetProperty("error").GetString());
+    }
+
+    [Fact]
     public async Task PlatformAdmin_WithActiveMatchingShare_CanDownload_ByteIdentical_WhenPlain()
     {
         var (scenario, shareId) = await SetupScenarioWithShareAsync(fixture, encrypt: false);

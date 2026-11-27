@@ -11,7 +11,7 @@ Authorization is decided in the backend by the central authorization service; th
 
 ## Reading backup content: BackupShare
 
-A PlatformAdmin can download a tenant's artifact only through a **BackupShare**: a time-limited, revocable grant for one artifact, created with a reason by a UserAdmin of the tenant or by a PlatformAdmin.
+A PlatformAdmin can download a tenant's artifact only through a **BackupShare**: a time-limited, revocable grant for one artifact, created by a UserAdmin of the tenant or by a PlatformAdmin. A PlatformAdmin can create a share from the customer workspace without tenant approval.
 
 - The share is checked when the download session is created and again when the stream starts. A stream that has started is not cut by expiry.
 - Revoking a share cancels downloads in progress on every API node.
