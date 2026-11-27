@@ -50,12 +50,10 @@ test.describe('artifact detail (inside the run detail)', () => {
     for (const name of ['Download', 'Share', 'Delete']) await expect(moreMenu(page).getByRole('button', { name, exact: true })).toBeVisible()
   })
 
-  test('PlatformAdmin cannot download directly and is told why', async ({ page }) => {
+  test('PlatformAdmin cannot open a tenant backup detail', async ({ page }) => {
     await signIn(page, state().accounts.platformAdmin)
     await page.goto(runUrl(w.runs.view))
-    await expect(page.getByText('Platform administrators cannot download directly', { exact: false })).toBeVisible()
-    await more(page)
-    await expect(moreMenu(page).getByRole('button', { name: 'Download', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Page not found.' })).toBeVisible()
   })
 
   test('delete: dialog explains consequences, Escape leaves the artifact untouched', async ({ page }) => {

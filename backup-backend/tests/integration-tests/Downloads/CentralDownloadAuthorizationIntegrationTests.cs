@@ -248,7 +248,7 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
     }
 
     [Fact]
-    public async Task RestoreBoundary_RejectsShareId_ReturnsNoBytesOrKey_AuditsPlatformAdmin()
+    public async Task RestoreBoundary_RejectsShareIdAndPlatformAdmin()
     {
         var (scenario, shareId) = await SetupScenarioWithShareAsync(fixture);
         await using (scenario)
@@ -256,21 +256,22 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
             var platformAccount = await scenario.World.SeedUserAsync(platformAdmin: true);
             var platform = await scenario.World.SignInAsync(platformAccount);
 
-            // Restore request with query param ShareId must be rejected (400)
-            using var queryReject = await platform.SendAsync(
+            using var denied = await platform.SendAsync(HttpMethod.Post,
+                $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore", new { });
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+            using var queryReject = await scenario.Admin.SendAsync(
                 HttpMethod.Post,
                 $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore?shareId={shareId}",
                 new { agentId = scenario.Backup.Agent.AgentId, databaseName = "RestoreDb", target = new { mode = "mssql-credential", credentialId = Guid.NewGuid() } });
             Assert.Equal(HttpStatusCode.BadRequest, queryReject.StatusCode);
 
-            // Restore request with body ShareId must be rejected (400) specifically because Restore does not accept a ShareId
-            using var bodyReject = await platform.SendAsync(
+            using var bodyReject = await scenario.Admin.SendAsync(
                 HttpMethod.Post,
                 $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore",
                 new { shareId, agentId = scenario.Backup.Agent.AgentId, databaseName = "RestoreDb", target = new { host = "localhost", databaseCredentialReference = "test-cred" } });
             Assert.Equal(HttpStatusCode.BadRequest, bodyReject.StatusCode);
             Assert.Equal("Restore does not accept a ShareId.", AgentWorld.ReadJson(bodyReject).GetProperty("message").GetString());
-            // PlatformAdmin restore without ShareId (valid admin management operation)
+            // A tenant member may restore without a share.
             var idempotencyKey = $"restore-{Guid.NewGuid():N}";
             using var validMsg = new HttpRequestMessage(HttpMethod.Post, $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore")
             {

@@ -342,15 +342,15 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
 
         var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
         using var platformProbe = await platform.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionAId}/probe");
-        Assert.Contains(platformProbe.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Accepted });
+        Assert.Equal(HttpStatusCode.NotFound, platformProbe.StatusCode);
         using var platformCapacity = await platform.GetAsync($"/api/v1/storage/connections/{connectionAId}/capacity");
-        Assert.Equal(HttpStatusCode.OK, platformCapacity.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, platformCapacity.StatusCode);
 
         var memberAccount = await world.SeedUserAsync();
         await world.GrantAsync(tenantA.Tenant, memberAccount);
         var member = await world.SignInAsync(memberAccount);
         using var memberCapacity = await member.GetAsync($"/api/v1/storage/connections/{connectionAId}/capacity");
-        Assert.Equal(HttpStatusCode.OK, memberCapacity.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, memberCapacity.StatusCode);
         await using (var context = fixture.CreatePlatformContext())
         {
             var membership = await context.TenantMemberships.SingleAsync(row => row.TenantId == tenantA.Tenant.Id && row.UserId == memberAccount.UserId);
