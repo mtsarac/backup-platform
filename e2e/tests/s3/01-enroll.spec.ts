@@ -93,9 +93,14 @@ echo "EXIT:$rc"`)
     await expect(dialog.getByLabel('Tek kullanımlık kurulum komutu')).toBeVisible()
     await dialog.getByRole('button', { name: 'Kapat' }).click()
 
-    await expect(page.getByRole('button', { name: /^İptal et/ }).first()).toBeVisible()
-    await page.getByRole('button', { name: /^İptal et/ }).first().click()
-    await page.getByRole('dialog').getByRole('button', { name: 'İptali onayla' }).click()
+    // The tenant is shared between runs, so keys left pending by earlier runs must be revoked too before the list can be empty.
+    const cancelKey = page.getByRole('button', { name: /^İptal et/ })
+    await expect(cancelKey.first()).toBeVisible()
+    for (let left = await cancelKey.count(); left > 0; left--) {
+      await cancelKey.first().click()
+      await page.getByRole('dialog').getByRole('button', { name: 'İptali onayla' }).click()
+      await expect(cancelKey).toHaveCount(left - 1)
+    }
     await expect(page.getByText('Bekleyen kayıt anahtarı yok.')).toBeVisible()
 
     const toggle = page.getByRole('switch', { name: 'Yeni bilgisayar kayıtlarına izin ver' })

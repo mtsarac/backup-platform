@@ -57,7 +57,7 @@ test.describe('in-app notifications (top-bar bell)', () => {
       await expect(bell).toBeVisible()
       await bell.click()
 
-      const panel = page.locator('#in-app-notifications')
+      const panel = page.getByRole('dialog', { name: 'Bildirimler' })
       await expect(panel).toBeVisible()
       await expect(panel).toContainText('Hesap güvenliği')
       await expect(panel).toContainText('Zorunlu güvenlik bildirimi')
@@ -69,7 +69,7 @@ test.describe('in-app notifications (top-bar bell)', () => {
 
       await page.reload()
       await page.getByRole('button', { name: 'Bildirimler', exact: true }).click()
-      await expect(page.locator('#in-app-notifications').getByText('Okundu', { exact: true })).toBeVisible()
+      await expect(page.getByRole('dialog', { name: 'Bildirimler' }).getByText('Okundu', { exact: true })).toBeVisible()
       expect(problems).toEqual([])
     } finally {
       await fresh.api.dispose()
