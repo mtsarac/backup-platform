@@ -252,9 +252,11 @@ internal sealed class GoogleDriveStagingDirectory : IDisposable
 
     private static class Native
     {
-        internal const int CreateFlags = 2 | 64 | 128 | 0x20000 | 0x80000;
-        internal const int OpenFileFlags = 2 | 0x20000 | 0x80000;
-        private const int DirectoryFlags = 0x10000 | 0x20000 | 0x80000;
+        private static readonly bool Arm = RuntimeInformation.ProcessArchitecture is Architecture.Arm or Architecture.Arm64;
+        private static readonly int NoFollow = Arm ? 0x8000 : 0x20000;
+        internal static readonly int CreateFlags = 2 | 64 | 128 | NoFollow | 0x80000;
+        internal static readonly int OpenFileFlags = 2 | NoFollow | 0x80000;
+        private static readonly int DirectoryFlags = (Arm ? 0x4000 : 0x10000) | NoFollow | 0x80000;
 
         internal static Win32Exception Error() => new(Marshal.GetLastPInvokeError());
         internal static SafeFileHandle OpenRoot() => Wrap(Open("/", DirectoryFlags));

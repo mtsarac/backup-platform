@@ -62,6 +62,7 @@ services:
       - "traefik.http.routers.backup-api.middlewares=protected@file,backup-strip-cert,backup-client-cert"
       - "traefik.http.middlewares.backup-strip-cert.headers.customrequestheaders.X-Forwarded-Tls-Client-Cert="
       - "traefik.http.middlewares.backup-client-cert.passtlsclientcert.pem=true"
+      - "traefik.http.middlewares.backup-strip-cert.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.services.backup-api.loadbalancer.server.port=5000"
 
   bootstrap:
