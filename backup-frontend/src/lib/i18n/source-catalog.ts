@@ -228,6 +228,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Anahtarı döndürmek yeni yedeklerde yeni bir anahtar kullanılmasını sağlar. Eski yedekler önceki anahtarla açılmaya devam eder.": { tr: "Anahtarı döndürmek yeni yedeklerde yeni bir anahtar kullanılmasını sağlar. Eski yedekler önceki anahtarla açılmaya devam eder.", en: "Rotating the key makes future backups use a new key. Existing backups remain readable with the previous key." },
   "{0} yedek artık uygulamada açılamaz. Bu dosyalar yalnızca kurtarma özel anahtarıyla çevrimdışı çözülebilir; bu anahtar yoksa erişim kaybolur.": { tr: "{0} yedek artık uygulamada açılamaz. Bu dosyalar yalnızca kurtarma özel anahtarıyla çevrimdışı çözülebilir; bu anahtar yoksa erişim kaybolur.", en: "{0} backups will no longer open in the application. These files can only be decrypted offline with a recovery private key; without that key, access is lost." },
   "Destek erişimi başlatıldı": { tr: "Destek erişimi başlatıldı", en: "Support access started" },
+  "Destek işlemi": { tr: "Destek işlemi", en: "Support request" },
   "Destek erişimi kapatıldı": { tr: "Destek erişimi kapatıldı", en: "Support access closed" },
   "Destek erişiminin süresi doldu": { tr: "Destek erişiminin süresi doldu", en: "Support access expired" },
   "Destek erişimi geri alındı": { tr: "Destek erişimi geri alındı", en: "Support access revoked" },
