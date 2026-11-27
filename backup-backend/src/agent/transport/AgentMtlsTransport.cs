@@ -26,7 +26,13 @@ public static class AgentMtlsTransport
         var path = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PATH");
         if (string.IsNullOrEmpty(path)) return null;
         if (!Path.IsPathFullyQualified(path)) throw new InvalidOperationException("The agent mTLS certificate path must be absolute.");
-        return X509CertificateLoader.LoadPkcs12FromFile(path, Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PASSWORD"), X509KeyStorageFlags.EphemeralKeySet);
+        return LoadCertificate(path, Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PASSWORD"));
+    }
+
+    internal static X509Certificate2 LoadCertificate(string path, string? password)
+    {
+        var flags = OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet;
+        return X509CertificateLoader.LoadPkcs12FromFile(path, password, flags);
     }
 
     private sealed class CertificateOwningHandler(HttpMessageHandler inner, X509Certificate2 certificate) : DelegatingHandler(inner)
