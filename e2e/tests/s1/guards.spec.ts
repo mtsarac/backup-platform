@@ -116,6 +116,16 @@ test.describe('route guards', () => {
     expect(w.problems.filter((p) => p.startsWith('pageerror'))).toEqual([])
   })
 
+  test('PlatformAdmin cannot open a customer workspace or its backup API', async ({ page }) => {
+    await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
+    await expect(page).toHaveURL(/\/platform$/)
+    await page.goto(`/tenants/${s.tenantId}`)
+    await expect(page.getByRole('heading', { name: 'Sayfa bulunamadı.' })).toBeVisible()
+    const platform = await platformApi()
+    await expect(platform.call('GET', `/api/tenants/${s.tenantId}/backup-jobs`)).rejects.toThrow(/403/)
+    await platform.dispose()
+  })
+
   test('PlatformAdmin reaches /platform; sign-out from there lands on /login; Back stays signed out', async ({ page }) => {
     await signIn(page, s.accounts.platformAdmin.login, s.accounts.platformAdmin.password)
     await page.waitForURL((u) => u.pathname !== '/login')

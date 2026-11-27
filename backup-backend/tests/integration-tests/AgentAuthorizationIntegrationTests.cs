@@ -131,7 +131,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
     }
 
     [Fact]
-    public async Task PlatformAdminManagesAnyTenantWithoutMembership()
+    public async Task PlatformAdminCannotManageTenantAgentsWithoutMembership()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
@@ -145,9 +145,8 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         using var detail = await platform.GetAsync($"/api/tenants/{tenant}/agents/{Guid.NewGuid()}");
         using var policy = await platform.GetAsync($"/api/tenants/{tenant}/agent-enrollment");
         using var changePolicy = await platform.SendAsync(HttpMethod.Put, $"/api/tenants/{tenant}/agent-enrollment", new { enabled = false });
-        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
-        Assert.All(new[] { list, agents, context, policy, changePolicy }, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
-        Assert.All(new[] { status, detail }, response => Assert.Equal(HttpStatusCode.NotFound, response.StatusCode));
+        Assert.All(new[] { create, list, status, agents, context, detail, policy, changePolicy },
+            response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
     }
 
     [Fact]

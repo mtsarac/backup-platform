@@ -47,6 +47,21 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task SuccessfulBackupWithoutRestoreVerificationHasNoRestorePenalty()
+    {
+        await using var scenario = await CreateScenarioAsync();
+        var job = await scenario.CreateJobAsync();
+        await ConfigureScheduleAsync(scenario, job);
+        await scenario.StartRunAsync(job);
+        await scenario.SucceedNextAsync();
+        var health = await HealthAsync(scenario, job);
+        var restore = health.GetProperty("factors").GetProperty("restoreVerification");
+        Assert.Equal(20, restore.GetProperty("score").GetInt32());
+        Assert.Equal("restore_unverified", restore.GetProperty("reason").GetString());
+        Assert.Equal("Healthy", health.GetProperty("state").GetString());
+    }
+
+    [Fact]
     public async Task FreshnessDecaysLinearlyAndMissingReplicasAndFailedRestoreRemainVisible()
     {
         await using var scenario = await CreateScenarioAsync();
@@ -147,7 +162,7 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
-    public async Task VersionedHealthUsesCurrentTenantAccessForBothRoles()
+    public async Task VersionedHealthRequiresTenantMembership()
     {
         await using var scenario = await CreateScenarioAsync();
         var job = await scenario.CreateJobAsync();
@@ -158,13 +173,14 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         var jobPath = $"/api/v1/backups/jobs/{job}/health";
         var summaryPath = $"/api/v1/observability/health-summary?tenantId={scenario.Setup.Tenant.Id.Value}";
 
-        foreach (var session in new[] { member, platform })
-        {
-            using var jobResponse = await session.GetAsync(jobPath);
-            using var summaryResponse = await session.GetAsync(summaryPath);
-            Assert.Equal(HttpStatusCode.OK, jobResponse.StatusCode);
-            Assert.Equal(HttpStatusCode.OK, summaryResponse.StatusCode);
-        }
+        using var jobResponse = await member.GetAsync(jobPath);
+        using var summaryResponse = await member.GetAsync(summaryPath);
+        Assert.Equal(HttpStatusCode.OK, jobResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, summaryResponse.StatusCode);
+        using var platformJob = await platform.GetAsync(jobPath);
+        using var platformSummary = await platform.GetAsync(summaryPath);
+        Assert.Equal(HttpStatusCode.NotFound, platformJob.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, platformSummary.StatusCode);
 
         using var missingTenant = await platform.GetAsync($"/api/v1/observability/health-summary?tenantId={Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.NotFound, missingTenant.StatusCode);
@@ -231,10 +247,11 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         await ConfigureScheduleAsync(scenario, job, "0 * * * *");
         await scenario.StartRunAsync(job);
         await scenario.SucceedNextAsync();
+        scenario.Clock.Advance(TimeSpan.FromMinutes(75));
         var fresh = await HealthAsync(scenario, job);
         Assert.Equal(80, fresh.GetProperty("score").GetInt32());
         Assert.Equal("Healthy", fresh.GetProperty("state").GetString());
-        scenario.Clock.Advance(TimeSpan.FromMinutes(61.5));
+        scenario.Clock.Advance(TimeSpan.FromMinutes(1.5));
         var late = await HealthAsync(scenario, job);
         Assert.Equal(79, late.GetProperty("score").GetInt32());
         Assert.Equal("Degraded", late.GetProperty("state").GetString());
@@ -242,7 +259,7 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
 
     [Theory]
     [InlineData(30, 20)]
-    [InlineData(31, 10)]
+    [InlineData(31, 20)]
     public async Task RestoreVerificationExpiresAfterThirtyDaysAndCapacityCannotStayFresh(int days, int expectedRestoreScore)
     {
         await using var scenario = await CreateScenarioAsync();
@@ -345,7 +362,7 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         await scenario.StartRunAsync(job);
         await scenario.SucceedNextAsync();
         if (state == "Healthy") await AddEvidenceAsync(scenario, job, restorePassed: true);
-        else scenario.Clock.Advance(TimeSpan.FromMinutes(61.5));
+        else scenario.Clock.Advance(TimeSpan.FromMinutes(76.5));
         Assert.Equal(state, (await HealthAsync(scenario, job)).GetProperty("state").GetString());
         return job;
     }

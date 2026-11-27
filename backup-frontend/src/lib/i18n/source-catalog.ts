@@ -3299,7 +3299,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Nereye ve nasıl": {"tr":"Nereye ve nasıl","en":"Where and how"},
   "Bu yedeği test edebilecek uygun bir bilgisayar yok.": {"tr":"Bu yedeği test edebilecek uygun bir bilgisayar yok.","en":"No computer can test this backup."},
   "Yedeğin alındığı sunucu bulunamadığı için geri yükleme testi başlatılamıyor.": {"tr":"Yedeğin alındığı sunucu bulunamadığı için geri yükleme testi başlatılamıyor.","en":"The restore test cannot start because the server the backup came from was not found."},
-  "Yedek henüz geri yükleme ile denenmedi.": {"tr":"Yedek henüz geri yükleme ile denenmedi.","en":"The backup has not been tried with a restore yet."},
   "Depolama alanı doluyor.": {"tr":"Depolama alanı doluyor.","en":"Storage space is filling up."},
   "Depolama alanı ölçülemiyor.": {"tr":"Depolama alanı ölçülemiyor.","en":"Storage space cannot be measured."},
   "{0}: ilk yedek alınamadı": {"tr":"{0}: ilk yedek alınamadı","en":"{0}: the first backup could not be taken"},

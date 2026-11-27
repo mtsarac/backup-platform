@@ -2,7 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { Card } from '@/components/ui/card'
 import { Link, Navigate } from 'react-router-dom'
 import { useState } from 'react'
-import { ArrowRight, LogOut, ShieldCheck } from 'lucide-react'
+import { ArrowRight, LogOut } from 'lucide-react'
 import { useAuth } from '@/features/auth/use-auth'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -15,10 +15,11 @@ export function TenantSelectPage() {
   useLanguage()
   const { user, tenants, logout } = useAuth()
   const [error, setError] = useState<ErrorDescription | null>(null)
+  if (user?.role === 'PlatformAdmin') return <Navigate to="/platform" replace />
   if (tenants.length === 1) return <Navigate to={`/tenants/${tenants[0].tenantId}`} replace />
   return <main className="mx-auto max-w-3xl space-y-6 px-4 py-10">
     <div className="flex justify-end"><LanguageSwitcher /></div>
-    <PageHeader title={tx("Tenant seçin")} description={<>{user?.displayName} · {user?.role === 'PlatformAdmin' ? tx('PlatformAdmin yetkisi tenant üyeliğinden ayrıdır.') : tx('Yönetmek istediğiniz tenant ile devam edin.')}</>}
+    <PageHeader title={tx("Tenant seçin")} description={<>{user?.displayName} · {tx('Yönetmek istediğiniz tenant ile devam edin.')}</>}
       actions={<Button variant="outline" onClick={() => { void logout().catch(error => setError(describeError(error))) }}><LogOut aria-hidden="true" className="size-4" />{tx("Çıkış")}</Button>} />
     {tenants.length === 0 ? <Card padding="none"><EmptyState message={tx("Henüz bir tenant üyeliğiniz yok")} /></Card>
       : <ul className="grid gap-3 sm:grid-cols-2">{tenants.map(tenant => <li key={tenant.tenantId}>
@@ -27,7 +28,6 @@ export function TenantSelectPage() {
           <ArrowRight aria-hidden="true" className="size-5 shrink-0 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
         </Link></li>)}</ul>}
     <Link className="inline-flex text-sm text-primary underline-offset-4 hover:underline" to="/account">{tx('Hesap ayarları')}</Link>
-    {user?.role === 'PlatformAdmin' && <Link className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3 font-medium text-primary hover:border-primary focus-visible:outline-2 focus-visible:outline-ring" to="/platform"><ShieldCheck aria-hidden="true" className="size-5" />{tx("Platform Administration")}</Link>}
     {error && <ErrorNotice {...error} />}
   </main>
 }

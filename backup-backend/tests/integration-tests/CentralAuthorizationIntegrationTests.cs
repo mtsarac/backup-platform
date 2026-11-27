@@ -36,7 +36,7 @@ public sealed class CentralAuthorizationIntegrationTests(PostgreSqlFixture fixtu
     }
 
     [Fact]
-    public async Task AuthorizationMatrix_PlatformAdmin_CanAccessPlatformAndTenantManagement_DeniedContent()
+    public async Task AuthorizationMatrix_PlatformAdmin_CanAccessPlatformButNotTenantBackups()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var tenantA = await world.CreateTenantAsync();
@@ -49,10 +49,18 @@ public sealed class CentralAuthorizationIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(HttpStatusCode.OK, platformSummary.StatusCode);
 
         using var tenantContext = await platformSession.GetAsync($"/api/tenants/{aId}/context");
-        Assert.Equal(HttpStatusCode.OK, tenantContext.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantContext.StatusCode);
 
         using var tenantAgents = await platformSession.GetAsync($"/api/tenants/{aId}/agents");
-        Assert.Equal(HttpStatusCode.OK, tenantAgents.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantAgents.StatusCode);
+
+        using var tenants = await platformSession.GetAsync("/api/me/tenants");
+        Assert.Empty(AgentWorld.ReadJson(tenants).EnumerateArray());
+        foreach (var path in new[] { "backup-jobs", "storage-connections", "agent-enrollment-tokens", $"backup-jobs/{Guid.NewGuid()}/runs" })
+        {
+            using var response = await platformSession.SendAsync(HttpMethod.Post, $"/api/tenants/{aId}/{path}", new { });
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
 
         using var downloadAvail = await platformSession.GetAsync($"/api/tenants/{aId}/backup-artifacts/{Guid.NewGuid()}/download-availability");
         Assert.Equal(HttpStatusCode.Forbidden, downloadAvail.StatusCode);

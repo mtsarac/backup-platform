@@ -43,7 +43,6 @@ export interface ProtectionRow {
 const noHealth = { jobId: '', jobName: '', score: 100, state: 'Healthy', evaluatedAt: '', factors: {} } as unknown as BackupJobHealth
 
 const notes: Record<string, () => string> = {
-  restore_untested: () => tx('Yedek henüz geri yükleme ile denenmedi.'),
   capacity_warning: () => tx('Depolama alanı doluyor.'),
   capacity_unavailable: () => tx('Depolama alanı ölçülemiyor.'),
 }
