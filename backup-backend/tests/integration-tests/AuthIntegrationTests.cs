@@ -230,7 +230,7 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
-    public async Task PlatformAdminHasNoTenantAccessAndUserAdminRequiresMembership()
+    public async Task PlatformAdminCanEnterCustomerTenantWithoutOwningMembership()
     {
         var seed = await SeedUserAsync();
         var adminTenant = await AddTenantAsync(seed.UserId, true);
@@ -262,7 +262,7 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         Assert.Equal(HttpStatusCode.OK, platformListed.StatusCode);
         Assert.Empty((await ReadJsonAsync(platformListed)).EnumerateArray());
         using var platformContext = await platformBrowser.GetAsync($"/api/tenants/{absentTenant.Id.Value}/context");
-        Assert.Equal(HttpStatusCode.Forbidden, platformContext.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, platformContext.StatusCode);
     }
 
     [Fact]

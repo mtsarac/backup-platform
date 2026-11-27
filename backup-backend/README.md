@@ -63,11 +63,11 @@ periodically and download the displayed (up to 1,000) records as JSON.
 
 ### Advisory backup health
 
-Tenant members can read `GET /api/tenants/{tenantId}/backup-jobs/{jobId}/health`
+Tenant members and platform administrators can read `GET /api/tenants/{tenantId}/backup-jobs/{jobId}/health`
 and `GET /api/tenants/{tenantId}/observability/health-summary`. The versioned
 equivalents are `GET /api/v1/backups/jobs/{id}/health` and
-`GET /api/v1/observability/health-summary?tenantId={tenantId}`; membership is
-checked before reading that tenant's data.
+`GET /api/v1/observability/health-summary?tenantId={tenantId}`; tenant membership
+or platform administrator access is checked before reading that tenant's data.
 
 The deterministic score weights freshness (40), usable verified replicas of the
 latest successful backup (30), latest isolated restore verification (20), and
@@ -191,7 +191,7 @@ connection's newest snapshot and its newest measured snapshot are always kept.
 
 ### Scheduled upload bandwidth
 
-Tenant members manage weekly profiles through
+Tenant members and platform administrators manage weekly profiles through
 `/api/tenants/{tenantId}/bandwidth-profiles` and assign them using the upload-bandwidth
 `tenant/profile`, `agents/{agentId}/profile`, or `jobs/{jobId}/profile` routes.
 The most specific assignment wins: job, then agent, then tenant. A static ceiling

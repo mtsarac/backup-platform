@@ -42,7 +42,7 @@ public sealed class TenantResolutionTests
     }
 
     [Fact]
-    public async Task PlatformAdminDoesNotResolveTenantWithoutMembership()
+    public async Task PlatformAdminResolvesCustomerTenantWithoutMembership()
     {
         var userId = UserId.New();
         var anyTenantId = TenantId.New();
@@ -50,7 +50,7 @@ public sealed class TenantResolutionTests
         store.PlatformAdmins.Add(userId);
         store.KnownTenants.Add(anyTenantId, "Known tenant");
         var resolver = new TenantResolutionService(new CurrentUser(true, userId), store);
-        Assert.Null(await resolver.ResolveAsync(anyTenantId, CancellationToken.None));
+        Assert.Equal(anyTenantId, (await resolver.ResolveAsync(anyTenantId, CancellationToken.None))?.TenantId);
     }
 
     [Fact]
@@ -82,7 +82,8 @@ public sealed class TenantResolutionTests
 
         public Task<TenantAccess?> EvaluateTenantAccessAsync(UserId userId, TenantId tenantId, CancellationToken cancellationToken)
         {
-            if (PlatformAdmins.Contains(userId)) return Task.FromResult<TenantAccess?>(null);
+            if (PlatformAdmins.Contains(userId))
+                return Task.FromResult(KnownTenants.TryGetValue(tenantId, out var name) ? new TenantAccess(tenantId, name) : null);
             return Task.FromResult(Memberships.GetValueOrDefault((userId, tenantId)));
         }
 

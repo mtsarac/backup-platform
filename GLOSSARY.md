@@ -77,7 +77,7 @@ A time-limited, revocable grant that lets a PlatformAdmin download one artifact 
 _Avoid_: Support session, Emergency access, Temporary access
 
 **Restore boundary**:
-Restore is a tenant management operation available to tenant members. It never accepts a share and never returns bytes or keys to the caller, but restoring to a controlled target exposes the plaintext there; every restore is audited. See `SECURITY.md`.
+Restore is a tenant management operation available to tenant members and platform administrators. It never accepts a share and never returns bytes or keys to the caller, but restoring to a controlled target exposes the plaintext there; every restore is audited. See `SECURITY.md`.
 _Avoid_: Restore share, Shared restore
 
 ### User-Facing Names

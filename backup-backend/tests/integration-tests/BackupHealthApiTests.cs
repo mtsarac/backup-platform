@@ -162,7 +162,7 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
-    public async Task VersionedHealthRequiresTenantMembership()
+    public async Task VersionedHealthAllowsMembersAndPlatformSupport()
     {
         await using var scenario = await CreateScenarioAsync();
         var job = await scenario.CreateJobAsync();
@@ -179,8 +179,8 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         Assert.Equal(HttpStatusCode.OK, summaryResponse.StatusCode);
         using var platformJob = await platform.GetAsync(jobPath);
         using var platformSummary = await platform.GetAsync(summaryPath);
-        Assert.Equal(HttpStatusCode.NotFound, platformJob.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, platformSummary.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, platformJob.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, platformSummary.StatusCode);
 
         using var missingTenant = await platform.GetAsync($"/api/v1/observability/health-summary?tenantId={Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.NotFound, missingTenant.StatusCode);

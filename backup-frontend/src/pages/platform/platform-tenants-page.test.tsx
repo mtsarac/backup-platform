@@ -31,9 +31,9 @@ describe('platform tenants list', () => {
     expect(screen.getByRole('link', { name: 'Acme A.Ş.' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
     expect(within(row).getByText('4')).toBeInTheDocument()
     expect(within(row).getByText('Kayıt açık')).toBeInTheDocument()
-    expect(within(row).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
+    expect(within(row).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/tenants/tenant-a')
     expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByText('Kayıt kapalı')).toBeInTheDocument()
-    expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/platform/tenants/tenant-b')
+    expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByRole('link', { name: 'Yönet' })).toHaveAttribute('href', '/tenants/tenant-b')
     expect(api.getTenants).toHaveBeenCalledWith({ page: 1, pageSize: 25 }, expect.any(AbortSignal))
   })
 

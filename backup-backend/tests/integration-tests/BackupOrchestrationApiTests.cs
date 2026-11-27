@@ -213,9 +213,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         using var hidden = await other.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{other.Tenant.Id.Value}/backup-runs/{runId}/pause");
         Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
         var platform = await world.SignInAsync(await world.SeedUserAsync(platformAdmin: true));
-        using var platformPause = await platform.SendAsync(HttpMethod.Post, $"/api/backups/runs/{runId}/pause");
-        Assert.Equal(HttpStatusCode.NotFound, platformPause.StatusCode);
-        using var pause = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/backups/runs/{runId}/pause").WaitAsync(TimeSpan.FromSeconds(5));
+        using var pause = await platform.SendAsync(HttpMethod.Post, $"/api/backups/runs/{runId}/pause").WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(HttpStatusCode.OK, pause.StatusCode);
         // The operator request returns before the provider flush: another mutation of that attempt must not wait on a held transaction.
         progress = progress with { Checkpoint = progress.Checkpoint! with { VerifiedByteOffset = 456 } };
@@ -234,7 +232,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         using var foreignCleanup = await world.SendAgentAsync(HttpMethod.Get, taskRoot + "/retained-transfer-release", foreignAgent.CredentialId, foreignAgent.Secret);
         Assert.Equal(HttpStatusCode.NotFound, foreignCleanup.StatusCode);
         Assert.DoesNotContain("provider-session", await detail.Content.ReadAsStringAsync());
-        using var resume = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/backups/runs/{runId}/resume");
+        using var resume = await platform.SendAsync(HttpMethod.Post, $"/api/backups/runs/{runId}/resume");
         Assert.Equal(HttpStatusCode.OK, resume.StatusCode);
         using var repoll = await world.PollAsync(agent);
         var resumed = Assert.Single(AgentWorld.ReadJson(repoll).GetProperty("tasks").EnumerateArray()).GetProperty("backup")

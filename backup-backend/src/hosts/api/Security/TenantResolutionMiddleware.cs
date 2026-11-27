@@ -1,4 +1,8 @@
 using BackupPlatform.Application.Tenancy;
+using BackupPlatform.Application.Identity;
+using BackupPlatform.Domain.Audit;
+using BackupPlatform.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Routing;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Tenancy;
 
@@ -36,7 +40,24 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next)
             throw new InvalidOperationException("The verified tenant context has already been established.");
         }
         context.Features.Set(new ResolvedTenantContext(membership));
+        await PlatformTenantAudit.RecordAsync(context, membership.TenantId);
         await next(context);
+    }
+}
+
+internal static class PlatformTenantAudit
+{
+    internal static async Task RecordAsync(HttpContext context, TenantId tenantId)
+    {
+        var user = context.RequestServices.GetRequiredService<ICurrentUser>();
+        var auth = context.RequestServices.GetRequiredService<ICentralAuthorizationService>();
+        if (user.UserId is not { } actor || !await auth.IsPlatformAdminAsync(actor, context.RequestAborted)) return;
+        var db = context.RequestServices.GetRequiredService<PlatformDbContext>();
+        var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unknown";
+        db.RecordAudit(AuditEvent.Record(context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow(),
+            actor, AuditActorKind.PlatformAdmin, "tenant.support_request", tenantId, "http_route", route,
+            new Dictionary<string, object?> { ["method"] = context.Request.Method }));
+        await db.SaveChangesAsync(context.RequestAborted);
     }
 }
 

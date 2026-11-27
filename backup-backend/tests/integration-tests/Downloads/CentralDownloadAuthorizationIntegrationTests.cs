@@ -248,7 +248,7 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
     }
 
     [Fact]
-    public async Task RestoreBoundary_RejectsShareIdAndPlatformAdmin()
+    public async Task RestoreBoundary_RejectsShareIdForPlatformAdmin()
     {
         var (scenario, shareId) = await SetupScenarioWithShareAsync(fixture);
         await using (scenario)
@@ -256,16 +256,13 @@ public sealed class CentralDownloadAuthorizationIntegrationTests(PostgreSqlFixtu
             var platformAccount = await scenario.World.SeedUserAsync(platformAdmin: true);
             var platform = await scenario.World.SignInAsync(platformAccount);
 
-            using var denied = await platform.SendAsync(HttpMethod.Post,
-                $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore", new { });
-            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
-            using var queryReject = await scenario.Admin.SendAsync(
+            using var queryReject = await platform.SendAsync(
                 HttpMethod.Post,
                 $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore?shareId={shareId}",
                 new { agentId = scenario.Backup.Agent.AgentId, databaseName = "RestoreDb", target = new { mode = "mssql-credential", credentialId = Guid.NewGuid() } });
             Assert.Equal(HttpStatusCode.BadRequest, queryReject.StatusCode);
 
-            using var bodyReject = await scenario.Admin.SendAsync(
+            using var bodyReject = await platform.SendAsync(
                 HttpMethod.Post,
                 $"{scenario.Root}/backup-artifacts/{scenario.Accepted.ArtifactId}/restore",
                 new { shareId, agentId = scenario.Backup.Agent.AgentId, databaseName = "RestoreDb", target = new { host = "localhost", databaseCredentialReference = "test-cred" } });

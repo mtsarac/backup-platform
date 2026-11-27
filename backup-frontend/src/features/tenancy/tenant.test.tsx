@@ -25,12 +25,12 @@ function setup(cache: QueryClient, role: 'PlatformAdmin' | 'UserAdmin' = 'UserAd
   return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', role, isPlatformAdmin: role === 'PlatformAdmin' }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), completeSecondFactor: vi.fn(), logout: vi.fn(), clearAuth: vi.fn(), refresh: vi.fn() }}><MemoryRouter initialEntries={[initialPath]}><Routes><Route path="/tenants/:tenantId" element={<TenantProvider><TenantProbe /></TenantProvider>} /></Routes></MemoryRouter></AuthContext.Provider></QueryClientProvider>)
 }
 describe('tenant switching and permissions', () => {
-  it('rejects platform administrators even when a tenant appears in the session', () => {
-    vi.mocked(apiRequest).mockClear()
+  it('loads the chosen customer workspace for platform support', async () => {
+    vi.mocked(apiRequest).mockResolvedValueOnce({ tenantId: 'tenant-c', name: 'Tenant C' })
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    setup(cache, 'PlatformAdmin')
-    expect(screen.getByRole('heading', { level: 1, name: 'Sayfa bulunamadı.' })).toBeInTheDocument()
-    expect(apiRequest).not.toHaveBeenCalled()
+    setup(cache, 'PlatformAdmin', '/tenants/tenant-c')
+    expect(await screen.findByText('tenant-c')).toBeInTheDocument()
+    expect(apiRequest).toHaveBeenCalledWith('tenants/tenant-c/context', expect.objectContaining({ signal: expect.any(AbortSignal) }))
     cache.clear()
   })
   it('displays not-found state for a user administrator deep-linking to foreign tenant without requesting context', () => {
