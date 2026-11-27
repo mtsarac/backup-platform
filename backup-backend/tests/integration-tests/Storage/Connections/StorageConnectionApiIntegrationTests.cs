@@ -7,6 +7,7 @@ using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.IntegrationTests.Quota;
 using BackupPlatform.Storage;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -234,42 +235,37 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
     }
 
     [Fact]
-    public async Task PlatformAdminCannotCreateOrMutateConnectionsThroughTenantRoutes()
+    public async Task PlatformAdminCanCreateAndEditConnectionsThroughTenantRoutesWithPlatformAdminAudit()
     {
         await using var env = await ApiWorld.CreateAsync(fixture);
-        var platform = await env.PlatformAdminAsync();
+        var account = await env.World.SeedUserAsync(platformAdmin: true);
+        var platform = await env.World.SignInAsync(account);
+
+        using var ownTenants = await platform.GetAsync("/api/me/tenants");
+        Assert.Equal(HttpStatusCode.OK, ownTenants.StatusCode);
+        Assert.Empty(AgentWorld.ReadJson(ownTenants).EnumerateArray());
 
         using var tenantList = await platform.GetAsync(env.TenantRoot + "/storage-connections");
         Assert.Equal(HttpStatusCode.OK, tenantList.StatusCode);
-        var items = AgentWorld.ReadJson(tenantList).GetProperty("items").EnumerateArray().ToList();
-        var localId = items.Single(item => item.GetProperty("providerType").GetString() == "local").GetProperty("id").GetGuid();
-        foreach (var item in items)
-        {
-            var permissions = item.GetProperty("permissions");
-            Assert.False(permissions.GetProperty("canEdit").GetBoolean());
-            Assert.False(permissions.GetProperty("canSetQuotaScope").GetBoolean());
-            Assert.False(permissions.GetProperty("canToggle").GetBoolean());
-            Assert.False(permissions.GetProperty("canDelete").GetBoolean());
-            Assert.False(permissions.GetProperty("canManageSecret").GetBoolean());
-            Assert.False(permissions.GetProperty("canTest").GetBoolean());
-        }
+        var local = AgentWorld.ReadJson(tenantList).GetProperty("items").EnumerateArray().Single(item => item.GetProperty("providerType").GetString() == "local");
+        Assert.True(local.GetProperty("permissions").GetProperty("canEdit").GetBoolean());
 
         using var create = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + "/storage-connections",
-            new { providerType = "google-drive", name = "Platform Drive" });
-        using var update = await platform.SendAsync(HttpMethod.Put, env.TenantRoot + $"/storage-connections/{localId}", new { name = "Renamed" });
-        using var setSecret = await platform.SendAsync(HttpMethod.Put, env.TenantRoot + $"/storage-connections/{localId}/secret", new { values = new { password = "x" } });
-        using var clearSecret = await platform.SendAsync(HttpMethod.Delete, env.TenantRoot + $"/storage-connections/{localId}/secret");
-        using var test = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/test");
-        using var disable = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/disable");
-        using var delete = await platform.SendAsync(HttpMethod.Delete, env.TenantRoot + $"/storage-connections/{localId}");
-        using var oauthStart = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/google-drive/authorize-url");
-        using var oauthDisconnect = await platform.SendAsync(HttpMethod.Post, env.TenantRoot + $"/storage-connections/{localId}/google-drive/disconnect");
+            new { providerType = VaultProvider.Type, name = "Support Vault", configuration = new { host = "vault.internal" }, secret = new { password = "pass" } });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var connectionId = AgentWorld.ReadJson(create).GetProperty("id").GetGuid();
 
-        foreach (var response in new[] { create, update, setSecret, clearSecret, test, disable, delete, oauthStart, oauthDisconnect })
-        {
-            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-            Assert.Equal("tenant_member_required", AgentWorld.ReadJson(response).GetProperty("code").GetString());
-        }
+        using var update = await platform.SendAsync(HttpMethod.Put, env.TenantRoot + $"/storage-connections/{connectionId}",
+            new { name = "Support Vault Updated" });
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        Assert.Equal("Support Vault Updated", AgentWorld.ReadJson(update).GetProperty("name").GetString());
+
+        await using var db = fixture.CreatePlatformContext();
+        var audits = await db.AuditEvents.AsNoTracking()
+            .Where(row => row.TenantId == env.Tenant.Id && row.TargetId == connectionId.ToString("D") && row.ActorUserId == account.UserId)
+            .ToListAsync();
+        Assert.Contains(audits, row => row.Action == StorageConnectionAuditActions.Created && row.ActorKind == BackupPlatform.Domain.Audit.AuditActorKind.PlatformAdmin);
+        Assert.Contains(audits, row => row.Action == StorageConnectionAuditActions.Updated && row.ActorKind == BackupPlatform.Domain.Audit.AuditActorKind.PlatformAdmin);
     }
 
     [Fact]
