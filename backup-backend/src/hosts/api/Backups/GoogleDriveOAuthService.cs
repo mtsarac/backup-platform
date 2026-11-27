@@ -156,8 +156,11 @@ public sealed class GoogleDriveOAuthService(
             if (!string.IsNullOrWhiteSpace(accountEmail)) config["accountEmail"] = accountEmail;
             if (!string.IsNullOrWhiteSpace(accountName)) config["accountName"] = accountName;
             connection.Reconfigure(config, now);
+            var actorId = new UserId(oauthState.UserId);
+            var actorRole = await db.Users.AsNoTracking().Where(u => u.Id == actorId).Select(u => (UserRole?)u.Role).SingleOrDefaultAsync(persistTimeout.Token);
+            var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
             db.AuditEvents.Add(AuditEvent.Record(
-                now, new UserId(oauthState.UserId), AuditActorKind.UserAdmin,
+                now, actorId, actorKind,
                 "storage_connection.oauth_connected", oauthState.TenantId,
                 BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
                 new Dictionary<string, object?> { ["accountEmail"] = accountEmail, ["accountName"] = accountName }));
@@ -207,8 +210,11 @@ public sealed class GoogleDriveOAuthService(
             config.Remove("accountEmail");
             config.Remove("accountName");
             connection.Reconfigure(config, now);
+            var actorId = new UserId(userId);
+            var actorRole = await db.Users.AsNoTracking().Where(u => u.Id == actorId).Select(u => (UserRole?)u.Role).SingleOrDefaultAsync(timeout.Token);
+            var actorKind = actorRole == UserRole.PlatformAdmin ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
             db.AuditEvents.Add(AuditEvent.Record(
-                now, new UserId(userId), AuditActorKind.UserAdmin,
+                now, actorId, actorKind,
                 "storage_connection.oauth_disconnected", tenantId,
                 BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
                 new Dictionary<string, object?>()));

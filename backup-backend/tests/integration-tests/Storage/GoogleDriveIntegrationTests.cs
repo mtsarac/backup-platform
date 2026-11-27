@@ -128,6 +128,90 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
         Assert.Equal("true", disconnectedObj.GetProperty("configuration").GetProperty("reauthorizationRequired").GetString());
     }
 
+    [Fact]
+    public async Task PlatformAdmin_CanCreateEditAndOAuthConnectTenantGoogleDrive_WithPlatformAdminAudit()
+    {
+        var fakeHandler = new FakeGoogleDriveServerHandler();
+        var fakeHttp = new HttpClient(fakeHandler);
+
+        var tenantId = TenantId.New();
+        var settings = new Dictionary<string, string?>
+        {
+            ["GoogleDrive:ClientId"] = "test_client_id",
+            ["GoogleDrive:ClientSecret"] = "test_client_secret",
+            ["GoogleDrive:RedirectUri"] = "https://backup.example.test/api/platform/google-drive/oauth/callback"
+        };
+        await using var world = await AgentWorld.CreateAsync(fixture, configuration: settings, configureServices: services =>
+        {
+            services.AddSingleton(fakeHttp);
+        });
+        var tenant = new Tenant(tenantId, "Support Google Drive Tenant");
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            db.Tenants.Add(tenant);
+            await db.SaveChangesAsync();
+        }
+        await world.EntitleAsync(tenant);
+
+        var platformAdmin = await world.SeedUserAsync(platformAdmin: true);
+        var session = await world.SignInAsync(platformAdmin);
+
+        using var ownTenants = await session.GetAsync("/api/me/tenants");
+        Assert.Empty(AgentWorld.ReadJson(ownTenants).EnumerateArray());
+
+        using var createResponse = await session.SendAsync(HttpMethod.Post, $"/api/tenants/{tenantId.Value}/storage-connections", new
+        {
+            providerType = "google-drive",
+            name = "Support Drive"
+        });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var connectionId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        using var editResponse = await session.SendAsync(HttpMethod.Put, $"/api/tenants/{tenantId.Value}/storage-connections/{connectionId}", new
+        {
+            name = "Support Drive Renamed"
+        });
+        Assert.Equal(HttpStatusCode.OK, editResponse.StatusCode);
+
+        using var authUrlResponse = await session.SendAsync(
+            HttpMethod.Post, $"/api/tenants/{tenantId.Value}/storage-connections/{connectionId}/google-drive/authorize-url", new { });
+        Assert.Equal(HttpStatusCode.OK, authUrlResponse.StatusCode);
+        var authUrl = (await authUrlResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("authorizationUrl").GetString()!;
+        var state = System.Web.HttpUtility.ParseQueryString(new Uri(authUrl).Query)["state"]!;
+
+        var callbackClient = world.Factory.CreateClient();
+        using var callbackResp = await callbackClient.GetAsync(
+            $"/api/platform/google-drive/oauth/callback?code=fake_auth_code&state={state}");
+        Assert.Equal(HttpStatusCode.OK, callbackResp.StatusCode);
+        Assert.Contains("başarılı", await callbackResp.Content.ReadAsStringAsync());
+
+        using var testResp = await session.SendAsync(
+            HttpMethod.Post, $"/api/tenants/{tenantId.Value}/storage-connections/{connectionId}/test", new { });
+        Assert.Equal(HttpStatusCode.OK, testResp.StatusCode);
+
+        using var disconnectResp = await session.SendAsync(
+            HttpMethod.Post, $"/api/tenants/{tenantId.Value}/storage-connections/{connectionId}/google-drive/disconnect", new { });
+        Assert.Equal(HttpStatusCode.OK, disconnectResp.StatusCode);
+
+        await using (var verifyDb = fixture.CreatePlatformContext())
+        {
+            var audits = await verifyDb.AuditEvents.AsNoTracking()
+                .Where(row => row.TenantId == tenantId && row.TargetId == connectionId.ToString("D") && row.ActorUserId == platformAdmin.UserId)
+                .ToListAsync();
+            foreach (var expectedAction in new[]
+            {
+                StorageConnectionAuditActions.Created,
+                StorageConnectionAuditActions.Updated,
+                "storage_connection.oauth_connected",
+                StorageConnectionAuditActions.Tested,
+                "storage_connection.oauth_disconnected"
+            })
+            {
+                Assert.Contains(audits, row => row.Action == expectedAction && row.ActorKind == BackupPlatform.Domain.Audit.AuditActorKind.PlatformAdmin);
+            }
+        }
+    }
+
     [Theory]
     [InlineData("http://localhost:5173", "}, \"http://localhost:5173\");")]
     [InlineData("http://localhost:5173/path", "}, window.location.origin);")]

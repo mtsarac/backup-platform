@@ -1,8 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { TextInput } from '@/components/ui/text-input'
-import { useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
-import { AuthContext } from '@/features/auth/auth-context'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
@@ -82,7 +81,6 @@ function NameRow({ name, editing, invalid, onEdit, onChange }: { name: string; e
 export function ConnectionWizard() {
   useLanguage()
   const { tenantId } = useTenant()
-  if (useContext(AuthContext)?.user?.role === 'PlatformAdmin') return <Navigate to={`/tenants/${tenantId}/storage`} replace />
   return <ConnectionWizardForm key={tenantId} />
 }
 

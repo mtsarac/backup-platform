@@ -35,15 +35,16 @@ public sealed class InvalidStorageConnectionException(string field, string code)
 /// lookup is bound to it) and null for the platform routes. <see cref="CanManage"/> says whether the caller may change things at all (a tenant
 /// Admin/Owner, or a PlatformAdmin); it only shapes the permissions a view reports, the routes' policies are the actual gate.
 /// </summary>
-public sealed record StorageScope(TenantId? TenantId, bool CanManage)
+public sealed record StorageScope(TenantId? TenantId, bool CanManage, AuditActorKind? TenantActorKind = null)
 {
     public bool IsPlatform => TenantId is null;
 
-    public static StorageScope Tenant(TenantId tenantId, bool canManage) => new(tenantId, canManage);
+    public static StorageScope Tenant(TenantId tenantId, bool canManage, AuditActorKind actorKind = AuditActorKind.UserAdmin) =>
+        new(tenantId, canManage, actorKind);
 
-    public static StorageScope Platform { get; } = new(null, true);
+    public static StorageScope Platform { get; } = new(null, true, AuditActorKind.PlatformAdmin);
 
-    public AuditActorKind ActorKind => IsPlatform ? AuditActorKind.PlatformAdmin : AuditActorKind.UserAdmin;
+    public AuditActorKind ActorKind => IsPlatform ? AuditActorKind.PlatformAdmin : (TenantActorKind ?? AuditActorKind.UserAdmin);
 }
 
 public sealed record StorageActor(UserId UserId, AuditActorKind Kind);
