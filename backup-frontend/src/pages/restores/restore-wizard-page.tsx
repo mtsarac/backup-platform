@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { useBackup } from '@/features/backups/hooks'
@@ -7,11 +7,13 @@ import { useRestoreTargets } from '@/features/restores/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { FileRestoreWizard } from '@/features/restores/file-restore-wizard'
 import { RestoreWizard } from '@/features/restores/restore-wizard'
+import type { RestorePrefill } from '@/features/restores/types'
 
 export function RestoreWizardPage() {
   useLanguage()
   const { id = '' } = useParams<{ id: string }>()
   const { tenantId } = useTenant()
+  const prefill = (useLocation().state as { restorePrefill?: RestorePrefill } | null)?.restorePrefill
   const runQuery = useBackup(id)
   const latest = runQuery.data?.attempts.flatMap(attempt => attempt.artifacts).at(-1)
   const targetsQuery = useRestoreTargets(latest?.id ?? '')
@@ -33,6 +35,7 @@ export function RestoreWizardPage() {
             tenantId={tenantId}
             artifact={artifact}
             targets={targetsQuery.data}
+            prefill={prefill}
           />
         )}
       </QueryState>

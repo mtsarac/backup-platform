@@ -23,6 +23,8 @@ interface RestoreModeStepProps {
   discoveryScanning: boolean
   precheckError: unknown
   precheckRetryable: boolean
+  /** A failed precheck is on screen: only "Yeniden kontrol et" or changing the target moves on; Continue would repeat the same failing check. */
+  precheckBlocked: boolean
   precheckStarting: boolean
   restoreStarting: boolean
   eligibleForRestore: boolean
@@ -40,7 +42,7 @@ interface RestoreModeStepProps {
 }
 
 /** Where the backup lands and how; continuing runs the pre-check, and only a passed check opens the confirmation. */
-export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckStarting, restoreStarting, eligibleForRestore, targetValid, loginPending, checkPanel, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, onBack, onContinue }: RestoreModeStepProps) {
+export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckBlocked, precheckStarting, restoreStarting, eligibleForRestore, targetValid, loginPending, checkPanel, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, onBack, onContinue }: RestoreModeStepProps) {
   useLanguage()
   const newDescriptionId = useId()
   const replaceDescriptionId = useId()
@@ -77,7 +79,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
 
           {mode === 'NewDatabase' && (
             <div className="space-y-2">
-              <label htmlFor={`${instancePrefix}-new-dbname`} className="block text-sm font-medium">{tx("Yeni veritabanı adı")}</label>
+              <label htmlFor={`${instancePrefix}-new-dbname`} className="block text-sm font-medium">{tx("Yeni veritabanı adı")}<span aria-hidden="true" className="text-error"> *</span></label>
               <TextInput
                 id={`${instancePrefix}-new-dbname`}
                 value={targetDatabaseName}
@@ -98,7 +100,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
 
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label htmlFor={`${instancePrefix}-replace-db-select`} className="block text-sm font-medium">{tx("Yerine geçilecek veritabanı")}</label>
+                  <label htmlFor={`${instancePrefix}-replace-db-select`} className="block text-sm font-medium">{tx("Yerine geçilecek veritabanı")}<span aria-hidden="true" className="text-error"> *</span></label>
                   <Button variant="outline" size="sm" onClick={() => onRefreshDiscovery()} disabled={discoveryScanning || !targetValid || loginPending}>
                     {discoveryScanning ? tx('Taranıyor…') : discoveryRetryable ? tx('Tekrar dene') : tx('Listeyi yenile')}
                   </Button>
@@ -145,7 +147,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
       <div className="flex flex-wrap justify-between gap-3">
         {onBack ? <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button> : <span />}
         <Button
-          disabled={!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || precheckStarting || restoreStarting}
+          disabled={!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || precheckStarting || restoreStarting || precheckBlocked}
           onClick={() => onContinue()}
         >
           {precheckStarting ? tx('Ön Kontrol Başlatılıyor…') : precheckRetryable ? tx('Tekrar dene') : tx('Devam et →')}

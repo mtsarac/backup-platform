@@ -9,6 +9,8 @@ export interface RestoreTarget {
   encrypt: boolean
   trustServerCertificate: boolean
 }
+/** What "Retry" on a failed or cancelled restore carries into the wizard: the operator's choices, never a ready-to-start restore. */
+export interface RestorePrefill { agentId: string; target: RestoreTarget; mode: RestoreMode; databaseName: string }
 export interface RestoreOptions {
   terminateActiveConnections?: boolean
   verifyChecksum?: boolean

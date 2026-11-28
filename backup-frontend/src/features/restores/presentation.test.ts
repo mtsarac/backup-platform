@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { databaseStateLabel, precheckLabel, precheckWarningText } from './presentation'
+import { databaseStateLabel, precheckLabel, precheckWarningText, targetStateDescription } from './presentation'
 
 describe('restore presentation', () => {
   it('names a reported database state and keeps unknown ones unknown', () => {
@@ -12,9 +12,14 @@ describe('restore presentation', () => {
 
   it('maps the check ids the PostgreSQL provider and the agent report', () => {
     for (const id of ['postgres.tools', 'postgres.restore', 'postgres.restore-plan', 'postgres.restore-permission', 'postgres.target', 'postgres.archive-compatibility', 'postgres.verification-scope', 'postgres.archive-trust', 'postgres.roles', 'source.key', 'source.storage', 'source.replica', 'file-system.source']) {
-      expect(precheckLabel(id), id).not.toBe('Diğer kontrol')
+      expect(precheckLabel(id), id).not.toMatch(/^Diğer kontrol/)
     }
-    expect(precheckLabel('unknown.check')).toBe('Diğer kontrol')
+    expect(precheckLabel('unknown.check')).toBe('Diğer kontrol (unknown.check)')
+  })
+
+  it('does not claim replaced content may be lost when a failed restore only created a new database', () => {
+    expect(targetStateDescription('PartiallyRestored', 'NewDatabase')).not.toMatch(/üzerine yazılan/)
+    expect(targetStateDescription('PartiallyRestored', 'ReplaceExistingDatabase')).toMatch(/üzerine yazılan eski içerik/)
   })
 
   it('shows known warnings in Turkish and keeps unknown engine messages out of the summary', () => {
