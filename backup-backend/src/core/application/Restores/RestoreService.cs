@@ -351,7 +351,7 @@ public sealed class RestoreService(IRestoreStore store, IRestorePlatformStore pl
         RestoreSourceRejection.ReplicaNotRestorable => "The replica can no longer be restored from: it was deleted, is being deleted, or its deletion grace period is over.",
         RestoreSourceRejection.ReplicaNotVerified => "The replica has not been verified, so it is not used for a restore.",
         RestoreSourceRejection.ChecksumUnavailable => "The replica has no recorded SHA-256 checksum to verify its bytes against.",
-        RestoreSourceRejection.BackupTypeUnsupported => "Only full backups from a supported database engine can be restored.",
+        RestoreSourceRejection.BackupTypeUnsupported => "Only logical full backups from a supported database engine can be restored (physical PostgreSQL base backups cannot).",
         RestoreSourceRejection.AgentTransferRequired => "The only usable replica is stored on another agent's local disk. Transferring a backup between agents is not supported: " +
             "restore with the agent that owns the replica, or use a backup stored in central storage.",
         _ => "No replica of this backup is reachable by the selected agent."
