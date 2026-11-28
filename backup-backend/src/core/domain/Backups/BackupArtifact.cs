@@ -280,6 +280,15 @@ public static class BackupArtifactEngine
         }
         return DatabaseEngines.IsValid(engine) ? engine : null;
     }
+
+    /// <summary>True for a PostgreSQL base backup (<c>postgreSqlDetails.archiveFormat</c> starting with "physical"), which no restore path can read.</summary>
+    public static bool IsPhysical(string metadata)
+    {
+        using var document = JsonDocument.Parse(metadata);
+        return document.RootElement.TryGetProperty("postgreSqlDetails", out var details) && details.ValueKind == JsonValueKind.Object
+            && details.TryGetProperty("archiveFormat", out var format) && format.ValueKind == JsonValueKind.String
+            && format.GetString()!.StartsWith("physical", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 /// <summary>The logical state of an artifact, derived from its replicas.</summary>

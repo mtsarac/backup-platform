@@ -45,6 +45,18 @@ public sealed class RestoreSourceEvaluatorTests
         Assert.Equal(expected, decision.Access);
     }
 
+    [Theory]
+    [InlineData("physical-tar-gzip", RestoreSourceRejection.BackupTypeUnsupported)]
+    [InlineData("custom", null)]
+    public void APhysicalPostgreSqlBaseBackupIsNotOfferedForRestore(string archiveFormat, RestoreSourceRejection? expected)
+    {
+        var metadata = $"{{\"engine\":\"postgres\",\"postgreSqlDetails\":{{\"archiveFormat\":\"{archiveFormat}\"}}}}";
+        var artifact = new BackupArtifact(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), 1000, Hash, Hash, "sha256", Now.AddDays(-1), metadata, "{}");
+        var replica = AddTo(artifact, CentralReplica(artifact));
+
+        Assert.Equal(expected, RejectionOf(artifact, replica));
+    }
+
     // ---- Evaluate: delete lifecycle ----
 
     [Theory]
