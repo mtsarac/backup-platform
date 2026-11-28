@@ -43,7 +43,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
       <Select id="tenant-select" value={tenantId} onChange={(event) => { void switchTenant(event.target.value) }} className="min-w-0 max-w-52 flex-1 text-sm font-medium sm:max-w-72">{options.map((item) => <option key={item.tenantId} value={item.tenantId}>{item.name}</option>)}</Select>
     </div>}
     badges={<>
-      {user?.role === 'PlatformAdmin' && <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/platform">{tx('Platform yönetimi')}</Link>}
+      {user?.role === 'PlatformAdmin' && <Link className="min-h-control text-sm text-primary underline-offset-4 hover:underline" to="/platform">{tx('Platform yönetimi')}</Link>}
       {user && <Badge tone={user.role === 'PlatformAdmin' ? "warning" : "neutral"}>{accountRoleLabel(user.role)}</Badge>}
     </>} />
 }

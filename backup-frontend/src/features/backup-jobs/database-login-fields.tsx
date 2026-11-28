@@ -19,10 +19,10 @@ export function DatabaseLoginFields({ idPrefix, login, onChange, hasStored = fal
   const password = login?.password ?? ''
   const change = (next: DatabaseLogin) => onChange(next.userName === '' && next.password === '' ? null : next)
   return <>
-    <Field id={`${idPrefix}-user`} label={tx("Veritabanı kullanıcı adı")} error={errors?.userName}>
+    <Field id={`${idPrefix}-user`} label={tx("Veritabanı kullanıcı adı")} error={errors?.userName} required={!hasStored}>
       {control => <TextInput {...control} autoComplete="off" value={userName} onChange={event => change({ userName: event.target.value, password })} />}
     </Field>
     <SecretField id={`${idPrefix}-password`} label={tx("Veritabanı parolası")} hint={hasStored ? tx("Kayıtlı bir giriş var. Değiştirmek için yeni kullanıcı adı ve parola girin; boş bırakırsanız mevcut giriş korunur.") : undefined} error={errors?.password}
-      saved={hasStored} value={password} onChange={value => change({ userName, password: value })} />
+      required={!hasStored} saved={hasStored} value={password} onChange={value => change({ userName, password: value })} />
   </>
 }

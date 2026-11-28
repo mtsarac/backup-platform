@@ -71,6 +71,7 @@ export function FileRestoreConfirmStep({ agent, agentId, original, name, scope, 
       </div>
 
       {overwrite && <ConfirmDialog
+        destructive
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title={tx("Mevcut dosyaların üzerine yazılsın mı?")}

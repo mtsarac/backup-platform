@@ -7,6 +7,7 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
 import { Select, TextArea, TextInput } from '@/components/ui/text-input'
 import { TechnicalDetails } from '@/components/ui/technical-details'
+import { Disclosure } from '@/components/ui/disclosure'
 import { createEnrollmentToken } from '@/features/agents/api'
 import { enrollmentCommands, httpsServerOrigin, likelyPlatform, type AgentPlatform } from '@/features/agents/enrollment-commands'
 import { agentQueryKeys, useAgentDistribution } from '@/features/agents/hooks'
@@ -69,7 +70,7 @@ export function ComputerStep({ tenantId, onOnline }: { tenantId: string; onOnlin
     <h2 id="first-backup-computer" className="text-lg font-semibold text-text-heading">{tx('Yedekleme bilgisayarı ekle')}</h2>
     <p className="text-sm text-text-muted">{tx('Yedekleri alacak bilgisayara küçük bir program kurulur.')}</p>
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label={tx('Bilgisayarın adı')} hint={tx('Listede bilgisayarı bu adla tanırsınız.')}>{control => <TextInput {...control} required autoFocus value={name} maxLength={200} onChange={event => setName(event.target.value)} />}</Field>
+      <Field label={tx('Bilgisayarın adı')} hint={tx('Listede bilgisayarı bu adla tanırsınız.')} required>{control => <TextInput {...control} required autoFocus value={name} maxLength={200} onChange={event => setName(event.target.value)} />}</Field>
       <Field label={tx('İşletim sistemi')}>{control => <Select {...control} value={platform} onChange={event => setPlatform(event.target.value as AgentPlatform)}><option>Windows</option><option>Linux</option></Select>}</Field>
     </div>
     {distribution.isPending && <p className="text-sm text-text-muted">{tx('Kurulum dosyalarının hazır olup olmadığı denetleniyor…')}</p>}
@@ -94,9 +95,8 @@ export function ComputerStep({ tenantId, onOnline }: { tenantId: string; onOnlin
       {monitor.paused && <Button type="button" variant="outline" onClick={monitor.retry}>{tx('Takibi tekrar dene')}</Button>}
       {monitor.error && <ErrorNotice {...monitor.error} />}
     </div>}
-    {ticket && secret && <details className="text-sm">
-      <summary className="w-fit cursor-pointer font-medium text-text-muted">{tx('Başka yollarla kur')}</summary>
-      <div className="space-y-2 pt-2">
+    {ticket && secret && <Disclosure title={tx('Başka yollarla kur')}>
+      <div className="space-y-2">
         <Field label={tx('Tek kullanımlık kayıt anahtarı')}>{control => <TextArea {...control} readOnly value={secret} rows={2} />}</Field>
         <CopyButton value={secret} label={tx('Kayıt anahtarını kopyala')} />
         {platform === 'Windows' && distribution.data?.packages['win-x64-setup'] && <div className="space-y-1">
@@ -106,7 +106,7 @@ export function ComputerStep({ tenantId, onOnline }: { tenantId: string; onOnlin
         <p><a className="text-primary underline" href={`${server}/api/agent-dist/${platform === 'Windows' ? 'install.ps1' : 'install-agent.sh'}`} download>{tx('Kurulum scriptini indir')}</a></p>
         <p><a className="text-primary underline" href={`${server}/api/agent-dist/packages/${packageKey}`} download>{platform === 'Windows' ? tx('Windows zip paketini indir') : tx('Linux tar.gz paketini indir')}</a></p>
       </div>
-    </details>}
+    </Disclosure>}
     {ticket && <TechnicalDetails items={[]}><p>{tx('Sunucunun TLS sertifikası hedef bilgisayarda güvenilir olmalıdır. Sertifika doğrulamasını asla devre dışı bırakmayın.')}</p></TechnicalDetails>}
   </section>
 }

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { Stepper } from '@/components/ui/stepper'
+import { WizardFooter } from '@/components/ui/wizard-footer'
 import { DiscardChangesLink } from '@/features/backup-jobs/discard-changes-link'
 import type { JobDraft, JobPrefill } from '@/features/backup-jobs/job-form-values'
 import { jobSteps, stepLabel, validateJob, validateStep, wizardStepOf, type JobStep } from '@/features/backup-jobs/job-wizard-model'
@@ -79,13 +80,11 @@ export function JobWizard({ prefill, draft, storageConnectionId }: { prefill?: J
         {last && <ReviewStep form={form} onGo={section => go(wizardStepOf(section))} onAddStorage={() => setAddingStorage(true)} />}
         {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
           control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{[...new Set(errorSteps.map(wizardStepOf))].map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={actionName(tx("Adıma git"), stepLabel(item))} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button type="button" variant="outline" disabled={index === 0 || save.isPending} onClick={() => go(jobSteps[index - 1])}>{tx("Geri")}</Button>
-          <div className="flex flex-wrap items-center gap-3">
-            <DiscardChangesLink to={form.listPath} dirty={form.dirty && !addingStorage} />
-            {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || form.cannotSave}>{save.isPending ? tx('Kaydediliyor…') : form.failedCount > 0 ? tx('Başarısızları yeniden dene') : tx('Kaydet')}</Button> : <Button key="next" type="submit">{tx("İleri")}</Button>}
-          </div>
-        </div>
+        <WizardFooter
+          back={index > 0 && <Button type="button" variant="outline" disabled={save.isPending} onClick={() => go(jobSteps[index - 1])}>{tx("Geri")}</Button>}
+          cancel={<DiscardChangesLink to={form.listPath} dirty={form.dirty && !addingStorage} />}>
+          {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || form.cannotSave}>{save.isPending ? tx('Kaydediliyor…') : form.failedCount > 0 ? tx('Başarısızları yeniden dene') : tx('Kaydet')}</Button> : <Button key="next" type="submit">{tx("İleri")}</Button>}
+        </WizardFooter>
       </div>
       {!last && <LiveSummary form={form} position={`${index + 1} / ${jobSteps.length}`} label={stepLabel(step)} />}
     </div>

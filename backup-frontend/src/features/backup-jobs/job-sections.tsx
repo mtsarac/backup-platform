@@ -35,7 +35,7 @@ function SourceFields({ form }: { form: JobFormState }) {
   const files = configuration.files ?? defaultFiles
   const pathError = Object.entries(errors).find(([key]) => key.startsWith('configuration.files'))?.[1]
   return <div className="space-y-4">
-    <FormGrid>{text('name', tx('İş adı'), values.name, name => set({ name }))}</FormGrid>
+    <FormGrid>{text('name', tx('İş adı'), values.name, name => set({ name }), false, true)}</FormGrid>
     {configuration.engine === 'file-system' && <FilePathList id="configuration.files.paths" label={tx('Yedeklenecek dosya ve klasörler')} paths={files.paths} error={pathError} onChange={paths => setConfiguration({ ...configuration, files: { ...files, paths } })} />}
     <Facts>
       <Fact label={tx('Yedekleme bilgisayarı')}>{agent?.hostName ?? job?.agentName ?? tx('Adsız bilgisayar')}</Fact>

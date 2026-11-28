@@ -54,10 +54,10 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
       : kind === 'email'
         ? tx('Olay ve önem bilgileri, etkilenen yedek veya bilgisayarın adıyla birlikte bu e-posta adresine gönderilir. Yedek dosyalarının içeriği gönderilmez.')
         : tx('Uyarıların kısa özeti bu telefon numarasına SMS olarak gönderilir.')}</p>
-    <Field label={tx("Ad")}>
+    <Field label={tx("Ad")} required>
       {(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={invalidField(error, 'name')} onChange={(event) => setName(event.target.value)} />}
     </Field>
-    <Field label={hint.label} hint={kind === 'email' ? tx('Adrese bir onay e-postası gönderilir. Adres sahibi bağlantıya tıklayıp onaylayana kadar bildirim gönderilmez; her e-postada abonelikten çıkma bağlantısı bulunur.') : webhook ? tx('Webhook adresi yalnızca 443 numaralı HTTPS portunu kullanabilir (platform yöneticisi başka port tanımlamadıysa).') : undefined}>
+    <Field label={hint.label} hint={kind === 'email' ? tx('Adrese bir onay e-postası gönderilir. Adres sahibi bağlantıya tıklayıp onaylayana kadar bildirim gönderilmez; her e-postada abonelikten çıkma bağlantısı bulunur.') : webhook ? tx('Webhook adresi yalnızca 443 numaralı HTTPS portunu kullanabilir (platform yöneticisi başka port tanımlamadıysa).') : undefined} required>
       {(control) => <TextInput {...control} value={target} placeholder={hint.placeholder} required aria-invalid={invalidField(error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
     </Field>
     {webhook && <SecretField label={tx('Gizli anahtar')} value={secret.value} invalid={invalidField(error, 'secret')} onChange={secret.set} />}
@@ -86,7 +86,7 @@ export function EditChannelDialog({ channel, onClose }: { channel: NotificationC
 
   return <FormDialog title={tx("Kanalı düzenle: {0}", { "0": channel.name })} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={update.isPending || setSecret.isPending} disabled={!name.trim()}
     error={update.error || setSecret.error} onSubmit={submit} onClose={onClose}>
-    <Field label={tx("Ad")}>
+    <Field label={tx("Ad")} required>
       {(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={invalidField(update.error, 'name')} onChange={(event) => setName(event.target.value)} />}
     </Field>
     <Field label={hint.label} hint={tx("Mevcut: {0} · boş bırakılırsa korunur", { "0": channel.targetDisplay })}>

@@ -249,7 +249,7 @@ export function LoginPage() {
                 <h2 className="text-lg font-semibold text-text-heading">{tx('Şifrenizi değiştirin')}</h2>
                 <p className="text-sm text-text-muted">{tx('İlk girişinizde veya geçici şifre atandığında şifrenizi değiştirmeniz zorunludur.')}</p>
               </div>
-              <Field label={tx('Mevcut şifre')}>
+              <Field label={tx('Mevcut şifre')} required>
                 {(control) => (
                   <TextInput
                     {...control}
@@ -262,7 +262,7 @@ export function LoginPage() {
                   />
                 )}
               </Field>
-              <Field label={tx('Yeni şifre')} hint={tx('En az 12 karakter olmalıdır. Büyük/küçük harf veya özel karakter zorunluluğu yoktur.')}>
+              <Field label={tx('Yeni şifre')} hint={tx('En az 12 karakter olmalıdır. Büyük/küçük harf veya özel karakter zorunluluğu yoktur.')} required>
                 {(control) => (
                   <TextInput
                     {...control}
@@ -274,7 +274,7 @@ export function LoginPage() {
                   />
                 )}
               </Field>
-              <Field label={tx('Yeni şifre (tekrar)')}>
+              <Field label={tx('Yeni şifre (tekrar)')} required>
                 {(control) => (
                   <TextInput
                     {...control}
@@ -324,7 +324,7 @@ export function LoginPage() {
               </Card>
             ) : factorMode === 'totp' ? (
               <Card key="2fa-totp" as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
-                <Field label={tx('Doğrulama kodu')}>
+                <Field label={tx('Doğrulama kodu')} required>
                   {(control) => (
                     <TextInput
                       {...control}
@@ -365,7 +365,7 @@ export function LoginPage() {
               </Card>
             ) : (
               <Card key="2fa-recovery" as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
-                <Field label={tx('Kurtarma kodu')}>
+                <Field label={tx('Kurtarma kodu')} required>
                   {(control) => (
                     <TextInput
                       {...control}
@@ -405,10 +405,10 @@ export function LoginPage() {
             )
           ) : (
             <Card key="password-login" as="form" padding="lg" onSubmit={handlePasswordSubmit} className="space-y-4">
-              <Field label={tx('Kullanıcı adı')} hint={tx('E-posta adresinizle de giriş yapabilirsiniz.')}>
+              <Field label={tx('Kullanıcı adı')} hint={tx('E-posta adresinizle de giriş yapabilirsiniz.')} required>
                 {(control) => <TextInput {...control} autoComplete="username" value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} required />}
               </Field>
-              <Field label={tx('Şifre')}>
+              <Field label={tx('Şifre')} required>
                 {(control) => <TextInput {...control} type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} required />}
               </Field>
               <CheckField label={tx('Beni hatırla')} checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />

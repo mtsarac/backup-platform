@@ -79,6 +79,7 @@ export function RestoreConfirmStep({ isPg, mode, targetDatabaseName, activeAgent
       </div>
 
       {replacing && <ConfirmDialog
+        destructive
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title={tx("Mevcut veritabanı değiştirilsin mi?")}

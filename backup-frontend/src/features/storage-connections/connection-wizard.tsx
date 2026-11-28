@@ -1,5 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { TextInput } from '@/components/ui/text-input'
+import { RequiredText } from '@/components/ui/field'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
@@ -10,6 +11,7 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
+import { WizardFooter } from '@/components/ui/wizard-footer'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
@@ -74,7 +76,7 @@ function ProviderStep({ providers, connections, value, onChange }: { providers: 
 function NameRow({ name, editing, invalid, onEdit, onChange }: { name: string; editing: boolean; invalid: boolean; onEdit: () => void; onChange: (name: string) => void }) {
   useLanguage()
   return editing || invalid
-    ? <label className="block space-y-1 text-sm font-medium text-text-heading">{tx("Ad")}<TextInput className="mt-1" value={name} required aria-label={tx("Ad")} aria-invalid={invalid} onChange={(event) => onChange(event.target.value)} /></label>
+    ? <label className="block space-y-1 text-sm font-medium text-text-heading"><RequiredText>{tx("Ad")}</RequiredText><TextInput className="mt-1" value={name} required aria-label={tx("Ad")} aria-invalid={invalid} onChange={(event) => onChange(event.target.value)} /></label>
     : <div className="flex flex-wrap items-center gap-x-3 text-body text-text">{name}<Button type="button" variant="ghost" size="sm" onClick={onEdit}>{tx("Adı değiştir")}</Button></div>
 }
 
@@ -234,14 +236,15 @@ function ConnectionWizardForm() {
             {showResult && <WizardResult created={created} google={Boolean(google)} ops={ops} googleOutcome={googleOutcome} googleError={googleConnect.error} googlePending={googleConnect.isPending}
               onGoogle={() => authorizeGoogle(created)} onFix={() => setStep('details')} storage={storage} back={back} />}
           </QueryState>
-          {!showResult && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            {stepIndex > 0 ? <Button type="button" variant="outline" disabled={saving} onClick={() => setStep(created && step === 'details' ? 'review' : stepKeys[stepIndex - 1])}><ArrowLeft aria-hidden="true" className="size-4" />{tx("Geri")}</Button> : <Link to={leave.to} state={leave.state} className={buttonVariants({ variant: 'ghost' })}>{tx("Vazgeç")}</Link>}
+          {!showResult && <WizardFooter className="border-t border-border pt-4"
+            back={stepIndex > 0 && <Button type="button" variant="outline" disabled={saving} onClick={() => setStep(created && step === 'details' ? 'review' : stepKeys[stepIndex - 1])}><ArrowLeft aria-hidden="true" className="size-4" />{tx("Geri")}</Button>}
+            cancel={<Link to={leave.to} state={leave.state} className={buttonVariants({ variant: 'ghost' })}>{tx("Vazgeç")}</Link>}>
             {step === 'review'
               ? <Button type="submit" disabled={!stepValid.review || saving}>{saving ? tx('Oluşturuluyor…') : tx('Bağlantıyı oluştur ve test et')}</Button>
               : step === 'details' && (google || created)
                 ? <Button type="submit" disabled={!stepValid.details || saving}>{saving ? tx('Kaydediliyor…') : google ? tx('Kaydet ve Google ile bağlan') : tx('Kaydet ve yeniden test et')}</Button>
                 : <Button type="submit" disabled={!stepValid[step]}>{tx("İleri")}<ArrowRight aria-hidden="true" className="size-4" /></Button>}
-          </div>}
+          </WizardFooter>}
         </div>
       </Section>
     </form>

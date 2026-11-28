@@ -13,7 +13,7 @@ export function OverrideFields({ draft, onChange, error, legend = tx('Depolama l
     <Field label={legend}>{(control) => <Select {...control} value={draft.kind} onChange={(event) => { if (isOverrideKind(event.target.value)) onChange({ ...draft, kind: event.target.value }) }}>
       {overrideKinds.map((kind) => <option key={kind} value={kind}>{kindLabels[kind]}</option>)}
     </Select>}</Field>
-    {draft.kind === 'limited' && <Field label={tx("Override boyutu (GB)")} hint={tx("1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak.")} error={error}>
+    {draft.kind === 'limited' && <Field label={tx("Override boyutu (GB)")} hint={tx("1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak.")} error={error} required>
       {(control) => <TextInput {...control} inputMode="decimal" required value={draft.gb} onChange={(event) => onChange({ ...draft, gb: event.target.value })} />}
     </Field>}
   </div>

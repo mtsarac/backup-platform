@@ -2,6 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Button } from '@/components/ui/button'
+import { DialogBody, DialogFooter, DialogHeader, DialogPopup } from '@/components/ui/dialog-parts'
 import { controlClass } from '@/components/ui/form-styles'
 import { ErrorNotice } from '@/components/ui/notice'
 import type { ErrorDescription, ErrorScope } from '@/lib/api/failure-messages'
@@ -47,22 +48,24 @@ function Body({ title, consequence, pending, error, errorScope, onConfirm, confi
   const [typed, setTyped] = useState('')
   const blocked = pending || confirmDisabled || (name !== undefined && typed !== name)
   function submit(event: FormEvent) { event.preventDefault(); event.stopPropagation(); if (!blocked) onConfirm() }
-  return <Dialog.Popup initialFocus={name === undefined ? cancelRef : undefined} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-lg border border-border bg-surface-raised p-6 shadow-overlay">
-    <Dialog.Title className="text-lg font-semibold text-text-heading">{title}</Dialog.Title>
-    <Dialog.Description render={<div />} className="text-sm"><Consequences consequence={consequence} /></Dialog.Description>
-    <form onSubmit={submit} className="space-y-4">
-      {children}
-      {name !== undefined && <div className="space-y-1">
-        <label htmlFor={inputId} className="block text-sm font-medium text-text-heading">{tx("Onaylamak için adı yazın: {0}", { "0": name })}</label>
-        <input id={inputId} value={typed} onChange={event => setTyped(event.target.value)} disabled={pending} autoComplete="off" spellCheck={false} className={`${controlClass} w-full font-mono`} />
-      </div>}
-      {error ? isDescribed(error) ? <ErrorNotice {...error} /> : <ErrorNotice error={error} scope={errorScope} /> : null}
-      <div className="flex flex-wrap justify-end gap-2">
+  return <DialogPopup size="md" initialFocus={name === undefined ? cancelRef : undefined}>
+    <DialogHeader title={title} />
+    <form onSubmit={submit} className="contents">
+      <DialogBody>
+        <Dialog.Description render={<div />} className="text-sm"><Consequences consequence={consequence} /></Dialog.Description>
+        {children}
+        {name !== undefined && <div className="space-y-1">
+          <label htmlFor={inputId} className="block text-sm font-medium text-text-heading">{tx("Onaylamak için adı yazın: {0}", { "0": name })}</label>
+          <input id={inputId} value={typed} onChange={event => setTyped(event.target.value)} disabled={pending} autoComplete="off" spellCheck={false} className={`${controlClass} w-full font-mono`} />
+        </div>}
+        {error ? isDescribed(error) ? <ErrorNotice {...error} /> : <ErrorNotice error={error} scope={errorScope} /> : null}
+      </DialogBody>
+      <DialogFooter>
         <Dialog.Close render={<Button ref={cancelRef} type="button" variant="outline" disabled={pending} />}>{tx("Vazgeç")}</Dialog.Close>
         <Button type="submit" variant={destructive ? 'destructive' : undefined} disabled={blocked}>{pending ? tx('İşleniyor…') : confirmLabel}</Button>
-      </div>
+      </DialogFooter>
     </form>
-  </Dialog.Popup>
+  </DialogPopup>
 }
 
 /** Consequence dialog for risky actions; pass `name` to also require typing it. */

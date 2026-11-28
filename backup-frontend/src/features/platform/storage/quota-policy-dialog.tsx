@@ -142,10 +142,10 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       {scopeError && <p role="alert" className="text-sm text-error">{scopeError}</p>}
       <fieldset className="space-y-4">
         <legend className="mb-3 text-sm font-semibold text-text-heading">{tx("Kimlik ve durum")}</legend>
-        {!isEditing && <Field label={tx("Politika anahtarı")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")}>
+        {!isEditing && <Field label={tx("Politika anahtarı")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")} required>
           {(control) => <TextInput {...control} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder={tx('ornek-politika-anahtari')} />}
         </Field>}
-        <Field label={tx("Politika adı")}>{(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
+        <Field label={tx("Politika adı")} required>{(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
         <CheckField label={tx("Etkin politika (planlarda seçilebilir)")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">
@@ -157,8 +157,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
           <Field label={tx("Uygulama modu")}>{(control) => <Select {...control} value={enforcementMode} onChange={(event) => setEnforcementMode(event.target.value as EnforcementMode)}>
             <option value="BlockNewBackups">{tx("BlockNewBackups (Yeni backup engellenir)")}</option><option value="WarnOnly">{tx("WarnOnly (Yalnızca uyar)")}</option><option value="None">{tx("None (Uygulanmaz)")}</option>
           </Select>}</Field>
-          <Field label={tx("Warning Eşiği (%)")}>{(control) => <TextInput {...control} type="number" min={1} max={99} value={warningThreshold} required onChange={(event) => setWarningThreshold(Number(event.target.value))} />}</Field>
-          <Field label={tx("Critical Eşiği (%)")}>{(control) => <TextInput {...control} type="number" min={1} max={100} value={criticalThreshold} required onChange={(event) => setCriticalThreshold(Number(event.target.value))} />}</Field>
+          <Field label={tx("Warning Eşiği (%)")} required>{(control) => <TextInput {...control} type="number" min={1} max={99} value={warningThreshold} required onChange={(event) => setWarningThreshold(Number(event.target.value))} />}</Field>
+          <Field label={tx("Critical Eşiği (%)")} required>{(control) => <TextInput {...control} type="number" min={1} max={100} value={criticalThreshold} required onChange={(event) => setCriticalThreshold(Number(event.target.value))} />}</Field>
         </div>
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">

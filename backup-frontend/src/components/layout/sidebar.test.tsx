@@ -77,6 +77,18 @@ describe('Tenant sidebar', () => {
     expect(within(drawer).getByRole('button', { name: 'Menüyü kapat' })).toBeInTheDocument()
   })
 
+  it('closes the phone drawer when the backdrop is tapped but not when its content is', () => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute('open', '') } })
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute('open') } })
+    render(<MemoryRouter><AppShell>{null}</AppShell></MemoryRouter>)
+    fireEvent.click(screen.getByRole('button', { name: 'Menüyü aç' }))
+    const drawer = screen.getByRole('dialog', { name: 'Ana menü' })
+    fireEvent.click(within(drawer).getByRole('navigation'))
+    expect(drawer).toHaveAttribute('open')
+    fireEvent.click(drawer)
+    expect(drawer).not.toHaveAttribute('open')
+  })
+
   it.each([
     'backup-jobs', 'backup-jobs/new', 'backup-jobs/j1', 'backup-runs', 'backup-runs/r1', 'backup-runs/r1/restore', 'restores', 'restores/x1', 'backup-shares',
   ])('marks the single Yedeklemeler entry current on %s', (path) => {

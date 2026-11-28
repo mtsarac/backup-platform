@@ -1207,7 +1207,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Kota kapsamı (isteğe bağlı)": {"tr":"Kota kapsamı (isteğe bağlı)","en":"Quota scope (optional)"},
   "Parola": {"tr":"Parola","en":"Password"},
   "Özel anahtar": {"tr":"Özel anahtar","en":"Private key"},
-  "Zorunlu alan.": {"tr":"Zorunlu alan.","en":"Required field."},
   "İsteğe bağlı; yalnızca şifreli özel anahtar için girin.": {"tr":"İsteğe bağlı; yalnızca şifreli özel anahtar için girin.","en":"Optional; enter only for an encrypted private key."},
   "Test edilemez": {"tr":"Test edilemez","en":"Cannot be tested"},
   "Yakında": {"tr":"Yakında","en":"Coming soon"},

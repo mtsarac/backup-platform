@@ -1,5 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
+import { cn } from '@/lib/utils'
+import { DisclosureChevron, disclosureTriggerClass } from '@/components/ui/disclosure'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -72,8 +74,8 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
 
     <Section title={tx("Kendi kurtarma anahtarınız")} description={tx("İsteğe bağlıdır. Genel anahtarınız yalnızca bundan sonra oluşturulan şifreli yedeklere eklenir; eski dosyalar değişmez. Özel anahtarı güvenle saklayın: platform bu anahtarı görmez ve kaybederseniz sizin için geri getiremez.")}
       actions={tenantRecovery && <Button variant="outline" onClick={() => { remove.reset(); setRemoving(true) }}>{tx("Anahtarı kaldır")}</Button>}>
-      <details open={adding}>
-        <summary onClick={event => { event.preventDefault(); setAdding(open => !open) }} className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('Kendi anahtarınızı ekleyin veya değiştirin')}</summary>
+      <details open={adding} className="group text-sm">
+        <summary onClick={event => { event.preventDefault(); setAdding(open => !open) }} className={cn(disclosureTriggerClass, 'list-none group-open:text-text-heading [&::-webkit-details-marker]:hidden')}><DisclosureChevron className="group-open:rotate-90" />{tx('Kendi anahtarınızı ekleyin veya değiştirin')}</summary>
       <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (!set.isPending && pem.trim()) submit() }}>
         <Field label={tx('Genel anahtar dosyası')} hint={tx('Yalnızca genel anahtar dosyasını seçin; özel anahtarınızı yüklemeyin.')}>
           {control => <TextInput {...control} type="file" accept=".pem,.pub,text/plain"  disabled={set.isPending} onChange={event => {
@@ -94,7 +96,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
             reader.readAsText(file)
           }} />}
         </Field>
-        <Field label={tx("Genel anahtar (PEM)")} hint={tx("“-----BEGIN PUBLIC KEY-----” ile başlayan RSA genel anahtarı, en az 4096 bit. Özel anahtar girmeyin.")} error={pemError}>
+        <Field label={tx("Genel anahtar (PEM)")} hint={tx("“-----BEGIN PUBLIC KEY-----” ile başlayan RSA genel anahtarı, en az 4096 bit. Özel anahtar girmeyin.")} error={pemError} required>
           {control => <TextArea {...control} className="font-mono text-sm" rows={6} required disabled={set.isPending} spellCheck={false} autoComplete="off" value={pem} onChange={event => { setSaved(false); setPemError(''); setPem(event.target.value) }} />}
         </Field>
         {set.error && <ErrorNotice error={set.error} />}

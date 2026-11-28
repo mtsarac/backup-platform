@@ -10,6 +10,7 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { useUrlParams } from '@/features/lists/url-params'
 import { CreatePlatformShareDialog } from '@/features/shares/create-platform-share-dialog'
+import { Disclosure } from '@/components/ui/disclosure'
 import {
   useAuditRetention,
   usePlatformShares,
@@ -77,8 +78,7 @@ export function PlatformSharesPage() {
 
       <DownloadAttemptsSection scope={{ route: 'platform', tenantId: tenantId || undefined }} description={tx('Paylaşımlar ve yedek dosyaları üzerinden yapılan tüm indirme girişimleri.')} />
 
-      <details className="group">
-        <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{tx('Denetim ve paylaşım geçmişi saklama süresi')}</summary>
+      <Disclosure title={tx('Denetim ve paylaşım geçmişi saklama süresi')}>
       <Section
         title={tx('Denetim ve paylaşım geçmişi saklama süresi')}
         description={tx('Paylaşım geçmişi ve denetim kayıtlarının sistem genelinde saklanma süresi (varsayılan 365 gün).')}
@@ -105,7 +105,7 @@ export function PlatformSharesPage() {
           </Button>
         </form>
       </Section>
-      </details>
+      </Disclosure>
 
       {createOpen && (
         <CreatePlatformShareDialog

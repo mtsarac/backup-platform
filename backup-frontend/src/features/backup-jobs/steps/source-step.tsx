@@ -35,7 +35,7 @@ function FileSourceGroup({ configuration, errors, onChange }: GroupProps) {
   const snapshotsOn = isFeatureEnabled('windowsVss') || isFeatureEnabled('linuxSnapshots')
   const pathError = (field: string) => Object.entries(errors).find(([key]) => key === field || key.startsWith(`${field}[`) || key.startsWith(`${field}.`))?.[1]
   return <FormGrid>
-    {text('configuration.database', tx('Dosya kaynağı referansı'), configuration.database, database => onChange({ ...configuration, database }))}
+    {text('configuration.database', tx('Dosya kaynağı referansı'), configuration.database, database => onChange({ ...configuration, database }), false, true)}
     <p className="text-sm text-text-muted md:col-span-2">{tx('Referans Agent FileSources ayarındaki ada karşılık gelir; fiziksel kök yol sunucudan seçilemez. . tüm kaynağı seçer. İzinler ve SHA-256 manifesti arşivde korunur. Canlı dosya değişiklikleri yedeği durdurur.')}{snapshotsOn && ' ' + tx('Noktasal görünüm için yapılandırılmış snapshot kaynağı kullanın.')}</p>
     <FilePathList id="configuration.files.paths" label={tx('Yedeklenecek dosya ve klasörler')} paths={files.paths} error={pathError('configuration.files.paths') ?? errors['configuration.files']} onChange={paths => onChange({ ...configuration, files: { ...files, paths } })} />
   </FormGrid>
@@ -47,8 +47,8 @@ function DatabaseSourceGroup({ configuration, errors, onChange }: GroupProps) {
   const { text, check } = fieldKit(errors)
   const isPg = configuration.engine === 'postgres'
   return <FormGrid>
-    {text('configuration.host', isPg ? tx('PostgreSQL host') : tx('SQL Server host / instance'), configuration.host, host => onChange({ ...configuration, host }))}
-    {text('configuration.database', 'Database', configuration.database, database => onChange({ ...configuration, database }))}
+    {text('configuration.host', isPg ? tx('PostgreSQL host') : tx('SQL Server host / instance'), configuration.host, host => onChange({ ...configuration, host }), false, true)}
+    {text('configuration.database', 'Database', configuration.database, database => onChange({ ...configuration, database }), false, true)}
     {!isPg && <div role="group" aria-label={tx('Giriş yöntemi')} className="flex flex-wrap gap-4 md:col-span-2">
       <RadioField name="configuration-auth" checked={configuration.integratedSecurity} onChange={() => onChange({ ...configuration, integratedSecurity: true })} label={tx('Windows hesabıyla giriş yap')} />
       <RadioField name="configuration-auth" checked={!configuration.integratedSecurity} onChange={() => onChange({ ...configuration, integratedSecurity: false })} label={tx('SQL Server oturumu (kullanıcı adı ve parola)')} />
@@ -127,9 +127,9 @@ export function SourceStep({ form }: { form: JobFormState }) {
   return <>
     <Question title={manual ? tx("Yedekleme işi ve bilgisayar") : tx("Yedekleme işi")} why={manual ? tx("İşi listelerde bu adla tanırsınız; yedeği, kaynağa ulaşabilen yedekleme bilgisayarındaki program alır.") : tx("İşi listelerde bu adla tanırsınız.")}>
       <FormGrid>
-        {text('name', tx('İş adı'), values.name, name => set({ name }))}
+        {text('name', tx('İş adı'), values.name, name => set({ name }), false, true)}
         {manual && <div className="min-w-0 space-y-1">
-          {select('agentId', tx('Yedekleme bilgisayarı'), values.agentId, [['', tx('Yedekleme bilgisayarı seçin')], ...(values.agentId && !agents.data?.some(item => item.agentId === values.agentId) ? [[values.agentId, `${tx('Adsız bilgisayar')} · ${values.agentId}`] as const] : []), ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', item.operationalStatus)}`] as const)], agentId => set({ agentId }))}
+          {select('agentId', tx('Yedekleme bilgisayarı'), values.agentId, [['', tx('Yedekleme bilgisayarı seçin')], ...(values.agentId && !agents.data?.some(item => item.agentId === values.agentId) ? [[values.agentId, `${tx('Adsız bilgisayar')} · ${values.agentId}`] as const] : []), ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', item.operationalStatus)}`] as const)], agentId => set({ agentId }), true)}
           {agents.isPending && <p role="status" className="text-sm text-text-muted">{tx("Bilgisayar listesi yükleniyor…")}</p>}{agents.error && <p role="alert" className="text-sm text-error">{errorMessage(agents.error)}</p>}
         </div>}
       </FormGrid>
