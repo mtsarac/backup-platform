@@ -53,7 +53,7 @@ test.describe('in-app notifications (top-bar bell)', () => {
       await signInAs(page, fresh.account)
       const problems = watch(page)
       await page.goto(`/tenants/${fresh.tenantId}/settings`)
-      const bell = page.getByRole('button', { name: /Bildirimler\s*\(1\)/ })
+      const bell = page.getByRole('button', { name: /^Bildirimler,? 1 okunmamış$/ })
       await expect(bell).toBeVisible()
       await bell.click()
 
@@ -63,13 +63,16 @@ test.describe('in-app notifications (top-bar bell)', () => {
       await expect(panel).toContainText('Zorunlu güvenlik bildirimi')
       expect(await axeViolations(page)).toEqual([])
 
-      await panel.getByRole('button', { name: 'Okundu olarak işaretle' }).click()
-      await expect(panel.getByText('Okundu', { exact: true })).toBeVisible()
-      await expect(page.getByRole('button', { name: /Bildirimler\s*\(/ })).toHaveCount(0)
+      await expect(panel.getByText('Okunmamış', { exact: true })).toHaveCount(1)
+      await panel.getByRole('button', { name: /^Okundu olarak işaretle/ }).click()
+      await expect(panel.getByText('Okunmamış', { exact: true })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /^Bildirimler,? 0 okunmamış$/ })).toBeVisible()
 
       await page.reload()
-      await page.getByRole('button', { name: 'Bildirimler', exact: true }).click()
-      await expect(page.getByRole('dialog', { name: 'Bildirimler' }).getByText('Okundu', { exact: true })).toBeVisible()
+      await page.getByRole('button', { name: /^Bildirimler,? 0 okunmamış$/ }).click()
+      const reopened = page.getByRole('dialog', { name: 'Bildirimler' })
+      await expect(reopened).toContainText('Zorunlu güvenlik bildirimi')
+      await expect(reopened.getByText('Okunmamış', { exact: true })).toHaveCount(0)
       expect(problems).toEqual([])
     } finally {
       await fresh.api.dispose()
