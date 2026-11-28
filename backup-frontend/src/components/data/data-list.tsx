@@ -1,7 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Card, cardClass } from '@/components/ui/card'
-import type { ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronsRight, ChevronsUpDown } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Select } from '@/components/ui/text-input'
 import { useLargeScreen } from '@/hooks/use-large-screen'
@@ -16,6 +17,8 @@ export interface Column<T> {
   readonly render: (row: T) => ReactNode
   /** Let long values (names, paths, schedules) wrap instead of forcing horizontal scrolling. */
   readonly wrap?: boolean
+  /** The cell names itself (a disclosure whose summary is the header): cards show it without the label above it. */
+  readonly selfLabeled?: boolean
   /** `title` heads the card, `status` sits beside it, `actions` fills the footer, `hidden` is table-only (technical detail). */
   readonly card?: CardRole
   /** Makes the header a sort button (the table) and an option of the sort menu (cards); needs `sort` on the list. The header must be a string. */
@@ -32,6 +35,8 @@ interface DataListProps<T> {
   keyExtractor: (row: T) => string
   /** Why the list is empty and what to do about it: one sentence, written for the screen. There is no generic default. */
   emptyMessage: string
+  /** The icon of the empty state, as on the other empty states. */
+  emptyIcon?: LucideIcon
   onClearFilters?: () => void
   className?: string
   /** Names the list for assistive tech (the table caption, the card list label). */
@@ -49,8 +54,10 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
   const untagged = columns.filter(column => !column.card)
   const title = columns.find(column => column.card === 'title') ?? untagged[0]
   const visibleFields = untagged.filter(column => column !== title)
-  const primaryFields = visibleFields.slice(0, KEY_FIELDS)
-  const secondaryFields = visibleFields.slice(KEY_FIELDS)
+  // A disclosure for one lone field costs more than the field: show it.
+  const shown = visibleFields.length === KEY_FIELDS + 1 ? KEY_FIELDS + 1 : KEY_FIELDS
+  const primaryFields = visibleFields.slice(0, shown)
+  const secondaryFields = visibleFields.slice(shown)
   const statuses = columns.filter(column => column.card === 'status')
   const actions = columns.filter(column => column.card === 'actions')
   return (
@@ -65,8 +72,8 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
             <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
               {primaryFields.map((column) => (
                 <div key={column.key} className="min-w-0">
-                  <dt className="text-sm text-text-muted">{column.header}</dt>
-                  <dd className="mt-0.5 break-words text-body text-text">{column.render(row)}</dd>
+                  <dt className={cn('text-sm text-text-muted', column.selfLabeled && 'sr-only')}>{column.header}</dt>
+                  <dd className={cn('break-words text-body text-text', !column.selfLabeled && 'mt-0.5')}>{column.render(row)}</dd>
                 </div>
               ))}
             </dl>
@@ -79,8 +86,8 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
               <dl className="mt-3 grid gap-x-6 gap-y-2 border-t border-border pt-2 sm:grid-cols-2">
                 {secondaryFields.map((column) => (
                   <div key={column.key} className="min-w-0">
-                    <dt className="text-sm text-text-muted">{column.header}</dt>
-                    <dd className="mt-0.5 break-words text-body text-text">{column.render(row)}</dd>
+                    <dt className={cn('text-sm text-text-muted', column.selfLabeled && 'sr-only')}>{column.header}</dt>
+                    <dd className={cn('break-words text-body text-text', !column.selfLabeled && 'mt-0.5')}>{column.render(row)}</dd>
                   </div>
                 ))}
               </dl>
@@ -111,28 +118,57 @@ export function SortMenu({ options, sort }: { options: readonly { key: string; l
   </label>
 }
 
+/** Whether the box scrolls sideways at all, and whether columns still hide behind its right edge. */
+function useOverflow() {
+  const box = useRef<HTMLDivElement>(null)
+  const [state, setState] = useState({ overflowing: false, more: false })
+  useEffect(() => {
+    const element = box.current
+    if (!element) return
+    const measure = () => {
+      const overflowing = element.scrollWidth > element.clientWidth + 1
+      const more = overflowing && element.scrollLeft + element.clientWidth < element.scrollWidth - 1
+      setState(previous => previous.overflowing === overflowing && previous.more === more ? previous : { overflowing, more })
+    }
+    measure()
+    element.addEventListener('scroll', measure, { passive: true })
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : undefined
+    observer?.observe(element)
+    if (element.firstElementChild) observer?.observe(element.firstElementChild)
+    return () => { element.removeEventListener('scroll', measure); observer?.disconnect() }
+  }, [])
+  return { box, ...state }
+}
+
 function Table<T>({ rows, columns, keyExtractor, className, caption, sort }: ListProps<T>) {
+  useLanguage()
+  const { box, overflowing, more } = useOverflow()
+  // The actions column sticks to the right edge so a row's buttons are always reachable; the hint below says that other columns are off-screen.
+  const stuck = (column: Column<T>) => overflowing && column.card === 'actions' ? 'sticky right-0 border-l border-border' : undefined
   return (
-    <div data-slot="data-table" className={cn(cardClass, 'scroll-shadow-x overflow-x-auto', className)}>
-      <table className="w-full border-collapse text-body">
-        {caption && <caption className="sr-only">{caption}</caption>}
-        <thead>
-          <tr className="border-b border-border bg-surface-2 text-left text-sm text-text-muted">
-            {columns.map((column) => <th key={column.key} aria-sort={column.sortable && sort ? sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none' : undefined} className="whitespace-nowrap px-3 py-2 font-medium">
-              {column.sortable && sort ? <SortButton column={column} sort={sort} /> : column.header}
-            </th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={keyExtractor(row)} className="border-b border-border last:border-b-0 hover:bg-surface-2">
-              {columns.map((column) => (
-                <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-control [&_button]:py-1 [&_button]:text-sm', column.card === 'actions' ? 'whitespace-nowrap [&_.flex-wrap]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 [overflow-wrap:anywhere]' : 'whitespace-nowrap')}>{column.render(row)}</td>
-              ))}
+    <div data-slot="data-table" className={cn(cardClass, 'overflow-hidden', className)}>
+      {more && <p aria-hidden="true" className="flex items-center justify-end gap-1 border-b border-border bg-surface-2 px-3 py-1.5 text-xs text-text-muted"><ChevronsRight className="size-3.5" />{tx('Diğer sütunlar için sağa kaydırın')}</p>}
+      <div ref={box} tabIndex={overflowing ? 0 : undefined} role={overflowing ? 'region' : undefined} aria-label={overflowing ? caption ?? tx('Tablo') : undefined} className="scroll-shadow-x overflow-x-auto focus-visible:outline-offset-[-3px]">
+        <table className="w-full border-collapse text-body">
+          {caption && <caption className="sr-only">{caption}</caption>}
+          <thead>
+            <tr className="border-b border-border bg-surface-2 text-left text-sm text-text-muted">
+              {columns.map((column) => <th key={column.key} aria-sort={column.sortable && sort ? sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none' : undefined} className={cn('whitespace-nowrap bg-surface-2 px-3 py-2 font-medium', stuck(column))}>
+                {column.sortable && sort ? <SortButton column={column} sort={sort} /> : column.header}
+              </th>)}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={keyExtractor(row)} className="group/row border-b border-border last:border-b-0 hover:bg-surface-2">
+                {columns.map((column) => (
+                  <td key={column.key} className={cn('px-3 py-2 align-top text-text [&_button]:min-h-control [&_button]:py-1 [&_button]:text-sm', column.card === 'actions' ? 'whitespace-nowrap [&_.flex-wrap]:flex-nowrap' : column.wrap ? 'min-w-40 max-w-80 [overflow-wrap:anywhere]' : 'whitespace-nowrap', overflowing && column.card === 'actions' && 'bg-surface group-hover/row:bg-surface-2', stuck(column))}>{column.render(row)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -141,14 +177,14 @@ function Table<T>({ rows, columns, keyExtractor, className, caption, sort }: Lis
  * One list for every page: a table on large screens, cards below them so phones never scroll sideways.
  * Cards show the title, the status and a few key fields; mark the rest of a row `card: 'hidden'`.
  */
-export function DataList<T>({ rows, columns, keyExtractor, emptyMessage, onClearFilters, className, caption, sort }: DataListProps<T>) {
+export function DataList<T>({ rows, columns, keyExtractor, emptyMessage, emptyIcon, onClearFilters, className, caption, sort }: DataListProps<T>) {
   useLanguage()
   const large = useLargeScreen()
   const List = large ? Table<T> : Cards<T>
   return (
     <div className="space-y-4">
       {rows.length === 0
-        ? <div className={cn(cardClass, className)}><EmptyState message={emptyMessage} onClearFilters={onClearFilters} /></div>
+        ? <div className={cn(cardClass, className)}><EmptyState icon={emptyIcon} message={emptyMessage} onClearFilters={onClearFilters} /></div>
         : <>
           {!large && sort && <SortMenu options={columns.filter(column => column.sortable).map(column => ({ key: column.key, label: String(column.header) }))} sort={sort} />}
           <List rows={rows} columns={columns} keyExtractor={keyExtractor} className={className} caption={caption} sort={sort} />

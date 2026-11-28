@@ -165,7 +165,7 @@ export function InstanceDetailPage() {
         {instance && (verifying ? <StatusPill level="neutral">{tx("Doğrulanıyor…")}</StatusPill> : <AccessPill status={instance.access} reasonCode={instance.accessReasonCode} />)}
         {scanning && !verifying && <span role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Tarama sürüyor")}</span>}
       </>} />
-    <QueryState isPending={query.isPending} error={query.error}>
+    <QueryState isPending={query.isPending} error={query.error} notFound={{ backTo: discoveredDatabasesPath(tenantId), backLabel: tx('Bulunan veritabanları') }}>
       {instance && <>
         {warned && <section aria-labelledby="instance-warnings" className="space-y-3">
           <h2 id="instance-warnings" className="text-base font-semibold text-text-heading">{tx("Uyarılar")}</h2>

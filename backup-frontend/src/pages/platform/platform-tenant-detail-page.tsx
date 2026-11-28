@@ -161,7 +161,7 @@ export function PlatformTenantDetailPage() {
   const tenant = query.data
   return <div className="space-y-6">
     {!tenant && <PageHeader crumbs={[platformCrumb, { label: tx('Tenants'), to: platformPaths.tenants }]} title={tx("Tenant")} />}
-    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error} notFound={{ backTo: platformPaths.tenants, backLabel: tx('Tenants') }}>
       {tenant && <>
         <Header tenant={tenant} />
         <TenantTabs tenant={tenant} />

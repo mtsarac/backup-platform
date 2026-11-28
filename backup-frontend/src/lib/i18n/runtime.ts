@@ -34,6 +34,10 @@ export function tx(source: unknown, params?: Record<string, unknown>) {
   if (typeof source !== 'string') return source
   const entry = sourceCatalog[source]
   let text = entry ? entry[currentLanguage()] : source
-  if (params) text = text.replace(/\{(\w+)\}/g, (placeholder, key: string) => String(params[key] ?? placeholder))
+  if (params) {
+    // `{0?copy|copies}` picks the first form when the number is exactly 1 (English plurals; Turkish keeps one form after a number).
+    text = text.replace(/\{(\w+)\?([^|{}]*)\|([^{}]*)\}/g, (_, key: string, one: string, many: string) => Number(params[key]) === 1 ? one : many)
+    text = text.replace(/\{(\w+)\}/g, (placeholder, key: string) => String(params[key] ?? placeholder))
+  }
   return text
 }

@@ -26,7 +26,7 @@ export function RestoreWizardPage() {
         description={targetsQuery.data?.engine === 'file-system' ? tx('Dosya arşivini özgün veya alternatif konuma, tümüyle ya da seçili yollarla geri yükleyin.') : targetsQuery.data?.engine === 'postgres' ? tx("PostgreSQL pg_dump custom arşivini pg_restore ile hedef PostgreSQL sunucusuna geri yükleyin.") : tx("Doğrulanmış backup'ı aynı Database motoruna güvenli ve denetlenebilir adımlarla geri yükleyin.")}
         crumbs={[{ label: tx('Yedekleme denemeleri'), to: `/tenants/${tenantId}/backup-runs` }, { label: artifact?.databaseName ?? tx('Yedekleme denemesi'), to: `/tenants/${tenantId}/backup-runs/${id}` }, { label: tx('Geri yükleme') }]}
       />
-      <QueryState isPending={runQuery.isPending || (Boolean(artifact) && targetsQuery.isPending)} error={runQuery.error || targetsQuery.error} empty={!runQuery.isPending && !artifact} emptyState={<p>{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p>}>
+      <QueryState isPending={runQuery.isPending || (Boolean(artifact) && targetsQuery.isPending)} error={runQuery.error || targetsQuery.error} notFound={{ backTo: `/tenants/${tenantId}/backup-runs`, backLabel: tx('Yedekleme denemeleri') }} empty={!runQuery.isPending && !artifact} emptyState={<p>{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p>}>
         {artifact && targetsQuery.data && (
           targetsQuery.data.engine === 'file-system' ? <FileRestoreWizard key={`${tenantId}:${id}`} tenantId={tenantId} artifact={artifact} targets={targetsQuery.data} /> : <RestoreWizard
             key={`${tenantId}:${id}`}

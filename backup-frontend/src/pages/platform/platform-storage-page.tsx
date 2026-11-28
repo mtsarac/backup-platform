@@ -5,7 +5,6 @@ import { RefreshCw, ShieldCheck } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Disclosure } from '@/components/ui/disclosure'
 import { FilterField } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
@@ -148,6 +147,7 @@ export function PlatformStoragePage() {
     {
       key: 'technical',
       header: tx('Teknik ayrıntılar'),
+      selfLabeled: true,
       wrap: true,
       render: (row) => <TechnicalDetails items={[
         { label: tx("Çalışma alanı kimliği"), value: row.tenantId },
@@ -173,7 +173,6 @@ export function PlatformStoragePage() {
       card: 'actions',
       header: tx('İşlemler'),
       render: (row) => (
-        <Disclosure title={<>{tx('İşlemler')} <span className="sr-only">{row.tenantName} ({row.tenantId})</span></>}>
         <div className="flex flex-wrap gap-1.5">
           <Button
             variant="outline"
@@ -192,7 +191,6 @@ export function PlatformStoragePage() {
             }}
           >{tx("Baştan hesapla")}</Button>
         </div>
-        </Disclosure>
       ),
     },
   ]

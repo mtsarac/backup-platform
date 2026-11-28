@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
+import { KeyRound } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
@@ -60,7 +61,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
       </Section>}
     </QueryState>
     <Section title={tx("Bekleyen kayıt anahtarları")} description={tx("Anahtarın değeri güvenlik nedeniyle gösterilmez. Süresi dolan, kullanılan veya iptal edilen anahtarlar listelenmez.")} flush actions={<Button disabled={!policy.data?.enabled || Boolean(policy.error) || changePolicy.isPending} onClick={() => setCreateOpen(true)}>{tx("Yedekleme bilgisayarı ekle")}</Button>}>
-      <QueryState isPending={tokens.isPending} error={tokens.error}><DataList rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyMessage={tx("Bekleyen kayıt anahtarı yok.")} className="rounded-none border-0" /></QueryState>
+      <QueryState isPending={tokens.isPending} error={tokens.error}><DataList rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyIcon={KeyRound} emptyMessage={tx("Bekleyen kayıt anahtarı yok.")} className="rounded-none border-0" /></QueryState>
     </Section>
     {createOpen && policy.data?.enabled && !changePolicy.isPending && <AddAgentDialog tenantId={tenantId} onClose={() => setCreateOpen(false)} />}
     <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Kayıt anahtarı iptal edilsin mi?")}

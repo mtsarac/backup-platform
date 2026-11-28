@@ -294,7 +294,9 @@ describe('platform tenant detail', () => {
   it('shows a not-found message for an unknown tenant', async () => {
     vi.mocked(api.getTenant).mockRejectedValue(new ApiError(404, { error: 'tenant_not_found' }))
     mount()
-    expect(await screen.findByText(/Çalışma alanı bulunamadı\./)).toBeInTheDocument()
+    expect(await screen.findByText('Kayıt bulunamadı')).toBeInTheDocument()
+    expect(screen.getAllByRole('link').filter(link => link.getAttribute('href') === '/platform/tenants').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
   })
 
   it('paginates memberships through the members-page URL parameter', async () => {

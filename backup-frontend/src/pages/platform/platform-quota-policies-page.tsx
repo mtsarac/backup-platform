@@ -49,7 +49,7 @@ export function PlatformQuotaPoliciesPage() {
     { key: 'status', card: 'status', header: tx('Durum'), sortable: true, render: (policy) => <StatusPill level={policy.enabled ? 'safe' : 'neutral'}>{policy.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
     { key: 'enforcement', header: tx('Sınıra ulaşınca'), sortable: true, wrap: true, render: (policy) => enforcementModeLabels[policy.enforcementMode] },
     { key: 'created', header: tx('Oluşturulma'), sortable: true, render: policy => formatDateTime(policy.createdAt) },
-    { key: 'technical', header: tx('Teknik ayrıntılar'), wrap: true, render: (policy) => <TechnicalDetails items={[
+    { key: 'technical', header: tx('Teknik ayrıntılar'), selfLabeled: true, wrap: true, render: (policy) => <TechnicalDetails items={[
       { label: tx("Politika kimliği"), value: policy.policyId },
       { label: tx("Politika anahtarı"), value: policy.key },
       { label: tx("Politika sürümü"), value: String(policy.version) },
@@ -71,7 +71,7 @@ export function PlatformQuotaPoliciesPage() {
       {query.data && (policies.length === 0
         ? <ListEmpty message={tx("Tanımlı kota politikası bulunamadı.")} />
         : <div className="space-y-4">
-          <ListToolbar state={state} label={tx('Kota politikaları')} total={list.total} search={{ label: tx('Politika ara') }} />
+          <ListToolbar state={state} label={tx('Kota politikaları')} total={list.total} search={{ label: tx('Politika ara'), placeholder: tx('Politika adı veya anahtarı') }} />
           <Section title={tx("Kota politikaları")} description={tx("{0} politika · Değişiklikler mevcut kullanım hesaplamalarını etkileyebilir.", { "0": policies.length })} flush className="overflow-hidden"><DataList className={bareListClass} rows={list.rows} columns={columns} sort={sortProps(state)} keyExtractor={(policy) => policy.policyId} emptyMessage={tx("Aramayla eşleşen kayıt yok.")} onClearFilters={state.filtering ? state.clear : undefined} /></Section>
         </div>)}
     </QueryState>

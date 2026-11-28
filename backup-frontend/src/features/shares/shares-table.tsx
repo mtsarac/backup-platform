@@ -137,6 +137,7 @@ export function SharesTable({
     },
     {
       key: 'actions',
+      card: 'actions' as const,
       header: tx('İşlemler'),
       render: (share: BackupShareView) => {
         const canManage = canManageShare(share, user?.role)
@@ -180,7 +181,7 @@ export function SharesTable({
   return (
     <div className="space-y-4">
       {notice && <Notice tone="success">{notice}</Notice>}
-      <ListToolbar state={state} label={tx('Paylaşım filtreleri')} total={list.total} search={{ label: tx('Paylaşım ara') }}>
+      <ListToolbar state={state} label={tx('Paylaşım filtreleri')} total={list.total} search={{ label: tx('Paylaşım ara'), placeholder: tx('Yedek dosyası, oluşturan veya gerekçe') }}>
         {tenantFilter}
         <FilterField label={tx('Durum')}>
           <Select aria-label={tx('Durum')} value={state.filters.status} onChange={event => state.setFilter('status', event.target.value)}>
