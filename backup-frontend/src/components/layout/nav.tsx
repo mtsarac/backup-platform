@@ -53,6 +53,7 @@ export function SidebarFrame({ mobileOpen, onMobileClose, dialogLabel, ...conten
   }, [mobileOpen])
   return <>
     <aside className="fixed inset-y-0 left-0 z-20 hidden w-68 flex-col border-r border-border bg-sidebar text-text lg:flex"><SidebarContent {...content} /></aside>
-    <dialog ref={dialog} aria-label={dialogLabel} onCancel={onMobileClose} onClose={onMobileClose} className="fixed inset-y-0 left-0 m-0 h-svh max-h-none w-72 max-w-[85vw] flex-col bg-sidebar p-0 text-text backdrop:bg-scrim open:flex"><SidebarContent {...content} onClose={onMobileClose} /></dialog>
+    {/* The dialog box is filled edge to edge by its content, so a click whose target is the dialog itself landed on the backdrop. */}
+    <dialog ref={dialog} aria-label={dialogLabel} onCancel={onMobileClose} onClose={onMobileClose} onClick={event => { if (event.target === event.currentTarget) onMobileClose?.() }} className="fixed inset-y-0 left-0 m-0 h-svh max-h-none w-72 max-w-[85vw] flex-col bg-sidebar p-0 text-text backdrop:bg-scrim open:flex"><SidebarContent {...content} onClose={onMobileClose} /></dialog>
   </>
 }

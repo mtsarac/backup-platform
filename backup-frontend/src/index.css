@@ -141,6 +141,22 @@
   --text-body--line-height: 1.45;
 }
 
+/* Standalone controls are 44 px on touch screens and phone widths; dense table rows keep the compact 32 px. */
+@media (pointer: coarse), (max-width: 40rem) {
+  :root {
+    --spacing-control: 2.75rem;
+  }
+}
+table, [data-dense] {
+  --spacing-control: 2rem;
+}
+
+/* The one required-field marker: the existing red asterisk, drawn in CSS so it is never part of the label text. */
+.required-mark::after {
+  content: ' *';
+  color: var(--error);
+}
+
 /* The top bar is sticky: keep keyboard focus and anchors from scrolling underneath it. */
 html {
   scroll-padding-top: 8rem;

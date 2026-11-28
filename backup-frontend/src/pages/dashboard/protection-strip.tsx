@@ -24,14 +24,19 @@ export function ProtectionStrip({ days, jobName }: { days: StripDay[]; jobName: 
     setActive(index)
     items.current[index]?.focus()
   }
-  return <div role="list" aria-label={tx('Son 14 gün · {0}', { '0': jobName })} onKeyDown={move} className="flex max-w-full flex-wrap gap-0.5 sm:gap-1">
-    {days.map((day, index) => {
-      const cell = cells[day.status] ?? cells.NoBackup
-      const Icon = cell.icon
-      return <div key={day.date} role="listitem" ref={element => { items.current[index] = element }} tabIndex={index === active ? 0 : -1} aria-label={dayLabel(day)} title={dayLabel(day)}
-        onFocus={() => setActive(index)} className={cn('flex size-5 items-center justify-center rounded-sm border bg-surface', cell.className)}>
-        {Icon && <Icon aria-hidden="true" className="size-3" />}
-      </div>
-    })}
+  return <div className="space-y-1">
+    <div role="list" aria-label={tx('Son 14 gün · {0}', { '0': jobName })} onKeyDown={move} className="flex max-w-full flex-wrap gap-0.5 sm:gap-1">
+      {days.map((day, index) => {
+        const cell = cells[day.status] ?? cells.NoBackup
+        const Icon = cell.icon
+        return <div key={day.date} role="listitem" ref={element => { items.current[index] = element }} tabIndex={index === active ? 0 : -1} aria-label={dayLabel(day)} title={dayLabel(day)}
+          onFocus={() => setActive(index)} onClick={() => setActive(index)}
+          className={cn('flex size-5 items-center justify-center rounded-sm border bg-surface pointer-coarse:size-6', cell.className)}>
+          {Icon && <Icon aria-hidden="true" className="size-3" />}
+        </div>
+      })}
+    </div>
+    {/* Touch has no hover title: the chosen day is always spelled out. The cells already carry this text as their name. */}
+    <p aria-hidden="true" className="text-xs text-text-muted">{dayLabel(days[active])}</p>
   </div>
 }

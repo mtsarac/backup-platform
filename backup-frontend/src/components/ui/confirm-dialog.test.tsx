@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api/client'
@@ -68,5 +69,23 @@ describe('ConfirmDialog with a name', () => {
     view.rerender(<ConfirmDialog open={false} onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
     view.rerender(<ConfirmDialog open onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
     expect(screen.getByRole('textbox', { name: /Muhasebe/ })).toHaveValue('')
+  })
+})
+
+describe('ConfirmDialog keyboard containment', () => {
+  it('wraps Tab and Shift+Tab inside the typed-name dialog', async () => {
+    render(<ConfirmDialog open onClose={() => {}} title="Silinsin mi?" consequence={consequence} pending={false} onConfirm={() => {}} confirmLabel="Sil" name="kanal" />)
+    const input = screen.getByRole('textbox'), cancel = screen.getByRole('button', { name: 'Vazgeç' })
+    await waitFor(() => expect(input).toHaveFocus())
+    await userEvent.type(input, 'kanal')
+    const confirm = screen.getByRole('button', { name: 'Sil' })
+    await userEvent.tab(); expect(cancel).toHaveFocus()
+    await userEvent.tab(); expect(confirm).toHaveFocus()
+    await userEvent.tab(); expect(input).toHaveFocus()
+    await userEvent.tab({ shift: true }); expect(confirm).toHaveFocus()
+  })
+  it('keeps the confirm button red when the action is destructive', () => {
+    render(<ConfirmDialog destructive open onClose={() => {}} title="Silinsin mi?" consequence={consequence} pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
+    expect(screen.getByRole('button', { name: 'Sil' })).toHaveClass('text-error')
   })
 })

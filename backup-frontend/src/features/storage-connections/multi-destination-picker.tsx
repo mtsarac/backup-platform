@@ -316,7 +316,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
               requiredVerifiedReplicaCount: event.target.checked ? Math.max(3, requiredCount) : requiredCount })} />
         <p className="text-xs text-text-muted">{tx('En az üç hedef ekleyin. Bağlantılarda fiziksel site ve medya sınıfını tanımlayın; uzak bağlantının erişim testini çalıştırın. Aynı site veya aynı medya üzerindeki kopyalar tek başına 3-2-1 sağlamaz.')}</p>
         {configuration.enforceThreeTwoOne && <div className="space-y-1">
-          <label htmlFor="backup-source-site" className="block text-sm font-medium">{tx('Kaynak fiziksel site')}</label>
+          <label htmlFor="backup-source-site" className="block text-sm font-medium required-mark">{tx('Kaynak fiziksel site')}</label>
           <TextInput id="backup-source-site" required maxLength={64} pattern="[A-Za-z0-9_-]+"
             aria-invalid={Boolean(replicationError)} aria-describedby={replicationError ? 'replication-error' : undefined}
             value={configuration.sourceSite ?? ''} onChange={event => onChange({ ...configuration, sourceSite: event.target.value })} />

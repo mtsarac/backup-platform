@@ -39,10 +39,9 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
       </div>
     }
     return <div key={field.name} className={`space-y-1 text-sm ${width}`}>
-      <label htmlFor={id} className="block font-medium text-text-heading">{configLabel(field, providerType)}</label>
+      <label htmlFor={id} className={`block font-medium text-text-heading${field.required ? ' required-mark' : ''}`}>{configLabel(field, providerType)}</label>
       <TextInput id={id} type={field.kind === 'Number' ? 'number' : 'text'} value={String(values[field.name] ?? '')} maxLength={field.kind === 'Text' ? field.maxLength ?? undefined : undefined}
         required={field.required} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.value)} />
-      {field.required && <span className="block text-sm text-text-muted">{tx("Zorunlu alan.")}</span>}
       {providerType === 'sftp' && field.name === 'hostKeyFingerprint' && <span className="block text-sm text-text-muted">{tx("Sunucu yöneticinizden parmak izini isteyin ya da ssh-keygen -lf çıktısını yapıştırın. Örnek: SHA256:AbCd…")}</span>}
       {providerType === 'local' && field.name === 'volume' && <span className="block text-sm text-text-muted">{tx("Yedekleme bilgisayarında tanımlı disk adı")}</span>}
     </div>
@@ -55,9 +54,7 @@ export function SecretFieldInputs({ fields, values, onChange, invalidName, provi
   const prefix = useId()
   return <>{fields.map((field) => <SecretInput key={field.name} id={`${prefix}-${field.name}`} label={tx(field.label)}
     multiline={providerType === 'sftp' && field.name === 'privateKey'} saved={savedNames.includes(field.name)} invalid={invalidName === field.name}
-    hint={(providerType === 'sftp' && field.name === 'passphrase') || field.required ? <>
-      {providerType === 'sftp' && field.name === 'passphrase' && <span className="block">{tx("İsteğe bağlı; yalnızca şifreli özel anahtar için girin.")}</span>}
-      {field.required && <span className="block">{tx("Zorunlu alan.")}</span>}
-    </> : undefined}
+    hint={providerType === 'sftp' && field.name === 'passphrase' ? <span className="block">{tx("İsteğe bağlı; yalnızca şifreli özel anahtar için girin.")}</span> : undefined}
+    required={field.required}
     value={values[field.name] ?? ''} onChange={(value) => onChange(field.name, value)} />)}</>
 }

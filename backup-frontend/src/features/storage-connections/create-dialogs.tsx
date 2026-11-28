@@ -1,5 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Select, TextInput } from '@/components/ui/text-input'
+import { RequiredText } from '@/components/ui/field'
 import { useEffect, useState } from 'react'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { TenantPicker } from '@/features/platform/tenant-picker'
@@ -55,7 +56,7 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
         {creatable.map((item) => <option key={item.providerType} value={item.providerType}>{tx(item.displayName)}</option>)}
       </Select>
     </label>
-    <label className="block text-sm text-text-muted">{tx("Hedef adı")}<TextInput className="mt-1" value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
+    <label className="block text-sm text-text-muted"><RequiredText>{tx("Hedef adı")}</RequiredText><TextInput className="mt-1" value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
     </label>
     <label className="block text-sm text-text-muted">{tx("Kota kapsamı (isteğe bağlı)")}<TextInput className="mt-1" value={quotaScope} maxLength={64} placeholder="managed" aria-invalid={quotaScopeInvalid || errorField(create.error) === 'quotaScope'} onChange={(event) => setQuotaScope(event.target.value)} />
       <span className="mt-1 block text-xs">{tx("Bu hedefin hangi kota grubuna sayılacağını belirler. Boş bırakırsanız platform varsayılanı kullanılır.")}</span>

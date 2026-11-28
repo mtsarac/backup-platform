@@ -1,5 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Card, cardClass } from '@/components/ui/card'
+import { Disclosure } from '@/components/ui/disclosure'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowDown, ArrowUp, ChevronsRight, ChevronsUpDown } from 'lucide-react'
@@ -79,11 +80,8 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
             </dl>
           )}
           {secondaryFields.length > 0 && (
-            <details className="group rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm">
-              <summary className="cursor-pointer select-none font-medium text-text-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                {tx('Diğer detaylar ({0})', { '0': String(secondaryFields.length) })}
-              </summary>
-              <dl className="mt-3 grid gap-x-6 gap-y-2 border-t border-border pt-2 sm:grid-cols-2">
+            <Disclosure title={tx('Diğer detaylar ({0})', { '0': String(secondaryFields.length) })}>
+              <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                 {secondaryFields.map((column) => (
                   <div key={column.key} className="min-w-0">
                     <dt className={cn('text-sm text-text-muted', column.selfLabeled && 'sr-only')}>{column.header}</dt>
@@ -91,7 +89,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
                   </div>
                 ))}
               </dl>
-            </details>
+            </Disclosure>
           )}
           {actions.length > 0 && <div className="flex flex-wrap items-center gap-2">{actions.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
         </Card>
