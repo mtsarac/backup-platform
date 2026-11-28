@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { Link } from 'react-router-dom'
 import { Select } from '@/components/ui/text-input'
 import { keepForLabel, retentionPresets, schedulePresetLabel, schedulePresets } from '@/features/backup-jobs/job-wizard-model'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
@@ -13,6 +15,9 @@ import { encryptionStateLabel } from '@/features/artifact-encryption/labels'
 import { useDestinationLabel } from './use-destination-label'
 import { autoJobName, type FirstBackupItem, type FirstBackupSettings } from './first-backup-model'
 import { actionName } from '@/lib/accessible-name'
+import { ApiError } from '@/lib/api/client'
+import { discoveryInstancePath } from '@/lib/routes'
+import { useTenant } from '@/features/tenancy/use-tenant'
 
 export type ItemResult = { jobId?: string; runId?: string; error?: unknown }
 type Row = 'where' | 'when' | 'keep' | 'encryption'
@@ -23,6 +28,7 @@ export function SummaryStep({ items, names, settings, onSettings, results, pendi
   results: Record<string, ItemResult>; pending: boolean; onCreate: (startFirstBackup: boolean) => void; onBack: () => void
 }) {
   useLanguage()
+  const { tenantId } = useTenant()
   const connections = useTenantConnections()
   const providers = useTenantProviders()
   const [editing, setEditing] = useState<Row | null>(null)
@@ -75,7 +81,15 @@ export function SummaryStep({ items, names, settings, onSettings, results, pendi
       <span className="font-medium text-text-heading">{names[item.key] ?? autoJobName(item.database)}</span>
       {done(item) && !results[item.key]?.error && <span className="text-text-muted"> · {tx('Oluşturuldu')}</span>}
     </li>)}</ul>
-    {failed.map(item => <ErrorNotice key={item.key} title={names[item.key] ?? autoJobName(item.database)} error={results[item.key].error} />)}
+    {failed.map(item => {
+      const title = names[item.key] ?? autoJobName(item.database)
+      const error = results[item.key].error
+      // The API names the field that failed; a missing saved login cannot be fixed by retrying, only on the server's credential form.
+      if (error instanceof ApiError && error.field?.startsWith('configuration.databaseLogin')) return <ErrorNotice key={item.key} title={title}
+        what={tx('Bu sunucu için kayıtlı bir veritabanı girişi yok.')} action={tx('Sunucunun giriş bilgilerini kaydedin, sonra buraya dönüp yeniden deneyin.')}
+        control={<Link className={buttonVariants({ variant: 'outline' })} to={discoveryInstancePath(tenantId, item.instance.id)} target="_blank" rel="noreferrer">{tx('Giriş bilgilerini kaydet (yeni sekme)')}</Link>} />
+      return <ErrorNotice key={item.key} title={title} error={error} />
+    })}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <Button type="button" variant="outline" disabled={pending || items.some(done)} onClick={onBack}>{tx('Geri')}</Button>
       <div className="flex flex-wrap items-center gap-3">

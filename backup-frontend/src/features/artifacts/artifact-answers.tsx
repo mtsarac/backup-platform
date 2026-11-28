@@ -12,7 +12,7 @@ interface Answer { level: StatusLevel; label: string; text: ReactNode }
 
 function intact(artifact: BackupArtifact): Answer {
   const verified = artifact.replicas.filter(replica => replica.verificationState === 'Verified' && replica.usable).length
-  if (verified > 0) return { level: 'safe', label: tx('Sağlam'), text: artifact.replication ? null : tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) }
+  if (verified > 0) return { level: 'safe', label: tx('Sağlam'), text: artifact.replication ? null : verified === 1 ? tx('Kopyanın bütünlüğü doğrulandı.') : tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) }
   return { level: 'attention', label: tx('Doğrulanmadı'), text: tx('Bütünlüğü doğrulanmış bir kopya yok. Bu dosyaya güvenmeyin; yeni bir yedek almayı düşünün.') }
 }
 

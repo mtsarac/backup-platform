@@ -16,11 +16,15 @@ import { RestoreModeStep } from './restore-mode-step'
 import { PrecheckResults } from './precheck-results'
 import { isActiveRestore } from './presentation'
 import { RestoreConfirmStep } from './restore-confirm-step'
+import { Notice } from '@/components/ui/notice'
+import type { RestorePrefill } from './types'
 
 export interface RestoreWizardProps {
   tenantId: string
   artifact: BackupArtifact
   targets: RestoreTargetsResponse
+  /** From "Retry" on a failed or cancelled restore; still needs its own precheck and confirmation. */
+  prefill?: RestorePrefill
 }
 
 interface RequestAttempt<Variables> {
@@ -28,7 +32,7 @@ interface RequestAttempt<Variables> {
   readonly variables: Variables
 }
 
-export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
+export function RestoreWizard({ tenantId, artifact, targets, prefill }: RestoreWizardProps) {
   useLanguage()
   const navigate = useNavigate()
   const instancePrefix = useId()
@@ -38,14 +42,16 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   const skipSource = eligibleAgents.length === 1
   const defaultAgent = eligibleAgents[0] ?? targets.agents[0]
   const ownTarget = targets.targets.find((t) => t.jobId === artifact.jobId)?.target
+  const usablePrefill = prefill && targets.agents.some((a) => a.agentId === prefill.agentId && a.canRestore && a.sourceEligible) ? prefill : undefined
+  const prefillIsOwn = Boolean(usablePrefill && ownTarget && (['host', 'port', 'integratedSecurity', 'databaseCredentialReference', 'encrypt'] as const).every((key) => (usablePrefill.target[key] ?? null) === (ownTarget[key] ?? null)))
 
-  const [step, setStep] = useState<'source' | 'target'>(skipSource ? 'target' : 'source')
+  const [step, setStep] = useState<'source' | 'target'>(skipSource || usablePrefill ? 'target' : 'source')
   const [confirming, setConfirming] = useState(false)
   const [loginPending, setLoginPending] = useState(false)
-  const [selectedAgentId, setSelectedAgentId] = useState<string>(defaultAgent?.agentId ?? '')
-  const [targetType, setTargetType] = useState<'own' | 'other'>(ownTarget ? 'own' : 'other')
-  // The job's fixed connection values; only the address and, when needed, the login are asked.
-  const [otherTarget, setOtherTarget] = useState<RestoreTarget>({
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(usablePrefill?.agentId ?? defaultAgent?.agentId ?? '')
+  const [targetType, setTargetType] = useState<'own' | 'other'>(usablePrefill ? (prefillIsOwn ? 'own' : 'other') : ownTarget ? 'own' : 'other')
+  // The job's fixed connection values; only the address and, when needed, the login are asked. A retry starts from the previous target, without its one-off certificate trust.
+  const [otherTarget, setOtherTarget] = useState<RestoreTarget>(usablePrefill && !prefillIsOwn ? { ...usablePrefill.target, trustServerCertificate: false } : {
     host: '',
     port: isPg ? 5432 : null,
     integratedSecurity: !isPg,
@@ -57,12 +63,12 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   // Set from the error panel when the server's certificate cannot be verified; it holds for this restore only and drops as soon as the computer or server changes.
   const [trustCertificate, setTrustCertificate] = useState(false)
 
-  const [mode, setMode] = useState<RestoreMode>('NewDatabase')
+  const [mode, setMode] = useState<RestoreMode>(usablePrefill?.mode ?? 'NewDatabase')
   const newDatabaseName = (() => {
     const name = artifact.databaseName ? `${artifact.databaseName}_restored` : 'RestoredDB'
     return isPg && new TextEncoder().encode(name).length > 63 ? 'restored_db' : name
   })()
-  const [targetDatabaseName, setTargetDatabaseName] = useState<string>(newDatabaseName)
+  const [targetDatabaseName, setTargetDatabaseName] = useState<string>(usablePrefill?.databaseName ?? newDatabaseName)
   const options = useMemo<RestoreOptions>(() => ({
     terminateActiveConnections: mode === 'ReplaceExistingDatabase',
     verifyChecksum: true,
@@ -307,6 +313,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
       {shown === 'target' && (
         <div className="space-y-5">
+        {usablePrefill && <Notice tone="info">{tx("Önceki geri yüklemenin bilgisayarı, hedef sunucusu ve modu dolduruldu. Başlamadan önce yeni bir ön kontrol çalışır ve onayınız istenir.")}</Notice>}
         <RestoreTargetStep
           tenantId={tenantId}
           instancePrefix={instancePrefix}
@@ -341,6 +348,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           eligibleForRestore={Boolean(eligibleForRestore)}
           targetValid={targetValid}
           loginPending={loginPending}
+          precheckBlocked={Boolean(checking && precheckFailed)}
           checkPanel={checkPanel}
           onSelectNewDatabase={selectNewDatabase}
           onSelectReplaceExisting={selectReplaceExisting}

@@ -136,17 +136,22 @@ export function ArtifactDetail({ id }: { id: string }) {
     <div className="space-y-6">
       <QueryState isPending={query.isPending} error={query.error}>
         {artifact && <>
-          {artifact.state !== 'Deleted' && <details className="text-sm">
-            <summary className="cursor-pointer">{tx('Diğer')}</summary>
-            <div className="flex flex-wrap gap-2 pt-2">
-              {canDownload && <Button variant="outline" onClick={() => setShowDownload(shown => !shown)}>{tx('İndir')}</Button>}
-              {artifact.state === 'Available' && <Button variant="outline" onClick={() => setShowShares(shown => !shown)}>{tx('Paylaş')}</Button>}
-              {canRequestDelete && <Button variant="destructive" disabled={busy} onClick={() => { requestDelete.reset(); cancelDelete.reset(); setDialogOpen(true) }}>{tx('Sil')}</Button>}
-            </div>
-          </details>}
           <ArtifactDeletedNotice artifact={artifact} />
           {artifactState(artifact) === 'DeleteFailed' && <p className="text-sm text-text">{tx('Fiziksel silme tamamlanamadı; dosyalar hâlâ depolamada olabilir.')}{' '}<Link className={linkClass} to={`/tenants/${tenantId}/storage`}>{tx('Depolama')}</Link></p>}
           <ArtifactAnswers artifact={artifact} now={now} />
+          {artifact.state !== 'Deleted' && (canDownload || artifact.state === 'Available' || canRequestDelete) && <Section title={tx('Yedek dosyası işlemleri')}>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <div role="group" aria-label={tx('Yedek dosyası işlemleri')} className="flex flex-wrap gap-2">
+                {canDownload && <Button variant="outline" aria-expanded={showDownload} onClick={() => setShowDownload(shown => !shown)}>{tx('İndir')}</Button>}
+                {artifact.state === 'Available' && <Button variant="outline" aria-expanded={showShares} onClick={() => setShowShares(shown => !shown)}>{tx('Paylaş')}</Button>}
+              </div>
+              {canRequestDelete && <div className="w-full border-t border-border pt-3 sm:ml-auto sm:w-auto sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+                <Button variant="destructive" disabled={busy} onClick={() => { requestDelete.reset(); cancelDelete.reset(); setDialogOpen(true) }}>{tx('Sil')}</Button>
+              </div>}
+            </div>
+          </Section>}
+          {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} eligible={artifact.state === 'Available'} />}
+          {showShares && artifact.state === 'Available' && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} />}
           {user?.role === 'PlatformAdmin' && <Notice tone="info">{tx('Platform yöneticileri doğrudan indirme yapamaz. İndirmek için bu yedek dosyasına ait etkin bir paylaşım gerekir.')}</Notice>}
           {pending && <Section title={tx("Silme süreci")} className="border-warning-border">
             <div className="space-y-3">
@@ -162,13 +167,12 @@ export function ArtifactDetail({ id }: { id: string }) {
             action={<Button variant="outline" size="sm" disabled={cancelRepair.isPending} onClick={handleCancelRepair}>{cancelRepair.isPending ? tx('İptal ediliyor…') : tx('Onarımı iptal et')}</Button>}>{tx("Durum:")}{' '}{repairQuery.data.status === 'InProgress' ? tx('Aktarılıyor ve doğrulanıyor') : tx('Sırada')}
             {repairQuery.data.transferredBytes > 0 && tx(" · {0} MB aktarıldı", { "0": Math.round(repairQuery.data.transferredBytes / (1024 * 1024)) })}
           </Notice>}
-          {showDownload && canDownload && <ArtifactDownload tenantId={tenantId} artifactId={id} eligible={artifact.state === 'Available'} />}
           {artifact.backupMetadata?.engine !== 'file-system' && <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />}
-          {showShares && <ArtifactSharesSection tenantId={tenantId} artifact={artifact} />}
           <ArtifactTechnical artifact={artifact} replication={artifact.replication && <ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} />} />
         </>}
       </QueryState>
       <ConfirmDialog open={dialogOpen && canRequestDelete} onClose={() => setDialogOpen(false)} title={tx("Yedek dosyası için silme isteği")} name={artifact ? artifactName(artifact) : ''}
+        destructive
         consequence={{
           what: tx("Yedek dosyası hemen silinmez; bekleme süresi başlar. Süre dolunca kopyalar kalıcı olarak kaldırılır, geçmiş kaydı korunur. Kalan süre bu sayfada görünür."),
           who: tx("Bu dosyadan yapılacak indirmeler ve geri yüklemeler, bekleme süresi dolduktan sonra kullanılamaz."),

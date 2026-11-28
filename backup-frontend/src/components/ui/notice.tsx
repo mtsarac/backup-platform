@@ -56,7 +56,8 @@ export function ErrorNotice(props: ErrorNoticeProps) {
     <Icon aria-hidden="true" className={cn('mt-0.5 size-5 shrink-0', text)} />
     <div className="min-w-0 flex-1 space-y-2">
       {props.title && <div className={cn('font-medium', text)}>{props.title}</div>}
-      <p className="text-sm text-text">{[what, dataImpact, action].filter(Boolean).join(' ')}</p>
+      {/* The trust step below carries the caution itself; repeating the "trust it if it is yours" advice would say the same thing twice. */}
+      <p className="text-sm text-text">{[what, dataImpact, props.trust && certificateUntrusted ? undefined : action].filter(Boolean).join(' ')}</p>
       {props.trust && certificateUntrusted && <>
         <p className="text-sm text-text">{tx("Bu sunucunun kimliği doğrulanamaz; yalnızca kendi sunucunuz olduğundan eminseniz açın.")}</p>
         <Disclosure title={tx("Bu sunucunun sertifikasına yine de güven")}>

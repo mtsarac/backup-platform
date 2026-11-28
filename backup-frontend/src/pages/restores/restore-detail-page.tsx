@@ -21,17 +21,19 @@ import { restoreTitle, sourceBackupLabel, useSourceDatabaseName } from '@/featur
 import { useCancelRestore, useRestore } from '@/features/restores/hooks'
 import { RollbackCopyPanel, VerificationDetail } from '@/features/restores/verification-detail'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, precheckLabel, restoreModeLabel, restoreProgressPercent, restoreStageLabel, safeRestoreCode, targetStateDescription, targetStateLabel, technicalChecks, dedupeChecks } from '@/features/restores/presentation'
-import type { RestoreView } from '@/features/restores/types'
+import type { RestorePrefill, RestoreStatus, RestoreView } from '@/features/restores/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDateTime, formatDuration } from '@/lib/format'
 import { actionLabel, describeFailure } from '@/lib/api/failure-messages'
 
-function RestoreProgress({ stage, percent: rawPercent, at, label }: { stage: string | null; percent: number | null; at: string | null; label: string }) {
+function RestoreProgress({ stage, percent: rawPercent, at, label, status }: { stage: string | null; percent: number | null; at: string | null; label: string; status: RestoreStatus }) {
   useLanguage()
   const percent = restoreProgressPercent(rawPercent)
+  // A failed or cancelled restore must not look like one still running.
+  const tone = status === 'Failed' || status === 'AgentLost' ? 'error' : status === 'Cancelled' ? 'warning' : undefined
   return <div className="space-y-2">
     <p className="text-sm">{restoreStageLabel(stage)} · {percent == null ? tx('Yüzde bildirilmedi') : tx('%{0}', { '0': percent.toLocaleString(currentLocale(), { maximumFractionDigits: 1 }) })}</p>
-    <ProgressBar label={label} value={percent} />
+    <ProgressBar label={label} value={percent} tone={tone} />
     <p className="text-xs text-text-muted">{tx("Son bildirim:")}{' '}<RelativeTime value={at} /></p>
   </div>
 }
@@ -85,12 +87,14 @@ function RestoreDetail({ id }: { id: string }) {
   const sourceName = restore && sourceBackupLabel(databaseOfBackup, backupCreatedAt)
   const title = restore ? restoreTitle(restore, databaseOfBackup) : ''
   const failure = describeFailure(restore?.failureCode, 'restore')
-  function failureControl(code: string | null | undefined) {
-    if (!restore || !code) return undefined
-    const kind = describeFailure(code, 'restore').actionKind
+  function failureControl(code: string | null | undefined, cancelled = false) {
+    if (!restore || (!code && !cancelled)) return undefined
+    const kind = cancelled ? 'retry' : describeFailure(code, 'restore').actionKind
     if (!kind || kind === 'backupNow' || (kind !== 'checkComputer' && kind !== 'manageStorage' && !artifact.data?.runId)) return undefined
     const to = kind === 'checkComputer' ? `/tenants/${tenantId}/agents/${restore.agentId}` : kind === 'manageStorage' ? `/tenants/${tenantId}/storage` : `/tenants/${tenantId}/backup-runs/${artifact.data?.runId}/restore`
-    return <Link className={buttonVariants({ variant: 'outline' })} to={to}>{actionLabel(kind)}</Link>
+    // Retry keeps the operator's intent: same computer, target and mode. The wizard still runs a fresh precheck and asks for confirmation.
+    const state = kind === 'retry' && !fileRestore && restore.purpose === 'Execution' ? { restorePrefill: { agentId: restore.agentId, target: restore.target, mode: restore.mode, databaseName: restore.databaseName } satisfies RestorePrefill } : undefined
+    return <Link className={buttonVariants({ variant: 'outline' })} to={to} state={state}>{actionLabel(kind)}</Link>
   }
   const sourceJob = restore && (restore.sourceJobName ?? artifact.data?.jobName)
   async function confirmCancel() {
@@ -117,14 +121,14 @@ function RestoreDetail({ id }: { id: string }) {
           description={fileRestore ? tx('Dosya / klasör geri yükleme') : undefined}
           meta={<><StatusPill status={restore.status} /><span className="text-sm text-text-muted"><RelativeTime value={restore.createdAt} /></span></>}
           actions={mayCancel && <Button variant="destructive" disabled={cancel.isPending} onClick={() => { cancel.reset(); setConfirmOpen(true) }}>{tx("Geri yüklemeyi iptal et")}</Button>} />
-        {notice && (isActiveRestore(restore.status) || restore.status === 'Cancelled') && <Notice>{notice}</Notice>}
+        {notice && (isActiveRestore(restore.status) || restore.status === 'Cancelled') && !(restore.cancellationRequestedAt && isActiveRestore(restore.status)) && <Notice>{notice}</Notice>}
         {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <Notice tone="warning">{tx("İptal istendi; işlem henüz sona ermedi. Yedekleme bilgisayarının sonucu ve veritabanının durumu bekleniyor.")}</Notice>}
         {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && restore.purpose !== 'Verification' && <section aria-label={tx("Geri yükleme sonucu uyarısı")}><ErrorNotice
           title={fileRestore ? tx('Hedef dosyaları kontrol edin') : tx("Hedef veritabanını kontrol edin")}
           {...failure}
           {...(restore.status === 'Failed' && restore.failureCode ? {} : { what: restore.status === 'AgentLost' ? tx('Yedekleme bilgisayarıyla bağlantı koptu.') : tx('Geri yükleme iptal edildi.') })}
           dataImpact={fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("Bu durum veritabanının sağlıklı olduğunu göstermez. Hedef veritabanının durumunu kontrol edin; elle müdahale gerekebilir.")}
-          control={restore.status === 'Failed' ? failureControl(restore.failureCode) : undefined} /></section>}
+          control={restore.status === 'Failed' ? failureControl(restore.failureCode) : restore.status === 'Cancelled' ? failureControl(null, true) : undefined} /></section>}
         <Tabs label={tx("Geri yükleme bölümleri")} idPrefix="restore" value={tab} onChange={setTab} items={[
           { value: 'summary', label: tx('Özet') }, { value: 'details', label: tx('Seçenekler') }, { value: 'attempts', label: tx('Denemeler') }, { value: 'checks', label: tx('Doğrulama sonucu') },
         ]} />
@@ -132,11 +136,11 @@ function RestoreDetail({ id }: { id: string }) {
           {tab === 'summary' && <>
             {restore.purpose === 'Verification' && <VerificationDetail restore={restore} />}
             <RollbackCopyPanel restore={restore} />
-            {restore.purpose !== 'Verification' && <Section title={fileRestore ? tx('Hedef dosyaların durumu') : tx("Hedef veritabanının durumu")} description={fileRestore ? undefined : targetStateDescription(restore.targetState)}>
+            {restore.purpose !== 'Verification' && <Section title={fileRestore ? tx('Hedef dosyaların durumu') : tx("Hedef veritabanının durumu")} description={fileRestore ? undefined : targetStateDescription(restore.targetState, restore.mode)}>
               <p className="font-medium text-text-heading">{targetStateLabel(restore.targetState, Boolean(fileRestore))}</p>
               {restore.result && !fileRestore && <p className="mt-2 text-sm">{tx("Veritabanı durumu:")}{' '}{databaseStateLabel(restore.result.databaseState)}</p>}
             </Section>}
-            <Section title={tx("İlerleme")}><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label={tx("Geri yükleme ilerlemesi")} /></Section>
+            <Section title={tx("İlerleme")}><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} status={restore.status} label={tx("Geri yükleme ilerlemesi")} /></Section>
             <Section title={tx("Geri yükleme özeti")}><Facts columns={3}>
               <Fact label={tx("Mod")}>{fileRestore ? restore.mode === 'ReplaceExistingDatabase' ? tx('Mevcut dosyaların üzerine yazmaya izin ver') : tx('Mevcut dosyaların üzerine yazılmaz') : restoreModeLabel(restore.mode)}</Fact>
               {source}
@@ -164,7 +168,7 @@ function RestoreDetail({ id }: { id: string }) {
                 <Fact label={tx('Bitiş')}><RelativeTime value={attempt.completedAt} /></Fact>
                 <Fact label={tx('Hedef veritabanının durumu')}>{targetStateLabel(attempt.targetState, Boolean(fileRestore))}</Fact>
               </Facts>
-              <RestoreProgress stage={attempt.progressStage} percent={attempt.progressPercent} at={attempt.progressAt} label={tx("{0}. deneme ilerlemesi", { "0": attempt.number })} />
+              <RestoreProgress stage={attempt.progressStage} percent={attempt.progressPercent} at={attempt.progressAt} status={attempt.status} label={tx("{0}. deneme ilerlemesi", { "0": attempt.number })} />
               {attempt.failureCode && <ErrorNotice failureCode={attempt.failureCode} scope="restore" control={restore.purpose === 'Execution' ? failureControl(attempt.failureCode) : undefined} />}
             </article></li>)}</ol>}
           </Section>}

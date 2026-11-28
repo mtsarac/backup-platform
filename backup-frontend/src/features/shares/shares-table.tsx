@@ -1,6 +1,7 @@
 import { useState, useContext, type ReactNode } from 'react'
 import { Share2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useLargeScreen } from '@/hooks/use-large-screen'
 import { DataList, type Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
@@ -26,14 +27,13 @@ import { ArtifactRunLink } from '@/features/artifacts/artifact-run-link'
 const listConfig = {
   search: true,
   filters: { status: ['Active', 'Expired', 'Revoked'] },
-  sort: { first: { tenant: 'asc', artifact: 'asc', creator: 'asc', role: 'asc', createdAt: 'desc', expiresAt: 'desc', status: 'asc', reason: 'asc' }, default: { key: 'createdAt', dir: 'desc' } },
+  sort: { first: { tenant: 'asc', artifact: 'asc', creator: 'asc', createdAt: 'desc', expiresAt: 'desc', status: 'asc', reason: 'asc' }, default: { key: 'createdAt', dir: 'desc' } },
 } as const
 
 const comparators = {
   tenant: (a: BackupShareView, b: BackupShareView) => compareText(a.tenantName || a.tenantId, b.tenantName || b.tenantId),
   artifact: (a: BackupShareView, b: BackupShareView) => compareText(a.artifactName || tx('Yedek dosyası'), b.artifactName || tx('Yedek dosyası')),
   creator: (a: BackupShareView, b: BackupShareView) => compareText(a.createdByDisplayName || a.createdByUserId, b.createdByDisplayName || b.createdByUserId),
-  role: (a: BackupShareView, b: BackupShareView) => compareText(accountRoleLabel(a.createdByRole), accountRoleLabel(b.createdByRole)),
   createdAt: (a: BackupShareView, b: BackupShareView) => compareDate(a.createdAtUtc, b.createdAtUtc),
   expiresAt: (a: BackupShareView, b: BackupShareView) => compareDate(a.expiresAtUtc, b.expiresAtUtc),
   status: (a: BackupShareView, b: BackupShareView) => compareText(a.status, b.status),
@@ -58,6 +58,7 @@ export function SharesTable({
   tenantFilter,
 }: SharesTableProps) {
   useLanguage()
+  const large = useLargeScreen()
   const { user } = useAuth()
   const tenantContext = useContext(TenantContext)
   const state = useListState(listConfig)
@@ -72,49 +73,47 @@ export function SharesTable({
   const [notice, setNotice] = useState<string | null>(null)
 
   const columns: Column<BackupShareView>[] = [
-    ...(showTenant
-      ? [
-          {
-            key: 'tenant',
-            header: tx('Tenant'),
-            sortable: true,
-            render: (share: BackupShareView) => (
-              <Link className={`${linkClass} ${rowLinkClass}`} to={`/platform/tenants/${share.tenantId}`}>
-                {share.tenantName || share.tenantId}
-              </Link>
-            ),
-          },
-        ]
-      : []),
     {
       key: 'artifact',
       header: tx('Yedek dosyası'),
       sortable: true,
       card: 'title' as const,
       render: (share: BackupShareView) => (
-        <ArtifactRunLink className={`${linkClass} ${rowLinkClass}`} tenantId={share.tenantId} artifactId={share.artifactId}>
-          {share.artifactName || tx('Yedek dosyası')}
-        </ArtifactRunLink>
+        <>
+          <span className="block">
+            <ArtifactRunLink className={`${linkClass} ${rowLinkClass}`} tenantId={share.tenantId} artifactId={share.artifactId}>
+              {share.artifactName || tx('Yedek dosyası')}
+            </ArtifactRunLink>
+          </span>
+          {showTenant && (
+            <span className="block text-sm">
+              <Link className={`${linkClass} ${rowLinkClass}`} to={`/platform/tenants/${share.tenantId}`}>
+                {share.tenantName || share.tenantId}
+              </Link>
+            </span>
+          )}
+        </>
       ),
     },
     {
       key: 'creator',
       header: tx('Oluşturan'),
       sortable: true,
-      render: (share: BackupShareView) => share.createdByDisplayName || share.createdByUserId,
+      render: (share: BackupShareView) => (
+        <>
+          {share.createdByDisplayName || share.createdByUserId}
+          <span className="block text-sm text-text-muted"><span>{accountRoleLabel(share.createdByRole)}</span>{large && <> · <span>{formatDateTime(share.createdAtUtc)}</span></>}</span>
+        </>
+      ),
     },
-    {
-      key: 'role',
-      header: tx('Rol'),
-      sortable: true,
-      render: (share: BackupShareView) => accountRoleLabel(share.createdByRole),
-    },
-    {
+    // The table folds the creation date under the creator to keep reason and actions in view; the card list sorts by it from the menu.
+    ...(large ? [] : [{
       key: 'createdAt',
       header: tx('Oluşturulma'),
       sortable: true,
+      card: 'hidden' as const,
       render: (share: BackupShareView) => formatDateTime(share.createdAtUtc),
-    },
+    }]),
     {
       key: 'expiresAt',
       header: tx('Bitiş'),
@@ -147,7 +146,7 @@ export function SharesTable({
           return '—'
         }
         return (
-          <div className="flex gap-2 justify-end">
+          <div className="flex flex-col items-stretch gap-2 max-lg:flex-row max-lg:flex-wrap">
             {canDownload && (
               <ShareDownload share={share} />
             )}
