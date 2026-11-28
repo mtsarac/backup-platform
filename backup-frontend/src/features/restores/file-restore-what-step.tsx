@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Why } from '@/features/backup-jobs/job-form-fields'
 import { RadioField } from '@/components/ui/radio-field'
 import { Button } from '@/components/ui/button'
 import { Section } from '@/components/ui/section'
@@ -20,7 +21,7 @@ export function FileRestoreWhatStep({ instancePrefix, scope, paths, pathsValid, 
   useLanguage()
   return (
     <div className="space-y-5">
-      <Section title={tx("Hangi dosyalar geri yüklensin?")} description={tx("Neden soruluyor? Yedeğin tamamını ya da yalnızca ihtiyacınız olan dosya ve klasörleri geri yükleyebilirsiniz.")}>
+      <Section title={tx("Hangi dosyalar geri yüklensin?")} description={<Why>{tx("Yedeğin tamamını ya da yalnızca ihtiyacınız olan dosya ve klasörleri geri yükleyebilirsiniz.")}</Why>}>
         <div className="space-y-4">
           <fieldset className="flex flex-wrap gap-4">
             <legend className="sr-only">{tx("Geri yükleme kapsamı")}</legend>

@@ -5,6 +5,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
+import { Why } from '@/features/backup-jobs/job-form-fields'
 import type { RestoreMode, RestoreView } from './types'
 import { describeError, errorMessage } from '@/lib/api/failure-messages'
 
@@ -48,7 +49,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
   const replaceDescriptionId = useId()
   return (
     <div className="space-y-5">
-      <Section title={tx("Nasıl geri yüklensin?")} description={tx("Neden soruluyor? Yedek ya yeni bir veritabanı olarak açılır ya da var olan bir veritabanının yerine geçer. İkincisi geri alınamaz, bu yüzden ayrıca onay istenir.")}>
+      <Section title={tx("Nasıl geri yüklensin?")} description={<Why lead={false}>{tx("Yedek ya yeni bir veritabanı olarak açılır ya da var olan bir veritabanının yerine geçer. İkincisi geri alınamaz, bu yüzden ayrıca onay istenir.")}</Why>}>
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <button

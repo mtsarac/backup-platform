@@ -8,10 +8,16 @@ export function FormGrid({ children }: { children: ReactNode }) {
   return <div className="grid gap-4 md:grid-cols-2 [&>div]:min-w-0">{children}</div>
 }
 
-/** One wizard question with the short reason it is asked; `lead={false}` drops the "Neden soruluyor?" label on later questions of the same step. */
+/** The "Neden soruluyor?" label plus the reason; `lead={false}` drops the label on later questions of the same step. */
+export function Why({ children, lead = true }: { children: ReactNode; lead?: boolean }) {
+  useLanguage()
+  return <>{lead && <><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}</>}{children}</>
+}
+
+/** One wizard question with the short reason it is asked. */
 export function Question({ title, why, children, headingLevel, compact, lead = true }: { title: string; why: string; children?: ReactNode; headingLevel?: 2 | 3; compact?: boolean; lead?: boolean }) {
   useLanguage()
-  return <Section title={title} headingLevel={headingLevel} className={compact ? '[&>div:first-child]:border-0 [&>div:first-child]:pb-0 [&>div:nth-child(2)]:pt-2' : undefined} description={compact ? undefined : <>{lead && <><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}</>}{why}</>}>{children}</Section>
+  return <Section title={title} headingLevel={headingLevel} className={compact ? '[&>div:first-child]:border-0 [&>div:first-child]:pb-0 [&>div:nth-child(2)]:pt-2' : undefined} description={compact ? undefined : <Why lead={lead}>{why}</Why>}>{children}</Section>
 }
 
 /** A ready-made choice for a setting: exactly one option is pressed, or none when the current value is custom. */
