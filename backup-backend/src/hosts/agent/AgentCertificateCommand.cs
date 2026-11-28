@@ -29,7 +29,12 @@ public static class AgentCertificateCommand
             var configured = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PATH");
             using var currentCertificate = args[1] == "rotate" && configured is not null && File.Exists(configured) ? AgentMtlsTransport.LoadCertificate() : null;
             using var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
-            if (currentCertificate is not null) handler.SslOptions.ClientCertificates = [currentCertificate];
+            if (currentCertificate is not null)
+            {
+                // A proxy that only requests a client certificate sends no acceptable-issuer list, so without a selection callback .NET may send none.
+                handler.SslOptions.ClientCertificates = [currentCertificate];
+                handler.SslOptions.LocalCertificateSelectionCallback = (_, _, _, _, _) => currentCertificate;
+            }
             using var http = new HttpClient(handler) { BaseAddress = identity.ServerUri, Timeout = TimeSpan.FromSeconds(30) };
             if (args[1] == "rotate" && identity.Pending is null)
             {
