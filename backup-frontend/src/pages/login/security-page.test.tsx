@@ -38,7 +38,7 @@ describe('SecurityPage', () => {
 
     mount()
     expect(await screen.findByRole('heading', { name: 'Güvenlik ayarları' })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'TOTP Etkinleştir' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'TOTP etkinleştir' })).toBeInTheDocument()
     expect(screen.queryByText(/Kalan kullanılabilir kurtarma kodu/)).not.toBeInTheDocument()
   })
 
@@ -61,11 +61,11 @@ describe('SecurityPage', () => {
       return {}
     })
     mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'TOTP Etkinleştir' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'TOTP etkinleştir' }))
     const dialog = await screen.findByRole('dialog')
-    await userEvent.type(within(dialog).getByLabelText('Mevcut şifreniz'), 'password')
-    await userEvent.type(within(dialog).getByLabelText('Doğrulama kodu'), '123456')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Doğrula ve Etkinleştir' }))
+    await userEvent.type(within(dialog).getByLabelText(/^Mevcut şifreniz( \*)?$/), 'password')
+    await userEvent.type(within(dialog).getByLabelText(/^Doğrulama kodu( \*)?$/), '123456')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Doğrula ve etkinleştir' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(message)
   })
 
@@ -89,17 +89,17 @@ describe('SecurityPage', () => {
     })
 
     mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'TOTP Etkinleştir' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'TOTP etkinleştir' }))
 
     expect(await screen.findByRole('heading', { name: 'İki faktörlü doğrulama kurulumu' })).toBeInTheDocument()
     expect(screen.getByText('JBSWY3DPEHPK3PXP')).toBeInTheDocument()
 
     const dialog = screen.getByRole('dialog')
-    await userEvent.click(within(dialog).getByLabelText('Mevcut şifreniz'))
+    await userEvent.click(within(dialog).getByLabelText(/^Mevcut şifreniz( \*)?$/))
     await userEvent.paste('my-password')
-    await userEvent.click(within(dialog).getByLabelText('Doğrulama kodu'))
+    await userEvent.click(within(dialog).getByLabelText(/^Doğrulama kodu( \*)?$/))
     await userEvent.paste('654321')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Doğrula ve Etkinleştir' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Doğrula ve etkinleştir' }))
 
     expect(apiMock).toHaveBeenCalledWith('auth/security/totp/enroll', {
       method: 'POST',
@@ -114,6 +114,7 @@ describe('SecurityPage', () => {
     expect(screen.getByText('CODE-1111-2222')).toBeInTheDocument()
     expect(screen.getByText('CODE-3333-4444')).toBeInTheDocument()
 
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Kodları güvenli bir yere kaydettim.' }))
     await userEvent.click(screen.getByRole('button', { name: 'Tamam' }))
     expect(screen.queryByRole('heading', { name: 'Kurtarma kodlarınız' })).not.toBeInTheDocument()
   })
@@ -127,12 +128,12 @@ describe('SecurityPage', () => {
 
     mount()
     expect(await screen.findByText('Kalan kullanılabilir kurtarma kodu: 8')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'TOTP’yi Kaldır' }))
+    await userEvent.click(screen.getByRole('button', { name: 'TOTP’yi kaldır' }))
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('heading', { name: 'İki faktörlü doğrulamayı kaldır' })).toBeInTheDocument()
 
-    await userEvent.type(within(dialog).getByLabelText('Mevcut şifre'), 'my-password')
+    await userEvent.type(within(dialog).getByLabelText(/^Mevcut şifre( \*)?$/), 'my-password')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Kaldır' }))
 
     expect(apiMock).toHaveBeenCalledWith('auth/security/totp/remove', {
@@ -175,7 +176,7 @@ describe('SecurityPage', () => {
     expect(screen.getByText('NEW-3333-4444')).toBeInTheDocument()
   })
 
-  it('renders issued recovery codes inside an accessible dialog that moves focus in, closes on Escape, and restores focus (#244)', async () => {
+  it('renders issued recovery codes inside an accessible dialog that moves focus in, ignores Escape and closes only after the saved confirmation (#244)', async () => {
     apiMock.mockImplementation(async (path, options) => {
       if (path === 'auth/security') return { hasTotp: true, remainingRecoveryCodes: 5 }
       if (path === 'auth/security/recovery-codes/regenerate' && options?.method === 'POST') {
@@ -197,6 +198,11 @@ describe('SecurityPage', () => {
     await waitFor(() => expect(codesDialog.contains(document.activeElement)).toBe(true))
 
     await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Kurtarma kodlarınız' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tamam' })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Kodları güvenli bir yere kaydettim.' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tamam' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Kurtarma kodlarınız' })).not.toBeInTheDocument())
   })
 })

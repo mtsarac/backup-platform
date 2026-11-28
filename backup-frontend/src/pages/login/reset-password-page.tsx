@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { LanguageSwitcher } from '@/components/layout/language-switcher'
-import { BrandMark } from '@/components/ui/brand-mark'
+import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
@@ -44,11 +43,7 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-svh bg-canvas">
-      <main className="flex min-h-svh items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm space-y-6">
-          <BrandMark size="sm" />
-          <h1 className="text-xl font-semibold text-text-heading">{tx('Şifre sıfırlama')}</h1>
+    <AuthLayout title={tx('Şifre sıfırlama')}>
           {done ? (
             <Notice tone="success">{tx('Şifreniz güncellendi. Tüm oturumlarınız sonlandırıldı; yeni şifrenizle giriş yapın.')}</Notice>
           ) : !token ? (
@@ -66,9 +61,6 @@ export function ResetPasswordPage() {
             </Card>
           )}
           <Link className="block text-sm text-primary underline-offset-4 hover:underline" to="/login">{tx('Girişe dön')}</Link>
-          <LanguageSwitcher />
-        </div>
-      </main>
-    </div>
+    </AuthLayout>
   )
 }

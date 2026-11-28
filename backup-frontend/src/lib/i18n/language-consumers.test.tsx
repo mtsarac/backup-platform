@@ -16,12 +16,12 @@ vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({
 describe('Language consumers', () => {
   it('switches complete login copy without remounting or translating entered values, and localizes formatters', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), { target: { value: 'Customer Agent Tenant' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), { target: { value: 'Customer Agent Tenant' } })
     expect(formatGb(2_500_000_000)).toBe('2,5 GB')
     fireEvent.click(screen.getByRole('button', { name: 'TR / EN: Dili değiştir' }))
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Username' })).toHaveValue('Customer Agent Tenant')
-    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /^Username( \*)?$/ })).toHaveValue('Customer Agent Tenant')
+    expect(screen.getByLabelText(/^Password( \*)?$/)).toBeInTheDocument()
     expect(localStorage.getItem('bp_language')).toBe('en')
     expect(document.documentElement.lang).toBe('en')
     expect(formatGb(2_500_000_000)).toBe('2.5 GB')

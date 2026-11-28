@@ -13,6 +13,7 @@ import { apiRequest } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
 import { tx, useLanguage } from '@/lib/i18n'
 import { createCredential, getAssertion } from '@/features/auth/webauthn'
+import { RecoveryCodesDialog } from '@/features/auth/recovery-codes-dialog'
 import { Key, Plus, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { actionName } from '@/lib/accessible-name'
@@ -40,6 +41,8 @@ export function PasskeysPage() {
   const [addError, setAddError] = useState<ErrorDescription | null>(null)
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
   const [usePasskeyVerification, setUsePasskeyVerification] = useState(false)
+  const hasPasskeys = (passkeys.data?.length ?? 0) > 0
+  const verifyWithPasskey = usePasskeyVerification && hasPasskeys
 
   const [deleteTarget, setDeleteTarget] = useState<PasskeyItem | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
@@ -55,17 +58,18 @@ export function PasskeysPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!addName.trim() || (!usePasskeyVerification && !addPassword)) return
+    if (!addName.trim() || (!verifyWithPasskey && !addPassword)) return
     setAddPending(true)
     setAddError(null)
     try {
+      // Verify first: a failed verification must not leave an orphaned credential on the authenticator.
+      const verification = verifyWithPasskey ? await managementVerification() : { currentPassword: addPassword }
       const { options, challengeId } = await apiRequest<{
         options: Parameters<typeof createCredential>[0]
         challengeId: string
       }>('auth/passkeys/register/options', { method: 'POST' })
 
       const credentialResponse = await createCredential(options)
-      const verification = usePasskeyVerification ? await managementVerification() : { currentPassword: addPassword }
 
       const result = await apiRequest<{ recoveryCodes: string[] }>('auth/passkeys/register', {
         method: 'POST',
@@ -91,13 +95,13 @@ export function PasskeysPage() {
 
   async function handleDelete(e: React.FormEvent) {
     e.preventDefault()
-    if (!deleteTarget || (!usePasskeyVerification && !deletePassword)) return
+    if (!deleteTarget || (!verifyWithPasskey && !deletePassword)) return
     setDeletePending(true)
     setDeleteError(null)
     try {
       await apiRequest<void>(`auth/passkeys/${encodeURIComponent(deleteTarget.id)}`, {
         method: 'DELETE',
-        json: usePasskeyVerification ? await managementVerification() : { currentPassword: deletePassword }
+        json: verifyWithPasskey ? await managementVerification() : { currentPassword: deletePassword }
       })
 
       await cache.invalidateQueries({ queryKey: ['auth', 'passkeys'] })
@@ -131,14 +135,7 @@ export function PasskeysPage() {
         }
       />
 
-      {recoveryCodes.length > 0 && (
-        <Card padding="lg" className="space-y-4">
-          <h2 className="text-lg font-semibold text-text-heading">{tx('Kurtarma kodları')}</h2>
-          <p>{tx('Bu kodları güvenli bir yerde saklayın. Her kod yalnızca bir kez kullanılabilir.')}</p>
-          <ul>{recoveryCodes.map(code => <li key={code}><code>{code}</code></li>)}</ul>
-          <Button type="button" onClick={() => setRecoveryCodes([])}>{tx('Kapat')}</Button>
-        </Card>
-      )}
+      {recoveryCodes.length > 0 && <RecoveryCodesDialog codes={recoveryCodes} onClose={() => setRecoveryCodes([])} />}
 
       {addOpen && (
         <Card as="form" padding="lg" onSubmit={handleAdd} className="space-y-4">
@@ -154,7 +151,7 @@ export function PasskeysPage() {
               />
             )}
           </Field>
-          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')} required>
+          {!verifyWithPasskey && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')} required>
             {(control) => (
               <TextInput
                 {...control}
@@ -166,9 +163,9 @@ export function PasskeysPage() {
               />
             )}
           </Field>}
-          <Button type="button" variant="outline" onClick={() => setUsePasskeyVerification(!usePasskeyVerification)}>
-            {usePasskeyVerification ? tx('Şifreyle doğrula') : tx('Geçiş anahtarıyla doğrula')}
-          </Button>
+          {hasPasskeys && <Button type="button" variant="outline" onClick={() => setUsePasskeyVerification(!usePasskeyVerification)}>
+            {verifyWithPasskey ? tx('Şifreyle doğrula') : tx('Geçiş anahtarıyla doğrula')}
+          </Button>}
           {addError && <ErrorNotice {...addError} />}
           <div className="flex justify-end gap-2">
             <Button
@@ -182,7 +179,7 @@ export function PasskeysPage() {
             >
               {tx('Vazgeç')}
             </Button>
-            <Button type="submit" disabled={addPending || !addName.trim() || (!usePasskeyVerification && !addPassword)}>
+            <Button type="submit" disabled={addPending || !addName.trim() || (!verifyWithPasskey && !addPassword)}>
               {addPending ? tx('İşleniyor…') : tx('Kaydet')}
             </Button>
           </div>
@@ -195,7 +192,7 @@ export function PasskeysPage() {
           <p className="text-sm text-text-muted">
             {tx('Bu geçiş anahtarını kaldırmak istediğinizden emin misiniz?')} (<strong>{deleteTarget.name}</strong>)
           </p>
-          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')} required>
+          {!verifyWithPasskey && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')} required>
             {(control) => (
               <TextInput
                 {...control}
@@ -207,9 +204,9 @@ export function PasskeysPage() {
               />
             )}
           </Field>}
-          <Button type="button" variant="outline" onClick={() => setUsePasskeyVerification(!usePasskeyVerification)}>
-            {usePasskeyVerification ? tx('Şifreyle doğrula') : tx('Geçiş anahtarıyla doğrula')}
-          </Button>
+          {hasPasskeys && <Button type="button" variant="outline" onClick={() => setUsePasskeyVerification(!usePasskeyVerification)}>
+            {verifyWithPasskey ? tx('Şifreyle doğrula') : tx('Geçiş anahtarıyla doğrula')}
+          </Button>}
           {deleteError && <ErrorNotice {...deleteError} />}
           <div className="flex justify-end gap-2">
             <Button
@@ -224,7 +221,7 @@ export function PasskeysPage() {
             >
               {tx('Vazgeç')}
             </Button>
-            <Button type="submit" variant="destructive" disabled={deletePending || (!usePasskeyVerification && !deletePassword)}>
+            <Button type="submit" variant="destructive" disabled={deletePending || (!verifyWithPasskey && !deletePassword)}>
               {deletePending ? tx('İşleniyor…') : tx('Kaldır')}
             </Button>
           </div>

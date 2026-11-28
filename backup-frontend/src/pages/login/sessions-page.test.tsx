@@ -71,8 +71,8 @@ describe('session management', () => {
   })
   it('passes the remember-me choice to login', async () => {
     mount(<LoginPage />)
-    await userEvent.type(screen.getByLabelText('Kullanıcı adı'), 'owner')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'password')
+    await userEvent.type(screen.getByLabelText(/^Kullanıcı adı( \*)?$/), 'owner')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'password')
     await userEvent.click(screen.getByLabelText('Beni hatırla'))
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
     await waitFor(() => expect(login).toHaveBeenCalledWith('owner', 'password', true))

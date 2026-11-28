@@ -205,11 +205,11 @@ describe('cookie session UI', () => {
         </ThemeProvider>
       </QueryClientProvider>,
     )
-    const userField = await screen.findByRole('textbox', { name: 'Kullanıcı adı' })
+    const userField = await screen.findByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ })
     expect(screen.getByTestId('loc')).toHaveTextContent('/login')
 
     await userEvent.type(userField, 'owner')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'typed-password')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'typed-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/tenants/tenant-a/settings?tab=general'))
@@ -218,8 +218,8 @@ describe('cookie session UI', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Çıkış' }))
     await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/login'))
 
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Kullanıcı adı' }), 'owner')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'typed-password')
+    await userEvent.type(await screen.findByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'owner')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'typed-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/tenants/tenant-a'))
