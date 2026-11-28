@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+AgentMtlsPasswordFile.Install();
 if (await AgentUpdateCommands.TryRunAsync(args)) return;
 
 if (args.FirstOrDefault() == "enroll")
