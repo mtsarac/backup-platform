@@ -96,8 +96,8 @@ describe('Passkeys management page', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ekle' }))
 
-    const nameInput = screen.getByLabelText('Geçiş anahtarı adı')
-    const pwdInput = screen.getByLabelText('Mevcut şifreniz')
+    const nameInput = screen.getByLabelText(/^Geçiş anahtarı adı( \*)?$/)
+    const pwdInput = screen.getByLabelText(/^Mevcut şifreniz( \*)?$/)
 
     await userEvent.click(nameInput)
     await userEvent.paste('Home Key')
@@ -118,8 +118,45 @@ describe('Passkeys management page', () => {
       }))
     })
     expect(await screen.findByText('ABCD-EFGH')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Kapat' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Kodları güvenli bir yere kaydettim.' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tamam' }))
     expect(screen.queryByText('ABCD-EFGH')).not.toBeInTheDocument()
+  })
+
+  it('offers no passkey verification when none is registered', async () => {
+    api.mockImplementation(async (path: string) => (path === 'auth/passkeys' ? [] : undefined))
+    mount(<PasskeysPage />)
+    await screen.findByText('Henüz geçiş anahtarı eklenmedi.')
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ekle' }))
+    expect(screen.getByLabelText(/Mevcut şifreniz/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Geçiş anahtarıyla doğrula' })).toBeNull()
+  })
+
+  it('verifies with the existing passkey before creating a new credential', async () => {
+    mount(<PasskeysPage />)
+    await screen.findByText('Work YubiKey')
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ekle' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarıyla doğrula' }))
+    await userEvent.click(screen.getByLabelText(/Geçiş anahtarı adı/))
+    await userEvent.paste('Second Key')
+    const order: string[] = []
+    webauthnMock.getAssertion.mockImplementation(async () => { order.push('verify'); return { id: 'existing-key' } })
+    webauthnMock.createCredential.mockImplementation(async () => { order.push('create'); return { id: 'new' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(order).toEqual(['verify', 'create']))
+  })
+
+  it('creates no credential when the verification fails', async () => {
+    webauthnMock.getAssertion.mockRejectedValue(new DOMException('cancelled', 'NotAllowedError'))
+    mount(<PasskeysPage />)
+    await screen.findByText('Work YubiKey')
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ekle' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarıyla doğrula' }))
+    await userEvent.click(screen.getByLabelText(/Geçiş anahtarı adı/))
+    await userEvent.paste('Second Key')
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+    await screen.findByRole('alert')
+    expect(webauthnMock.createCredential).not.toHaveBeenCalled()
   })
 
   it('verifies removal with an existing passkey instead of a password', async () => {
@@ -142,7 +179,7 @@ describe('Passkeys management page', () => {
 
     expect(screen.getByText(/Bu geçiş anahtarını kaldırmak istediğinizden emin misiniz\?/)).toBeInTheDocument()
 
-    const pwdInput = screen.getByLabelText('Mevcut şifreniz')
+    const pwdInput = screen.getByLabelText(/^Mevcut şifreniz( \*)?$/)
     await userEvent.type(pwdInput, 'Correct-password-123!')
 
     await userEvent.click(screen.getByRole('button', { name: 'Kaldır' }))
@@ -168,17 +205,17 @@ describe('Passkeys management page', () => {
     await screen.findByText('Work YubiKey')
 
     await userEvent.click(screen.getByRole('button', { name: 'Geçiş anahtarı ekle' }))
-    await userEvent.type(screen.getByLabelText('Geçiş anahtarı adı'), 'Wrong Pwd Key')
-    await userEvent.type(screen.getByLabelText('Mevcut şifreniz'), 'wrong-password')
+    await userEvent.type(screen.getByLabelText(/^Geçiş anahtarı adı( \*)?$/), 'Wrong Pwd Key')
+    await userEvent.type(screen.getByLabelText(/^Mevcut şifreniz( \*)?$/), 'wrong-password')
     await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Parola geçersiz.')
-    expect(screen.getByLabelText('Geçiş anahtarı adı')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Geçiş anahtarı adı( \*)?$/)).toBeInTheDocument()
     expect(auth.clearAuth).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Vazgeç' }))
     await userEvent.click(screen.getByRole('button', { name: 'Kaldır — Work YubiKey' }))
-    await userEvent.type(screen.getByLabelText('Mevcut şifreniz'), 'wrong-password')
+    await userEvent.type(screen.getByLabelText(/^Mevcut şifreniz( \*)?$/), 'wrong-password')
     await userEvent.click(screen.getByRole('button', { name: 'Kaldır' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Parola geçersiz.')

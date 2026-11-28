@@ -2,14 +2,15 @@
 import { createElement, type ComponentType, type ReactElement, type ReactNode } from 'react'
 import * as rtl from '@testing-library/react/pure'
 import { LanguageProvider } from '@/lib/i18n'
+import { ThemeProvider } from '@/components/theme-provider'
 
 export * from '@testing-library/react/pure'
 
 type Wrapper = ComponentType<{ children: ReactNode }>
 
-// Every rendered tree gets the language context the real app mounts in Providers.
+// Every rendered tree gets the language and theme contexts the real app mounts in Providers.
 function withLanguage(Inner?: Wrapper): Wrapper {
-  return ({ children }) => createElement(LanguageProvider, null, Inner ? createElement(Inner, null, children) : children)
+  return ({ children }) => createElement(LanguageProvider, null, createElement(ThemeProvider, null, Inner ? createElement(Inner, null, children) : children))
 }
 
 export function render(ui: ReactElement, options: rtl.RenderOptions = {}) {

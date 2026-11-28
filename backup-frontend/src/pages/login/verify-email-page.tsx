@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { LanguageSwitcher } from '@/components/layout/language-switcher'
-import { BrandMark } from '@/components/ui/brand-mark'
+import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -34,11 +33,7 @@ export function VerifyEmailPage() {
   }
 
   return (
-    <div className="min-h-svh bg-canvas">
-      <main className="flex min-h-svh items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm space-y-6">
-          <BrandMark size="sm" />
-          <h1 className="text-xl font-semibold text-text-heading">{tx('E-posta doğrulama')}</h1>
+    <AuthLayout title={tx('E-posta doğrulama')}>
           {done ? (
             <Notice tone="success">{tx('E-posta adresiniz doğrulandı.')}</Notice>
           ) : !token ? (
@@ -50,10 +45,7 @@ export function VerifyEmailPage() {
               <Button className="w-full" disabled={loading} onClick={() => { void confirm() }}>{loading ? tx('Doğrulanıyor...') : tx('E-posta adresini doğrula')}</Button>
             </Card>
           )}
-          <Link className="block text-sm text-primary underline-offset-4 hover:underline" to="/">{tx('Çalışma alanlarına dön')}</Link>
-          <LanguageSwitcher />
-        </div>
-      </main>
-    </div>
+          <Link className="block text-sm text-primary underline-offset-4 hover:underline" to="/login">{tx('Girişe dön')}</Link>
+    </AuthLayout>
   )
 }

@@ -38,11 +38,11 @@ describe('Sign-in page', () => {
   it('accepts an email address as the login identifier', async () => {
     loginMock.mockResolvedValueOnce(undefined)
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    const field = screen.getByRole('textbox', { name: 'Kullanıcı adı' })
+    const field = screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ })
     expect(field).toHaveAttribute('autocomplete', 'username')
     expect(screen.getByText('E-posta adresinizle de giriş yapabilirsiniz.')).toBeInTheDocument()
     await userEvent.type(field, 'alice@example.com')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
     expect(loginMock).toHaveBeenCalledWith('alice@example.com', 'correct-password', false)
   })
@@ -52,12 +52,12 @@ describe('Sign-in page', () => {
     apiMock.mockResolvedValueOnce(undefined)
 
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     expect(await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })).toBeInTheDocument()
-    const codeInput = screen.getByRole('textbox', { name: 'Doğrulama kodu' })
+    const codeInput = screen.getByRole('textbox', { name: /^Doğrulama kodu( \*)?$/ })
     expect(codeInput).toBeInTheDocument()
 
     await userEvent.type(codeInput, '123456')
@@ -75,14 +75,14 @@ describe('Sign-in page', () => {
     apiMock.mockResolvedValueOnce(undefined)
 
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
     await userEvent.click(screen.getByRole('button', { name: 'Kurtarma kodu kullan' }))
 
-    const recoveryInput = await screen.findByRole('textbox', { name: 'Kurtarma kodu' })
+    const recoveryInput = await screen.findByRole('textbox', { name: /^Kurtarma kodu( \*)?$/ })
     expect(recoveryInput).toBeInTheDocument()
 
     await userEvent.type(recoveryInput, 'ABCD-EFGH-IJKL')
@@ -100,8 +100,8 @@ describe('Sign-in page', () => {
     logoutMock.mockResolvedValueOnce(undefined)
 
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
@@ -138,8 +138,8 @@ describe('Sign-in page', () => {
     verifySecondFactorMock.mockResolvedValueOnce(undefined)
 
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByLabelText('Kullanıcı adı'), 'testuser')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'password123!')
+    await userEvent.type(screen.getByLabelText(/^Kullanıcı adı( \*)?$/), 'testuser')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'password123!')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await waitFor(() => {
@@ -156,8 +156,8 @@ describe('Sign-in page', () => {
   it('shows lockout message and Retry-After wait time on 429 instead of unexpected error (#243)', async () => {
     loginMock.mockRejectedValueOnce(new client.ApiError(429, { error: 'Too many failed login attempts.' }, 45))
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'wrong-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'wrong-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     const alert = await screen.findByRole('alert')
@@ -170,22 +170,22 @@ describe('Sign-in page', () => {
   it('opens the passkey step instead of TOTP prompt for a passkey-only user (#260)', async () => {
     loginMock.mockResolvedValueOnce({ secondFactorRequired: true, requiresSecondFactor: true, methods: ['passkey', 'recovery'] })
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'passkey-only')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'passkey-only')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     expect(await screen.findByRole('heading', { level: 1, name: 'İkinci faktör doğrulaması' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Doğrulama kodu')).toBeNull()
+    expect(screen.queryByLabelText(/^Doğrulama kodu( \*)?$/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' })).toBeInTheDocument()
   })
 
   it('shows an error alert when passkey second factor verification fails (#250)', async () => {
-    loginMock.mockResolvedValueOnce({ secondFactorRequired: true, requiresSecondFactor: true, methods: ['totp', 'recovery'] })
+    loginMock.mockResolvedValueOnce({ secondFactorRequired: true, requiresSecondFactor: true, methods: ['totp', 'passkey', 'recovery'] })
     verifySecondFactorMock.mockRejectedValueOnce(new DOMException('cancelled', 'NotAllowedError'))
 
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
     await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
@@ -200,26 +200,38 @@ describe('Sign-in page', () => {
     logoutMock.mockResolvedValueOnce(undefined)
 
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'correct-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
-    const totpInput = await screen.findByRole('textbox', { name: 'Doğrulama kodu' })
+    const totpInput = await screen.findByRole('textbox', { name: /^Doğrulama kodu( \*)?$/ })
     await waitFor(() => expect(totpInput).toHaveFocus())
 
     await userEvent.click(screen.getByRole('button', { name: 'Kurtarma kodu kullan' }))
-    const recoveryInput = await screen.findByRole('textbox', { name: 'Kurtarma kodu' })
+    const recoveryInput = await screen.findByRole('textbox', { name: /^Kurtarma kodu( \*)?$/ })
     await waitFor(() => expect(recoveryInput).toHaveFocus())
 
     await userEvent.click(screen.getByRole('button', { name: 'Girişe dön' }))
     await screen.findByRole('heading', { name: 'Giriş yapın' })
 
     loginMock.mockResolvedValueOnce({ passwordChangeRequired: true, requiresPasswordChange: true })
-    await userEvent.type(screen.getByRole('textbox', { name: 'Kullanıcı adı' }), 'alice')
-    await userEvent.type(screen.getByLabelText('Şifre'), 'temp-password')
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'temp-password')
     await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
 
-    const firstPwdField = await screen.findByLabelText('Mevcut şifre')
+    const firstPwdField = await screen.findByLabelText(/^Mevcut şifre( \*)?$/)
     await waitFor(() => expect(firstPwdField).toHaveFocus())
+  })
+
+  it('offers only the second-factor methods the account has', async () => {
+    loginMock.mockResolvedValueOnce({ secondFactorRequired: true, requiresSecondFactor: true, methods: ['totp', 'recovery'] })
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    await userEvent.type(screen.getByRole('textbox', { name: /^Kullanıcı adı( \*)?$/ }), 'alice')
+    await userEvent.type(screen.getByLabelText(/^Şifre( \*)?$/), 'correct-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
+
+    await screen.findByRole('heading', { name: 'İki faktörlü doğrulama' })
+    expect(screen.getByRole('button', { name: 'Kurtarma kodu kullan' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Geçiş anahtarı ile doğrula' })).toBeNull()
   })
 })

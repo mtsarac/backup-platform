@@ -1,16 +1,14 @@
-import { useRef, useState } from 'react'
-import { Dialog } from '@base-ui/react/dialog'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { DialogBody, DialogFooter, DialogHeader, DialogPopup } from '@/components/ui/dialog-parts'
 import { Field } from '@/components/ui/field'
 import { TextInput } from '@/components/ui/text-input'
 import { PageHeader } from '@/components/ui/page-header'
-import { Notice } from '@/components/ui/notice'
 import { EmailVerificationCard } from './email-verification-card'
+import { RecoveryCodesDialog } from '@/features/auth/recovery-codes-dialog'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { apiRequest } from '@/lib/api/client'
 import { tx, useLanguage } from '@/lib/i18n'
@@ -50,8 +48,6 @@ export function SecurityPage() {
   // Recovery codes display modal (shown once after enroll or regenerate)
   const [codesModalOpen, setCodesModalOpen] = useState(false)
   const [issuedCodes, setIssuedCodes] = useState<string[]>([])
-  const [copied, setCopied] = useState(false)
-  const codesDoneRef = useRef<HTMLButtonElement>(null)
 
   // Remove modal state
   const [removeOpen, setRemoveOpen] = useState(false)
@@ -156,11 +152,6 @@ export function SecurityPage() {
     }
   }
 
-  function copyRecoveryCodes() {
-    void navigator.clipboard.writeText(issuedCodes.join('\n'))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
     <div className="space-y-6">
@@ -185,11 +176,11 @@ export function SecurityPage() {
               <div>
                 {security.data?.hasTotp ? (
                   <Button variant="destructive" size="sm" onClick={() => { setRemoveError(null); setRemoveOpen(true) }}>
-                    {tx('TOTP’yi Kaldır')}
+                    {tx('TOTP’yi kaldır')}
                   </Button>
                 ) : (
                   <Button size="sm" disabled={setupPending} onClick={() => { void startSetup() }}>
-                    {tx('TOTP Etkinleştir')}
+                    {tx('TOTP etkinleştir')}
                   </Button>
                 )}
               </div>
@@ -220,7 +211,7 @@ export function SecurityPage() {
       {setupOpen && setupData && (
         <FormDialog
           title={tx('İki faktörlü doğrulama kurulumu')}
-          submitLabel={tx('Doğrula ve Etkinleştir')}
+          submitLabel={tx('Doğrula ve etkinleştir')}
           pendingLabel={tx('Etkinleştiriliyor...')}
           pending={setupPending}
           error={setupError}
@@ -270,35 +261,7 @@ export function SecurityPage() {
         </FormDialog>
       )}
 
-      {/* Issued Recovery Codes Modal */}
-      {codesModalOpen && (
-        <Dialog.Root open onOpenChange={(next) => { if (!next) setCodesModalOpen(false) }}>
-          <Dialog.Portal>
-            <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
-            <DialogPopup size="md" initialFocus={codesDoneRef}>
-              <DialogHeader title={tx('Kurtarma kodlarınız')} />
-              <DialogBody>
-                <Notice tone="warning">
-                  {tx('Bu kodlar yalnızca bir kez gösterilir. Kimlik doğrulama cihazınıza erişiminizi kaybederseniz hesabınıza erişmek için bu kodları kullanabilirsiniz.')}
-                </Notice>
-                <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-surface-2 p-4 font-mono text-sm">
-                  {issuedCodes.map((code) => (
-                    <span key={code} className="select-all text-text-heading">
-                      {code}
-                    </span>
-                  ))}
-                </div>
-              </DialogBody>
-              <DialogFooter>
-                <Button variant="outline" onClick={copyRecoveryCodes}>
-                  {copied ? tx('Kopyalandı!') : tx('Kodları kopyala')}
-                </Button>
-                <Dialog.Close render={<Button ref={codesDoneRef} />}>{tx('Tamam')}</Dialog.Close>
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog.Portal>
-        </Dialog.Root>
-      )}
+      {codesModalOpen && <RecoveryCodesDialog codes={issuedCodes} onClose={() => setCodesModalOpen(false)} />}
 
       {/* Remove TOTP Dialog */}
       {removeOpen && (
@@ -307,6 +270,7 @@ export function SecurityPage() {
           title={tx('İki faktörlü doğrulamayı kaldır')}
           description={tx('Güvenlik doğrulaması için mevcut şifrenizi veya geçerli bir TOTP kodunu girin.')}
           submitLabel={tx('Kaldır')}
+          destructive
           pendingLabel={tx('Kaldırılıyor...')}
           pending={removePending}
           error={removeError}

@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Key } from 'lucide-react'
-import { BrandMark } from '@/components/ui/brand-mark'
 import { Card } from '@/components/ui/card'
 import { CheckField } from '@/components/ui/check-field'
 import { Field } from '@/components/ui/field'
@@ -13,13 +12,14 @@ import { useAuth } from '@/features/auth/use-auth'
 import { ROUTES } from '@/lib/routes'
 import { apiRequest, ApiError } from '@/lib/api/client'
 import { type ErrorDescription, describeError, describePasskeyError } from '@/lib/api/failure-messages'
-import { LanguageSwitcher } from '@/components/layout/language-switcher'
+import { AuthLayout } from '@/components/layout/auth-layout'
 import { usePageTitle } from '@/hooks/use-page-title'
 
-function initialFactorMode(result: { secondFactorRequired?: boolean; requiresSecondFactor?: boolean; methods?: readonly string[] }): 'totp' | 'passkey' {
+function initialFactorMode(result: { secondFactorRequired?: boolean; requiresSecondFactor?: boolean; methods?: readonly string[] }): 'totp' | 'recovery' | 'passkey' {
   if (Array.isArray(result.methods)) {
     if (result.methods.includes('totp')) return 'totp'
     if (result.methods.includes('passkey')) return 'passkey'
+    if (result.methods.includes('recovery')) return 'recovery'
   }
   return result.requiresSecondFactor && !result.secondFactorRequired ? 'passkey' : 'totp'
 }
@@ -39,6 +39,9 @@ export function LoginPage() {
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [factorMode, setFactorMode] = useState<'totp' | 'recovery' | 'passkey'>('totp')
+  // Second-factor methods the account really has; links to any other method are not offered.
+  const [methods, setMethods] = useState<readonly string[] | undefined>()
+  const has = (method: string) => !methods || methods.includes(method)
   const [totpCode, setTotpCode] = useState('')
   const [recoveryCode, setRecoveryCode] = useState('')
   const [error, setError] = useState<ErrorDescription | null>(null)
@@ -82,7 +85,7 @@ export function LoginPage() {
       }
       if (result && (result.secondFactorRequired || result.requiresSecondFactor)) {
         setSecondFactorPending(true)
-        setFactorMode(initialFactorMode(result))
+        { setFactorMode(initialFactorMode(result)); setMethods(result.methods) }
         setPassword('')
         return
       }
@@ -124,7 +127,7 @@ export function LoginPage() {
       if (changeResult && (changeResult.secondFactorRequired || changeResult.requiresSecondFactor)) {
         setPasswordChangePending(false)
         setSecondFactorPending(true)
-        setFactorMode(initialFactorMode(changeResult))
+        { setFactorMode(initialFactorMode(changeResult)); setMethods(changeResult.methods) }
         return
       }
       await completeSecondFactor()
@@ -236,13 +239,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-svh bg-canvas">
-      <main className="flex min-h-svh items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm space-y-6">
-          <BrandMark size="sm" />
-          <h1 className="text-xl font-semibold text-text-heading">
-            {secondFactorPending ? (factorMode === 'passkey' ? tx('İkinci faktör doğrulaması') : tx('İki faktörlü doğrulama')) : tx('Giriş yapın')}
-          </h1>
+    <AuthLayout title={secondFactorPending ? (factorMode === 'passkey' ? tx('İkinci faktör doğrulaması') : tx('İki faktörlü doğrulama')) : tx('Giriş yapın')}>
           {passwordChangePending ? (
             <Card key="password-change" as="form" padding="lg" onSubmit={handlePasswordChangeSubmit} className="space-y-4">
               <div>
@@ -288,10 +285,10 @@ export function LoginPage() {
               </Field>
               {error && <ErrorNotice {...error} />}
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? tx('Şifre değiştiriliyor...') : tx('Şifreyi Değiştir ve Giriş Yap')}
+                {loading ? tx('Şifre değiştiriliyor...') : tx('Şifreyi değiştir ve giriş yap')}
               </Button>
               <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelPasswordChange}>
-                {tx('İptal et ve Çıkış Yap')}
+                {tx('İptal et ve çıkış yap')}
               </Button>
             </Card>
           ) : secondFactorPending ? (
@@ -302,24 +299,24 @@ export function LoginPage() {
                   {loading ? tx('Doğrulanıyor...') : tx('Geçiş anahtarı ile doğrula')}
                 </Button>
                 <div className="flex flex-col gap-2 text-center">
-                  <button
+                  {has('totp') && <button
                     type="button"
-                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    className="min-h-control text-sm text-primary underline-offset-4 hover:underline"
                     onClick={() => { setError(null); setFactorMode('totp') }}
                   >
                     {tx('Doğrulama kodu kullan (TOTP)')}
-                  </button>
-                  <button
+                  </button>}
+                  {has('recovery') && <button
                     type="button"
-                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    className="min-h-control text-sm text-primary underline-offset-4 hover:underline"
                     onClick={() => { setError(null); setFactorMode('recovery') }}
                   >
                     {tx('Kurtarma kodu kullan')}
-                  </button>
+                  </button>}
                 </div>
                 {error && <ErrorNotice {...error} />}
                 <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
-                  {tx('Geri dön')}
+                  {tx('Girişe dön')}
                 </Button>
               </Card>
             ) : factorMode === 'totp' ? (
@@ -343,20 +340,20 @@ export function LoginPage() {
                   {loading ? tx('Doğrulanıyor...') : tx('Doğrula')}
                 </Button>
                 <div className="flex flex-col gap-2 text-center">
-                  <button
+                  {has('recovery') && <button
                     type="button"
-                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    className="min-h-control text-sm text-primary underline-offset-4 hover:underline"
                     onClick={() => { setError(null); setFactorMode('recovery') }}
                   >
                     {tx('Kurtarma kodu kullan')}
-                  </button>
-                  <button
+                  </button>}
+                  {has('passkey') && <button
                     type="button"
-                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    className="min-h-control text-sm text-primary underline-offset-4 hover:underline"
                     onClick={() => { setError(null); setFactorMode('passkey') }}
                   >
                     {tx('Geçiş anahtarı ile doğrula')}
-                  </button>
+                  </button>}
                 </div>
                 {error && <ErrorNotice {...error} />}
                 <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
@@ -382,20 +379,20 @@ export function LoginPage() {
                   {loading ? tx('Doğrulanıyor...') : tx('Kurtarma koduyla giriş yap')}
                 </Button>
                 <div className="flex flex-col gap-2 text-center">
-                  <button
+                  {has('totp') && <button
                     type="button"
-                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    className="min-h-control text-sm text-primary underline-offset-4 hover:underline"
                     onClick={() => { setError(null); setFactorMode('totp') }}
                   >
                     {tx('Doğrulama kodu kullan (TOTP)')}
-                  </button>
-                  <button
+                  </button>}
+                  {has('passkey') && <button
                     type="button"
-                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    className="min-h-control text-sm text-primary underline-offset-4 hover:underline"
                     onClick={() => { setError(null); setFactorMode('passkey') }}
                   >
                     {tx('Geçiş anahtarı ile doğrula')}
-                  </button>
+                  </button>}
                 </div>
                 {error && <ErrorNotice {...error} />}
                 <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={cancelSecondFactor}>
@@ -427,9 +424,6 @@ export function LoginPage() {
               <Link className="block text-center text-sm text-primary underline-offset-4 hover:underline" to="/forgot-password">{tx('Şifremi unuttum')}</Link>
             </Card>
           )}
-          <LanguageSwitcher />
-        </div>
-      </main>
-    </div>
+      </AuthLayout>
   )
 }
