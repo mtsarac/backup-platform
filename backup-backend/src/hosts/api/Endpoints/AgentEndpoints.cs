@@ -59,7 +59,8 @@ public static class AgentEndpoints
     }
     public sealed record CertificateEnrollmentRequest(string SigningRequestPem);
 
-    private static IResult EnrollCertificateAsync(CertificateEnrollmentRequest request, ICurrentAgent agent, HttpContext context)
+    private static async Task<IResult> EnrollCertificateAsync(
+        CertificateEnrollmentRequest request, ICurrentAgent agent, IAgentRegistryStore registry, HttpContext context, CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
         var authority = context.RequestServices.GetService<AgentCertificateAuthority>();
@@ -67,7 +68,9 @@ public static class AgentEndpoints
         try
         {
             if (request.SigningRequestPem is null) return Error(StatusCodes.Status400BadRequest, "invalid_signing_request", null);
-            return Results.Ok(new { certificatePem = authority.Issue(request.SigningRequestPem, agent.Identity!) });
+            var pem = authority.Issue(request.SigningRequestPem, agent.Identity!);
+            await registry.BindCertificateAsync(agent.Identity!.TenantId, agent.Identity.AgentId, cancellationToken);
+            return Results.Ok(new { certificatePem = pem });
         }
         catch (Exception exception) when (exception is ArgumentException or System.Security.Cryptography.CryptographicException)
         {

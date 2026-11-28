@@ -87,7 +87,8 @@ public sealed class AgentAuthenticationHandler(
             var authority = services.GetService<AgentCertificateAuthority>();
             var identity = authority?.Validate(certificate);
             if (identity is null) return AuthenticateResult.Fail("Agent certificate authentication failed.");
-            var record = await services.GetRequiredService<IAgentRegistryStore>().FindCredentialAsync(identity.CredentialId, Context.RequestAborted);
+            var registry = services.GetRequiredService<IAgentRegistryStore>();
+            var record = await registry.FindCredentialAsync(identity.CredentialId, Context.RequestAborted);
             var pendingAllowed = Context.GetEndpoint()?.Metadata.GetMetadata<AllowPendingAgentCredential>() is not null;
             if (record is null || record.AgentStatus != AgentStatus.Active || record.AgentTenantId != identity.TenantId ||
                 record.Credential.AgentId != identity.AgentId || record.Credential.TenantId != identity.TenantId ||
@@ -98,6 +99,22 @@ public sealed class AgentAuthenticationHandler(
                       record.Credential.IsExpired(services.GetRequiredService<TimeProvider>().GetUtcNow()) ||
                       record.AgentCredentialGeneration + 1 != identity.CredentialGeneration))
                 return AuthenticateResult.Fail("Agent certificate authentication failed.");
+            if (!record.AgentCertificateBound)
+                await registry.BindCertificateAsync(identity.TenantId, identity.AgentId, Context.RequestAborted);
+            if (pendingAllowed && record.Credential.Status == AgentCredentialStatus.Active
+                && Request.Headers.Authorization is [var pendingHeader] && pendingHeader is not null
+                && pendingHeader.StartsWith(AgentAuthorizationScheme.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!AgentAuthorizationScheme.TryParseHeaderValue(pendingHeader, out var pendingId, out var pendingSecret))
+                    return AuthenticateResult.Fail("Malformed agent credential.");
+                var pendingResult = await credentials.AuthenticateAsync(pendingId, pendingSecret, allowPending: true, Context.RequestAborted, certificatePresented: true);
+                if (pendingResult.Identity is null
+                    || pendingResult.Identity.AgentId != identity.AgentId
+                    || pendingResult.Identity.TenantId != identity.TenantId
+                    || pendingResult.Identity.CredentialGeneration != identity.CredentialGeneration + 1)
+                    return AuthenticateResult.Fail("Agent authentication failed.");
+                return AuthenticateResult.Success(new AuthenticationTicket(AgentAuthentication.CreatePrincipal(pendingResult.Identity), Scheme.Name));
+            }
             return AuthenticateResult.Success(new AuthenticationTicket(AgentAuthentication.CreatePrincipal(identity), Scheme.Name));
         }
         var headers = Request.Headers.Authorization;

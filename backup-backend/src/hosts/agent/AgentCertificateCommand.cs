@@ -26,20 +26,16 @@ public static class AgentCertificateCommand
             using var lease = AgentEnrollmentLease.Acquire(directory);
             var store = AgentCredentialStoreFactory.Create(directory);
             var identity = await store.LoadAsync(cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException(AgentText.Get(AgentMessage.CertificateEnrollFirst));
-            // Bearer-only client: a certificate on the request would win over the bearer and identify the active generation, not the pending one.
+            var configured = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PATH");
+            using var currentCertificate = args[1] == "rotate" && configured is not null && File.Exists(configured) ? AgentMtlsTransport.LoadCertificate() : null;
             using var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+            if (currentCertificate is not null) handler.SslOptions.ClientCertificates = [currentCertificate];
             using var http = new HttpClient(handler) { BaseAddress = identity.ServerUri, Timeout = TimeSpan.FromSeconds(30) };
             if (args[1] == "rotate" && identity.Pending is null)
             {
-                // A server that requires client certificates refuses a bearer-only rotation: present the current certificate when one is configured.
-                var configured = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PATH");
-                using var currentCertificate = configured is not null && File.Exists(configured) ? AgentMtlsTransport.LoadCertificate() : null;
-                using var rotateHandler = new SocketsHttpHandler { AllowAutoRedirect = false };
-                if (currentCertificate is not null) rotateHandler.SslOptions.ClientCertificates = [currentCertificate];
-                using var rotateHttp = new HttpClient(rotateHandler) { BaseAddress = identity.ServerUri, Timeout = TimeSpan.FromSeconds(30) };
                 using var rotate = new HttpRequestMessage(HttpMethod.Post, "/api/agent/credential/rotate");
                 rotate.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
-                using var response = await rotateHttp.SendAsync(rotate, cancellationToken).ConfigureAwait(false);
+                using var response = await http.SendAsync(rotate, cancellationToken).ConfigureAwait(false);
                 Ensure(response);
                 var issued = await response.Content.ReadFromJsonAsync<IssuedAgentCredential>(cancellationToken: cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException(AgentText.Get(AgentMessage.CertificateRotationInvalid));
                 identity = identity.WithPending(new AgentStoredCredential(issued.CredentialId, issued.Secret, issued.Generation));

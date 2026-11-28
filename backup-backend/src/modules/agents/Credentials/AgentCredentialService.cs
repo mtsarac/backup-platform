@@ -14,7 +14,8 @@ public enum AgentAuthenticationFailure
     PendingCredentialNotAllowed = 5,
     AgentNotActive = 6,
     StaleGeneration = 7,
-    TenantMismatch = 8
+    TenantMismatch = 8,
+    CertificateRequired = 9
 }
 
 public sealed record AgentAuthenticationResult(AgentIdentity? Identity, AgentAuthenticationFailure Failure)
@@ -56,7 +57,7 @@ public sealed class AgentCredentialService(IAgentRegistryStore store, TimeProvid
     /// only when <paramref name="allowPending"/> is set, which is reserved for the rotation confirmation call.
     /// </summary>
     public async Task<AgentAuthenticationResult> AuthenticateAsync(
-        Guid credentialId, string secret, bool allowPending, CancellationToken cancellationToken)
+        Guid credentialId, string secret, bool allowPending, CancellationToken cancellationToken, bool certificatePresented = false)
     {
         ArgumentNullException.ThrowIfNull(secret);
         var record = await store.FindCredentialAsync(credentialId, cancellationToken).ConfigureAwait(false);
@@ -69,6 +70,10 @@ public sealed class AgentCredentialService(IAgentRegistryStore store, TimeProvid
         if (!credential.VerifySecret(secret))
         {
             return Fail(AgentAuthenticationFailure.InvalidSecret);
+        }
+        if (record.AgentCertificateBound && !certificatePresented)
+        {
+            return Fail(AgentAuthenticationFailure.CertificateRequired);
         }
         if (record.AgentStatus != AgentStatus.Active)
         {

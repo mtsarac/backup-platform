@@ -46,6 +46,7 @@ internal sealed class AgentConfiguration : IEntityTypeConfiguration<Agent>
             .IsRequired();
         builder.Property(agent => agent.Status).HasConversion<int>().IsRequired();
         builder.Property(agent => agent.CredentialGeneration).IsRequired();
+        builder.Property(agent => agent.CertificateBound).IsRequired().HasDefaultValue(false);
         builder.Property(agent => agent.HostName).HasMaxLength(Agent.MaximumHostNameLength);
         builder.Property(agent => agent.InstallationId).HasColumnType("uuid");
         builder.Ignore(agent => agent.Capabilities);
