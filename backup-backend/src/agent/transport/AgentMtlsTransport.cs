@@ -21,12 +21,27 @@ public static class AgentMtlsTransport
         return handler;
     }
 
-    internal static X509Certificate2? LoadCertificate()
+    /// <summary>Reads the file named by <c>AGENT_MTLS_CERTIFICATE_PASSWORD_FILE</c>. The Windows host replaces it with a DPAPI reader; Linux reads a root-owned file (for example a systemd credential).</summary>
+    public static Func<string, string> ReadPasswordFile { get; set; } = path => File.ReadAllText(path).Trim();
+
+    /// <summary>The PFX password: the password file when configured, else the process environment. Null when neither is set.</summary>
+    public static string? ResolvePassword()
+    {
+        var file = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PASSWORD_FILE");
+        if (!string.IsNullOrEmpty(file))
+        {
+            if (!Path.IsPathFullyQualified(file)) throw new InvalidOperationException("The agent mTLS password file path must be absolute.");
+            return ReadPasswordFile(file);
+        }
+        return Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PASSWORD");
+    }
+
+    public static X509Certificate2? LoadCertificate()
     {
         var path = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PATH");
         if (string.IsNullOrEmpty(path)) return null;
         if (!Path.IsPathFullyQualified(path)) throw new InvalidOperationException("The agent mTLS certificate path must be absolute.");
-        return LoadCertificate(path, Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PASSWORD"));
+        return LoadCertificate(path, ResolvePassword());
     }
 
     internal static X509Certificate2 LoadCertificate(string path, string? password)

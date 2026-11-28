@@ -7,5 +7,7 @@ Agent__Backup__LocalStorage__RootDirectory=/var/lib/backup-platform-agent/backup
 Agent__Backup__PostgreSql__BackupMode=Logical
 # PostgreSQL tools must be installed separately and match the server major for physical backups.
 # Agent__Backup__PostgreSql__ClientToolsDirectory=/usr/lib/postgresql/18/bin
-# After certificate enrollment, enable both and set a protected PFX password via your secret deployment tooling.
+# After certificate enrollment, set the PFX path and keep the password out of this file and out of the process environment:
+# store it root-only (0600) and hand it over with a systemd drop-in: LoadCredential=mtls-pfx-password:/etc/backup-platform-agent/mtls-pfx.pass
+# plus Environment=AGENT_MTLS_CERTIFICATE_PASSWORD_FILE=%d/mtls-pfx-password
 # AGENT_MTLS_CERTIFICATE_PATH=/var/lib/backup-platform-agent/identity/client-certificate.pfx

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using BackupPlatform.Agent.Core.Identity;
+using BackupPlatform.Agent.Transport;
 using BackupPlatform.Contracts.Agents;
 
 namespace BackupPlatform.Agent.Host;
@@ -19,13 +20,17 @@ public static class AgentCertificateCommand
         }
         try
         {
-            var password = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PASSWORD");
-            if (password is null || password.Length < 12) throw new InvalidOperationException("A PFX password of at least 12 characters is required in AGENT_MTLS_CERTIFICATE_PASSWORD.");
+            var password = AgentMtlsPasswordFile.ResolveOrCreate();
+            if (password.Length < 12) throw new InvalidOperationException("The PFX password must have at least 12 characters.");
             var directory = AgentCredentialStoreFactory.ResolveDirectory(args.Length == 3 ? args[2] : null);
             using var lease = AgentEnrollmentLease.Acquire(directory);
             var store = AgentCredentialStoreFactory.Create(directory);
             var identity = await store.LoadAsync(cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("Enroll the agent before requesting a certificate.");
             using var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+            // A server that requires client certificates refuses a bearer-only rotation: present the current certificate when one is configured.
+            var configured = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PATH");
+            using var currentCertificate = configured is not null && File.Exists(configured) ? AgentMtlsTransport.LoadCertificate() : null;
+            if (currentCertificate is not null) handler.SslOptions.ClientCertificates = [currentCertificate];
             using var http = new HttpClient(handler) { BaseAddress = identity.ServerUri, Timeout = TimeSpan.FromSeconds(30) };
             if (args[1] == "rotate" && identity.Pending is null)
             {

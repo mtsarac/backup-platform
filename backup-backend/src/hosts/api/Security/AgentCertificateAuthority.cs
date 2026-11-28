@@ -56,6 +56,9 @@ public sealed class AgentCertificateAuthority(X509Certificate2 issuer, TimeProvi
     }
 }
 
+/// <summary>With <see cref="RequireCertificate"/> an agent route authenticates only by client certificate; a bearer credential alone is refused except where <see cref="AllowBearerBootstrap"/> is set.</summary>
+public sealed record AgentMtlsPolicy(bool RequireCertificate);
+
 /// <summary>Explicit mTLS issuer configuration; private-key material is loaded at runtime, never copied into configuration.</summary>
 public static class AgentCertificateServiceCollectionExtensions
 {
@@ -67,6 +70,7 @@ public static class AgentCertificateServiceCollectionExtensions
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) throw new InvalidOperationException("mTLS requires an absolute issuer PFX path.");
         var days = section.GetValue<int?>("LifetimeDays") ?? 30;
         if (days is < 1 or > 90) throw new InvalidOperationException("mTLS certificate lifetime must be 1–90 days.");
+        services.AddSingleton(new AgentMtlsPolicy(section.GetValue<bool>("RequireCertificate")));
         services.AddSingleton(sp =>
         {
             var issuer = X509CertificateLoader.LoadPkcs12FromFile(path, Environment.GetEnvironmentVariable("AGENT_MTLS_ISSUER_PASSWORD"), X509KeyStorageFlags.EphemeralKeySet);
