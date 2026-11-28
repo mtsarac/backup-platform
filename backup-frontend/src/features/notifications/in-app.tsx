@@ -138,7 +138,7 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
   </section>
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger render={<Button variant="outline" size="sm" aria-label={unread > 0 ? tx('Bildirimler, {0} okunmamış', { '0': unread }) : tx('Bildirimler')} />}>
+    <Popover.Trigger render={<Button variant="outline" size="sm" aria-label={tx('Bildirimler, {0} okunmamış', { '0': unread })} />}>
       <Bell aria-hidden="true" className="size-4" /><span className="max-sm:sr-only">{tx('Bildirimler')}</span>
       {unread > 0 && <Badge tone="accent" className="tabular-nums">{unread > 99 ? '99+' : unread}</Badge>}
     </Popover.Trigger>
