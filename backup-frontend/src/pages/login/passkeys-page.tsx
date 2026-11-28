@@ -143,7 +143,7 @@ export function PasskeysPage() {
       {addOpen && (
         <Card as="form" padding="lg" onSubmit={handleAdd} className="space-y-4">
           <h2 className="text-lg font-semibold text-text-heading">{tx('Geçiş anahtarı ekle')}</h2>
-          <Field label={tx('Geçiş anahtarı adı')}>
+          <Field label={tx('Geçiş anahtarı adı')} required>
             {(control) => (
               <TextInput
                 {...control}
@@ -154,7 +154,7 @@ export function PasskeysPage() {
               />
             )}
           </Field>
-          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')}>
+          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')} required>
             {(control) => (
               <TextInput
                 {...control}
@@ -195,7 +195,7 @@ export function PasskeysPage() {
           <p className="text-sm text-text-muted">
             {tx('Bu geçiş anahtarını kaldırmak istediğinizden emin misiniz?')} (<strong>{deleteTarget.name}</strong>)
           </p>
-          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')}>
+          {!usePasskeyVerification && <Field label={tx('Mevcut şifreniz')} hint={tx('Güvenlik doğrulaması için mevcut şifrenizi girin.')} required>
             {(control) => (
               <TextInput
                 {...control}

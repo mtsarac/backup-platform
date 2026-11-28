@@ -90,7 +90,7 @@ export function RollbackCopyPanel({ restore }: { restore: RestoreView }) {
   return <Section title={tx("Rollback kopyası")} actions={cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setOpen(true) }}>{tx("Rollback kopyasını kaldır")}</Button>}>
     <p className="text-sm">{tx("Rollback kopyası saklanıyor:")}{' '}<code className="font-mono">{name}</code>{tx(". Otomatik olarak asla kaldırılmaz.")}</p>
     {cleanup.retainedUntil && <p className="mt-1 text-sm text-text-muted">{tx("Koruma süresi sonu:")}{' '}{formatDateTime(cleanup.retainedUntil)}</p>}
-    <ConfirmDialog open={open} onClose={() => setOpen(false)} title={tx("Rollback kopyası kaldırılsın mı?")} confirmLabel={tx("Kalıcı olarak kaldır")} name={name}
+    <ConfirmDialog destructive open={open} onClose={() => setOpen(false)} title={tx("Rollback kopyası kaldırılsın mı?")} confirmLabel={tx("Kalıcı olarak kaldır")} name={name}
       pending={remove.isPending} error={remove.error} errorScope="restore" onConfirm={() => void confirm()}
       consequence={{
         what: tx("Önceki veritabanı kalıcı olarak silinir."),

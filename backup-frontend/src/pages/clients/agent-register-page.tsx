@@ -63,7 +63,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
       <QueryState isPending={tokens.isPending} error={tokens.error}><DataList rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyMessage={tx("Bekleyen kayıt anahtarı yok.")} className="rounded-none border-0" /></QueryState>
     </Section>
     {createOpen && policy.data?.enabled && !changePolicy.isPending && <AddAgentDialog tenantId={tenantId} onClose={() => setCreateOpen(false)} />}
-    <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Kayıt anahtarı iptal edilsin mi?")}
+    <ConfirmDialog destructive open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Kayıt anahtarı iptal edilsin mi?")}
       consequence={{
         what: tx("Bu anahtar yeni bilgisayar kaydı için kullanılamaz."),
         who: tx("Yalnızca bu anahtarla henüz kaydolmamış bilgisayarlar etkilenir; mevcut yedekleme bilgisayarları etkilenmez."),

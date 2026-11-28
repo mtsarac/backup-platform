@@ -75,7 +75,7 @@ function RetentionForm({ retention }: { retention: Retention }) {
   const valid = /^\d+$/.test(days) && Number.isSafeInteger(value) && value >= 1 && value <= 36500
   function submit(event: FormEvent) { event.preventDefault(); if (valid) save.mutate(value) }
   return <form onSubmit={submit} className="space-y-3">
-    <Field label={tx('Saklama süresi (gün)')} hint={tx('1 ile 36500 arasında bir tam sayı girin.')}>
+    <Field label={tx('Saklama süresi (gün)')} hint={tx('1 ile 36500 arasında bir tam sayı girin.')} required>
       {(control) => <TextInput {...control} type="number" min={1} max={36500} step={1} required value={days} onChange={(event) => setDays(event.target.value)} />}
     </Field>
     {save.error && <ErrorNotice error={save.error} />}

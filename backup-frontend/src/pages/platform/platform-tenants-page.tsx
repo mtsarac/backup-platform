@@ -34,7 +34,7 @@ function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCre
     submitLabel={tx("Tenant oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} disabled={!name.trim()}
     error={create.error} onClose={onClose}
     onSubmit={() => create.mutate(name.trim(), { onSuccess: (tenant) => { onCreated(tenant.name); onClose() } })}>
-    <Field label={tx("Tenant adı")}>{(control) => <TextInput {...control}  value={name} maxLength={200} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
+    <Field label={tx("Tenant adı")} required>{(control) => <TextInput {...control}  value={name} maxLength={200} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
   </FormDialog>
 }
 

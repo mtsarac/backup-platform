@@ -55,7 +55,7 @@ export function ForgotPasswordPage() {
               ) : (
                 <Card as="form" padding="lg" onSubmit={submit} className="space-y-4">
                   <p className="text-sm text-text-muted">{tx('Şifre sıfırlama bağlantısı yalnızca doğrulanmış e-posta adreslerine gönderilir.')}</p>
-                  <Field label={tx('Kullanıcı adı')} hint={tx('E-posta adresinizle de giriş yapabilirsiniz.')}>
+                  <Field label={tx('Kullanıcı adı')} hint={tx('E-posta adresinizle de giriş yapabilirsiniz.')} required>
                     {(control) => <TextInput {...control} autoComplete="username" value={identifier} onChange={(event) => setIdentifier(event.target.value)} required />}
                   </Field>
                   {error && <ErrorNotice {...error} />}

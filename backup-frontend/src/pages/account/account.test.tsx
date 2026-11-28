@@ -37,7 +37,7 @@ describe('Account settings', () => {
   it('marks the open sub-page current in the sub-navigation and the settings entry in the sidebar', async () => {
     renderPlatform(null, { path: '/account/security', routes: tree })
     const tabs = within(await screen.findByRole('navigation', { name: 'Hesap ayarları' }))
-    expect(tabs.getByRole('list')).toHaveClass('flex-wrap')
+    expect(tabs.getByRole('list')).toHaveClass('overflow-x-auto')
     expect(tabs.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Hesap', '/account'], ['Oturumlarım', '/account/sessions'], ['Güvenlik', '/account/security'], ['Geçiş anahtarları', '/account/passkeys'],
     ])

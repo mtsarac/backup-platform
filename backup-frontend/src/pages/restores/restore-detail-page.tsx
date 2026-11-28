@@ -178,7 +178,7 @@ function RestoreDetail({ id }: { id: string }) {
         <TechnicalDetails items={technicalItems(restore)} />
       </>}
     </QueryState>
-    <ConfirmDialog open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title={tx("Geri yükleme iptal edilsin mi?")}
+    <ConfirmDialog destructive open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title={tx("Geri yükleme iptal edilsin mi?")}
       consequence={{
         what: fileRestore
           ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol etmeniz gerekebilir.')

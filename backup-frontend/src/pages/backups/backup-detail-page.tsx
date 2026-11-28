@@ -155,7 +155,7 @@ function BackupDetail({ id }: { id: string }) {
       </div>
       <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run} emptyState={<EmptyState icon={History} message={tx("Bu yedekleme denemesi bulunamadı. Yedekleme denemeleri listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-runs`}>{tx("Yedekleme denemeleri")}</Link>} />}>
         {run && <>
-          <ConfirmDialog open={confirmCancel && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
+          <ConfirmDialog destructive open={confirmCancel && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu yedekleme denemesi iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
             consequence={{
               what: tx("Yedekleme bilgisayarına iptal isteği iletilir. İşlem durana kadar deneme iptal edilmiş sayılmaz; yarım kalan yedek kullanılamaz."),
               who: tx("Yalnızca bu yedekleme denemesi etkilenir; önceki yedekleriniz korunur."),

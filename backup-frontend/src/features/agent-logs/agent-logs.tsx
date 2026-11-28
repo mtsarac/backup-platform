@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
+import { CheckField } from '@/components/ui/check-field'
 import { controlClass } from '@/components/ui/form-styles'
 import { Section } from '@/components/ui/section'
 import { apiRequest, tenantPath } from '@/lib/api/client'
@@ -41,7 +42,7 @@ export function AgentLogs({ tenantId, agentId, jobId, runId }: Scope) {
     URL.revokeObjectURL(url)
   }
   return <Section title={tx('Bilgisayar günlükleri')} description={tx('En fazla son 1000 kayıt gösterilir.')} actions={<>
-    <label className="flex items-center gap-2"><input type="checkbox" checked={tail} onChange={event => setTail(event.target.checked)} />{tx('Canlı takip')}</label>
+    <CheckField label={tx('Canlı takip')} checked={tail} onChange={event => setTail(event.target.checked)} />
     <Button variant="outline" onClick={() => void query.refetch()}>{tx('Yenile')}</Button>
     <Button variant="outline" disabled={!query.data?.length} onClick={download}>{tx('İndir')}</Button>
   </>}>

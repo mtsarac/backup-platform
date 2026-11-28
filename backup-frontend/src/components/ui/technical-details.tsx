@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { DisclosureChevron, disclosureTriggerClass } from '@/components/ui/disclosure'
 import { tx, useLanguage } from '@/lib/i18n'
 import { CopyButton } from '@/components/ui/copy-button'
 
@@ -22,9 +23,8 @@ export function TechnicalDetails({ items, defaultOpen = false, children }: Techn
   const panel = useId()
   if (items.length === 0 && !children) return null
   return <div className="text-sm">
-    <button type="button" aria-expanded={open} aria-controls={panel} onClick={() => setOpen(value => !value)}
-      className="flex w-fit cursor-pointer select-none items-center gap-1 rounded-sm py-1 font-medium text-text-muted underline-offset-4 hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-      <ChevronRight aria-hidden="true" className={`size-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />{tx('Teknik ayrıntılar')}
+    <button type="button" aria-expanded={open} aria-controls={panel} onClick={() => setOpen(value => !value)} className={cn(disclosureTriggerClass, open && 'text-text-heading')}>
+      <DisclosureChevron className={open ? 'rotate-90' : undefined} />{tx('Teknik ayrıntılar')}
     </button>
     {open && <div id={panel} role="region" aria-label={tx('Teknik ayrıntılar')} className="mt-1 space-y-3">
       {items.length > 0 && <div className="flex items-start gap-2 rounded-md border border-border bg-surface-2 p-2">

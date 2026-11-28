@@ -61,7 +61,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
       onClose={onClose}
     >
       <div className="space-y-4">
-        <Field label={tx("Profil adı")}>
+        <Field label={tx("Profil adı")} required>
           {control => <TextInput {...control}  value={name} onChange={e => setName(e.target.value)} placeholder={tx("Örn. Mesai Saatleri")} maxLength={200} required />}
         </Field>
 

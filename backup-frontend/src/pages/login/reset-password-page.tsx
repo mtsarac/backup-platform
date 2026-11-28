@@ -55,10 +55,10 @@ export function ResetPasswordPage() {
             <Notice tone="warning">{tx('Sıfırlama bağlantısı geçersiz veya süresi dolmuş.')}</Notice>
           ) : (
             <Card as="form" padding="lg" onSubmit={submit} className="space-y-4">
-              <Field label={tx('Yeni şifre')} hint={tx('En az 12 karakter olmalıdır.')}>
+              <Field label={tx('Yeni şifre')} hint={tx('En az 12 karakter olmalıdır.')} required>
                 {(control) => <TextInput {...control} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />}
               </Field>
-              <Field label={tx('Yeni şifre (tekrar)')}>
+              <Field label={tx('Yeni şifre (tekrar)')} required>
                 {(control) => <TextInput {...control} type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required />}
               </Field>
               {error && <ErrorNotice {...error} />}
