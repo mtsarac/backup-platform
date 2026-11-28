@@ -1,12 +1,14 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
 using BackupPlatform.Contracts.Agents;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -14,7 +16,7 @@ using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.AgentTests.Support;
 
-internal sealed record ReceivedConnection(string Path, string? Authorization, string? Protocol, string Query);
+internal sealed record ReceivedConnection(string Path, string? Authorization, string? Protocol, string Query, string? ClientCertificateSerial = null);
 
 /// <summary>Shared by every incarnation of the server so tests can stop and restart it on the same port.</summary>
 internal sealed class TestHubState
@@ -56,18 +58,23 @@ internal sealed class TestAgentHub(TestHubState state) : Hub
 internal sealed class TestHubServer : IAsyncDisposable
 {
     private WebApplication? _app;
+    private readonly X509Certificate2? _tlsCertificate;
 
-    private TestHubServer(int port) => Port = port;
+    private TestHubServer(int port, X509Certificate2? tlsCertificate)
+    {
+        Port = port;
+        _tlsCertificate = tlsCertificate;
+    }
 
     public int Port { get; }
 
     public TestHubState State { get; } = new();
 
-    public Uri BaseUri => new($"http://127.0.0.1:{Port}/");
+    public Uri BaseUri => new($"{(_tlsCertificate is null ? "http" : "https")}://127.0.0.1:{Port}/");
 
-    public static async Task<TestHubServer> StartAsync()
+    public static async Task<TestHubServer> StartAsync(X509Certificate2? tlsCertificate = null)
     {
-        var server = new TestHubServer(FreePort());
+        var server = new TestHubServer(FreePort(), tlsCertificate);
         await server.StartAsync(CancellationToken.None);
         return server;
     }
@@ -85,7 +92,18 @@ internal sealed class TestHubServer : IAsyncDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, Port));
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, Port, listen =>
+        {
+            if (_tlsCertificate is not null)
+            {
+                listen.UseHttps(https =>
+                {
+                    https.ServerCertificate = _tlsCertificate;
+                    https.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
+                    https.ClientCertificateValidation = (_, _, _) => true;
+                });
+            }
+        }));
         builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(2));
         builder.Services.AddSingleton(State);
         builder.Services.AddSignalR();
@@ -98,7 +116,8 @@ internal sealed class TestHubServer : IAsyncDisposable
                     context.Request.Path,
                     context.Request.Headers.Authorization.ToString() is { Length: > 0 } auth ? auth : null,
                     context.Request.Headers[AgentProtocolHeader.Name].ToString() is { Length: > 0 } protocol ? protocol : null,
-                    context.Request.QueryString.Value ?? string.Empty));
+                    context.Request.QueryString.Value ?? string.Empty,
+                    context.Connection.ClientCertificate?.SerialNumber));
                 if (State.RejectStatus is { } status)
                 {
                     context.Response.StatusCode = status;

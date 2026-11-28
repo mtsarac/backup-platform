@@ -71,7 +71,8 @@ builder.Services.AddSingleton(_ => new AgentLogJournal(AgentCredentialStoreFacto
     builder.Configuration.GetValue<int?>("Agent:Logging:MaxPendingSegments") ?? AgentLogJournal.DefaultMaxPendingSegments));
 builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<AgentLogJournal>());
 builder.Services.AddHttpClient<AgentLogSender>(client => client.Timeout = TimeSpan.FromSeconds(30))
-    .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler);
+    .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler)
+    .SetHandlerLifetime(TimeSpan.FromMinutes(2));
 builder.Services.AddHostedService(provider => provider.GetRequiredService<AgentLogSender>());
 builder.Services.AddAgentPlatformHosting();
 using var host = builder.Build();

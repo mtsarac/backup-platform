@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Transport;
 using BackupPlatform.AgentTests.Support;
@@ -7,6 +9,7 @@ using BackupPlatform.Contracts.Agents;
 
 namespace BackupPlatform.AgentTests;
 
+[Collection("Agent mTLS environment")]
 public sealed class SignalRAgentPushChannelTests
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
@@ -305,5 +308,81 @@ public sealed class SignalRAgentPushChannelTests
         });
 
         Assert.True(outcome is null or OperationCanceledException, outcome?.ToString());
+    }
+
+    [Fact]
+    public async Task Renewing_the_client_certificate_reconnects_the_push_channel_with_the_new_certificate()
+    {
+        using var serverKey = System.Security.Cryptography.RSA.Create(2048);
+        var serverReq = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=127.0.0.1", serverKey, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        serverReq.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension(false, false, 0, true));
+        serverReq.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509KeyUsageExtension(
+            System.Security.Cryptography.X509Certificates.X509KeyUsageFlags.DigitalSignature | System.Security.Cryptography.X509Certificates.X509KeyUsageFlags.KeyEncipherment, true));
+        serverReq.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension(
+            [new System.Security.Cryptography.Oid("1.3.6.1.5.5.7.3.1")], true));
+        var san = new System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder();
+        san.AddIpAddress(IPAddress.Loopback);
+        serverReq.CertificateExtensions.Add(san.Build());
+        using var serverCert = serverReq.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
+
+        using var issuerKey = System.Security.Cryptography.RSA.Create(2048);
+        var issuerReq = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=push-ca", issuerKey, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        issuerReq.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension(true, false, 0, true));
+        using var issuer = issuerReq.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(2));
+
+        using var firstClient = IssueClient(issuer, "CN=agent-push-1");
+        using var secondClient = IssueClient(issuer, "CN=agent-push-2");
+        using var provider = AgentClientCertificateProvider.FromCertificate(ReloadPfx(firstClient));
+
+        await using var server = await TestHubServer.StartAsync(serverCert);
+        await using var channel = new SignalRAgentPushChannel(
+            AgentBackendEndpoint.ForLoopbackTesting(server.BaseUri, serverCert),
+            new AgentBackoff(TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(200), () => 0.5),
+            TimeProvider.System,
+            new CaptureLoggerProvider().CreateFactory(),
+            TimeSpan.FromSeconds(5),
+            provider);
+        var listener = new RecordingListener();
+        Assert.True((await channel.ConnectAsync(TestIdentity.Create(), listener, CancellationToken.None)).IsConnected);
+        Assert.Contains(server.State.Received, r => r.ClientCertificateSerial == firstClient.SerialNumber);
+
+        provider.Update(ReloadPfx(secondClient));
+
+        await listener.ReconnectedSignal.Task.WaitAsync(Patience);
+        await server.SendPollHintAsync("after-renewal");
+        await Wait.UntilAsync(() => listener.Hints == 1, "poll hint on renewed connection");
+
+        Assert.Contains(server.State.Received, r => r.ClientCertificateSerial == secondClient.SerialNumber);
+        Assert.Equal(["reconnecting", "reconnected", "hint:after-renewal"], listener.Events);
+
+        static System.Security.Cryptography.X509Certificates.X509Certificate2 IssueClient(
+            System.Security.Cryptography.X509Certificates.X509Certificate2 ca, string subject)
+        {
+            using var key = System.Security.Cryptography.RSA.Create(2048);
+            var req = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+                subject, key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+            req.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension(false, false, 0, true));
+            req.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509KeyUsageExtension(
+                System.Security.Cryptography.X509Certificates.X509KeyUsageFlags.DigitalSignature, true));
+            req.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension(
+                [new System.Security.Cryptography.Oid("1.3.6.1.5.5.7.3.2")], true));
+            using var pub = req.Create(ca, DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1),
+                System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+            return pub.CopyWithPrivateKey(key);
+        }
+
+        static System.Security.Cryptography.X509Certificates.X509Certificate2 ReloadPfx(
+            System.Security.Cryptography.X509Certificates.X509Certificate2 cert)
+        {
+            var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".pfx");
+            try
+            {
+                File.WriteAllBytes(path, cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pfx, "test-password-123"));
+                return AgentMtlsTransport.LoadCertificate(path, "test-password-123");
+            }
+            finally { File.Delete(path); }
+        }
     }
 }

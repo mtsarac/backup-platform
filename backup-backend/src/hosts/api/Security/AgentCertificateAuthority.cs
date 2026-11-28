@@ -68,15 +68,26 @@ public static class AgentCertificateServiceCollectionExtensions
         if (!section.GetValue<bool>("Enabled")) return services;
         var path = section["IssuerPfxPath"];
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) throw new InvalidOperationException("mTLS requires an absolute issuer PFX path.");
-        var days = section.GetValue<int?>("LifetimeDays") ?? 30;
-        if (days is < 1 or > 90) throw new InvalidOperationException("mTLS certificate lifetime must be 1–90 days.");
+        TimeSpan lifetime;
+        if (section["Lifetime"] is { Length: > 0 } configuredLifetime)
+        {
+            if (!TimeSpan.TryParse(configuredLifetime, System.Globalization.CultureInfo.InvariantCulture, out lifetime)
+                || lifetime < TimeSpan.FromMinutes(1) || lifetime > TimeSpan.FromDays(90))
+                throw new InvalidOperationException("mTLS certificate lifetime must be between 1 minute and 90 days.");
+        }
+        else
+        {
+            var days = section.GetValue<int?>("LifetimeDays") ?? 30;
+            if (days is < 1 or > 90) throw new InvalidOperationException("mTLS certificate lifetime must be 1–90 days.");
+            lifetime = TimeSpan.FromDays(days);
+        }
         services.AddSingleton(new AgentMtlsPolicy(section.GetValue<bool>("RequireCertificate")));
         services.AddSingleton(sp =>
         {
             var issuer = X509CertificateLoader.LoadPkcs12FromFile(path, Environment.GetEnvironmentVariable("AGENT_MTLS_ISSUER_PASSWORD"), X509KeyStorageFlags.EphemeralKeySet);
             if (!issuer.HasPrivateKey || issuer.Extensions.OfType<X509BasicConstraintsExtension>().SingleOrDefault()?.CertificateAuthority != true)
                 throw new InvalidOperationException("The mTLS issuer must be a CA certificate with a private key.");
-            return new AgentCertificateAuthority(issuer, sp.GetRequiredService<TimeProvider>(), TimeSpan.FromDays(days));
+            return new AgentCertificateAuthority(issuer, sp.GetRequiredService<TimeProvider>(), lifetime);
         });
         return services;
     }
