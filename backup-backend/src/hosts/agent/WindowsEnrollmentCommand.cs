@@ -37,7 +37,7 @@ internal static class WindowsEnrollmentCommand
             $ErrorActionPreference = 'Stop'
             try {
                 $request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::ReadLine())) | ConvertFrom-Json
-                & $request.installer -BinaryDirectory $request.binaryDirectory -BackendUri $request.server -EnrollmentToken $request.token -AgentName $request.name -StoreDirectory $request.storeDirectory -Language $request.language
+                & $request.installer -BinaryDirectory $request.binaryDirectory -BackendUri $request.server -EnrollmentToken $request.token -AgentName $request.name -StoreDirectory $request.storeDirectory
                 $request = $null
                 exit 0
             } catch {
@@ -62,8 +62,7 @@ internal static class WindowsEnrollmentCommand
             server = input.Server,
             token = input.Token,
             name = input.Name,
-            storeDirectory = input.StoreDirectory,
-            language = AgentText.Language
+            storeDirectory = input.StoreDirectory
         });
         try
         {
