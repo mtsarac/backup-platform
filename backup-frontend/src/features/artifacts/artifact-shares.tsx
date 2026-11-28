@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { tx, useLanguage } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
@@ -6,6 +6,7 @@ import { FormDialog } from '@/components/ui/form-dialog'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TextInput } from '@/components/ui/text-input'
+import { DataList, type Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { formatDateTime } from '@/lib/format'
 import { useAuth } from '@/features/auth/use-auth'
@@ -36,10 +37,28 @@ export function ArtifactSharesSection({
   const [extendTarget, setExtendTarget] = useState<BackupShareView | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<BackupShareView | null>(null)
 
+  const columns: Column<BackupShareView>[] = [
+    { key: 'creator', header: tx('Oluşturan'), card: 'title', render: (share) => <><span className="font-medium text-text">{share.createdByDisplayName || share.createdByUserId}</span><span className="block text-sm text-text-muted"><span>{accountRoleLabel(share.createdByRole)}</span> · <span>{formatDateTime(share.createdAtUtc)}</span></span></> },
+    { key: 'expiresAt', header: tx('Bitiş'), render: (share) => formatDateTime(share.expiresAtUtc) },
+    { key: 'status', header: tx('Durum'), card: 'status', render: (share) => <StatusPill domain="share" status={share.status} /> },
+    { key: 'reason', header: tx('Gerekçe'), wrap: true, render: (share) => share.reason || '-' },
+    { key: 'actions', header: tx('İşlemler'), card: 'actions', render: (share) => canManageShare(share, user?.role) ? (
+      <div className="flex flex-col items-stretch gap-2 max-lg:flex-row max-lg:flex-wrap max-lg:justify-end">
+        {user?.role === 'PlatformAdmin' && share.status === 'Active' && <ShareDownload share={share} />}
+        {canExtendShare(share, user?.role) && <Button size="sm" variant="outline" onClick={() => setExtendTarget(share)}>{tx('Süreyi uzat')}</Button>}
+        <Button size="sm" variant="outline" onClick={() => setRevokeTarget(share)}>{tx('İptal et')}</Button>
+      </div>
+    ) : '-' },
+  ]
+
   const hasDownloadableReplica = artifact.replicas.some(
     (r) => r.verificationState === 'Verified' && r.status === 'Available'
   )
   const canCreate = hasDownloadableReplica
+
+  const sectionRef = useRef<HTMLDivElement>(null)
+  // Opened from the action group above: bring the section into view and start reading it from its heading.
+  useEffect(() => { sectionRef.current?.focus() }, [])
 
   function handleSubmit() {
     createMutation.mutate(
@@ -55,6 +74,7 @@ export function ArtifactSharesSection({
     )
   }
   return (
+    <div ref={sectionRef} tabIndex={-1} className="focus:outline-none">
     <Section
       title={tx('Paylaşımlar')}
       actions={
@@ -85,62 +105,12 @@ export function ArtifactSharesSection({
             {tx('Bu yedek dosyası için henüz paylaşım bulunmuyor.')}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-border text-xs text-text-muted uppercase">
-                <tr>
-                  <th className="py-2 pr-4">{tx('Oluşturan')}</th>
-                  <th className="py-2 pr-4">{tx('Rol')}</th>
-                  <th className="py-2 pr-4">{tx('Oluşturulma')}</th>
-                  <th className="py-2 pr-4">{tx('Bitiş')}</th>
-                  <th className="py-2 pr-4">{tx('Durum')}</th>
-                  <th className="py-2 pr-4">{tx('Gerekçe')}</th>
-                  <th className="py-2 text-right">{tx('İşlemler')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {shares.map((share) => (
-                  <tr key={share.id}>
-                    <td className="py-2 pr-4 font-medium text-text">
-                      {share.createdByDisplayName || share.createdByUserId}
-                    </td>
-                    <td className="py-2 pr-4 text-text-muted">{accountRoleLabel(share.createdByRole)}</td>
-                    <td className="py-2 pr-4 text-text-muted">{formatDateTime(share.createdAtUtc)}</td>
-                    <td className="py-2 pr-4 text-text-muted">{formatDateTime(share.expiresAtUtc)}</td>
-                    <td className="py-2 pr-4">
-                      <StatusPill domain="share" status={share.status} />
-                    </td>
-                    <td className="py-2 pr-4 text-text-muted">{share.reason || '—'}</td>
-                    <td className="py-2 text-right">
-                      {canManageShare(share, user?.role) ? (
-                        <div className="flex justify-end gap-2">
-                          {user?.role === 'PlatformAdmin' && share.status === 'Active' && <ShareDownload share={share} />}
-                          {canExtendShare(share, user?.role) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setExtendTarget(share)}
-                            >
-                              {tx('Süreyi uzat')}
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setRevokeTarget(share)}
-                          >
-                            {tx('İptal et')}
-                          </Button>
-                        </div>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataList
+            rows={shares}
+            columns={columns}
+            keyExtractor={(share) => share.id}
+            emptyMessage={tx('Bu yedek dosyası için henüz paylaşım bulunmuyor.')}
+          />
         )}
       </div>
 
@@ -154,6 +124,9 @@ export function ArtifactSharesSection({
           onSubmit={handleSubmit}
           onClose={() => setDialogOpen(false)}
         >
+          <Notice tone="warning" title={tx('Platform yöneticisi bu yedek dosyasını indirebilir')}>
+            {tx('Seçtiğiniz süre boyunca yedeğin tamamına erişir; süre dolunca erişim kapanır. İstediğiniz zaman “İptal et” ile paylaşımı geri alabilirsiniz.')}
+          </Notice>
           <ShareDurationSelect label={tx('Süre')} hint={tx('Varsayılan: 24 saat.')} hours={SHARE_DURATION_HOURS} value={durationHours} onChange={setDurationHours} />
           <Field label={tx('Gerekçe (isteğe bağlı)')}>
             {(fieldProps) => (
@@ -178,6 +151,7 @@ export function ArtifactSharesSection({
         onSuccess={(msg) => setNotice(msg)}
       />
     </Section>
+    </div>
 
   )
 }

@@ -168,7 +168,6 @@ function BackupDetail({ id }: { id: string }) {
           {actions.pause.error && <ErrorNotice error={actions.pause.error} />}
           {actions.resume.error && <ErrorNotice error={actions.resume.error} />}
           <Tabs label={tx("Yedekleme denemesi bölümleri")} idPrefix="run" value={tab} onChange={setTab} items={tabs} />
-          <AgentLogs tenantId={tenantId} runId={run.id} />
           <div role="tabpanel" id={`run-panel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="space-y-6">
             {tab === 'summary' && <>
               {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
@@ -212,6 +211,7 @@ function BackupDetail({ id }: { id: string }) {
               </Section>))}
             {tab === 'replication' && <ReplicationSection replication={run.replication} />}
           </div>
+          <AgentLogs tenantId={tenantId} runId={run.id} />
         </>}
       </QueryState>
     </div>

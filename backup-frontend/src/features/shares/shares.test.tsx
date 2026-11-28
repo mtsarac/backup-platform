@@ -422,7 +422,7 @@ describe('BackupShare frontend', () => {
     })
   })
 
-  it('renders Paylaşılan yedekler page with cross-tenant shares, tenant column, and status filter', async () => {
+  it('renders Paylaşılan yedekler page with cross-tenant shares, the workspace under each file, and status filter', async () => {
     permissions.role = 'PlatformAdmin'
     request.mockImplementation(async (path: string) => {
       if (path.includes('platform/backup-shares')) return [platformShare, testShare]

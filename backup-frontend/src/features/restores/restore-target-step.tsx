@@ -42,7 +42,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
         {targetType === 'other' && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label htmlFor={`${instancePrefix}-host`} className="block text-sm font-medium">{isPg ? tx('PostgreSQL Host') : tx('Host / Instance')}</label>
+              <label htmlFor={`${instancePrefix}-host`} className="block text-sm font-medium">{isPg ? tx('PostgreSQL Host') : tx('Host / Instance')}<span aria-hidden="true" className="text-error"> *</span></label>
               <TextInput
                 id={`${instancePrefix}-host`}
                 value={otherTarget.host}

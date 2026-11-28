@@ -256,6 +256,19 @@ describe('first backup flow', () => {
     expect(startJobRun).toHaveBeenCalledTimes(2)
   })
 
+  it('names the missing database login and links to the server\'s credential form instead of offering a retry that cannot work', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { error: 'invalid_request', field: 'configuration.databaseLogin', code: 'invalid_value' }))
+    const user = userEvent.setup()
+    mount()
+    await toSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Yedeklemeyi oluştur ve ilk yedeği başlat' }))
+    const alerts = await screen.findAllByRole('alert')
+    expect(within(alerts[0]).getByText(/kayıtlı bir veritabanı girişi yok/)).toBeVisible()
+    const link = within(alerts[0]).getByRole('link', { name: /Giriş bilgilerini kaydet/ })
+    expect(link).toHaveAttribute('href', `/tenants/tenant-a/discovery/instances/${encodeURIComponent(detail.id)}`)
+    expect(within(alerts[0]).queryByText('Girilen değer geçersiz.')).not.toBeInTheDocument()
+  })
+
   it('yanıtı kaybolan ilk işin anahtarını diğer iş başarıyla oluşsa da korur', async () => {
     vi.mocked(saveBackupJob).mockRejectedValueOnce(new TypeError('response lost'))
     const user = userEvent.setup()
