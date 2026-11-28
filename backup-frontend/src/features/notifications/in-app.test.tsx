@@ -158,7 +158,7 @@ describe('in-app notifications', () => {
       { ...first, id: 'd', type: 'agent_offline', subjectName: 'Kritik', occurredAt: at(12) },
     ]
     mount()
-    expect(await screen.findByRole('button', { name: 'Bildirimler, 3 okunmamış' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Bildirimler 3 okunmamış' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Bildirimler/ }))
     const panel = await screen.findByRole('dialog', { name: 'Bildirimler' })
     const order = () => within(panel).getAllByRole('listitem').map((li) => ['Okunmus yeni', 'Kritik', 'Paylasim', 'Eski uyari'].find((name) => li.textContent?.includes(name)))
