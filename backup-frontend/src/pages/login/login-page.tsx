@@ -321,7 +321,7 @@ export function LoginPage() {
               </Card>
             ) : factorMode === 'totp' ? (
               <Card key="2fa-totp" as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
-                <Field label={tx('Doğrulama kodu')} required>
+                <Field label={tx('Doğrulama kodu')} hint={tx('Kimlik doğrulama uygulamanızdaki 6 haneli kodu girin.')} required>
                   {(control) => (
                     <TextInput
                       {...control}
@@ -362,12 +362,14 @@ export function LoginPage() {
               </Card>
             ) : (
               <Card key="2fa-recovery" as="form" padding="lg" onSubmit={handleSecondFactorSubmit} className="space-y-4">
-                <Field label={tx('Kurtarma kodu')} required>
+                <Field label={tx('Kurtarma kodu')} hint={tx('Kurtarma kodlarınızdan birini girin. Her kod yalnızca bir kez kullanılabilir.')} required>
                   {(control) => (
                     <TextInput
                       {...control}
                       ref={(el) => { stepFocusRef.current = el }}
                       autoFocus
+                      autoComplete="off"
+                      spellCheck={false}
                       placeholder="0000-0000-0000"
                       value={recoveryCode}
                       onChange={(e) => setRecoveryCode(e.target.value)}

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Why } from '@/features/backup-jobs/job-form-fields'
 import { CheckField } from '@/components/ui/check-field'
 import { tx, useLanguage } from '@/lib/i18n'
 import { RadioField } from '@/components/ui/radio-field'
@@ -30,7 +31,7 @@ export function FileRestoreTargetStep({ instancePrefix, originalAgent, original,
   useLanguage()
   return (
     <div className="space-y-5">
-      <Section title={tx("Dosyalar nereye geri konsun?")} description={tx("Neden soruluyor? Dosyalar ya yedeklendikleri yere geri döner ya da ayrı bir klasöre konur; ikincisinde mevcut dosyalara dokunulmaz.")}>
+      <Section title={tx("Dosyalar nereye geri konsun?")} description={<Why>{tx("Dosyalar ya yedeklendikleri yere geri döner ya da ayrı bir klasöre konur; ikincisinde mevcut dosyalara dokunulmaz.")}</Why>}>
         <div className="space-y-4">
           <fieldset className="space-y-3">
             <legend className="sr-only">{tx("Geri yükleme konumu")}</legend>
@@ -47,7 +48,7 @@ export function FileRestoreTargetStep({ instancePrefix, originalAgent, original,
         </div>
       </Section>
 
-      <Section title={tx("Aynı adlı dosyalar ne olsun?")} description={tx("Neden soruluyor? Hedefte aynı adlı bir dosya varsa onun korunup korunmayacağını sizin belirlemeniz gerekir.")}>
+      <Section title={tx("Aynı adlı dosyalar ne olsun?")} description={<Why lead={false}>{tx("Hedefte aynı adlı bir dosya varsa onun korunup korunmayacağını sizin belirlemeniz gerekir.")}</Why>}>
         <div className="space-y-3">
           <CheckField label={tx("Mevcut dosyaların üzerine yazmaya izin ver")} aria-describedby={`${instancePrefix}-overwrite-hint`} checked={overwrite} onChange={(event) => onOverwriteChange(event.target.checked)} />
           <p id={`${instancePrefix}-overwrite-hint`} className="ml-6 text-sm text-text-muted">{tx("İşaretlemezseniz hedefteki mevcut dosyaların üzerine yazılmaz. Dosya izinleri, zaman damgaları ve bütünlük korunur.")}</p>

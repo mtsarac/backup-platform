@@ -3,6 +3,7 @@ import { RadioField } from '@/components/ui/radio-field'
 import { CheckField } from '@/components/ui/check-field'
 import { TextInput } from '@/components/ui/text-input'
 import { Section } from '@/components/ui/section'
+import { Why } from '@/features/backup-jobs/job-form-fields'
 import { StoredLoginPanel } from './stored-login-panel'
 import type { RestoreTarget } from './types'
 
@@ -27,7 +28,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
   useLanguage()
   const needsLogin = isPg || !otherTarget.integratedSecurity
   return (
-    <Section title={tx("Hangi {0} sunucusuna geri yüklensin?", { "0": engineName })} description={tx("Neden soruluyor? Geri yüklemenin yapılacağı {0} sunucusunun bağlantı bilgisi gerekir.", { "0": engineName })}>
+    <Section title={tx("Hangi {0} sunucusuna geri yüklensin?", { "0": engineName })} description={<Why>{tx("Geri yüklemenin yapılacağı {0} sunucusunun bağlantı bilgisi gerekir.", { "0": engineName })}</Why>}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-4 text-sm">
           <RadioField label={ownTarget ? tx("Yedeğin alındığı sunucu ({0})", { "0": `${ownTarget.host}${ownTarget.port ? `:${ownTarget.port}` : ''}` }) : tx("Yedeğin alındığı sunucu")} name="targetType"

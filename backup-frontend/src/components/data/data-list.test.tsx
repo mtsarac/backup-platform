@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { setViewport } from '@/test/viewport'
 import { DataList, type Column } from './data-list'
@@ -98,4 +98,26 @@ describe('DataList', () => {
     }
   })
 
+  describe('sideways scroll hint', () => {
+    const hint = 'Diğer sütunlar için sağa kaydırın'
+    const layout = (scrollWidth: number, clientWidth: number) => {
+      vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockReturnValue(scrollWidth)
+      vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(clientWidth)
+    }
+    afterEach(() => vi.restoreAllMocks())
+
+    it('is hidden while every column fits', () => {
+      setViewport(true)
+      layout(800, 800)
+      render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="" />)
+      expect(screen.queryByText(hint)).not.toBeInTheDocument()
+    })
+
+    it('shows only when columns really hide behind the right edge', () => {
+      setViewport(true)
+      layout(1200, 800)
+      render(<DataList rows={jobs} columns={columns} keyExtractor={job => job.id} emptyMessage="" />)
+      expect(screen.getByText(hint)).toBeInTheDocument()
+    })
+  })
 })

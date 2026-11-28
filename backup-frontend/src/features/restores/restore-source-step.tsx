@@ -3,6 +3,7 @@ import { Select } from '@/components/ui/text-input'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Section } from '@/components/ui/section'
+import { Why } from '@/features/backup-jobs/job-form-fields'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import type { RestoreTargetAgent, RestoreTargetsResponse } from './types'
 import { failureMessage } from '@/lib/api/failure-messages'
@@ -25,7 +26,7 @@ export function RestoreSourceStep({ instancePrefix, engineName, targets, activeA
   useLanguage()
   return (
     <div className="space-y-5">
-      <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Yedek dosyasını alıp {0} sunucusuna aktaracak yedekleme bilgisayarını seçmeniz gerekir.", { "0": engineName })}>
+      <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={<Why>{tx("Yedek dosyasını alıp {0} sunucusuna aktaracak yedekleme bilgisayarını seçmeniz gerekir.", { "0": engineName })}</Why>}>
         <div className="space-y-3">
           <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">{tx("Yedekleme bilgisayarı")}</label>
           <Select

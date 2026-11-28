@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Why } from '@/features/backup-jobs/job-form-fields'
 import { Select } from '@/components/ui/text-input'
 import { CheckCircle2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -30,7 +31,7 @@ export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId,
   const { tenantId } = useTenant()
   return (
     <div className="space-y-5">
-      <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Dosyaları yedekten alıp yerlerine koyacak yedekleme bilgisayarını seçmeniz gerekir.")}>
+      <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={<Why>{tx("Dosyaları yedekten alıp yerlerine koyacak yedekleme bilgisayarını seçmeniz gerekir.")}</Why>}>
         <div className="space-y-3">
           <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">{tx("Yedekleme bilgisayarı")}</label>
           <Select id={`${instancePrefix}-agent`} value={agentId} onChange={(event) => onAgentChange(event.target.value)}>
