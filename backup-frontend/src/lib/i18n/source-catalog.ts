@@ -2995,7 +2995,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Yedekleme bilgisayarlarının bağlanacağı sunucu adresi ve kurulum anahtarlarının süresi burada bir kez belirlenir.": {"tr":"Yedekleme bilgisayarlarının bağlanacağı sunucu adresi ve kurulum anahtarlarının süresi burada bir kez belirlenir.","en":"The server address backup computers connect to and the lifetime of installation keys are set once here."},
   "Okundu olarak işaretle: {0}": {"tr":"Okundu olarak işaretle: {0}","en":"Mark as read: {0}"},
   "Tümünü okundu işaretle": {"tr":"Tümünü okundu işaretle","en":"Mark all as read"},
-  "Bildirimler, {0} okunmamış": {"tr":"Bildirimler, {0} okunmamış","en":"Notifications, {0} unread"},
+  "Bildirimler {0} okunmamış": {"tr":"Bildirimler {0} okunmamış","en":"Notifications {0} unread"},
   "Okunmamış": {"tr":"Okunmamış","en":"Unread"},
   "Bildirim ayarları": {"tr":"Bildirim ayarları","en":"Notification settings"},
   "Bildirim geçmişi saklama süresi": {"tr":"Bildirim geçmişi saklama süresi","en":"Notification history retention"},
