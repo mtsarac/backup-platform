@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiRequest, ApiError, resetAntiforgery, subscribeSessionExpired, tenantPath } from './client'
 import { errorMessage, failureMessage } from './failure-messages'
+import { changeLanguage } from '@/lib/i18n/runtime'
 
 const requests: Request[] = []
 let handle: (request: Request) => Response | Promise<Response>
@@ -28,6 +29,15 @@ describe('browser API contract', () => {
     handle = request => request.url.endsWith('/auth/antiforgery') ? json({ requestToken: 'authenticated-csrf', headerName: 'X-CSRF-TOKEN' }) : new Response(null, { status: 204 })
     await apiRequest('auth/logout', { method: 'POST' })
     expect(requests.at(-1)?.headers.get('X-CSRF-TOKEN')).toBe('authenticated-csrf')
+  })
+  it('tells the backend the interface language so emails follow it', async () => {
+    handle = () => new Response(null, { status: 204 })
+    changeLanguage('en')
+    await apiRequest('auth/logout')
+    expect(requests.at(-1)?.headers.get('Accept-Language')).toBe('en-US')
+    changeLanguage('tr')
+    await apiRequest('auth/logout')
+    expect(requests.at(-1)?.headers.get('Accept-Language')).toBe('tr-TR')
   })
   it('shares concurrent antiforgery initialization but does not retry mutations', async () => {
     await Promise.all([apiRequest('first', { method: 'POST' }), apiRequest('second', { method: 'DELETE' })])

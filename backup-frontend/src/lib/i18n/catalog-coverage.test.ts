@@ -72,7 +72,7 @@ describe('English catalog text', () => {
   const englishStop = /\b(the|and|was|not|with|for|could|must|your|this|that|from|has|have|cannot|will|please|enter|select|are)\b/g
   const turkishStop = /\b(ve|veya|bir|bu|için|ile|değil|olarak|daha|gibi|olan|henüz|önce|sonra|tüm|lütfen|girin|seçin)\b/g
   /** Identical in both languages on purpose: product names, protocols and placeholders. */
-  const sameInBoth = /^(TR|EN|Platform|Windows|Linux|PostgreSQL WAL \/ PITR|Microsoft SQL Server|PostgreSQL|Google Drive|5 GB|Plan|SQL Server|Windows Server 2025|Test|Normal|SFTP|SHA256|STARTTLS|Docker|SMS|mssql|postgres|[{}0-9 .:·–—|/-]+)$/
+  const sameInBoth = /^(TR|EN|Platform|Windows|Linux|PostgreSQL WAL \/ PITR|Microsoft SQL Server|PostgreSQL|Google Drive|5 GB|Plan|SQL Server|Windows Server 2025|Test|Normal|SFTP|SHA256|STARTTLS|Docker|SMS|mssql|postgres|[{}0-9 .:·\u2013\u2014|/-]+)$/
 
   it('has no Turkish text that is English, no English text that is Turkish, and no copy-pasted pair', () => {
     const entries = Object.entries(sourceCatalog)

@@ -46,7 +46,7 @@ public sealed class NotificationHostedWorkersIntegrationTests : IAsyncLifetime
         // A new address first gets a confirmation request and nothing else; opening its link only shows what it would do.
         await WaitForMessagesAsync(smtp, 1);
         var confirmation = ParseMessage(smtp.Messages[0]);
-        Assert.Equal("[Backup Platform] Confirm your email address", confirmation.Subject);
+        Assert.Equal("[Backup Platform] E-posta adresinizi doğrulayın", confirmation.Subject);
         var (confirmPath, confirmToken) = PageLink(confirmation);
         using (var page = await scenario.World.Anonymous.GetAsync(confirmPath))
         {
@@ -72,8 +72,9 @@ public sealed class NotificationHostedWorkersIntegrationTests : IAsyncLifetime
 
         Assert.Equal(2, smtp.Messages.Count);
         var alert = ParseMessage(smtp.Messages[1]);
-        Assert.Equal("[Backup Platform] Backup failed: Nightly full backup", alert.Subject);
-        Assert.Contains("InvalidConfiguration", alert.TextBody);
+        Assert.Equal("[Backup Platform] Yedekleme başarısız: Nightly full backup", alert.Subject);
+        Assert.Contains("web konsoluna bakın", alert.TextBody);
+        Assert.DoesNotContain("InvalidConfiguration", alert.TextBody); // an internal reason code is never shown
         Assert.DoesNotContain("sql-server", smtp.Messages[1]); // the job's host is backup metadata a notification has no business carrying
 
         using var history = await scenario.Admin.GetAsync(notifications + "/deliveries?eventType=backup_failed");

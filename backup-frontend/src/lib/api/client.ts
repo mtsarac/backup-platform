@@ -1,8 +1,8 @@
-import { tx } from '@/lib/i18n'
+import { currentLocale, tx } from '@/lib/i18n'
 import ky from 'ky'
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '')
-const http = ky.create({ credentials: 'include', retry: 0, timeout: 30_000, throwHttpErrors: false, headers: { Accept: 'application/json' } })
+const http = ky.create({ credentials: 'include', retry: 0, timeout: 30_000, throwHttpErrors: false, headers: { Accept: 'application/json' }, hooks: { beforeRequest: [({ request }) => { request.headers.set('Accept-Language', currentLocale()) }] } })
 type ErrorBody = { error?: string; code?: string; reason?: string; message?: string; field?: string; errors?: Record<string, string[]>; activeRunId?: string; sessionId?: string; permission?: string }
 export const isForbidden = (error: unknown): error is ApiError => error instanceof ApiError && error.status === 403
 

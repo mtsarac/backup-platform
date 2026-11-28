@@ -31,7 +31,7 @@ export function ArtifactSummary({ artifact }: { artifact: ArtifactPresentation }
     <Facts columns={3}>
       <Fact label={tx("Durum")}><StatusPill status={artifactState(artifact)} /></Fact>
       {artifact.replication && <Fact label={tx("Replikasyon")}><ReplicationSummary replication={artifact.replication} /></Fact>}
-      <Fact label={tx("Backup tipi")}>{artifact.backupType ? statusLabel('backupType', artifact.backupType) : '—'}</Fact>
+      <Fact label={tx("Backup tipi")}>{artifact.backupType ? statusLabel('backupType', artifact.backupType) : '\u2014'}</Fact>
       <Fact label={tx("Database")}>{artifact.databaseName || '—'}</Fact>
       <Fact label={tx("Backup Job")}>{artifact.jobName || '—'}</Fact>
       <Fact label={tx("Agent")}>{artifact.agentName || '—'}</Fact>
@@ -72,7 +72,7 @@ export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation 
   const isFiles = meta?.engine === 'file-system'
   return <Section title={isFiles ? tx('Dosya arşivi bilgileri') : isPg ? tx('PostgreSQL backup metadata') : tx('Database backup metadata')} description={isFiles ? tx('Dosya içeriği, izinler ve zaman damgaları SHA-256 manifestiyle korunur.') : isPg ? tx('pg_dump custom-format mantıksal Full Backup bilgileri.') : tx('Database motorunun bu backup için bildirdiği teknik bilgiler.')}>
     {meta ? <Facts columns={3}>
-      <Fact label={tx("Engine")}>{meta.engine ? statusLabel('engine', meta.engine) : '—'}</Fact>
+      <Fact label={tx("Engine")}>{meta.engine ? statusLabel('engine', meta.engine) : '\u2014'}</Fact>
       <Fact label={tx("Backup başladı")}>{formatDateTime(meta.backupStartedAt)}</Fact>
       <Fact label={tx("Backup tamamlandı")}>{formatDateTime(meta.backupFinishedAt)}</Fact>
       <Fact label={tx("Sunucu")}>{meta.instance?.serverName ?? '—'}</Fact>
@@ -95,7 +95,7 @@ export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation 
         <Fact label={tx("Kaynak Database boyutu (byte)")}>{meta.postgreSqlDetails?.databaseSizeBytes ?? '—'}</Fact>
         <Fact label={tx("Extensions")}>{meta.postgreSqlDetails?.extensions || '—'}</Fact>
       </>}
-      <Fact label={tx("Backup doğrulaması")}>{meta.verification?.state ? statusLabel('general', meta.verification.state) : '—'} · {meta.verification?.method ? statusLabel('verificationMethod', meta.verification.method) : '—'}</Fact>
+      <Fact label={tx("Backup doğrulaması")}>{meta.verification?.state ? statusLabel('general', meta.verification.state) : '\u2014'} · {meta.verification?.method ? statusLabel('verificationMethod', meta.verification.method) : '\u2014'}</Fact>
       <Fact label={tx("Doğrulama başladı")}>{formatDateTime(meta.verification?.startedAt)}</Fact>
       <Fact label={tx("Doğrulama tamamlandı")}>{formatDateTime(meta.verification?.finishedAt)}</Fact>
       {!isPg && !isFiles && <Fact label={tx("COPY_ONLY")}>{meta.appliedOptions?.copyOnly == null ? tx('Bildirilmedi') : meta.appliedOptions.copyOnly ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>}
