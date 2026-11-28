@@ -5,7 +5,12 @@ using BackupPlatform.Domain.Identity;
 namespace BackupPlatform.Agents.Credentials;
 
 /// <summary>An agent credential together with the agent state required to decide whether it may authenticate.</summary>
-public sealed record AgentCredentialRecord(AgentCredential Credential, AgentStatus AgentStatus, int AgentCredentialGeneration, TenantId AgentTenantId);
+public sealed record AgentCredentialRecord(
+    AgentCredential Credential,
+    AgentStatus AgentStatus,
+    int AgentCredentialGeneration,
+    TenantId AgentTenantId,
+    bool AgentCertificateBound = false);
 
 public sealed record RotationBeginCommit(RotationBeginOutcome Outcome, NewAgentCredential? Issued, Guid? ReplacedPendingCredentialId);
 
@@ -26,6 +31,9 @@ public interface IAgentRegistryStore
 
     /// <summary>Serialized per agent. Promotes the caller's pending credential and revokes the previous active one.</summary>
     Task<RotationConfirmCommit> ConfirmRotationAsync(AgentIdentity caller, DateTimeOffset now, CancellationToken cancellationToken);
+
+    /// <summary>Marks the agent bound to client-certificate authentication so bearer-only requests are refused thereafter.</summary>
+    Task BindCertificateAsync(TenantId tenantId, AgentId agentId, CancellationToken cancellationToken);
 
     /// <summary>Null when the agent does not exist in the tenant. Terminal; revokes every non-revoked credential.</summary>
     Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, UserId? actor, DateTimeOffset now, CancellationToken cancellationToken);

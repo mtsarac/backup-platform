@@ -46,12 +46,19 @@ public sealed class Agent : ITenantOwned
     public AgentStatus Status { get; private set; } = AgentStatus.PendingEnrollment;
     public CapabilitySet Capabilities { get; private set; } = CapabilitySet.Empty;
     public int CredentialGeneration { get; private set; }
+    public bool CertificateBound { get; private set; }
 
     public void RecordEnrollment()
     {
         RequireStatus(AgentStatus.PendingEnrollment);
         CredentialGeneration = 1;
         Status = AgentStatus.Active;
+    }
+
+    public void BindCertificate()
+    {
+        EnsureEnrolled();
+        CertificateBound = true;
     }
 
     public void Disable()

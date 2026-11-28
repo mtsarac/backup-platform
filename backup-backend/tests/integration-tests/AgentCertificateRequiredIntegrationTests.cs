@@ -56,8 +56,7 @@ public sealed class AgentCertificateRequiredIntegrationTests(PostgreSqlFixture f
             Assert.True(401 == await CallAsync(world, method, path, null, null), $"{label}: no credential");
             Assert.True(401 == await CallAsync(world, method, path, foreign, bearerA), $"{label}: certificate from another issuer, valid bearer");
             Assert.True(401 == await CallAsync(world, method, path, forged, bearerA), $"{label}: forged identity from another issuer");
-            if (endpoint.Metadata.GetMetadata<AllowBearerBootstrap>() is null)
-                Assert.True(401 == await CallAsync(world, method, path, null, bearerA), $"{label}: bearer alone");
+            Assert.True(401 == await CallAsync(world, method, path, null, bearerA), $"{label}: bearer alone for certificate-bound agent");
             var withCertificate = await CallAsync(world, method, path, certA, null);
             Assert.True(withCertificate is not (401 or 403), $"{label}: valid certificate was refused ({withCertificate})");
         }
@@ -91,6 +90,107 @@ public sealed class AgentCertificateRequiredIntegrationTests(PostgreSqlFixture f
         Assert.Equal(200, response.Response.StatusCode);
         using var json = await JsonDocument.ParseAsync(response.Response.Body);
         Assert.Equal(agentB.AgentId, json.RootElement.GetProperty("agentId").GetGuid());
+    }
+
+    [Fact]
+    public async Task FirstTimeBootstrapWorksUntilACertificateIsIssuedThenEveryBearerOnlyOrMismatchedCallIsRefused()
+    {
+        using var issuerKey = RSA.Create(2048);
+        var issuerRequest = new CertificateRequest("CN=bootstrap-hardening-ca", issuerKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        issuerRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        using var issuer = issuerRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(30));
+        await using var world = await AgentWorld.CreateAsync(fixture, configureServices: services =>
+        {
+            services.AddSingleton(new AgentCertificateAuthority(issuer, TimeProvider.System, TimeSpan.FromDays(7)));
+            services.AddSingleton(new AgentMtlsPolicy(RequireCertificate: true));
+        });
+        var setup = await world.CreateTenantAsync();
+        var agentA = await world.EnrollAsync(setup);
+        var agentB = await world.EnrollAsync(setup);
+        var bearerA = AgentAuthorizationScheme.FormatHeaderValue(agentA.CredentialId, agentA.Secret);
+        using var key = RSA.Create(2048);
+        var csr = new CertificateRequest("CN=backup-agent", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1).CreateSigningRequestPem();
+
+        // First-time bootstrap: /me works with bearer alone, and a malformed CSR does not lock out bootstrap before a certificate is issued.
+        Assert.Equal(200, await CallAsync(world, "GET", "/api/agent/me", null, bearerA));
+        using (var badCsr = await world.SendAgentAsync(HttpMethod.Post, "/api/agent/certificate/enroll", agentA.CredentialId, agentA.Secret, body: new { signingRequestPem = "not-a-valid-csr" }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, badCsr.StatusCode);
+        }
+        Assert.Equal(200, await CallAsync(world, "GET", "/api/agent/me", null, bearerA));
+
+        // First valid certificate enrollment succeeds and binds the agent to client certificates.
+        using var certA = await IssueAsync(world, agentA);
+        using var certB = await IssueAsync(world, agentB);
+        using var foreign = SelfSigned("CN=foreign-issuer", identity: null);
+        using var forged = SelfSigned("CN=backup-agent-" + agentA.AgentId.ToString("N"), identity: agentA);
+
+        // Stolen active bearer alone is now refused on /me, /certificate/enroll, and /credential/rotate.
+        Assert.Equal(401, await CallAsync(world, "GET", "/api/agent/me", null, bearerA));
+        using (var stolenEnroll = await world.SendAgentAsync(HttpMethod.Post, "/api/agent/certificate/enroll", agentA.CredentialId, agentA.Secret, body: new { signingRequestPem = csr }))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, stolenEnroll.StatusCode);
+        }
+        Assert.Equal(401, await CallAsync(world, "POST", "/api/agent/credential/rotate", null, bearerA));
+
+        // Foreign or forged certificate with stolen bearer is also refused on /me and /certificate/enroll.
+        Assert.Equal(401, await CallAsync(world, "GET", "/api/agent/me", foreign, bearerA));
+        Assert.Equal(401, await CallAsync(world, "GET", "/api/agent/me", forged, bearerA));
+        Assert.Equal(401, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", foreign, bearerA, new { signingRequestPem = csr }));
+        Assert.Equal(401, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", forged, bearerA, new { signingRequestPem = csr }));
+
+        // Valid certificate continues to work for /me and in-process certificate renewal without bearer.
+        Assert.Equal(200, await CallAsync(world, "GET", "/api/agent/me", certA, null));
+        Assert.Equal(200, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", certA, null, new { signingRequestPem = csr }));
+
+        // Credential rotation started with certA produces a pending bearer; that pending bearer is still refused without certA or with another agent's cert.
+        var rotateResponse = await world.Factory.Server.SendAsync(context =>
+        {
+            context.Request.Scheme = "https";
+            context.Request.Method = "POST";
+            context.Request.Path = "/api/agent/credential/rotate";
+            context.Connection.ClientCertificate = certA;
+        });
+        Assert.Equal(201, rotateResponse.Response.StatusCode);
+        using var rotateJson = await JsonDocument.ParseAsync(rotateResponse.Response.Body);
+        var pendingBearer = AgentAuthorizationScheme.FormatHeaderValue(
+            rotateJson.RootElement.GetProperty("credentialId").GetGuid(),
+            rotateJson.RootElement.GetProperty("secret").GetString()!);
+
+        Assert.Equal(401, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", null, pendingBearer, new { signingRequestPem = csr }));
+        Assert.Equal(401, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", certB, pendingBearer, new { signingRequestPem = csr }));
+        Assert.Equal(401, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", certA, bearerA, new { signingRequestPem = csr }));
+        Assert.Equal(200, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", certA, pendingBearer, new { signingRequestPem = csr }));
+
+        // Pre-existing agent migrated with CertificateBound=false becomes certificate-bound on its first valid certificate authentication.
+        await fixture.ExecuteAsync($"UPDATE agents SET \"CertificateBound\" = FALSE WHERE \"Id\" = '{agentB.AgentId:D}'");
+        var bearerB = AgentAuthorizationScheme.FormatHeaderValue(agentB.CredentialId, agentB.Secret);
+        Assert.Equal(200, await CallAsync(world, "GET", "/api/agent/me", certB, null));
+        Assert.Equal(401, await CallAsync(world, "GET", "/api/agent/me", null, bearerB));
+        Assert.Equal(401, await CallWithBodyAsync(world, "/api/agent/certificate/enroll", null, bearerB, new { signingRequestPem = csr }));
+    }
+
+    private sealed class HasBodyFeature : Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature
+    {
+        public bool CanHaveBody => true;
+    }
+
+    private static async Task<int> CallWithBodyAsync(AgentWorld world, string path, X509Certificate2? certificate, string? bearer, object body)
+    {
+        var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(body));
+        var response = await world.Factory.Server.SendAsync(context =>
+        {
+            context.Request.Scheme = "https";
+            context.Request.Method = "POST";
+            context.Request.Path = path;
+            context.Request.ContentType = "application/json";
+            context.Request.ContentLength = payload.Length;
+            context.Request.Body = new MemoryStream(payload);
+            context.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature>(new HasBodyFeature());
+            if (bearer is not null) context.Request.Headers.Authorization = bearer;
+            if (certificate is not null) context.Connection.ClientCertificate = certificate;
+        });
+        return response.Response.StatusCode;
     }
 
     private static async Task<X509Certificate2> IssueAsync(AgentWorld world, EnrolledAgent agent)

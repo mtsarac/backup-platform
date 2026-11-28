@@ -54,10 +54,45 @@ public sealed class AgentCertificateIntegrationTests(PostgreSqlFixture fixture) 
         Assert.Equal(HttpStatusCode.OK, enrolled.StatusCode);
         using var oldCertificate = X509Certificate2.CreateFromPem(AgentWorld.ReadJson(enrolled).GetProperty("certificatePem").GetString()!);
         Assert.Equal(200, await CertificateCallAsync("/api/agent/me", "GET", oldCertificate));
-        var pending = await world.BeginRotationAsync(agent.CredentialId, agent.Secret);
-        using var rotated = await world.SendAgentAsync(HttpMethod.Post, "/api/agent/certificate/enroll", pending.CredentialId, pending.Secret, body: new { signingRequestPem = csr });
-        Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
-        using var newCertificate = X509Certificate2.CreateFromPem(AgentWorld.ReadJson(rotated).GetProperty("certificatePem").GetString()!);
+        using (var bearerMe = await world.AgentMeAsync(agent.CredentialId, agent.Secret))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, bearerMe.StatusCode);
+        }
+        using (var bearerRotate = await world.AgentCallAsync(HttpMethod.Post, "/api/agent/credential/rotate", agent.CredentialId, agent.Secret))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, bearerRotate.StatusCode);
+        }
+        var rotateResponse = await world.Factory.Server.SendAsync(context =>
+        {
+            context.Request.Scheme = "https";
+            context.Request.Method = "POST";
+            context.Request.Path = "/api/agent/credential/rotate";
+            context.Connection.ClientCertificate = oldCertificate;
+        });
+        Assert.Equal(201, rotateResponse.Response.StatusCode);
+        using var rotateDoc = await System.Text.Json.JsonDocument.ParseAsync(rotateResponse.Response.Body);
+        var pendingId = rotateDoc.RootElement.GetProperty("credentialId").GetGuid();
+        var pendingSecret = rotateDoc.RootElement.GetProperty("secret").GetString()!;
+        using (var bearerPendingEnroll = await world.SendAgentAsync(HttpMethod.Post, "/api/agent/certificate/enroll", pendingId, pendingSecret, body: new { signingRequestPem = csr }))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, bearerPendingEnroll.StatusCode);
+        }
+        var csrBytes = System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(new { signingRequestPem = csr }));
+        var rotatedResponse = await world.Factory.Server.SendAsync(context =>
+        {
+            context.Request.Scheme = "https";
+            context.Request.Method = "POST";
+            context.Request.Path = "/api/agent/certificate/enroll";
+            context.Request.ContentType = "application/json";
+            context.Request.ContentLength = csrBytes.Length;
+            context.Request.Body = new MemoryStream(csrBytes);
+            context.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature>(new HasBodyFeature());
+            context.Request.Headers.Authorization = BackupPlatform.Contracts.Agents.AgentAuthorizationScheme.FormatHeaderValue(pendingId, pendingSecret);
+            context.Connection.ClientCertificate = oldCertificate;
+        });
+        Assert.Equal(200, rotatedResponse.Response.StatusCode);
+        using var rotatedDoc = await System.Text.Json.JsonDocument.ParseAsync(rotatedResponse.Response.Body);
+        using var newCertificate = X509Certificate2.CreateFromPem(rotatedDoc.RootElement.GetProperty("certificatePem").GetString()!);
         Assert.Equal(401, await CertificateCallAsync("/api/agent/me", "GET", newCertificate));
         Assert.Equal(200, await CertificateCallAsync("/api/agent/credential/confirm", "POST", newCertificate));
         Assert.Equal(401, await CertificateCallAsync("/api/agent/me", "GET", oldCertificate));
@@ -129,5 +164,10 @@ public sealed class AgentCertificateIntegrationTests(PostgreSqlFixture fixture) 
             });
             return response.Response.StatusCode;
         }
+    }
+
+    private sealed class HasBodyFeature : Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature
+    {
+        public bool CanHaveBody => true;
     }
 }

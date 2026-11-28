@@ -27,9 +27,18 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
         var row = await (from credential in context.AgentCredentials.AsNoTracking()
                          join agent in context.Agents.AsNoTracking() on credential.AgentId equals agent.Id
                          where credential.Id == credentialId
-                         select new { Credential = credential, agent.Status, agent.CredentialGeneration, agent.TenantId })
+                         select new { Credential = credential, agent.Status, agent.CredentialGeneration, agent.TenantId, agent.CertificateBound })
             .SingleOrDefaultAsync(cancellationToken);
-        return row is null ? null : new AgentCredentialRecord(row.Credential, row.Status, row.CredentialGeneration, row.TenantId);
+        return row is null ? null : new AgentCredentialRecord(row.Credential, row.Status, row.CredentialGeneration, row.TenantId, row.CertificateBound);
+    }
+
+    public async Task BindCertificateAsync(TenantId tenantId, AgentId agentId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformOperationsDbContext.Create(options);
+        await context.Agents
+            .Where(row => row.Id == agentId && row.TenantId == tenantId && !row.CertificateBound
+                && (row.Status == AgentStatus.Active || row.Status == AgentStatus.Disabled))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.CertificateBound, true), cancellationToken);
     }
 
     public async Task<RotationBeginCommit> BeginRotationAsync(
