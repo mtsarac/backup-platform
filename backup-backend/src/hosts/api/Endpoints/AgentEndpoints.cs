@@ -29,7 +29,7 @@ public static class AgentEndpoints
         var agent = endpoints.MapGroup("/api/agent").WithMetadata(new AgentApiEndpoint());
         agent.MapPost("/enroll", EnrollAsync).AllowAnonymous().RequireRateLimiting(AgentRateLimitOptions.Policies.Enrollment);
         agent.MapPost("/certificate/enroll", EnrollCertificateAsync)
-            .WithMetadata(new AllowPendingAgentCredential(), new RequestSizeLimitAttribute(20 * 1024))
+            .WithMetadata(new AllowPendingAgentCredential(), new AllowBearerBootstrap(), new RequestSizeLimitAttribute(20 * 1024))
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .RequireRateLimiting(AgentRateLimitOptions.Policies.Enrollment);
         agent.MapPost("/heartbeat", HeartbeatAsync)
@@ -50,7 +50,7 @@ public static class AgentEndpoints
         agent.MapPost("/capacity-probes/{taskId:guid}/lease", AuthorizeCapacityAsync)
             .RequireAuthorization(AuthorizationPolicies.Agent).RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
             .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4096));
-        agent.MapGet("/me", GetIdentity).RequireAuthorization(AuthorizationPolicies.Agent);
+        agent.MapGet("/me", GetIdentity).WithMetadata(new AllowBearerBootstrap()).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/rotate", BeginRotationAsync).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/confirm", ConfirmRotationAsync)
             .WithMetadata(new AllowPendingAgentCredential())

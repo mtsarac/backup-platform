@@ -63,6 +63,9 @@ public static class AgentAuthentication
 /// <summary>Endpoint metadata: the endpoint also accepts a pending rotation credential (rotation confirmation only).</summary>
 public sealed class AllowPendingAgentCredential { }
 
+/// <summary>Endpoint metadata: accepts a bearer credential without a client certificate even when certificates are required (certificate issuance and the enrollment identity check only).</summary>
+public sealed class AllowBearerBootstrap { }
+
 /// <summary>Endpoint metadata: protected by agent or enrollment-token credentials, so browser antiforgery does not apply.</summary>
 public sealed class AgentApiEndpoint { }
 
@@ -112,6 +115,11 @@ public sealed class AgentAuthenticationHandler(
             return AuthenticateResult.NoResult();
         }
         // The key is the network client, never anything derived from the presented credential.
+        if (services.GetService<AgentMtlsPolicy>() is { RequireCertificate: true }
+            && Context.GetEndpoint()?.Metadata.GetMetadata<AllowBearerBootstrap>() is null)
+        {
+            return AuthenticateResult.Fail("A client certificate is required.");
+        }
         var client = AgentClientKey.From(Context.Connection.RemoteIpAddress);
         if (failureLimiter.IsBlocked(client))
         {

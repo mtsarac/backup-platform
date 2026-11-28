@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using BackupPlatform.Agent.Core.Identity;
+using BackupPlatform.Agent.Transport;
 using BackupPlatform.Contracts.Agents;
 
 namespace BackupPlatform.Agent.Host;
@@ -19,19 +20,26 @@ public static class AgentCertificateCommand
         }
         try
         {
-            var password = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PASSWORD");
-            if (password is null || password.Length < 12) throw new InvalidOperationException("A PFX password of at least 12 characters is required in AGENT_MTLS_CERTIFICATE_PASSWORD.");
+            var password = AgentMtlsPasswordFile.ResolveOrCreate();
+            if (password.Length < 12) throw new InvalidOperationException("The PFX password must have at least 12 characters.");
             var directory = AgentCredentialStoreFactory.ResolveDirectory(args.Length == 3 ? args[2] : null);
             using var lease = AgentEnrollmentLease.Acquire(directory);
             var store = AgentCredentialStoreFactory.Create(directory);
             var identity = await store.LoadAsync(cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("Enroll the agent before requesting a certificate.");
+            // Bearer-only client: a certificate on the request would win over the bearer and identify the active generation, not the pending one.
             using var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
             using var http = new HttpClient(handler) { BaseAddress = identity.ServerUri, Timeout = TimeSpan.FromSeconds(30) };
             if (args[1] == "rotate" && identity.Pending is null)
             {
+                // A server that requires client certificates refuses a bearer-only rotation: present the current certificate when one is configured.
+                var configured = Environment.GetEnvironmentVariable("AGENT_MTLS_CERTIFICATE_PATH");
+                using var currentCertificate = configured is not null && File.Exists(configured) ? AgentMtlsTransport.LoadCertificate() : null;
+                using var rotateHandler = new SocketsHttpHandler { AllowAutoRedirect = false };
+                if (currentCertificate is not null) rotateHandler.SslOptions.ClientCertificates = [currentCertificate];
+                using var rotateHttp = new HttpClient(rotateHandler) { BaseAddress = identity.ServerUri, Timeout = TimeSpan.FromSeconds(30) };
                 using var rotate = new HttpRequestMessage(HttpMethod.Post, "/api/agent/credential/rotate");
                 rotate.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
-                using var response = await http.SendAsync(rotate, cancellationToken).ConfigureAwait(false);
+                using var response = await rotateHttp.SendAsync(rotate, cancellationToken).ConfigureAwait(false);
                 Ensure(response);
                 var issued = await response.Content.ReadFromJsonAsync<IssuedAgentCredential>(cancellationToken: cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("The backend returned an invalid rotation response.");
                 identity = identity.WithPending(new AgentStoredCredential(issued.CredentialId, issued.Secret, issued.Generation));
