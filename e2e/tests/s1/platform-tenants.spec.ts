@@ -65,7 +65,7 @@ test('create and rename: duplicate workspace names are refused (#252)', async ({
 
   await page.goto(`/platform/tenants/${otherId}`)
   await page.getByText('Yeniden adlandır').first().click()
-  await page.getByRole('textbox', { name: 'Ad', exact: true }).fill(name)
+  await page.getByRole('textbox', { name: /^Ad( \*)?$/ }).fill(name)
   await page.getByRole('button', { name: 'Yeniden adlandır' }).click()
   await expect(page.getByRole('alert')).toContainText('zaten var')
 })
@@ -95,7 +95,7 @@ test('detail: all 6 tabs deep-link, back/forward keeps the tab, rename persists,
   await page.goto(`/platform/tenants/${id}`)
   await page.getByText('Yeniden adlandır').first().click()
   const renamed = `${name}-renamed`
-  await page.getByRole('textbox', { name: 'Ad', exact: true }).fill(renamed)
+  await page.getByRole('textbox', { name: /^Ad( \*)?$/ }).fill(renamed)
   await page.getByRole('button', { name: 'Yeniden adlandır' }).click()
   await expect(page.getByRole('heading', { level: 1, name: renamed })).toBeVisible()
   await page.reload()

@@ -67,6 +67,19 @@ export async function virtualAuthenticator(context: BrowserContext, page: Page) 
   return { cdp, authenticatorId }
 }
 
+/** The recovery-codes dialog is blocking (no Escape, no backdrop): tick the acknowledgement, then Tamam. Returns the codes, or [] if no dialog appears (user already had codes). */
+export async function acknowledgeRecoveryCodes(page: Page): Promise<string[]> {
+  const dialog = page.getByRole('dialog', { name: 'Kurtarma kodlarınız' })
+  if (!(await dialog.waitFor({ timeout: 5000 }).then(() => true, () => false))) return []
+  const codes = (await dialog.locator('.font-mono span').allInnerTexts()).map((c) => c.trim())
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('checkbox', { name: 'Kodları güvenli bir yere kaydettim.' }).check()
+  await dialog.getByRole('button', { name: 'Tamam' }).click()
+  await expect(dialog).toBeHidden()
+  return codes
+}
+
 export const platformApi = () => Api.signIn(s.accounts.platformAdmin)
 
 /** Fresh UserAdmin in the shared tenant, usable immediately (password already changed) unless keepForcedChange. */

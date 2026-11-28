@@ -33,7 +33,7 @@ test.describe('recovery pages without a token (always available)', () => {
     await page.goto('/verify-email')
     await expect(page.getByRole('heading', { level: 1, name: 'E-posta doğrulama' })).toBeVisible()
     await expect(page.getByText('Doğrulama bağlantısı geçersiz veya süresi dolmuş.')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Çalışma alanlarına dön' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Girişe dön' })).toBeVisible()
     expect(await axeViolations(page)).toEqual([])
     await page.setViewportSize(MOBILE)
     await expectNoHorizontalScroll(page)

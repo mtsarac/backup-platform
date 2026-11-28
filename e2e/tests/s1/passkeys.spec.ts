@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { Api } from '../../api'
-import { axeViolations, MOBILE, newTotpUser, newUser, platformApi, resetIsolatedThrottle, signIn, totp, virtualAuthenticator, watch } from './helpers'
+import { acknowledgeRecoveryCodes, axeViolations, MOBILE, newTotpUser, newUser, platformApi, resetIsolatedThrottle, signIn, totp, virtualAuthenticator, watch } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -32,14 +32,7 @@ async function registerViaUi(page: Page, u: { login: string; password: string },
   await page.getByLabel('Mevcut şifreniz').fill(u.password)
   await page.getByRole('button', { name: 'Kaydet' }).click()
   await expect(page.getByText(name)).toBeVisible()
-  const codesHeading = page.getByRole('heading', { name: 'Kurtarma kodları' })
-  if (await codesHeading.isVisible()) {
-    const codes = (await page.locator('code').allInnerTexts()).map((c) => c.trim()).filter(Boolean)
-    await page.getByRole('button', { name: 'Kapat', exact: true }).click()
-    await expect(codesHeading).toHaveCount(0)
-    return codes
-  }
-  return []
+  return acknowledgeRecoveryCodes(page)
 }
 
 test('empty state, validation, first passkey issues recovery codes, and key is listed with accessible remove button', async ({ page, context }) => {
@@ -59,8 +52,7 @@ test('empty state, validation, first passkey issues recovery codes, and key is l
   await form.getByLabel('Geçiş anahtarı adı').fill(NAME)
   await form.getByLabel('Mevcut şifreniz').fill(user.password)
   await form.getByRole('button', { name: 'Kaydet' }).click()
-  await expect(page.getByRole('heading', { name: 'Kurtarma kodları' })).toBeVisible()
-  await page.getByRole('button', { name: 'Kapat', exact: true }).click()
+  expect((await acknowledgeRecoveryCodes(page)).length).toBeGreaterThanOrEqual(8)
   await expect(page.getByText(NAME)).toBeVisible()
   await expect(page.getByText(/Kayıt tarihi/)).toBeVisible()
   await expect(page.getByRole('button', { name: `Kaldır — ${NAME}` })).toBeVisible()
@@ -119,7 +111,7 @@ test('wrong password while adding or removing a passkey keeps the session and sh
   // Now register with the valid password, then try removing with a wrong password
   await addForm.getByLabel('Mevcut şifreniz').fill(fresh.password)
   await addForm.getByRole('button', { name: 'Kaydet' }).click()
-  await page.getByRole('button', { name: 'Kapat', exact: true }).click().catch(() => {})
+  await acknowledgeRecoveryCodes(page)
   await expect(page.getByText('E2E protected key')).toBeVisible()
 
   await page.getByRole('button', { name: 'Kaldır — E2E protected key' }).click()
@@ -220,12 +212,19 @@ test('password sign-in of a passkey-only user opens the passkey step (#260), foc
 
 test('failed passkey second factor shows an error message (#250)', async ({ page, context }) => {
   test.skip(!configured, SKIP)
-  await virtualAuthenticator(context, page) // empty authenticator: no passkey enrolled for `fresh`
-  const fresh = await platformApi().then(async (p) => { const n = await newTotpUser(p); await p.dispose(); return n })
+  const { cdp, authenticatorId } = await virtualAuthenticator(context, page)
+  const fresh = await platformApi().then(async (p) => { const n = await newUser(p); await p.dispose(); return n })
+  await registerViaUi(page, fresh, 'E2E vanishing key')
+  await page.goto('/account')
+  await page.getByRole('button', { name: 'Çıkış' }).click()
+  await expect(page).toHaveURL(/\/login/)
+  // the account has a passkey, but the authenticator no longer holds it: the assertion must fail visibly
+  await cdp.send('WebAuthn.clearCredentials', { authenticatorId })
   await signIn(page, fresh.login, fresh.password)
-  await page.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'İkinci faktör doğrulaması' })).toBeVisible()
   await page.getByRole('button', { name: 'Geçiş anahtarı ile doğrula' }).first().click()
-  await expect(page.getByRole('alert')).toContainText('kayıtlı bir geçiş anahtarı yok')
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page).toHaveURL(/\/login/)
 })
 
 test('removing a passkey needs the password; Cancel keeps it, the right password empties the list', async ({ page, context }) => {
