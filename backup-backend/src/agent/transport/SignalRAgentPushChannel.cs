@@ -27,11 +27,21 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
     private readonly TimeProvider _time;
     private readonly ILoggerFactory _loggerFactory;
     private readonly TimeSpan _helloTimeout;
+    private readonly AgentClientCertificateProvider? _certificates;
     private readonly object _gate = new();
+    private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private CancellationTokenSource? _sessionCts;
+    private long _sessionGeneration;
     private Session? _session;
     private bool _disposed;
 
-    public SignalRAgentPushChannel(AgentBackendEndpoint endpoint, AgentBackoff backoff, TimeProvider timeProvider, ILoggerFactory loggerFactory, TimeSpan? serverHelloTimeout = null)
+    public SignalRAgentPushChannel(
+        AgentBackendEndpoint endpoint,
+        AgentBackoff backoff,
+        TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
+        TimeSpan? serverHelloTimeout = null,
+        AgentClientCertificateProvider? certificates = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(backoff);
@@ -42,6 +52,11 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
         _time = timeProvider;
         _loggerFactory = loggerFactory;
         _helloTimeout = serverHelloTimeout ?? DefaultServerHelloTimeout;
+        _certificates = certificates;
+        if (_certificates is not null)
+        {
+            _certificates.Changed += OnCertificateChanged;
+        }
     }
 
     public async Task<AgentPushConnectResult> ConnectAsync(AgentLocalIdentity identity, IAgentPushChannelListener listener, CancellationToken cancellationToken)
@@ -52,7 +67,15 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
         var session = new Session(this, identity, listener);
         lock (_gate)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_disposed)
+            {
+                _ = session.StopAsync(CancellationToken.None);
+                throw new ObjectDisposedException(nameof(SignalRAgentPushChannel));
+            }
+            _sessionCts?.Cancel();
+            _sessionCts?.Dispose();
+            _sessionCts = new CancellationTokenSource();
+            ++_sessionGeneration;
             _session = session;
         }
         try
@@ -60,6 +83,10 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
             var failure = await session.StartAsync(cancellationToken).ConfigureAwait(false);
             if (failure is null)
             {
+                if (_certificates is not null && _certificates.Version != session.CertificateVersion)
+                {
+                    OnCertificateChanged();
+                }
                 return AgentPushConnectResult.Connected;
             }
             await DetachAsync(session, CancellationToken.None).ConfigureAwait(false);
@@ -75,10 +102,19 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         Session? session;
+        CancellationTokenSource? cts;
         lock (_gate)
         {
+            ++_sessionGeneration;
+            cts = _sessionCts;
+            _sessionCts = null;
             session = _session;
             _session = null;
+        }
+        if (cts is not null)
+        {
+            await cts.CancelAsync().ConfigureAwait(false);
+            cts.Dispose();
         }
         if (session is not null)
         {
@@ -88,6 +124,10 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
 
     public async ValueTask DisposeAsync()
     {
+        if (_certificates is not null)
+        {
+            _certificates.Changed -= OnCertificateChanged;
+        }
         lock (_gate)
         {
             _disposed = true;
@@ -100,6 +140,86 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
         catch (OperationCanceledException)
         {
             // Bounded: the connection is abandoned if it does not stop in time.
+        }
+    }
+
+    private void OnCertificateChanged() => _ = RotateSessionAsync();
+
+    private async Task RotateSessionAsync()
+    {
+        if (_certificates is null)
+        {
+            return;
+        }
+        await _refreshGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            while (true)
+            {
+                Session? previous;
+                long generation;
+                CancellationToken token;
+                lock (_gate)
+                {
+                    if (_disposed || _session is null || !Volatile.Read(ref _session.EstablishedFlag)
+                        || _session.CertificateVersion == _certificates.Version || _sessionCts is null)
+                    {
+                        return;
+                    }
+                    previous = _session;
+                    generation = _sessionGeneration;
+                    token = _sessionCts.Token;
+                }
+
+                previous.Listener.OnReconnecting(new AgentBackendFailure(AgentBackendFailureKind.Transient, "client certificate renewed"));
+                var next = new Session(this, previous.Identity, previous.Listener);
+                lock (_gate)
+                {
+                    if (_disposed || _sessionGeneration != generation || !ReferenceEquals(_session, previous))
+                    {
+                        _ = next.StopAsync(CancellationToken.None);
+                        return;
+                    }
+                    _session = next;
+                }
+
+                await previous.StopAsync(CancellationToken.None).ConfigureAwait(false);
+
+                AgentBackendFailure? failure;
+                try
+                {
+                    failure = await next.StartAsync(token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    await DetachAsync(next, CancellationToken.None).ConfigureAwait(false);
+                    return;
+                }
+
+                bool stillCurrent;
+                lock (_gate)
+                {
+                    stillCurrent = !_disposed && _sessionGeneration == generation && ReferenceEquals(_session, next);
+                }
+                if (!stillCurrent)
+                {
+                    await next.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                    return;
+                }
+
+                if (failure is not null)
+                {
+                    await DetachAsync(next, CancellationToken.None).ConfigureAwait(false);
+                    next.NotifyClosed(failure);
+                    return;
+                }
+
+                next.Listener.OnReconnected();
+            }
+        }
+        finally
+        {
+            _refreshGate.Release();
         }
     }
 
@@ -119,21 +239,32 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
     {
         private readonly SignalRAgentPushChannel _owner;
         private readonly Guid _expectedAgentId;
-        private readonly IAgentPushChannelListener _listener;
         private readonly HubConnection _connection;
-        private readonly X509Certificate2? _clientCertificate;
+        private readonly IDisposable? _certificateLease;
+        private readonly X509Certificate2? _ownedCertificate;
         private volatile TaskCompletionSource<AgentBackendFailure?> _hello = NewHelloSignal();
         private volatile bool _stopping;
-        private volatile bool _established;
+        internal bool EstablishedFlag;
         private AgentBackendFailure? _terminalFailure;
         private int _closedReported;
 
         public Session(SignalRAgentPushChannel owner, AgentLocalIdentity identity, IAgentPushChannelListener listener)
         {
             _owner = owner;
+            Identity = identity;
+            Listener = listener;
             _expectedAgentId = identity.AgentId;
-            _listener = listener;
-            _clientCertificate = AgentMtlsTransport.LoadCertificate();
+            X509Certificate2? clientCertificate;
+            if (owner._certificates is not null)
+            {
+                _certificateLease = owner._certificates.AcquireLease(out var version, out clientCertificate);
+                CertificateVersion = version;
+            }
+            else
+            {
+                _ownedCertificate = AgentMtlsTransport.LoadCertificate();
+                clientCertificate = _ownedCertificate;
+            }
 
             var url = new Uri(owner._endpoint.BaseUri, AgentPushChannelContract.HubPath.TrimStart('/'));
             var authorization = identity.Current.ToAuthorizationHeaderValue();
@@ -143,12 +274,21 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
                     options.Transports = HttpTransportType.WebSockets;
                     options.Headers["Authorization"] = authorization;
                     options.Headers[AgentProtocolHeader.Name] = ProtocolHeaderValue;
-                    if (_clientCertificate is not null) options.ClientCertificates?.Add(_clientCertificate);
+                    if (clientCertificate is not null) options.ClientCertificates?.Add(clientCertificate);
+                    if (owner._endpoint.HasLoopbackServerTrust)
+                    {
+                        options.WebSocketConfiguration = ws =>
+                            ws.RemoteCertificateValidationCallback = (_, remote, _, errors) => owner._endpoint.ValidateLoopbackServer(remote, errors);
+                    }
                     options.HttpMessageHandlerFactory = handler =>
                     {
                         if (handler is HttpClientHandler client)
                         {
                             client.AllowAutoRedirect = false;
+                            if (owner._endpoint.HasLoopbackServerTrust)
+                            {
+                                client.ServerCertificateCustomValidationCallback = (_, remote, _, errors) => owner._endpoint.ValidateLoopbackServer(remote, errors);
+                            }
                         }
                         return handler;
                     };
@@ -162,28 +302,28 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
             {
                 if (!_stopping)
                 {
-                    _listener.OnProtocolNotice(notice);
+                    Listener.OnProtocolNotice(notice);
                 }
             });
             _connection.On<AgentPollHint>(AgentPushChannelContract.PollHintMethod, hint =>
             {
                 if (!_stopping)
                 {
-                    _listener.OnPollHint(hint);
+                    Listener.OnPollHint(hint);
                 }
             });
             _connection.Reconnecting += exception =>
             {
-                if (_established && !_stopping)
+                if (Volatile.Read(ref EstablishedFlag) && !_stopping)
                 {
                     _hello = NewHelloSignal(); // every connection starts with its own hello
-                    _listener.OnReconnecting(AgentTransportFailures.FromException(exception));
+                    Listener.OnReconnecting(AgentTransportFailures.FromException(exception));
                 }
                 return Task.CompletedTask;
             };
             _connection.Reconnected += connectionId =>
             {
-                if (_established && !_stopping)
+                if (Volatile.Read(ref EstablishedFlag) && !_stopping)
                 {
                     _ = ReportReconnectedAsync(_hello);
                 }
@@ -191,6 +331,10 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
             };
             _connection.Closed += OnClosed;
         }
+
+        public AgentLocalIdentity Identity { get; }
+        public IAgentPushChannelListener Listener { get; }
+        public long CertificateVersion { get; }
 
         /// <summary>Connects and waits for a valid server hello. Returns null when connected, otherwise the failure.</summary>
         public async Task<AgentBackendFailure?> StartAsync(CancellationToken cancellationToken)
@@ -213,7 +357,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
                 var failure = await _hello.Task.WaitAsync(_owner._helloTimeout, _owner._time, cancellationToken).ConfigureAwait(false);
                 if (failure is null)
                 {
-                    _established = true;
+                    Volatile.Write(ref EstablishedFlag, true);
                 }
                 return failure;
             }
@@ -237,9 +381,15 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
             finally
             {
                 try { await _connection.DisposeAsync().ConfigureAwait(false); }
-                finally { _clientCertificate?.Dispose(); }
+                finally
+                {
+                    _certificateLease?.Dispose();
+                    _ownedCertificate?.Dispose();
+                }
             }
         }
+
+        public void NotifyClosed(AgentBackendFailure failure) => Report(failure);
 
         private static TaskCompletionSource<AgentBackendFailure?> NewHelloSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -272,7 +422,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
             }
             if (failure is null)
             {
-                _listener.OnReconnected();
+                Listener.OnReconnected();
             }
             else
             {
@@ -287,7 +437,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
                 return Task.CompletedTask;
             }
             var failure = _terminalFailure ?? (exception is null ? null : AgentTransportFailures.FromException(exception));
-            if (!_established)
+            if (!Volatile.Read(ref EstablishedFlag))
             {
                 _hello.TrySetResult(failure ?? new AgentBackendFailure(AgentBackendFailureKind.Transient, "the server closed the connection before its hello"));
                 return Task.CompletedTask;
@@ -318,7 +468,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
         {
             if (Interlocked.Exchange(ref _closedReported, 1) == 0)
             {
-                _listener.OnClosed(failure);
+                Listener.OnClosed(failure);
             }
         }
 
@@ -328,7 +478,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
         {
             public TimeSpan? NextRetryDelay(RetryContext retryContext)
             {
-                if (session._stopping)
+                if (session._stopping || (session._owner._certificates is { } certs && certs.Version != session.CertificateVersion))
                 {
                     return null;
                 }

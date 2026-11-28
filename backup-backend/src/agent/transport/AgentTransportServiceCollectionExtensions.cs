@@ -21,6 +21,7 @@ public static class AgentTransportServiceCollectionExtensions
     public static IServiceCollection AddAgentTransport(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+        services.TryAddSingleton(static _ => AgentClientCertificateProvider.FromEnvironment());
         services.AddHttpClient<IAgentUpdateClient, HttpAgentUpdateClient>(client =>
             {
                 client.Timeout = TimeSpan.FromMinutes(10);
@@ -120,7 +121,12 @@ public static class AgentTransportServiceCollectionExtensions
             })
             .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler)
             .SetHandlerLifetime(TimeSpan.FromMinutes(2));
-        services.TryAddSingleton<IAgentPushChannel, SignalRAgentPushChannel>();
+        services.TryAddSingleton<IAgentPushChannel>(static provider => new SignalRAgentPushChannel(
+            provider.GetRequiredService<AgentBackendEndpoint>(),
+            provider.GetRequiredService<AgentBackoff>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>(),
+            certificates: provider.GetRequiredService<AgentClientCertificateProvider>()));
         return services;
     }
 }

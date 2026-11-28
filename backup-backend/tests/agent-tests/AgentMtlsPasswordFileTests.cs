@@ -3,6 +3,10 @@ using BackupPlatform.Agent.Transport;
 
 namespace BackupPlatform.AgentTests;
 
+[CollectionDefinition("Agent mTLS environment", DisableParallelization = true)]
+public sealed class AgentMtlsEnvironmentCollection;
+
+[Collection("Agent mTLS environment")]
 public sealed class AgentMtlsPasswordFileTests : IDisposable
 {
     private const string FileVariable = "AGENT_MTLS_CERTIFICATE_PASSWORD_FILE";

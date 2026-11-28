@@ -96,6 +96,10 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();
+        services.AddHttpClient<AgentCertificateRenewalService>(static client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler)
+            .SetHandlerLifetime(TimeSpan.FromMinutes(2));
+        services.AddHostedService(static provider => provider.GetRequiredService<AgentCertificateRenewalService>());
         services.AddAgentAutoUpdates(configuration);
         return services;
     }

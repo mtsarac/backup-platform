@@ -56,27 +56,12 @@ public static class AgentCertificateCommand
             using var publicCertificate = X509Certificate2.CreateFromPem(json!.RootElement.GetProperty("certificatePem").GetString()!);
             using var certificate = publicCertificate.CopyWithPrivateKey(key);
             var target = Path.Combine(directory, "client-certificate.pfx");
-            var temporary = target + "." + Guid.NewGuid().ToString("N");
-            try
-            {
-                var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Options = FileOptions.Asynchronous | FileOptions.WriteThrough };
-                if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-                var bytes = certificate.Export(X509ContentType.Pfx, password);
-                try
-                {
-                    await using var output = new FileStream(temporary, options);
-                    await output.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
-                    await output.FlushAsync(cancellationToken).ConfigureAwait(false);
-                    output.Flush(true);
-                }
-                finally { CryptographicOperations.ZeroMemory(bytes); }
-                File.Move(temporary, target, overwrite: true);
-            }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+            await AgentCertificateRenewalService.SavePfxAtomicallyAsync(certificate, target, password, cancellationToken).ConfigureAwait(false);
             if (identity.Pending is not null)
             {
-                using var confirmHandler = new HttpClientHandler { AllowAutoRedirect = false };
-                confirmHandler.ClientCertificates.Add(certificate);
+                using var savedCertificate = AgentMtlsTransport.LoadCertificate(target, password);
+                using var confirmHandler = new SocketsHttpHandler { AllowAutoRedirect = false };
+                confirmHandler.SslOptions.ClientCertificates = [savedCertificate];
                 using var confirmClient = new HttpClient(confirmHandler) { BaseAddress = identity.ServerUri, Timeout = TimeSpan.FromSeconds(30) };
                 using var confirmed = await confirmClient.PostAsync("/api/agent/credential/confirm", null, cancellationToken).ConfigureAwait(false);
                 Ensure(confirmed);

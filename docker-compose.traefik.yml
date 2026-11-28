@@ -35,6 +35,7 @@ services:
       Authentication__ClientCertificateHeader__Format: Traefik
       AgentSecurity__Mtls__Enabled: "true"
       AgentSecurity__Mtls__IssuerPfxPath: /run/agent-ca/issuer.pfx
+      AgentSecurity__Mtls__Lifetime: ${AGENT_MTLS_LIFETIME:-}
       AgentSecurity__Mtls__RequireCertificate: ${AGENT_MTLS_REQUIRE_CERTIFICATE:-false}
       AGENT_MTLS_ISSUER_PASSWORD: ${AGENT_MTLS_ISSUER_PASSWORD:?set AGENT_MTLS_ISSUER_PASSWORD}
       Secrets__DataProtection__KeysDirectory: /app/dp-keys
