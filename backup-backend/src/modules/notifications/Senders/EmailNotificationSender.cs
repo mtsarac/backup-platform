@@ -38,13 +38,14 @@ public sealed class EmailNotificationSender(
             catch (SecretUnavailableException) { return SendOutcome.Permanent("secret_unavailable"); }
         }
 
-        var rendered = NotificationMessageFormatter.Render(work.Event);
+        var language = NotificationLanguages.Default;
+        var rendered = NotificationMessageFormatter.Render(work.Event, language);
         var fingerprint = RecipientLinks.Fingerprint(work.Target);
         string Token(RecipientAction action) => tokens.Issue(new RecipientClaim(work.TenantId, work.ChannelId, action, fingerprint));
         var unsubscribeToken = Token(RecipientAction.Unsubscribe);
         var unsubscribe = RecipientLinks.PageUrl(options, RecipientAction.Unsubscribe, unsubscribeToken);
         var text = work.Event.Type == NotificationEventTypes.RecipientVerification
-            ? $"{rendered.Text}\n\nTo confirm this address, open:\n{RecipientLinks.PageUrl(options, RecipientAction.Confirm, Token(RecipientAction.Confirm))}" : rendered.Text;
+            ? $"{rendered.Text}\n\n{NotificationMessageFormatter.ConfirmLine(language)}\n{RecipientLinks.PageUrl(options, RecipientAction.Confirm, Token(RecipientAction.Confirm))}" : rendered.Text;
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(settings.FromName ?? NotificationMessageFormatter.Product, settings.FromAddress));
         message.To.Add(MailboxAddress.Parse(work.Target));
@@ -53,7 +54,7 @@ public sealed class EmailNotificationSender(
         message.Headers.Add("Auto-Submitted", "auto-generated");
         message.Headers.Add("List-Unsubscribe", $"<{RecipientLinks.OneClickUrl(options, unsubscribeToken)}>");
         message.Headers.Add("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
-        message.Body = new TextPart("plain") { Text = $"{text}\n\nTo stop receiving these emails, open:\n{unsubscribe}" };
+        message.Body = new TextPart("plain") { Text = $"{text}\n\n{NotificationMessageFormatter.UnsubscribeLine(language)}\n{unsubscribe}" };
 
         return await relay.SendAsync(settings, password, message, cancellationToken);
     }

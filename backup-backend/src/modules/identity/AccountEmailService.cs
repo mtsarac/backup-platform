@@ -6,7 +6,8 @@ namespace BackupPlatform.Identity;
 
 public enum AccountMailKind { Verification, PasswordReset }
 
-public sealed record AccountMail(string To, AccountMailKind Kind, string Token);
+/// <param name="Language">A language tag or Accept-Language value of the request that caused the mail; empty means the product default (Turkish).</param>
+public sealed record AccountMail(string To, AccountMailKind Kind, string Token, string? Language = null);
 
 /// <summary>Platform email delivery for account mail. Not available when no SMTP relay (or public base URL for the links) is configured.</summary>
 public interface IAccountMailer
@@ -28,7 +29,7 @@ public sealed class AccountEmailService(IIdentityStore store, IAccountMailer mai
     public Task<bool> IsAvailableAsync(CancellationToken cancellationToken) => mailer.IsAvailableAsync(cancellationToken);
 
     /// <summary>Sends a reset message when the account exists and its address is verified; otherwise does nothing. The caller answers identically either way.</summary>
-    public async Task RequestPasswordResetAsync(string? identifier, CancellationToken cancellationToken)
+    public async Task RequestPasswordResetAsync(string? identifier, CancellationToken cancellationToken, string? language = null)
     {
         string? normalized;
         try
@@ -39,14 +40,14 @@ public sealed class AccountEmailService(IIdentityStore store, IAccountMailer mai
         }
         catch (ArgumentException) { return; }
         if (normalized is null || await store.FindCredentialAsync(normalized, cancellationToken) is not { Email: not null, EmailVerifiedAt: not null } credential) return;
-        await IssueAsync(credential, AccountEmailPurpose.PasswordReset, ResetLifetime, cancellationToken);
+        await IssueAsync(credential, AccountEmailPurpose.PasswordReset, ResetLifetime, cancellationToken, language);
     }
 
     /// <summary>False when the account has no address or it is already verified.</summary>
-    public async Task<bool> SendVerificationAsync(UserId userId, CancellationToken cancellationToken)
+    public async Task<bool> SendVerificationAsync(UserId userId, CancellationToken cancellationToken, string? language = null)
     {
         if (await store.FindCredentialByUserIdAsync(userId, cancellationToken) is not { Email: not null, EmailVerifiedAt: null } credential) return false;
-        await IssueAsync(credential, AccountEmailPurpose.Verification, VerificationLifetime, cancellationToken);
+        await IssueAsync(credential, AccountEmailPurpose.Verification, VerificationLifetime, cancellationToken, language);
         return true;
     }
 
@@ -63,12 +64,12 @@ public sealed class AccountEmailService(IIdentityStore store, IAccountMailer mai
         return (completed ? PasswordResetResult.Completed : PasswordResetResult.InvalidToken, null);
     }
 
-    private async Task IssueAsync(PasswordCredential credential, AccountEmailPurpose purpose, TimeSpan lifetime, CancellationToken cancellationToken)
+    private async Task IssueAsync(PasswordCredential credential, AccountEmailPurpose purpose, TimeSpan lifetime, CancellationToken cancellationToken, string? language)
     {
         var secret = Base64Url(RandomNumberGenerator.GetBytes(32));
         var now = time.GetUtcNow();
         await store.IssueEmailTokenAsync(new AccountEmailToken(Guid.NewGuid(), credential.UserId, purpose, Hash(secret), credential.NormalizedEmail!, now, now + lifetime), cancellationToken);
-        mailer.Enqueue(new AccountMail(credential.Email!, purpose == AccountEmailPurpose.PasswordReset ? AccountMailKind.PasswordReset : AccountMailKind.Verification, secret));
+        mailer.Enqueue(new AccountMail(credential.Email!, purpose == AccountEmailPurpose.PasswordReset ? AccountMailKind.PasswordReset : AccountMailKind.Verification, secret, language));
     }
 
     private static string Hash(string token) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));

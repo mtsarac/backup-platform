@@ -28,6 +28,8 @@ public sealed class NotificationDeliverySmokeIntegrationTests : IAsyncLifetime
     private BackupStoreHarness Kit => _world.Quota.Harness;
     private DateTimeOffset Now => _world.Clock.GetUtcNow();
 
+    private static string Subject(string raw) => MimeKit.MimeMessage.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(raw))).Subject ?? "";
+
     private async Task<StoreAgent> OfflineAgentTenantAsync(TestSmtpServer smtp, TestHttpsServer hook, string[]? types = null, int perHour = 30)
     {
         var agent = await Kit.AddAgentAsync();
@@ -61,7 +63,7 @@ public sealed class NotificationDeliverySmokeIntegrationTests : IAsyncLifetime
 
         // The mailbox has its message; the endpoint was down: one failed attempt, scheduled for later, not hammered.
         Assert.Single(smtp.Messages);
-        Assert.Contains("Subject: [Backup Platform] Agent offline", smtp.Messages[0]);
+        Assert.Contains("Yedekleme bilgisayarı çevrimdışı", Subject(smtp.Messages[0]));
         Assert.Single(hook.Requests);
         var pending = (await _world.DeliveriesAsync(agent.TenantId)).Single(delivery => delivery.ChannelKind == NotificationChannelKind.Webhook);
         Assert.Equal((NotificationDeliveryStatus.Pending, 1, "http_503"), (pending.Status, pending.AttemptCount, pending.ErrorCode));
@@ -90,7 +92,7 @@ public sealed class NotificationDeliverySmokeIntegrationTests : IAsyncLifetime
         await _world.DeliverAsync();
 
         Assert.Equal(2, smtp.Messages.Count);
-        Assert.Contains("Agent back online", smtp.Messages[1]);
+        Assert.Contains("Yedekleme bilgisayarı yeniden çevrimiçi", Subject(smtp.Messages[1]));
         Assert.Equal("recovered", System.Text.Json.JsonDocument.Parse(hook.Requests[^1].Body).RootElement.GetProperty("phase").GetString());
         var history = await _world.Admin().ListDeliveriesAsync(agent.TenantId, null, null, null, new ListQuery(), default);
         Assert.Equal(4, history.TotalCount);

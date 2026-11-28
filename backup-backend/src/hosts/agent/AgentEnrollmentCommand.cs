@@ -6,6 +6,7 @@ internal static class AgentEnrollmentCommand
 {
     internal static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
+        AgentText.ConfigureFrom(args);
         try
         {
             var options = Parse(args);
@@ -17,7 +18,7 @@ internal static class AgentEnrollmentCommand
             var interactive = !options.ContainsKey("--non-interactive");
             if (interactive && server is null)
             {
-                Console.Write("HTTPS backend address: ");
+                Console.Write(AgentText.Get(AgentMessage.PromptServer));
                 server = Console.ReadLine();
             }
             var uri = AgentEnrollment.ValidateServer(server);
@@ -39,7 +40,7 @@ internal static class AgentEnrollmentCommand
             var store = AgentCredentialStoreFactory.Create(directory);
             using var http = CreateHttpClient();
             var identity = await new AgentEnrollment(http, store).EnrollAsync(uri, token!, name, cancellationToken).ConfigureAwait(false);
-            Console.WriteLine($"Enrollment verified for agent {identity.AgentId:D}. Identity saved securely. Start this host with the same service account and store directory to connect.");
+            Console.WriteLine(AgentText.Format(AgentMessage.EnrollmentVerified, identity.AgentId));
             return 0;
         }
         catch (Exception exception) when (exception is AgentEnrollmentException or AgentCredentialStoreException or ArgumentException
@@ -50,7 +51,7 @@ internal static class AgentEnrollmentCommand
         }
         catch (OperationCanceledException)
         {
-            Console.Error.WriteLine("Enrollment was cancelled. If submitted, the token may have been consumed; check the wizard. Any saved identity was preserved.");
+            Console.Error.WriteLine(AgentText.Get(AgentMessage.EnrollmentCancelled));
             return 1;
         }
     }
@@ -60,7 +61,7 @@ internal static class AgentEnrollmentCommand
     internal static string SafeError(Exception exception) => exception switch
     {
         AgentEnrollmentException or AgentCredentialStoreException => exception.Message,
-        _ => "The secure enrollment store could not be used. Check the absolute store path, ownership and permissions. No existing identity was replaced."
+        _ => AgentText.Get(AgentMessage.StoreUnusable)
     };
 
     internal static Dictionary<string, string?> Parse(string[] args)
@@ -71,13 +72,17 @@ internal static class AgentEnrollmentCommand
             var key = args[index];
             if (key is "--non-interactive" or "--console")
             {
-                if (!options.TryAdd(key, null)) { throw new AgentEnrollmentException("Duplicate enrollment option."); }
+                if (!options.TryAdd(key, null)) { throw new AgentEnrollmentException(AgentText.Get(AgentMessage.DuplicateOption)); }
                 continue;
             }
-            if (key is not ("--server" or "--token" or "--name" or "--store-directory") || index + 1 == args.Length
+            if (key is not ("--server" or "--token" or "--name" or "--store-directory" or "--language") || index + 1 == args.Length
                 || args[index + 1].StartsWith("--", StringComparison.Ordinal) || !options.TryAdd(key, args[++index]))
             {
-                throw new AgentEnrollmentException("Usage: enroll --server https://backend/ [--token TOKEN] [--name NAME] [--store-directory ABSOLUTE_PATH] [--non-interactive] [--console].");
+                throw new AgentEnrollmentException(AgentText.Get(AgentMessage.EnrollUsage));
+            }
+            if (key == "--language" && options[key] is not ("tr" or "en"))
+            {
+                throw new AgentEnrollmentException(AgentText.Get(AgentMessage.EnrollUsage));
             }
         }
         return options;
@@ -87,9 +92,9 @@ internal static class AgentEnrollmentCommand
     {
         if (Console.IsInputRedirected)
         {
-            throw new AgentEnrollmentException("Token prompting requires a terminal. Supply --token with --non-interactive instead.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.TokenPromptNeedsTerminal));
         }
-        Console.Write("Enrollment token (hidden): ");
+        Console.Write(AgentText.Get(AgentMessage.PromptToken));
         var characters = new List<char>();
         while (true)
         {

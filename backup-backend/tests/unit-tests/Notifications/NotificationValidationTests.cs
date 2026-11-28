@@ -98,7 +98,7 @@ public sealed class NotificationValidationTests
 
         Assert.DoesNotContain('\r', message.Subject);
         Assert.DoesNotContain('\n', message.Subject);
-        Assert.Contains("disk_full", message.Text);
+        Assert.DoesNotContain("disk_full", message.Text);
         Assert.True(message.Short.Length <= 160);
         Assert.DoesNotContain("evil@example.com\n", message.Text);
     }

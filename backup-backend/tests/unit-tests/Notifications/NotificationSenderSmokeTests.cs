@@ -249,9 +249,9 @@ public sealed class SmtpDeliverySmokeTests
         Assert.Equal(SendStatus.Sent, outcome.Status);
         var message = Assert.Single(server.Messages);
         Assert.Contains("To: ops@example.com", message);
-        Assert.Contains("Subject: [Backup Platform] Backup failed: nightly", message);
+        Assert.Equal("[Backup Platform] Yedekleme başarısız: nightly", Parse(message).Subject);
         Assert.Contains($"Message-Id: <{work.DeliveryId:N}@example.com>", message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("disk_full", message);
+        Assert.Contains("depolamada yeterli boş alan yok", Parse(message).TextBody);
         Assert.Contains("Auto-Submitted: auto-generated", message);
     }
 
@@ -291,7 +291,7 @@ public sealed class SmtpDeliverySmokeTests
 
         Assert.Equal(SendStatus.Sent, outcome.Status);
         var message = Parse(Assert.Single(server.Messages));
-        Assert.Equal("[Backup Platform] Confirm your email address", message.Subject);
+        Assert.Equal("[Backup Platform] E-posta adresinizi doğrulayın", message.Subject);
         Assert.DoesNotContain("bank", message.TextBody);
         // The link a person opens keeps its token in the fragment (never sent to a server, so in no access log); the body has no query-string token at all.
         Assert.DoesNotContain("?token=", message.TextBody);

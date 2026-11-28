@@ -158,6 +158,21 @@ const dictionary = {
     Failed: { level: 'urgent', get label() { return tx("Başarısız · Failed") } },
     NotRun: { level: 'neutral', get label() { return tx("Çalışmadı · NotRun") } },
   },
+  backupType: {
+    Full: { level: 'neutral', get label() { return tx("Tam yedekleme") } },
+    Differential: { level: 'neutral', get label() { return tx("Fark yedeklemesi") } },
+    Log: { level: 'neutral', get label() { return tx("İşlem günlüğü yedeklemesi") } },
+  },
+  verificationMethod: {
+    ReadBack: { level: 'neutral', get label() { return tx("Geri okuma") } },
+    ServerSideChecksum: { level: 'neutral', get label() { return tx("Sunucu tarafı sağlama toplamı") } },
+    ObjectMissing: { level: 'neutral', get label() { return tx("Nesne bulunamadı") } },
+  },
+  engine: {
+    mssql: { level: 'neutral', label: 'SQL Server' },
+    postgres: { level: 'neutral', label: 'PostgreSQL' },
+    'file-system': { level: 'neutral', get label() { return tx("Dosya / Klasör") } },
+  },
   connectionTest: {
     Succeeded: { level: 'safe', get label() { return tx("Başarılı") } },
     Failed: { level: 'urgent', get label() { return tx("Başarısız") } },

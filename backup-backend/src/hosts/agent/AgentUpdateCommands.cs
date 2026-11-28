@@ -64,9 +64,9 @@ public static class AgentUpdateCommands
                 }
             }
         }
-        catch (Exception exception)
+        catch (Exception)
         {
-            Console.Error.WriteLine("Agent update failed (" + exception.GetType().Name + "). Previous identity and configuration were preserved.");
+            Console.Error.WriteLine(AgentText.Get(AgentMessage.UpdateFailed));
             Environment.ExitCode = 1;
         }
         return true;
