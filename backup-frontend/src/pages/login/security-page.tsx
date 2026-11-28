@@ -270,7 +270,6 @@ export function SecurityPage() {
           title={tx('İki faktörlü doğrulamayı kaldır')}
           description={tx('Güvenlik doğrulaması için mevcut şifrenizi veya geçerli bir TOTP kodunu girin.')}
           submitLabel={tx('Kaldır')}
-          destructive
           pendingLabel={tx('Kaldırılıyor...')}
           pending={removePending}
           error={removeError}
