@@ -45,7 +45,7 @@ export function PlatformPlansPage() {
     { key: 'storageLimitBytes', sortable: true, header: tx('Depolama limiti'), render: (plan) => formatGb(plan.storageLimitBytes) },
     { key: 'tenantCount', sortable: true, header: tx('Çalışma alanı sayısı'), render: (plan) => plan.tenantCount },
     { key: 'createdAt', sortable: true, header: tx('Oluşturulma'), render: (plan) => formatDateTime(plan.createdAt) },
-    { key: 'technical', header: tx('Teknik ayrıntılar'), wrap: true, render: (plan) => <TechnicalDetails items={[
+    { key: 'technical', header: tx('Teknik ayrıntılar'), selfLabeled: true, wrap: true, render: (plan) => <TechnicalDetails items={[
       { label: tx("Plan kimliği"), value: plan.planId },
       { label: tx("Limit (bayt)"), value: plan.storageLimitBytes === null ? '—' : String(plan.storageLimitBytes) },
       { label: tx("Politika referansı"), value: plan.quotaPolicyReference ?? '—' },

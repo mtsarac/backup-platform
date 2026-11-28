@@ -51,7 +51,9 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
   const agent = query.data
   const crumbs = [{ label: tx("Yedekleme bilgisayarları"), to: `/tenants/${tenantId}/agents` }, { label: agent?.hostName ?? tx('Adsız bilgisayar') }]
   return <div className="space-y-6">
-    {!id ? <><PageHeader title={tx("Yedekleme bilgisayarı bulunamadı")} crumbs={crumbs} /><ErrorNotice {...notFound(tx("Yedekleme bilgisayarı bulunamadı."))} /></> : <QueryState isPending={query.isPending} error={query.error}>
+    {!id ? <><PageHeader title={tx("Yedekleme bilgisayarı bulunamadı")} crumbs={crumbs} /><ErrorNotice {...notFound(tx("Yedekleme bilgisayarı bulunamadı."))} /></> : <>
+      {!agent && <PageHeader title={tx("Yedekleme bilgisayarı")} crumbs={crumbs.slice(0, 1)} />}
+      <QueryState isPending={query.isPending} error={query.error} notFound={{ backTo: `/tenants/${tenantId}/agents`, backLabel: tx("Yedekleme bilgisayarları") }}>
       {agent && <>
         <PageHeader crumbs={crumbs} title={agent.hostName ?? tx('Adsız bilgisayar')}
           description={<>{tx("Son görülme")}: {agent.lastSeenAt ? agent.status === 'Revoked' ? formatDateTime(agent.lastSeenAt) : <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
@@ -65,7 +67,7 @@ function AgentDetailContent({ tenantId, id }: { tenantId: string; id: string }) 
         <AgentTechnicalDetails agent={agent} />
         <AgentLogs tenantId={tenantId} agentId={id} />
       </>}
-    </QueryState>}
+    </QueryState></>}
     <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={tx("Bilgisayar kaydı iptal edilsin mi?")}
       consequence={{
         what: tx("Bu yedekleme bilgisayarı artık bu çalışma alanına bağlanamaz."),
@@ -105,7 +107,7 @@ function AgentJobs({ agentId }: { agentId: string }) {
   return <Section title={tx("Bu bilgisayarın yedekleme işleri")} flush>
     <QueryState isPending={jobs.isPending} error={jobs.error}>
       <div className="space-y-4">
-        {rows.length > 10 && <ListToolbar state={state} label={tx('İş filtreleri')} total={list.total} search={{ label: tx('Yedekleme işi ara') }} />}
+        {rows.length > 10 && <ListToolbar state={state} label={tx('İş filtreleri')} total={list.total} search={{ label: tx('Yedekleme işi ara'), placeholder: tx('Yedekleme işi adı') }} />}
         <DataList rows={list.rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={state.filtering ? tx('Aramanızla eşleşen iş yok.') : tx("Bu bilgisayar için tanımlı yedekleme işi yok.")} onClearFilters={state.filtering ? state.clear : undefined} sort={sortProps(state)} className="rounded-none border-0" />
       </div>
     </QueryState>

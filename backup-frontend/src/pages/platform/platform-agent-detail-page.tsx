@@ -18,10 +18,10 @@ export function PlatformAgentDetailPage() {
   const query = usePlatformAgent(tenantId, agentId)
   const agent = query.data
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb, { label: tx('Yedekleme bilgisayarları'), to: platformPaths.agents() }]} title={agent?.hostName ?? (query.isPending ? tx('Yedekleme bilgisayarı') : tx('Adsız bilgisayar'))}
+    <PageHeader crumbs={[platformCrumb, { label: tx('Yedekleme bilgisayarları'), to: platformPaths.agents() }]} title={agent ? agent.hostName ?? tx('Adsız bilgisayar') : tx('Yedekleme bilgisayarı')}
       description={agent && <>{tx("Çalışma alanı:")}{' '}<Link className={linkClass} to={platformPaths.tenant(agent.tenantId)}>{agent.tenantName}</Link>{' · '}<span>{tx("Son görülme")}{': '}{agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</span></>}
       meta={agent && <><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>} />
-    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error} notFound={{ backTo: platformPaths.agents(), backLabel: tx('Yedekleme bilgisayarları') }}>
       {agent && <AgentTechnicalDetails agent={agent} />}
     </QueryState>
   </div>

@@ -17,9 +17,9 @@ function pageCount(totalCount: number, pageSize: number) {
 export function Pagination({ page, pageSize, totalCount, onPageChange, disabled = false, label = tx('Sayfalama') }: PaginationProps) {
   useLanguage()
   const lastPage = pageCount(totalCount, pageSize)
-  if (lastPage === 1) return <nav aria-label={label} className="text-sm text-text-muted">{totalCount}{' '}{tx("kayıt")}</nav>
+  if (lastPage === 1) return <nav aria-label={label} className="text-sm text-text-muted">{tx("{0} kayıt", { '0': totalCount })}</nav>
   return <nav aria-label={label} className="flex flex-wrap items-center justify-between gap-3 text-sm">
-    <span className="text-text-muted">{totalCount}{' '}{tx("kayıt · Sayfa")}{' '}{page} / {lastPage}</span>
+    <span className="text-text-muted">{tx("{0} kayıt · Sayfa {1} / {2}", { '0': totalCount, '1': page, '2': lastPage })}</span>
     <div className="flex gap-2">
       <Button variant="outline" disabled={disabled || page <= 1} onClick={() => onPageChange(page - 1)}>{tx("Önceki")}</Button>
       <Button variant="outline" disabled={disabled || page >= lastPage} onClick={() => onPageChange(page + 1)}>{tx("Sonraki")}</Button>

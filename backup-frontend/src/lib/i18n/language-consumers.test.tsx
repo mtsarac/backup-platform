@@ -40,3 +40,16 @@ describe('Language consumers', () => {
     expect(document.documentElement.lang).toBe('tr')
   })
 })
+
+describe('English plurals', () => {
+  it('uses the singular form only for exactly one', async () => {
+    const { changeLanguage, tx } = await import('@/lib/i18n/runtime')
+    changeLanguage('en')
+    try {
+      expect(tx('{0} kopya', { '0': 1 })).toBe('1 copy')
+      expect(tx('{0} kopya', { '0': 2 })).toBe('2 copies')
+      expect(tx('{0} kayıt', { '0': 0 })).toBe('0 records')
+      expect(tx('{0}. deneme', { '0': 1 })).toBe('Attempt 1')
+    } finally { changeLanguage('tr') }
+  })
+})

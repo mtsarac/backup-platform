@@ -44,7 +44,7 @@ export function PlatformAgentsPage() {
   ]
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Yedekleme bilgisayarları")} description={tx("Tüm çalışma alanlarındaki yedekleme bilgisayarları ve çevrimiçi olup olmadıkları. Bu görünüm salt okunurdur.")} />
-    <ListToolbar state={state} label={tx('Bilgisayar filtreleri')} total={data?.totalCount} search={{ label: tx('Bilgisayar ara'), placeholder: tx('Bilgisayar veya çalışma alanı adı') }}>
+    <ListToolbar state={state} label={tx('Bilgisayar filtreleri')} total={data?.totalCount} search={{ label: tx('Bilgisayar ara'), placeholder: tx('Bilgisayar veya çalışma alanı') }}>
       <TenantPicker value={tenantId} onChange={(value) => state.setFilter('tenantId', value)} />
       <FilterField label={tx("Bağlantı")}><Select className="text-sm" value={connectivity} onChange={(event) => state.setFilter('connectivity', event.target.value)}><option value="">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></Select></FilterField>
       <FilterField label={tx("Kayıt durumu")}><Select className="text-sm" value={status} onChange={(event) => state.setFilter('status', event.target.value)}><option value="">{tx("Tümü")}</option><option value="PendingEnrollment">{tx("Kayıt bekliyor")}</option><option value="Active">{tx("Etkin")}</option><option value="Disabled">{tx("Devre dışı")}</option><option value="Revoked">{tx("İptal edildi")}</option></Select></FilterField>

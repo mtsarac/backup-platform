@@ -71,7 +71,7 @@ export function BackupsPage() {
   return (
     <div className={id ? 'grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : undefined}>
       <div className={`min-w-0 space-y-6 ${id ? 'hidden md:block' : ''}`}>
-      <ListToolbar state={state} label={tx("Yedekleme filtreleri")} total={backups.data?.totalCount} search={{ label: tx('Ara') }}>
+      <ListToolbar state={state} label={tx("Yedekleme filtreleri")} total={backups.data?.totalCount} search={{ label: tx('Ara'), placeholder: tx('İş, bilgisayar veya veritabanı') }}>
         <FilterField label={tx("Durum")}>
           <Select aria-label={tx("Durum")} value={status} onChange={(event) => state.setFilter('status', event.target.value)}>
             <option value="">{tx("Tüm durumlar")}</option>

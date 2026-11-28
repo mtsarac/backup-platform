@@ -149,7 +149,7 @@ export function UploadBandwidthPage() {
         {tab === 'agents' && <QueryState isPending={agents.isPending} error={agents.error}>
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-text-heading">{tx("Yedekleme bilgisayarı sınırları")}</h2>
-            <ListToolbar state={agentState} label={tx('Bilgisayar filtreleri')} total={agentList.total} search={{ label: tx('Yedekleme bilgisayarı ara') }} />
+            <ListToolbar state={agentState} label={tx('Bilgisayar filtreleri')} total={agentList.total} search={{ label: tx('Yedekleme bilgisayarı ara'), placeholder: tx('Bilgisayar adı') }} />
             <DataList rows={agentList.rows} columns={agentColumns} keyExtractor={agent => agent.agentId} sort={sortProps(agentState)} emptyMessage={tx("Yedekleme bilgisayarı bulunamadı.")} onClearFilters={agentState.filtering ? agentState.clear : undefined} />
             <ListPager state={agentState} total={agentList.total} label={tx('Bilgisayar sayfaları')} />
             <TechnicalDetails items={(agents.data ?? []).flatMap(agent => exactLimit(agent.hostName || agent.agentId, agentLimits.get(agent.agentId)))} />
@@ -158,7 +158,7 @@ export function UploadBandwidthPage() {
         {tab === 'jobs' && <QueryState isPending={jobs.isPending} error={jobs.error}>
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-text-heading">{tx("Yedekleme işi sınırları")}</h2>
-            <ListToolbar state={jobState} label={tx('İş filtreleri')} total={jobList.total} search={{ label: tx('Yedekleme işi ara') }} />
+            <ListToolbar state={jobState} label={tx('İş filtreleri')} total={jobList.total} search={{ label: tx('Yedekleme işi ara'), placeholder: tx('İş veya bilgisayar adı') }} />
             <DataList rows={jobList.rows} columns={jobColumns} keyExtractor={job => job.id} sort={sortProps(jobState)} emptyMessage={tx("Yedekleme işi bulunamadı.")} onClearFilters={jobState.filtering ? jobState.clear : undefined} />
             <ListPager state={jobState} total={jobList.total} label={tx('Yedekleme işi sayfaları')} />
             <TechnicalDetails items={(jobs.data ?? []).flatMap(job => exactLimit(job.name, jobLimits.get(job.id)))} />

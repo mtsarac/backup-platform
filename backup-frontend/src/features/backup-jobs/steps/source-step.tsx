@@ -134,12 +134,12 @@ export function SourceStep({ form }: { form: JobFormState }) {
         </div>}
       </FormGrid>
     </Question>
-    {manual ? <Question title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
+    {manual ? <Question lead={false} title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
       <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => set({ sourceMode: 'discovery' })}>{tx("Otomatik keşiften seç")}</Button>
       <EngineGroup engine={configuration.engine} onEngine={form.changeEngine} />
       {isFiles ? <FileSourceGroup key={configuration.engine} {...group} /> : <DatabaseSourceGroup key={configuration.engine} {...group} />}
     </Question>
-    : <Question title={tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
+    : <Question lead={false} title={tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
       {picked ? <DiscoveredSource form={form} /> : <DiscoverySourceChoice form={form} />}
       {sourceError && <p role="alert" className="mt-3 text-sm text-error">{sourceError}</p>}
     </Question>}

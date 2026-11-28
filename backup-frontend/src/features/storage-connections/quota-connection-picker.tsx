@@ -28,7 +28,7 @@ export function QuotaConnectionPicker({ values, onChange, invalid }: { values: r
   }
 
   return <div className="space-y-2">
-    <ListToolbar state={state} label={tx("Depolama bağlantıları filtreleri")} search={{ label: tx("Tenant veya bağlantı adı ara") }} />
+    <ListToolbar state={state} label={tx("Depolama bağlantıları filtreleri")} search={{ label: tx("Tenant veya bağlantı adı ara"), placeholder: tx("Tenant veya bağlantı adı") }} />
     <fieldset className="space-y-2" aria-invalid={invalid}>
       <legend className="text-xs text-text-muted">{tx("Depolama bağlantıları listesi")}</legend>
       {values.map((id, index) => {

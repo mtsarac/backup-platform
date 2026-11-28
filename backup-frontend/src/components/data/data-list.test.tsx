@@ -64,14 +64,23 @@ describe('DataList', () => {
 
   it('keeps the first three fields visible and puts remaining fields into an accessible details section', () => {
     setViewport(false)
-    const many: Column<Job>[] = [...columns.slice(0, 5), { key: 'extra', header: 'Fazladan', render: () => 'ekstra değer' }]
+    const many: Column<Job>[] = [...columns.slice(0, 5), { key: 'extra', header: 'Fazladan', render: () => 'ekstra değer' }, { key: 'extra2', header: 'Daha fazla', render: () => 'ikinci değer' }]
     render(<DataList rows={jobs} columns={many} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
     const first = within(screen.getAllByRole('listitem')[0])
     // Primary fields are immediately present
-    expect(first.getAllByRole('term')).toHaveLength(4) // 3 primary terms + 1 secondary inside details
+    expect(first.getAllByRole('term')).toHaveLength(5) // 3 primary terms + 2 secondary inside details
     expect(first.getByText('Fazladan')).toBeInTheDocument()
     expect(first.getByText('ekstra değer')).toBeInTheDocument()
     expect(first.getByText(/Diğer detaylar/)).toBeInTheDocument()
+  })
+
+  it('shows a lone extra field instead of hiding it in a disclosure', () => {
+    setViewport(false)
+    const one: Column<Job>[] = [...columns.slice(0, 5), { key: 'extra', header: 'Fazladan', render: () => 'ekstra değer' }]
+    render(<DataList rows={jobs} columns={one} keyExtractor={job => job.id} emptyMessage="Hiç iş yok." />)
+    const first = within(screen.getAllByRole('listitem')[0])
+    expect(first.getByText('ekstra değer')).toBeInTheDocument()
+    expect(first.queryByText(/Diğer detaylar/)).not.toBeInTheDocument()
   })
 
   it('leaves columns marked hidden out of cards', () => {

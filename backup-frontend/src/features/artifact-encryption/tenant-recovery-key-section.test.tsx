@@ -31,9 +31,11 @@ describe('tenant recovery public key', () => {
 
   it('platform view keeps the platform-key warning and states the RSA4096 requirement', () => {
     mount(makeTenantEncryption({ platformRecovery: { configured: false, keyId: null, keyVersion: null } }), true)
+    expect(screen.getByRole('heading', { name: 'Çalışma alanı yedeklerinin şifreleme koruması' })).toBeInTheDocument()
+    expect(screen.getByText('Kurtarma anahtarı eklenmemiş')).toBeInTheDocument()
     expect(screen.getByText(/Platform kurtarma anahtarı yapılandırılmamış/)).toBeInTheDocument()
     expect(screen.getByLabelText('Genel anahtar (PEM)')).not.toBeVisible()
-    fireEvent.click(screen.getByText('Kendi anahtarınızı ekleyin veya değiştirin'))
+    fireEvent.click(screen.getByText('Kurtarma anahtarını ekleyin veya değiştirin'))
     expect(screen.getByText(/en az 4096 bit/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Anahtarı kaydet' })).toBeDisabled()
   })

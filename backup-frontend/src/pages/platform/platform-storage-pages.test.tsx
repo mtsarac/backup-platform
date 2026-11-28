@@ -99,7 +99,6 @@ describe('Platform Storage Usage Page states and operations', () => {
     expect(within(list).queryByText('policy-1')).not.toBeInTheDocument()
     await userEvent.click(within(list).getByRole('button', { name: 'Teknik ayrıntılar' }))
     expect(within(list).getByRole('region', { name: 'Teknik ayrıntılar' })).toHaveTextContent('policy-1')
-    await userEvent.click(within(list).getByText('İşlemler', { selector: 'summary' }))
     expect(within(list).getByRole('button', { name: 'Baştan hesapla' })).toBeInTheDocument()
   })
 
@@ -159,8 +158,7 @@ describe('Platform Storage Usage Page states and operations', () => {
 
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
     expect(await screen.findByRole('link', { name: 'Acme Corp' })).toBeInTheDocument()
-    expect(screen.getByText('Kullanımı doğrula', { selector: 'button' })).not.toBeVisible()
-    await userEvent.click(screen.getByText('İşlemler', { selector: 'summary' }))
+    expect(screen.getByText('Kullanımı doğrula', { selector: 'button' })).toBeVisible()
 
     const reconcileBtn = screen.getByRole('button', { name: "Kullanımı doğrula" })
     fireEvent.click(reconcileBtn)
@@ -193,7 +191,6 @@ describe('Platform Storage Usage Page states and operations', () => {
 
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
     expect(await screen.findByRole('link', { name: 'Acme Corp' })).toBeInTheDocument()
-    await userEvent.click(screen.getByText('İşlemler', { selector: 'summary' }))
 
     const rebuildBtn = screen.getByRole('button', { name: "Baştan hesapla" })
     fireEvent.click(rebuildBtn)
