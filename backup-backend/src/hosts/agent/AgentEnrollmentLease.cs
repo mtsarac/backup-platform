@@ -23,25 +23,25 @@ internal static class AgentEnrollmentLease
             var info = new DirectoryInfo(directory);
             if (info.LinkTarget is not null)
             {
-                throw new AgentCredentialStoreException("The enrollment directory must not be a symbolic link.");
+                throw new AgentCredentialStoreException(AgentText.Get(AgentMessage.DirectoryIsLink));
             }
             Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             if ((File.GetUnixFileMode(directory) & (UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute
                 | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute)) != 0)
             {
-                throw new AgentCredentialStoreException("The enrollment directory must be owner-only (mode 0700).");
+                throw new AgentCredentialStoreException(AgentText.Get(AgentMessage.DirectoryNotOwnerOnly));
             }
 #endif
             var path = Path.Combine(directory, ".enrollment.lock");
             if (new FileInfo(path).LinkTarget is not null || (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0))
             {
-                throw new AgentCredentialStoreException("The enrollment lock must not be a link.");
+                throw new AgentCredentialStoreException(AgentText.Get(AgentMessage.LockIsLink));
             }
             var options = new FileStreamOptions { Mode = FileMode.OpenOrCreate, Access = FileAccess.ReadWrite, Share = FileShare.None };
 #if AGENT_PLATFORM_LINUX
             if (File.Exists(path) && File.GetUnixFileMode(path) != (UnixFileMode.UserRead | UnixFileMode.UserWrite))
             {
-                throw new AgentCredentialStoreException("The enrollment lock must be an owner-only regular file (mode 0600).");
+                throw new AgentCredentialStoreException(AgentText.Get(AgentMessage.LockNotOwnerOnly));
             }
             options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
 #endif
@@ -49,11 +49,11 @@ internal static class AgentEnrollmentLease
         }
         catch (IOException)
         {
-            throw new AgentEnrollmentException("Another enrollment is in progress, or the secure store cannot be locked. No token was submitted.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.EnrollmentBusy));
         }
         catch (UnauthorizedAccessException)
         {
-            throw new AgentCredentialStoreException("Access to the enrollment store was denied. Run as the agent's service account or choose an owner-only store directory.");
+            throw new AgentCredentialStoreException(AgentText.Get(AgentMessage.StoreAccessDenied));
         }
     }
 }

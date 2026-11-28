@@ -46,7 +46,7 @@ internal sealed class WindowsEnrollmentWorker(string requestPath, string storeDi
             if (string.IsNullOrEmpty(input.Token))
             {
                 var identity = await store.LoadAsync(stoppingToken).ConfigureAwait(false)
-                    ?? throw new AgentEnrollmentException("No saved identity exists. Supply an enrollment token or run the installer interactively.");
+                    ?? throw new AgentEnrollmentException(AgentText.Get(AgentMessage.ServiceIdentityMissing));
                 await enrollment.VerifyAsync(identity, stoppingToken).ConfigureAwait(false);
             }
             else
@@ -54,13 +54,13 @@ internal sealed class WindowsEnrollmentWorker(string requestPath, string storeDi
                 await enrollment.EnrollAsync(AgentEnrollment.ValidateServer(input.Server), input.Token, input.Name, stoppingToken).ConfigureAwait(false);
             }
             success = true;
-            message = "The service identity was loaded and verified successfully.";
+            message = AgentText.Get(AgentMessage.ServiceIdentityVerified);
         }
         catch (Exception exception) when (exception is AgentEnrollmentException or AgentCredentialStoreException or ArgumentException
             or IOException or UnauthorizedAccessException or CryptographicException or JsonException or OperationCanceledException)
         {
             message = exception is CryptographicException or JsonException or OperationCanceledException
-                ? "The protected enrollment request could not be read, or enrollment was cancelled. Any existing identity was preserved."
+                ? AgentText.Get(AgentMessage.ServiceRequestUnreadable)
                 : AgentEnrollmentCommand.SafeError(exception);
         }
         finally
@@ -99,7 +99,7 @@ internal sealed class WindowsEnrollmentWorker(string requestPath, string storeDi
                 if (rule.AccessControlType == AccessControlType.Allow && (rule.IdentityReference is not SecurityIdentifier sid
                     || (sid != service && sid != system && sid != admins)))
                 {
-                    throw new AgentEnrollmentException("The enrollment staging permissions admit an untrusted account.");
+                    throw new AgentEnrollmentException(AgentText.Get(AgentMessage.StagingPermissionsUntrusted));
                 }
             }
         }

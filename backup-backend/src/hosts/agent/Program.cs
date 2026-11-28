@@ -27,7 +27,7 @@ if (args.FirstOrDefault() == "certificate")
 #if AGENT_PLATFORM_WINDOWS
 if (args.FirstOrDefault() == "--service-enroll")
 {
-    if (args.Length != 3) { Console.Error.WriteLine("Use the Windows Service installer to provision this agent."); Environment.ExitCode = 1; return; }
+    if (args.Length != 3) { Console.Error.WriteLine(AgentText.Get(AgentMessage.ServiceInstallerRequired)); Environment.ExitCode = 1; return; }
     var bootstrap = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { ContentRootPath = AppContext.BaseDirectory });
     bootstrap.Services.AddAgentPlatformHosting();
     bootstrap.Services.AddSingleton<IHostedService>(provider =>

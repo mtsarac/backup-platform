@@ -15,7 +15,7 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
         if (!Uri.TryCreate(server, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps
             || string.IsNullOrEmpty(uri.Host) || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0)
         {
-            throw new AgentEnrollmentException("The server must be an absolute HTTPS address without user information, query or fragment.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.ServerInvalid));
         }
         return new Uri(uri.AbsoluteUri.TrimEnd('/') + "/");
     }
@@ -24,11 +24,11 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
     {
         if (!AgentSecretReference.TryParse(token, out _, out _))
         {
-            throw new AgentEnrollmentException("The enrollment token is malformed. Copy the complete token from the Add agent wizard.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.TokenMalformed));
         }
         if (name is not null && (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name.Any(char.IsControl)))
         {
-            throw new AgentEnrollmentException("The agent name must contain 1–255 characters and no control characters.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.NameInvalid));
         }
     }
 
@@ -39,7 +39,7 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
         ValidateInput(token, name);
         if (await store.LoadAsync(cancellationToken).ConfigureAwait(false) is not null)
         {
-            throw new AgentEnrollmentException("This store is already enrolled. The existing identity was preserved and the token was not used.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.AlreadyEnrolled));
         }
         var software = AgentSoftwareInfo.Detect(typeof(AgentEnrollment).Assembly);
         var installationId = Guid.NewGuid();
@@ -63,7 +63,7 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
             throw new AgentEnrollmentException(MapError(error?.Error, (int)response.StatusCode));
         }
         var enrolled = await ReadAsync<AgentEnrollmentResponse>(response, cancellationToken).ConfigureAwait(false)
-            ?? throw new AgentEnrollmentException("The backend returned an unreadable enrollment response. The token may have been consumed; check the wizard before trying another token.");
+            ?? throw new AgentEnrollmentException(AgentText.Get(AgentMessage.UnreadableEnrollmentResponse));
         AgentLocalIdentity identity;
         try
         {
@@ -73,18 +73,18 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
         }
         catch (ArgumentException)
         {
-            throw new AgentEnrollmentException("The backend returned an invalid identity. Nothing was saved; the token may have been consumed.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.InvalidIdentity));
         }
         AgentLocalIdentity persisted;
         try
         {
             await store.SaveAsync(identity, cancellationToken).ConfigureAwait(false);
             persisted = await store.LoadAsync(cancellationToken).ConfigureAwait(false)
-                ?? throw new AgentEnrollmentException("The saved identity could not be reloaded. The token has been consumed; repair the secure store before retrying.");
+                ?? throw new AgentEnrollmentException(AgentText.Get(AgentMessage.IdentityReloadFailed));
         }
         catch (AgentCredentialStoreException)
         {
-            throw new AgentEnrollmentException("The backend accepted enrollment, but the secure identity could not be saved or reloaded. The token was consumed. Check store ownership, permissions and disk space; any stored identity was preserved.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.IdentitySaveFailed));
         }
         await VerifyAsync(persisted, cancellationToken).ConfigureAwait(false);
         return persisted;
@@ -101,7 +101,7 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
         if (verified is null || verified.AgentId != identity.AgentId || verified.CredentialId != identity.Current.CredentialId
             || verified.CredentialGeneration != identity.Current.Generation || verified.TenantId == Guid.Empty)
         {
-            throw new AgentEnrollmentException("The saved identity could not be verified by the backend. It was preserved; check the backend and secure store, then restart the agent. Do not enroll again.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.IdentityVerifyFailed));
         }
     }
 
@@ -115,16 +115,16 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
         {
             var message = exception.HttpRequestError switch
             {
-                HttpRequestError.SecureConnectionError => "The backend TLS connection failed. Check that its HTTPS certificate is trusted, valid for this server name and not expired.",
-                HttpRequestError.NameResolutionError => "The backend server name could not be resolved. Check the HTTPS address and DNS configuration.",
-                HttpRequestError.ConnectionError => "The HTTPS backend could not be reached. Check the server address, network, firewall and backend availability.",
-                _ => "The HTTPS backend request failed. Check backend availability and the network connection."
+                HttpRequestError.SecureConnectionError => AgentText.Get(AgentMessage.TlsFailed),
+                HttpRequestError.NameResolutionError => AgentText.Get(AgentMessage.NameResolutionFailed),
+                HttpRequestError.ConnectionError => AgentText.Get(AgentMessage.ConnectionFailed),
+                _ => AgentText.Get(AgentMessage.RequestFailed)
             };
-            throw new AgentEnrollmentException(message + " A submitted token may have been consumed; check the wizard before retrying.");
+            throw new AgentEnrollmentException(message + " " + AgentText.Get(AgentMessage.TokenMayBeConsumed));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new AgentEnrollmentException("The backend request timed out. A submitted token may have been consumed; check the wizard before retrying.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.RequestTimedOut));
         }
     }
 
@@ -142,11 +142,11 @@ internal sealed class AgentEnrollment(HttpClient http, IAgentCredentialStore sto
 
     private static string MapError(string? error, int status) => error switch
     {
-        "enrollment_token_expired" => "The enrollment token expired. Generate a new token in the Add agent wizard.",
-        "enrollment_token_consumed" => "The enrollment token was already used. Check the agent in the wizard or generate a new token for another machine.",
-        "invalid_enrollment_token" => "The enrollment token is invalid or revoked. Generate a new token in the Add agent wizard.",
-        "enrollment_disabled" => "Enrollment is disabled for this tenant. Ask your administrator to enable it.",
-        "protocol_incompatible" or "protocol_missing" => "The backend and agent protocol versions are incompatible. Install a compatible agent release.",
-        _ => $"The backend rejected enrollment (HTTP {status}). Check tenant enrollment permissions and use a fresh token."
+        "enrollment_token_expired" => AgentText.Get(AgentMessage.TokenExpired),
+        "enrollment_token_consumed" => AgentText.Get(AgentMessage.TokenConsumed),
+        "invalid_enrollment_token" => AgentText.Get(AgentMessage.TokenInvalid),
+        "enrollment_disabled" => AgentText.Get(AgentMessage.EnrollmentDisabled),
+        "protocol_incompatible" or "protocol_missing" => AgentText.Get(AgentMessage.ProtocolIncompatible),
+        _ => AgentText.Format(AgentMessage.BackendRejected, status)
     };
 }

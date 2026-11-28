@@ -1,4 +1,5 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { statusLabel } from '@/lib/status'
 import { useState } from 'react'
 import { ArrowLeft, History } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -42,8 +43,8 @@ function runTechnicalItems(run: BackupRun): TechnicalItem[] {
     { label: tx("Tetikleyici"), value: triggerLabel(run.triggerType) },
     { label: tx("Planlanan zaman"), value: formatDateTime(run.scheduledFor) },
     { label: tx("Planlama gecikmesi"), value: run.scheduleDelaySeconds == null ? '—' : formatSeconds(run.scheduleDelaySeconds) },
-    { label: tx("Yedek türü"), value: tx(run.backupType) },
-    { label: tx("Veritabanı motoru"), value: run.configuration.engine },
+    { label: tx("Yedek türü"), value: statusLabel('backupType', run.backupType) },
+    { label: tx("Veritabanı motoru"), value: statusLabel('engine', run.configuration.engine) },
     { label: tx("Deneme sayısı"), value: `${run.currentAttemptNumber} / ${retry.maxAttempts}` },
     { label: tx("Oluşturulma"), value: formatDateTime(run.createdAt) },
     { label: tx("Yedekleme bilgisayarı alım son zamanı"), value: formatDateTime(run.claimDeadline) },

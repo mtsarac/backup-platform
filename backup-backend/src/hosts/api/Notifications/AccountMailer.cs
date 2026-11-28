@@ -49,32 +49,53 @@ public sealed class AccountMailer(IServiceScopeFactory scopes, NotificationOptio
     private async Task<SendOutcome> SendAsync(AccountMail mail, CancellationToken cancellationToken)
     {
         if (options.PublicBaseUrl is null) return SendOutcome.Permanent("public_url_not_configured");
-        var (page, subject, text) = mail.Kind == AccountMailKind.PasswordReset
-            ? ("reset-password", "Şifre sıfırlama", "Şifrenizi sıfırlamak için aşağıdaki bağlantıyı açın. Bağlantı 30 dakika geçerlidir ve yalnızca bir kez kullanılabilir. Bu isteği siz yapmadıysanız bu iletiyi yok sayın.")
-            : ("verify-email", "E-posta adresini doğrulama", "E-posta adresinizi doğrulamak için aşağıdaki bağlantıyı açın. Bağlantı 24 saat geçerlidir ve yalnızca bir kez kullanılabilir.");
+        var (page, subject, text) = RenderAccountMail(mail.Kind, NotificationLanguages.Parse(mail.Language));
         return await SubmitAsync(mail.To, subject, $"{text}\n\n{options.PublicBaseUrl.TrimEnd('/')}/{page}?token={mail.Token}", cancellationToken);
     }
 
     public async Task<bool?> SendSecurityNoticeAsync(string to, string eventType, DateTimeOffset occurredAt, CancellationToken cancellationToken)
     {
-        var outcome = await SubmitAsync(to, "Hesap güvenliği bildirimi",
-            $"{SecurityNoticeText(eventType)}\n\nZaman (UTC): {occurredAt.UtcDateTime:yyyy-MM-dd HH:mm}\n\nBu işlemi siz yapmadıysanız şifrenizi değiştirin ve bir Platform Yöneticisine haber verin.", cancellationToken);
+        var (subject, body) = RenderSecurityNotice(eventType, occurredAt, NotificationLanguages.Default);
+        var outcome = await SubmitAsync(to, subject, body, cancellationToken);
         return outcome.Status switch { SendStatus.Sent => true, SendStatus.Retry => null, _ => false };
     }
 
-    private static string SecurityNoticeText(string eventType) => eventType switch
+    public static (string Page, string Subject, string Text) RenderAccountMail(AccountMailKind kind, NotificationLanguage language)
     {
-        NotificationEventTypes.SecurityPasswordChanged => "Hesabınızın şifresi değiştirildi.",
-        NotificationEventTypes.SecurityTemporaryPassword => "Hesabınıza bir yönetici tarafından geçici şifre atandı.",
-        NotificationEventTypes.SecurityPasswordReset => "Hesabınızın şifresi e-posta ile sıfırlandı.",
-        NotificationEventTypes.SecurityAccountDisabled => "Hesabınız devre dışı bırakıldı.",
-        NotificationEventTypes.SecurityAccountEnabled => "Hesabınız yeniden etkinleştirildi.",
-        NotificationEventTypes.SecurityFactorAdded => "Hesabınıza yeni bir ikinci faktör veya geçiş anahtarı eklendi.",
-        NotificationEventTypes.SecurityFactorRemoved => "Hesabınızdan bir ikinci faktör veya geçiş anahtarı kaldırıldı.",
-        NotificationEventTypes.SecurityRecoveryRegenerated => "Hesabınızın kurtarma kodları yeniden oluşturuldu.",
-        NotificationEventTypes.SecurityRecoveryUsed => "Hesabınıza giriş için bir kurtarma kodu kullanıldı.",
-        NotificationEventTypes.SecurityEmailChanged => "Hesabınızın e-posta adresi değiştirildi.",
-        _ => "Hesabınızda şüpheli bir giriş etkinliği algılandı."
+        var tr = language == NotificationLanguage.Turkish;
+        return kind == AccountMailKind.PasswordReset
+            ? ("reset-password", tr ? "Şifre sıfırlama" : "Password reset", tr
+                ? "Şifrenizi sıfırlamak için aşağıdaki bağlantıyı açın. Bağlantı 30 dakika geçerlidir ve yalnızca bir kez kullanılabilir. Bu isteği siz yapmadıysanız bu iletiyi yok sayın."
+                : "Open the link below to reset your password. The link is valid for 30 minutes and can be used only once. If you did not make this request, ignore this message.")
+            : ("verify-email", tr ? "E-posta adresini doğrulama" : "Email address verification", tr
+                ? "E-posta adresinizi doğrulamak için aşağıdaki bağlantıyı açın. Bağlantı 24 saat geçerlidir ve yalnızca bir kez kullanılabilir."
+                : "Open the link below to verify your email address. The link is valid for 24 hours and can be used only once.");
+    }
+
+    public static (string Subject, string Body) RenderSecurityNotice(string eventType, DateTimeOffset occurredAt, NotificationLanguage language)
+    {
+        var tr = language == NotificationLanguage.Turkish;
+        var time = tr ? "Zaman (UTC)" : "Time (UTC)";
+        var advice = tr
+            ? "Bu işlemi siz yapmadıysanız şifrenizi değiştirin ve bir Platform Yöneticisine haber verin."
+            : "If you did not do this, change your password and tell a Platform Administrator.";
+        return (tr ? "Hesap güvenliği bildirimi" : "Account security notice",
+            $"{SecurityNoticeText(eventType, tr)}\n\n{time}: {occurredAt.UtcDateTime:yyyy-MM-dd HH:mm}\n\n{advice}");
+    }
+
+    private static string SecurityNoticeText(string eventType, bool tr) => eventType switch
+    {
+        NotificationEventTypes.SecurityPasswordChanged => tr ? "Hesabınızın şifresi değiştirildi." : "Your account password was changed.",
+        NotificationEventTypes.SecurityTemporaryPassword => tr ? "Hesabınıza bir yönetici tarafından geçici şifre atandı." : "An administrator assigned a temporary password to your account.",
+        NotificationEventTypes.SecurityPasswordReset => tr ? "Hesabınızın şifresi e-posta ile sıfırlandı." : "Your account password was reset by email.",
+        NotificationEventTypes.SecurityAccountDisabled => tr ? "Hesabınız devre dışı bırakıldı." : "Your account was disabled.",
+        NotificationEventTypes.SecurityAccountEnabled => tr ? "Hesabınız yeniden etkinleştirildi." : "Your account was enabled again.",
+        NotificationEventTypes.SecurityFactorAdded => tr ? "Hesabınıza yeni bir ikinci faktör veya geçiş anahtarı eklendi." : "A new second factor or passkey was added to your account.",
+        NotificationEventTypes.SecurityFactorRemoved => tr ? "Hesabınızdan bir ikinci faktör veya geçiş anahtarı kaldırıldı." : "A second factor or passkey was removed from your account.",
+        NotificationEventTypes.SecurityRecoveryRegenerated => tr ? "Hesabınızın kurtarma kodları yeniden oluşturuldu." : "Your account recovery codes were regenerated.",
+        NotificationEventTypes.SecurityRecoveryUsed => tr ? "Hesabınıza giriş için bir kurtarma kodu kullanıldı." : "A recovery code was used to sign in to your account.",
+        NotificationEventTypes.SecurityEmailChanged => tr ? "Hesabınızın e-posta adresi değiştirildi." : "Your account email address was changed.",
+        _ => tr ? "Hesabınızda şüpheli bir giriş etkinliği algılandı." : "Suspicious sign-in activity was detected on your account."
     };
 
     private async Task<SendOutcome> SubmitAsync(string to, string subject, string body, CancellationToken cancellationToken)

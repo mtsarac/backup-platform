@@ -67,6 +67,24 @@ describe('English catalog text', () => {
     const bad = Object.entries(sourceCatalog).filter(([, entry]) => /[ıİşŞğĞ]/.test(entry.en)).map(([key]) => key)
     expect(bad).toEqual([])
   })
+
+  const stopwords = (text: string, list: RegExp) => new Set(text.toLowerCase().match(list) ?? []).size
+  const englishStop = /\b(the|and|was|not|with|for|could|must|your|this|that|from|has|have|cannot|will|please|enter|select|are)\b/g
+  const turkishStop = /\b(ve|veya|bir|bu|için|ile|değil|olarak|daha|gibi|olan|henüz|önce|sonra|tüm|lütfen|girin|seçin)\b/g
+  /** Identical in both languages on purpose: product names, protocols and placeholders. */
+  const sameInBoth = /^(TR|EN|Platform|Windows|Linux|PostgreSQL WAL \/ PITR|Microsoft SQL Server|PostgreSQL|Google Drive|5 GB|Plan|SQL Server|Windows Server 2025|Test|Normal|SFTP|SHA256|STARTTLS|Docker|SMS|mssql|postgres|[{}0-9 .:·–—|/-]+)$/
+
+  it('has no Turkish text that is English, no English text that is Turkish, and no copy-pasted pair', () => {
+    const entries = Object.entries(sourceCatalog)
+    expect(entries.filter(([, v]) => stopwords(v.tr, englishStop) >= 2 && !/[çğıöşüÇĞİÖŞÜ]/.test(v.tr)).map(([k]) => k)).toEqual([])
+    expect(entries.filter(([, v]) => stopwords(v.en, turkishStop) >= 2).map(([k]) => k)).toEqual([])
+    expect(entries.filter(([, v]) => v.tr === v.en && !sameInBoth.test(v.tr)).map(([k]) => k)).toEqual([])
+  })
+
+  it('never shows a raw key or field name (camelCase or snake_case word) as a translation', () => {
+    const raw = Object.entries(sourceCatalog).filter(([, v]) => [v.tr, v.en].some(text => /^[a-z]+(?:[A-Z][a-z0-9]+)+$|^[a-z]+(?:_[a-z0-9]+)+$/.test(text)))
+    expect(raw.map(([k]) => k)).toEqual([])
+  })
 })
 
 describe('i18n source catalog', () => {

@@ -14,7 +14,7 @@ internal static class AgentCredentialStoreFactory
     {
         if (directory is not null && !Path.IsPathFullyQualified(directory))
         {
-            throw new AgentEnrollmentException("The credential store directory must be an absolute path.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.StoreNotAbsolute));
         }
 #if AGENT_PLATFORM_WINDOWS
         return Path.GetFullPath(directory ?? WindowsAgentCredentialStore.DefaultDirectory);

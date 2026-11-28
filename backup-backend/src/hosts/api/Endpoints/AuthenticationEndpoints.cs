@@ -380,7 +380,7 @@ public static class AuthenticationEndpoints
             return Results.Json(new { error = "Too many requests. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
         }
         await throttle.FailedAsync("password-reset", identifier, ip, context.RequestAborted);
-        await service.RequestPasswordResetAsync(identifier, context.RequestAborted);
+        await service.RequestPasswordResetAsync(identifier, context.RequestAborted, context.Request.Headers.AcceptLanguage.ToString());
         return Results.Accepted(null, new { accepted = true });
     }
 
@@ -399,7 +399,7 @@ public static class AuthenticationEndpoints
     {
         if (!BrowserAuthentication.TryGetSession(context.User, out var userId, out _)) return Results.Unauthorized();
         if (!await service.IsAvailableAsync(context.RequestAborted)) return EmailRecoveryUnavailable;
-        return await service.SendVerificationAsync(userId!, context.RequestAborted)
+        return await service.SendVerificationAsync(userId!, context.RequestAborted, context.Request.Headers.AcceptLanguage.ToString())
             ? Results.Accepted(null, new { accepted = true })
             : Results.Conflict(new { error = "email_not_verifiable" });
     }

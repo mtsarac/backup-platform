@@ -143,7 +143,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       <fieldset className="space-y-4">
         <legend className="mb-3 text-sm font-semibold text-text-heading">{tx("Kimlik ve durum")}</legend>
         {!isEditing && <Field label={tx("Politika anahtarı")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")}>
-          {(control) => <TextInput {...control} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder={tx('ornek-politika-key')} />}
+          {(control) => <TextInput {...control} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder={tx('ornek-politika-anahtari')} />}
         </Field>}
         <Field label={tx("Politika adı")}>{(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
         <CheckField label={tx("Etkin politika (planlarda seçilebilir)")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />

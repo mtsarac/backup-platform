@@ -48,7 +48,7 @@ export function SessionsPage() {
       <Card padding="none"><ul className="divide-y divide-border">{sessions.data?.map(session => <li key={session.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
         <div className="min-w-0 space-y-1"><p className="break-words font-semibold text-text-heading">{deviceName(session.device)} {session.isCurrent && <span className="text-sm font-normal text-text-muted">· {tx('Bu oturum')}</span>}</p>
           <p className="break-words text-sm text-text-muted">{tx('IP adresi')}: {session.ipAddress || tx('Bilinmiyor')}</p><p className="text-sm text-text-muted">{tx('Son etkinlik')}: {formatDateTime(session.lastActivityAt)}</p>
-          <TechnicalDetails items={session.device ? [{ label: 'User agent', value: session.device }] : []} /></div>
+          <TechnicalDetails items={session.device ? [{ label: tx('Tarayıcı bilgisi'), value: session.device }] : []} /></div>
         <Button variant="outline" size="sm" disabled={pending} aria-label={actionName(tx("Oturumu sonlandır"), deviceName(session.device))} onClick={() => { setError(null); setSelected(session) }}>{tx('Oturumu sonlandır')}</Button>
       </li>)}</ul></Card>
     </QueryState>

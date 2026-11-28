@@ -20,16 +20,16 @@ internal static class WindowsEnrollmentCommand
         using var account = WindowsIdentity.GetCurrent();
         if (!new WindowsPrincipal(account).IsInRole(WindowsBuiltInRole.Administrator))
         {
-            throw new AgentEnrollmentException("Windows enrollment requires an elevated terminal to install NT SERVICE\\BackupAgent. Run this same enroll command as administrator, or use deploy\\windows\\Install-BackupAgentService.ps1 from elevated PowerShell. No identity was changed.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.WindowsNeedsElevation));
         }
         if (File.Exists(Path.Combine(input.StoreDirectory, "agent-identity.bin")))
         {
-            throw new AgentEnrollmentException("This store is already enrolled. The existing identity was preserved and the token was not used. Reinstall through Install-BackupAgentService.ps1 without EnrollmentToken.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.WindowsAlreadyEnrolled));
         }
         var installer = Path.Combine(AppContext.BaseDirectory, "deploy", "windows", "Install-BackupAgentService.ps1");
         if (!File.Exists(installer))
         {
-            throw new AgentEnrollmentException("The published Windows installer is missing. Use a complete published agent folder containing deploy\\windows\\Install-BackupAgentService.ps1.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.WindowsInstallerMissing));
         }
         // Only this fixed script is on the child command line. The transient token is passed over redirected stdin,
         // then remains a local variable in the installer process; it is not a child argument, environment or registry value.
@@ -37,7 +37,7 @@ internal static class WindowsEnrollmentCommand
             $ErrorActionPreference = 'Stop'
             try {
                 $request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::ReadLine())) | ConvertFrom-Json
-                & $request.installer -BinaryDirectory $request.binaryDirectory -BackendUri $request.server -EnrollmentToken $request.token -AgentName $request.name -StoreDirectory $request.storeDirectory
+                & $request.installer -BinaryDirectory $request.binaryDirectory -BackendUri $request.server -EnrollmentToken $request.token -AgentName $request.name -StoreDirectory $request.storeDirectory -Language $request.language
                 $request = $null
                 exit 0
             } catch {
@@ -62,11 +62,12 @@ internal static class WindowsEnrollmentCommand
             server = input.Server,
             token = input.Token,
             name = input.Name,
-            storeDirectory = input.StoreDirectory
+            storeDirectory = input.StoreDirectory,
+            language = AgentText.Language
         });
         try
         {
-            using var process = Process.Start(start) ?? throw new AgentEnrollmentException("Windows PowerShell could not start the service installer.");
+            using var process = Process.Start(start) ?? throw new AgentEnrollmentException(AgentText.Get(AgentMessage.PowerShellStartFailed));
             await process.StandardInput.WriteLineAsync(Convert.ToBase64String(payload).AsMemory(), cancellationToken).ConfigureAwait(false);
             process.StandardInput.Close();
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
@@ -74,7 +75,7 @@ internal static class WindowsEnrollmentCommand
         }
         catch (Win32Exception)
         {
-            throw new AgentEnrollmentException("Windows PowerShell could not start the service installer. Check the published folder and administrator permissions.");
+            throw new AgentEnrollmentException(AgentText.Get(AgentMessage.PowerShellStartDenied));
         }
         finally
         {
