@@ -2968,7 +2968,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Tümünü okundu işaretle": {"tr":"Tümünü okundu işaretle","en":"Mark all as read"},
   "Bildirimler, {0} okunmamış": {"tr":"Bildirimler, {0} okunmamış","en":"Notifications, {0} unread"},
   "Okunmamış": {"tr":"Okunmamış","en":"Unread"},
-  "Daha eski": {"tr":"Daha eski","en":"Earlier"},
   "Bildirim ayarları": {"tr":"Bildirim ayarları","en":"Notification settings"},
   "Bildirim geçmişi saklama süresi": {"tr":"Bildirim geçmişi saklama süresi","en":"Notification history retention"},
   "Bildirim geçmişi bu süreden sonra silinir; denetim geçmişi etkilenmez.": {"tr":"Bildirim geçmişi bu süreden sonra silinir; denetim geçmişi etkilenmez.","en":"Notification history is deleted after this period; audit history is unaffected."},

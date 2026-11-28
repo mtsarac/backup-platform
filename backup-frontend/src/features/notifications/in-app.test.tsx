@@ -84,7 +84,7 @@ describe('in-app notifications', () => {
     expect(await screen.findByText('Sunucu A')).toBeInTheDocument()
     records = [{ ...first, readAt: '2026-01-01T12:05:00Z' }]
     await user.click(screen.getByRole('button', { name: 'Okundu olarak işaretle: Sunucu A' }))
-    expect(await screen.findByRole('region', { name: 'Daha eski' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Okunmamış')).not.toBeInTheDocument())
     expect(apiRequest).toHaveBeenCalledWith('notifications/in-app/1/read', { method: 'POST' })
     expect(screen.queryByRole('button', { name: /Okundu olarak işaretle/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Tümünü okundu işaretle' })).not.toBeInTheDocument()
@@ -148,25 +148,28 @@ describe('in-app notifications', () => {
     expect(await screen.findByRole('link', { name: 'ProductionDb' })).toHaveAttribute('href', '/platform/shares')
   })
 
-  it('groups unread first by severity, marks all as read, and shows the unread count on the button', async () => {
+  it('lists every notification newest first whatever its type or read state, marks all as read, and shows the unread count', async () => {
     const user = userEvent.setup()
+    const at = (hour: number) => `2026-01-01T${String(hour).padStart(2, '0')}:00:00Z`
     records = [
-      { ...first, id: 'a', type: 'backup_share_created', subjectName: 'Paylasim' },
-      { ...first, id: 'b', type: 'backup_stale', subjectName: 'Eski' },
-      { ...first, id: 'c', type: 'agent_offline', subjectName: 'Kritik' },
-      { ...first, id: 'd', type: 'backup_failed', subjectName: 'Okunmus', readAt: '2026-01-01T12:01:00Z' },
+      { ...first, id: 'a', type: 'backup_share_created', subjectName: 'Paylasim', occurredAt: at(11) },
+      { ...first, id: 'b', type: 'backup_failed', subjectName: 'Okunmus yeni', occurredAt: at(14), readAt: at(15) },
+      { ...first, id: 'c', type: 'backup_stale', subjectName: 'Eski uyari', occurredAt: at(9) },
+      { ...first, id: 'd', type: 'agent_offline', subjectName: 'Kritik', occurredAt: at(12) },
     ]
     mount()
     expect(await screen.findByRole('button', { name: 'Bildirimler, 3 okunmamış' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Bildirimler/ }))
-    const unreadGroup = await screen.findByRole('region', { name: 'Okunmamış' })
-    expect(within(unreadGroup).getAllByRole('listitem').map((li) => li.textContent)).toEqual([expect.stringContaining('Kritik'), expect.stringContaining('Eski'), expect.stringContaining('Paylasim')])
-    expect(within(screen.getByRole('region', { name: 'Daha eski' })).getByText('Okunmus')).toBeInTheDocument()
-    records = records.map((item) => ({ ...item, readAt: item.readAt ?? '2026-01-01T12:05:00Z' }))
-    await user.click(screen.getByRole('button', { name: 'Tümünü okundu işaretle' }))
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Okunmamış' })).not.toBeInTheDocument())
-    for (const id of ['a', 'b', 'c']) expect(apiRequest).toHaveBeenCalledWith(`notifications/in-app/${id}/read`, { method: 'POST' })
-    expect(apiRequest).not.toHaveBeenCalledWith('notifications/in-app/d/read', { method: 'POST' })
+    const panel = await screen.findByRole('dialog', { name: 'Bildirimler' })
+    const order = () => within(panel).getAllByRole('listitem').map((li) => ['Okunmus yeni', 'Kritik', 'Paylasim', 'Eski uyari'].find((name) => li.textContent?.includes(name)))
+    expect(order()).toEqual(['Okunmus yeni', 'Kritik', 'Paylasim', 'Eski uyari'])
+    expect(within(panel).getAllByText('Okunmamış')).toHaveLength(3)
+    records = records.map((item) => ({ ...item, readAt: item.readAt ?? at(16) }))
+    await user.click(within(panel).getByRole('button', { name: 'Tümünü okundu işaretle' }))
+    await waitFor(() => expect(within(panel).queryByText('Okunmamış')).not.toBeInTheDocument())
+    expect(order()).toEqual(['Okunmus yeni', 'Kritik', 'Paylasim', 'Eski uyari'])
+    for (const id of ['a', 'c', 'd']) expect(apiRequest).toHaveBeenCalledWith(`notifications/in-app/${id}/read`, { method: 'POST' })
+    expect(apiRequest).not.toHaveBeenCalledWith('notifications/in-app/b/read', { method: 'POST' })
   })
 
   it('links job, connection and agent notifications to their screens and marks the item read on click', async () => {

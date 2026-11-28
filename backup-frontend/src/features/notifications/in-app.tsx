@@ -48,7 +48,6 @@ function subjectHref(item: InAppNotification, role?: string, currentTenantId?: s
 type Tone = 'error' | 'warning' | 'neutral'
 const failureTypes = new Set(['backup_failed', 'agent_offline', 'quota_critical', 'storage_capacity_critical', 'replica_degraded'])
 const warningTypes = new Set(['backup_stale', 'backup_size_anomaly'])
-const toneRank: Record<Tone, number> = { error: 0, warning: 1, neutral: 2 }
 
 function describeType(type: string): { tone: Tone; Icon: LucideIcon } {
   if (type.startsWith('security_')) return { tone: 'warning', Icon: ShieldAlert }
@@ -104,9 +103,9 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
     return () => { stopped = true; clearTimeout(retry); void connection.stop() }
   }, [client, userId])
 
-  const items = list.data ?? []
-  const unreadItems = items.filter((item) => !item.readAt).sort((a, b) => toneRank[describeType(a.type).tone] - toneRank[describeType(b.type).tone])
-  const earlierItems = items.filter((item) => item.readAt)
+  // Newest first by the time the event occurred; read state only changes how a row looks.
+  const items = [...(list.data ?? [])].sort((a, b) => (Date.parse(b.occurredAt) - Date.parse(a.occurredAt)) || 0)
+  const unreadItems = items.filter((item) => !item.readAt)
   const unread = unreadItems.length
   const role = auth?.user?.role
   const settingsHref = role === 'PlatformAdmin' ? '/platform/notification-transports' : tenant?.tenantId ? `/tenants/${encodeURIComponent(tenant.tenantId)}/settings` : null
@@ -121,21 +120,20 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
     const title = security ? tx('Hesap güvenliği') : item.subjectName
     const isUnread = !item.readAt
     const titleClass = cn('block truncate font-medium text-text-heading', href && 'min-h-0 rounded-sm after:absolute after:inset-0 hover:underline')
-    return <li key={item.id} className={cn('relative flex items-start gap-3 px-4 py-3 hover:bg-surface-2', !isUnread && 'text-text-muted')}>
+    return <li key={item.id} className={cn('relative flex items-start gap-3 px-4 py-3 hover:bg-surface-2', isUnread ? 'bg-accent/40' : 'text-text-muted')}>
       <span aria-hidden="true" className={cn('mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full', isUnread ? toneClass[tone] : 'bg-surface-2 text-text-muted')}><Icon className="size-4" /></span>
       <div className="min-w-0 flex-1 space-y-0.5">
         {href ? openLink(href, titleClass, title, () => { setOpen(false); if (isUnread) markRead.mutate([item.id]) }) : <p className={titleClass}>{title}</p>}
         <p className="text-sm text-text-muted">{eventTypeLabels[item.type as keyof typeof eventTypeLabels] ?? item.type}</p>
         {security && <p className="text-xs text-text-muted">{tx('Zorunlu güvenlik bildirimi')}</p>}
-        <p className="text-xs text-text-muted"><time dateTime={item.occurredAt} title={formatDateTime(item.occurredAt)}>{formatRelativeTime(item.occurredAt)}</time></p>
+        <p className="flex items-center gap-1.5 text-xs text-text-muted">
+          {isUnread && <><span aria-hidden="true" className="size-1.5 rounded-full bg-primary" /><span className="sr-only">{tx('Okunmamış')}</span></>}
+          <time dateTime={item.occurredAt} title={formatDateTime(item.occurredAt)}>{formatRelativeTime(item.occurredAt)}</time>
+        </p>
       </div>
       {isUnread && <Button variant="ghost" size="icon" className="relative z-10 -mr-2 shrink-0" disabled={markRead.isPending} aria-label={tx('Okundu olarak işaretle: {0}', { '0': title })} onClick={() => markRead.mutate([item.id])}><Check aria-hidden="true" /></Button>}
     </li>
   }
-  const group = (label: string, group: InAppNotification[]) => group.length > 0 && <section aria-label={label}>
-    <h3 className="bg-canvas px-4 py-1.5 text-xs font-medium text-text-muted">{label}</h3>
-    <ul className="divide-y divide-border">{group.map(row)}</ul>
-  </section>
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
     <Popover.Trigger render={<Button variant="outline" size="sm" aria-label={tx('Bildirimler, {0} okunmamış', { '0': unread })} />}>
@@ -152,7 +150,7 @@ function InAppNotificationsConnected({ userId, client }: { userId: string; clien
         {list.isPending ? <div role="status" aria-label={tx('Yükleniyor')} className="space-y-3 p-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-4/5" /><span className="sr-only">{tx('Yükleniyor…')}</span></div>
           : list.error && !list.data ? <ErrorNotice className="m-3" title={tx('Veriler alınamadı')} error={list.error} onRetry={() => void list.refetch()} />
           : items.length === 0 ? <EmptyState icon={Bell} message={tx('Henüz bildiriminiz yok.')} action={<Button variant="outline" disabled={list.isFetching} onClick={() => void list.refetch()}>{tx('Yenile')}</Button>} />
-          : <>{group(tx('Okunmamış'), unreadItems)}{group(tx('Daha eski'), earlierItems)}</>}
+          : <ul className="divide-y divide-border">{items.map(row)}</ul>}
       </div>
       {settingsHref && <div className="border-t border-border px-4 py-2">{openLink(settingsHref, 'text-sm font-medium text-primary underline-offset-4 hover:underline', tx('Bildirim ayarları'), () => setOpen(false))}</div>}
     </Popover.Popup></Popover.Positioner></Popover.Portal>
