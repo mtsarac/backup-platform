@@ -16,7 +16,7 @@ export function RestoreSourceSummary({ artifact, isPg, fileArchive = false }: { 
         <span className="min-w-0 break-words">{tx("Yedek dosyası:")}{' '}{artifact.databaseName ?? (fileArchive ? tx('Bilinmeyen dosya kaynağı') : tx('Bilinmeyen veritabanı'))} · {formatBytes(artifact.sizeBytes)} · {formatDateTime(artifact.createdAt)}</span>
         <StatusPill status={artifact.state} />
       </div>
-      <p className="text-text-muted">{verified > 0 ? tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) : tx('Bütünlüğü doğrulanmış bir kopya yok.')}</p>
+      <p className="text-text-muted">{verified > 1 ? tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) : verified === 1 ? tx('Kopyanın bütünlüğü doğrulandı.') : tx('Bütünlüğü doğrulanmış bir kopya yok.')}</p>
       {isPg && <p>{tx('Yedek, seçtiğiniz veritabanına geri yüklenir. Mevcut bir veritabanının üzerine yazmak için ayrıca onay istenir.')}</p>}
       <TechnicalDetails items={[
         { label: tx('Yedek dosyası kimliği'), value: artifact.id },

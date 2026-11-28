@@ -10,11 +10,13 @@ export function restoreModeLabel(mode: RestoreMode): string { return mode === 'N
 export function targetStateLabel(state?: RestoreTargetState | null, files = false): string {
   return state ? ({ NotModified: files ? tx('Hedef dosyalar değiştirilmedi') : tx('Hedef veritabanı değiştirilmedi'), Online: tx('Çevrimiçi'), PartiallyRestored: tx('Kısmen geri yüklendi'), Unknown: tx('Bilinmiyor') })[state] : tx('Henüz bildirilmedi')
 }
-export function targetStateDescription(state?: RestoreTargetState | null): string {
+export function targetStateDescription(state?: RestoreTargetState | null, mode?: RestoreMode): string {
   switch (state) {
     case 'NotModified': return tx('Hedef veritabanı değiştirilmedi. Bu, veritabanının sağlığının kontrol edildiği anlamına gelmez.')
     case 'Online': return tx('Yedekleme bilgisayarı, geri yüklenen veritabanının çalışır durumda olduğunu bildirdi.')
-    case 'PartiallyRestored': return tx('Hedef değiştirildi ama geri yükleme tamamlanmadı. Veritabanı hasarlı veya eksik olabilir; üzerine yazılan eski içerik kaybolmuş olabilir. Elle müdahale gerekebilir.')
+    case 'PartiallyRestored': return mode === 'NewDatabase'
+      ? tx('Yeni veritabanı oluşturuldu ama geri yükleme tamamlanmadı. Veritabanı hasarlı veya eksik olabilir; mevcut veritabanlarına dokunulmadı. Elle müdahale gerekebilir.')
+      : tx('Hedef değiştirildi ama geri yükleme tamamlanmadı. Veritabanı hasarlı veya eksik olabilir; üzerine yazılan eski içerik kaybolmuş olabilir. Elle müdahale gerekebilir.')
     case 'Unknown': return tx('Yedekleme bilgisayarı veritabanının durumunu belirleyemedi. Veritabanını sağlıklı saymayın; elle kontrol edin.')
     default: return tx('Veritabanının durumu henüz bildirilmedi. İşlemin durumundan veritabanının sağlığı anlaşılamaz.')
   }
@@ -48,21 +50,21 @@ export function verificationCleanupText(cleanup: RestoreCleanup): string {
 /** What a pre-check is about, in everyday words. Ids come from the engines and are an open set, so unknown ones get a generic name; the raw id lives in the technical details. */
 export function precheckLabel(checkId: string): string {
   const labels: Record<string, string> = {
-    'server.reachable': tx('Sunucuya ulaşılabiliyor'), 'server.authentication': tx('Sunucu girişi kabul ediliyor'), 'server.instance': tx('Doğru sunucu örneğine bağlanılıyor'),
-    'database.exists': tx('Hedef veritabanı durumu'), 'database.state': tx('Veritabanı çalışır durumda'), 'permission.restore': tx('Geri yükleme izni var'),
-    'restore.target-server': tx('Hedef sunucu bilgisi okunabiliyor'), 'restore.database-name': tx('Veritabanı adı uygun'), 'restore.target-protected': tx('Hedef korunan bir veritabanı değil'),
-    'restore.target-sessions': tx('Hedefte açık bağlantı yok'), 'restore.target-directories': tx('Hedef klasörler uygun'), 'restore.disk-space': tx('Yeterli disk alanı var'),
-    'restore.backup-type': tx('Yedek türü destekleniyor'), 'restore.version-compatibility': tx('Sunucu sürümleri uyumlu'), 'restore.edition-compatibility': tx('Sunucu sürüm türü uyumlu'),
-    'restore.target-relation': tx('Hedef, yedeğin kaynağıyla uyumlu'), 'restore.file-types': tx('Dosya türleri destekleniyor'), 'restore.file-mapping': tx('Dosya yerleşimi hazır'),
-    'staging.agent-access': tx('Geçici klasöre yazılabiliyor'), 'staging.disk-space': tx('Geçici klasörde yeterli alan var'), 'staging.path-format': tx('Geçici klasör yolu geçerli'),
-    'staging.server-writable': tx('Sunucu geçici klasöre yazabiliyor'), 'staging.mapping': tx('Geçici klasör sunucuyla paylaşılıyor'),
-    'source.key': tx('Yedek anahtarı bu çalışma alanına ait'), 'source.storage': tx('Yedeğin saklandığı depolama okunabiliyor'), 'source.replica': tx('Yedek kopyası mevcut'),
-    'file-system.source': tx('Dosya kaynağı kullanılabilir'),
-    'postgres.tools': tx('pg_restore aracı hazır'), 'postgres.restore': tx('PostgreSQL geri yükleme ön kontrolü'), 'postgres.restore-plan': tx('Geri yükleme planı hazırlanabiliyor'),
-    'postgres.restore-permission': tx('Geri yükleme izni var'), 'postgres.target': tx('Hedef veritabanı seçilen moda uygun'), 'postgres.archive-compatibility': tx('Yedek arşivi hedef sunucuyla uyumlu'),
-    'postgres.verification-scope': tx('Doğrulama kapsamı'), 'postgres.archive-trust': tx('Yedek arşivinin kaynağı güvenilir olmalı'), 'postgres.roles': tx('Rol tanımları hedefte hazır olmalı'),
+    'server.reachable': tx('Sunucuya erişim'), 'server.authentication': tx('Sunucu girişi'), 'server.instance': tx('Sunucu örneği'),
+    'database.exists': tx('Hedef veritabanı durumu'), 'database.state': tx('Veritabanı durumu'), 'permission.restore': tx('Geri yükleme izni'),
+    'restore.target-server': tx('Hedef sunucu bilgisi'), 'restore.database-name': tx('Veritabanı adı'), 'restore.target-protected': tx('Hedef koruması'),
+    'restore.target-sessions': tx('Hedefteki açık bağlantılar'), 'restore.target-directories': tx('Hedef klasörler'), 'restore.disk-space': tx('Disk alanı'),
+    'restore.backup-type': tx('Yedek türü'), 'restore.version-compatibility': tx('Sunucu sürümü uyumu'), 'restore.edition-compatibility': tx('Sunucu sürüm türü uyumu'),
+    'restore.target-relation': tx('Hedef ile yedeğin ilişkisi'), 'restore.file-types': tx('Dosya türleri'), 'restore.file-mapping': tx('Dosya yerleşimi'),
+    'staging.agent-access': tx('Geçici klasöre yazma erişimi'), 'staging.disk-space': tx('Geçici klasör alanı'), 'staging.path-format': tx('Geçici klasör yolu'),
+    'staging.server-writable': tx('Sunucunun geçici klasöre yazması'), 'staging.mapping': tx('Geçici klasörün sunucuyla paylaşımı'),
+    'source.key': tx('Yedek anahtarı'), 'source.storage': tx('Yedeğin depolaması'), 'source.replica': tx('Yedek kopyası'),
+    'file-system.source': tx('Dosya kaynağı'),
+    'postgres.tools': tx('pg_restore aracı'), 'postgres.restore': tx('PostgreSQL geri yükleme ön kontrolü'), 'postgres.restore-plan': tx('Geri yükleme planı'),
+    'postgres.restore-permission': tx('Geri yükleme izni'), 'postgres.target': tx('Hedef veritabanı ve mod'), 'postgres.archive-compatibility': tx('Yedek arşivi uyumu'),
+    'postgres.verification-scope': tx('Doğrulama kapsamı'), 'postgres.archive-trust': tx('Yedek arşivinin güvenilirliği'), 'postgres.roles': tx('Rol tanımları'),
   }
-  return Object.hasOwn(labels, checkId) ? labels[checkId] : tx('Diğer kontrol')
+  return Object.hasOwn(labels, checkId) ? labels[checkId] : tx('Diğer kontrol ({0})', { '0': safeRestoreCode(checkId) })
 }
 export function precheckWarningText(item: { reasonCode: string; message: string }): string {
   const texts: Record<string, string> = {

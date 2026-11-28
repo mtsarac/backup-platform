@@ -79,6 +79,7 @@ export function ShareActionDialogs({
 
       {revokeTarget && (
         <ConfirmDialog
+          destructive
           open={Boolean(revokeTarget)}
           onClose={onClose}
           title={tx('Paylaşım iptal edilsin mi?')}
