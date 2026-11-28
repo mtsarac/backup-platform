@@ -45,6 +45,9 @@ services:
       GoogleDrive__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
       GoogleDrive__RedirectUri: ${GOOGLE_REDIRECT_URI:-}
       GoogleDrive__FrontendOrigin: https://${PUBLIC_HOST}
+      # Passkeys need the relying party id (the public name, no scheme or port) and an explicit origin; without them the API answers 503 passkeys_not_configured.
+      Authentication__Passkeys__RelyingPartyId: ${PUBLIC_HOST}
+      Authentication__Passkeys__Origins__0: https://${PUBLIC_HOST}
       GoogleDrive__StagingDirectory: /app/gdrive-staging
     depends_on:
       postgres:
