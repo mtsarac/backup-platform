@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, Circle, Plus } from 'lucide-react'
+import { Check, Circle, Plus, ShieldCheck } from 'lucide-react'
+import { ListEmpty } from '@/features/lists/list-empty'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { ProgressBar } from '@/components/data/progress-bar'
@@ -108,7 +109,7 @@ function ProtectedData({ rows, revokedRows, agents, base }: { rows: ProtectionRo
   return <Section title={tx('Korunan veriler')}>
     <div className="space-y-4">
       {rows.length === 0
-        ? <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">{tx('Korunan verileriniz burada görünecek.')}</p>
+        ? <ListEmpty icon={ShieldCheck} message={tx('Korunan verileriniz burada görünecek.')} />
         : [...groups].map(([agentId, items]) => {
           const connectivity = agents.find(agent => agent.agentId === agentId)?.connectivity ?? 'unknown'
           const sorted = items.toSorted((a, b) => Number(b.baseStatus === 'attention') - Number(a.baseStatus === 'attention') || a.score - b.score || a.job.name.localeCompare(b.job.name))

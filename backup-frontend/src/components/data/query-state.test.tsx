@@ -30,3 +30,17 @@ describe('QueryState', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('QueryState not found', () => {
+  const wrap = (error: unknown) => render(<MemoryRouter><QueryClientProvider client={new QueryClient()}><QueryState isPending={false} error={error} notFound={{ backTo: '/tenants/t/restores', backLabel: 'Geri yüklemeler' }} /></QueryClientProvider></MemoryRouter>)
+  it('offers the parent list and no retry on a 404, and keeps the retry for other failures', () => {
+    wrap(new ApiError(404))
+    expect(screen.getByText('Kayıt bulunamadı')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Geri yüklemeler' })).toHaveAttribute('href', '/tenants/t/restores')
+    expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
+  })
+  it('still retries a server failure', () => {
+    wrap(new ApiError(500))
+    expect(screen.getByRole('button', { name: 'Yeniden dene' })).toBeInTheDocument()
+  })
+})

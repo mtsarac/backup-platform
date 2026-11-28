@@ -68,7 +68,7 @@ export function RestoresPage() {
     when,
   ]
   return <div className="space-y-6">
-    <ListToolbar state={state} label={tx("Geri yükleme filtreleri")} total={query.data?.totalCount} search={{ label: tx('Ara') }}>
+    <ListToolbar state={state} label={tx("Geri yükleme filtreleri")} total={query.data?.totalCount} search={{ label: tx('Ara'), placeholder: tx('Hedef, bilgisayar, veritabanı veya iş') }}>
       <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status} onChange={(event) => state.setFilter('status', event.target.value)}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</Select></FilterField>
     </ListToolbar>
     <Disclosure title={tx('Diğer filtreler')} open={Boolean(artifactId || agentId)}>

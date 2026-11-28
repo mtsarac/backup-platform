@@ -6,11 +6,11 @@ import { controlClass } from '@/components/ui/form-styles'
 /** Shared look for filter controls; pair with `FilterField`. */
 export const filterControlClass = `${controlClass} w-full text-sm`
 
-/** One row of filters above a list. `onClear` adds the standard "Filtreleri temizle" button. */
+/** One row of filters above a list; the columns follow the width of the space it sits in (a split view is narrow on a wide screen), not the screen's. `onClear` adds the standard "Filtreleri temizle" button. */
 export function Filters({ label, children, onClear, footer }: { label: string; children: ReactNode; onClear?: () => void; footer?: ReactNode }) {
   useLanguage()
-  return <section aria-label={label} className="space-y-3">
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
+  return <section aria-label={label} className="@container space-y-3">
+    <div className="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4">{children}</div>
     {(onClear || footer) && <div className="flex flex-wrap items-center gap-3">{onClear && <Button variant="outline" size="sm" onClick={onClear}>{tx("Filtreleri temizle")}</Button>}{footer}</div>}
   </section>
 }

@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { Plus, Users } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Badge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Disclosure } from '@/components/ui/disclosure'
 import { Notice } from '@/components/ui/notice'
 import { SecretField } from '@/components/ui/secret-field'
 import { useSecretValue } from '@/components/ui/secret-value'
@@ -103,7 +103,6 @@ export function PlatformUsersPage() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<PlatformUser | null>(null)
   const [disablingUser, setDisablingUser] = useState<PlatformUser | null>(null)
-  const [menuEpoch, setMenuEpoch] = useState(0)
   const [assigningTemp, setAssigningTemp] = useState<PlatformUser | null>(null)
   const [disableReason, setDisableReason] = useState('')
   const [actionError, setActionError] = useState<unknown>(null)
@@ -111,16 +110,14 @@ export function PlatformUsersPage() {
   const disableMutation = useDisableUser(disablingUser?.userId ?? '')
   const data = query.data
   const columns: Column<PlatformUser>[] = [
-    { key: 'displayName', sortable: true, card: 'title', header: tx('Ad'), wrap: true, render: (user) => <span className="font-medium">{user.displayName}</span> },
+    { key: 'displayName', sortable: true, card: 'title', header: tx('Ad'), render: (user) => <span className="font-medium">{user.displayName}</span> },
     { key: 'role', sortable: true, header: tx('Platform rolü'), render: (user) => <Badge tone={user.role === 'PlatformAdmin' ? 'warning' : 'neutral'}>{tx(user.role)}</Badge> },
-    { key: 'isDisabled', sortable: true, card: 'status', header: tx('Durum'), render: (user) => <Badge tone={user.isDisabled ? 'error' : 'neutral'}>{user.isDisabled ? tx('Devre dışı') : tx('Etkin')}</Badge> },
-    { key: 'username', sortable: true, header: tx('Kullanıcı adı'), wrap: true, render: (user) => user.username },
+    { key: 'isDisabled', sortable: true, card: 'status', header: tx('Durum'), render: (user) => <StatusPill level={user.isDisabled ? 'urgent' : 'safe'}>{user.isDisabled ? tx('Devre dışı') : tx('Etkin')}</StatusPill> },
+    { key: 'username', sortable: true, header: tx('Kullanıcı adı'), render: (user) => user.username },
     { key: 'membershipCount', sortable: true, header: tx('Çalışma alanı üyelikleri'), render: (user) => user.membershipCount },
-    { key: 'email', sortable: true, header: tx('E-posta'), wrap: true, render: (user) => user.email },
-    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="min-w-28 space-y-1">
+    { key: 'email', sortable: true, header: tx('E-posta'), render: (user) => user.email },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (user) => <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="outline" aria-label={actionName(tx("Düzenle"), user.displayName)} onClick={() => { setSaved(null); setEditing(user) }}>{tx('Düzenle')}</Button>
-      <Disclosure key={menuEpoch} title={<>{tx('İşlemler')} <span className="sr-only">{user.displayName} ({user.username})</span></>}>
-      <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="outline" aria-label={actionName(tx("Geçici şifre ata"), user.displayName)} onClick={() => { setSaved(null); setAssigningTemp(user) }}>{tx('Geçici şifre ata')}</Button>
       {user.isManuallyDisabled ? (
         <Button size="sm" variant="outline" aria-label={actionName(tx("Etkinleştir"), user.displayName)} onClick={async () => {
@@ -134,8 +131,6 @@ export function PlatformUsersPage() {
       ) : (
         <Button size="sm" variant="outline" aria-label={actionName(tx("Devre dışı bırak"), user.displayName)} onClick={() => { setSaved(null); setActionError(null); setDisableReason(''); setDisablingUser(user) }}>{tx('Devre dışı bırak')}</Button>
       )}
-      </div>
-      </Disclosure>
     </div> },
   ]
   return <div className="space-y-6">
@@ -161,6 +156,6 @@ export function PlatformUsersPage() {
         <Field label={tx('Devre dışı bırakma nedeni')}>{(control) => <TextInput {...control} value={disableReason} placeholder={tx('İsteğe bağlı açıklama')} onChange={(e) => setDisableReason(e.target.value)} />}</Field>
       </FormDialog>
     )}
-    {assigningTemp && <TemporaryPasswordDialog user={assigningTemp} onClose={() => setAssigningTemp(null)} onAssigned={(name) => { setMenuEpoch((epoch) => epoch + 1); setSaved({ name, created: false, action: 'temp' }) }} />}
+    {assigningTemp && <TemporaryPasswordDialog user={assigningTemp} onClose={() => setAssigningTemp(null)} onAssigned={(name) => { setSaved({ name, created: false, action: 'temp' }) }} />}
   </div>
 }

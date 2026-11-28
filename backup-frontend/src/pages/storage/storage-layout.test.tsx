@@ -29,6 +29,18 @@ beforeEach(() => {
   vi.mocked(artifactApi.listArtifacts).mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 })
 })
 describe('Depolama', () => {
+  it('shows one failure with one retry when every request fails, and retries all of them', async () => {
+    vi.mocked(storageApi.getTenantStorageQuota).mockRejectedValue(new Error('down'))
+    vi.mocked(connectionApi.getTenantConnections).mockRejectedValue(new Error('down'))
+    vi.mocked(artifactApi.listArtifacts).mockRejectedValue(new Error('down'))
+    mount()
+    expect(await screen.findByText('Depolama bilgileri alınamadı')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Yeniden dene' })).toHaveLength(1)
+    vi.mocked(storageApi.getTenantStorageQuota).mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
+    await waitFor(() => expect(storageApi.getTenantStorageQuota).toHaveBeenCalledTimes(1))
+  })
   it('shows quota before connections and an actionable empty state', async () => {
     mount()
     expect(await screen.findByText(/Toplam boyut: 6,2 GB/)).toBeInTheDocument()

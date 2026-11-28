@@ -113,7 +113,8 @@ function RestoreDetail({ id }: { id: string }) {
     {artifact.error && <p className="mt-1 text-sm text-text-muted">{tx("Yedek dosyasının ayrıntıları yüklenemedi; geri yükleme kaydı yine de kullanılabilir.")}</p>}
   </Fact>
   return <div className="space-y-6">
-    <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore} emptyState={<EmptyState message={tx("Bu geri yükleme bulunamadı. Geri yüklemeler listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/restores`}>{tx("Geri yüklemeler")}</Link>} />} onRetry={() => void query.refetch()}>
+    {!restore && <PageHeader title={tx("Geri yükleme")} crumbs={[{ label: tx('Geri yüklemeler'), to: `/tenants/${tenantId}/restores` }]} />}
+    <QueryState isPending={query.isPending} error={query.error} notFound={{ backTo: `/tenants/${tenantId}/restores`, backLabel: tx("Geri yüklemeler") }} empty={!query.isPending && !restore} emptyState={<EmptyState message={tx("Bu geri yükleme bulunamadı. Geri yüklemeler listesinden yeniden seçin.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/restores`}>{tx("Geri yüklemeler")}</Link>} />} onRetry={() => void query.refetch()}>
       {restore && <>
         <PageHeader title={restore.purpose === 'Verification' ? title : `${restore.purpose === 'Precheck' ? tx('Geri yükleme ön kontrolü') : restore.purpose === 'Discovery' ? tx('Hedef veritabanı bulma') : tx('Geri yükleme')} · ${title}`}
           crumbs={[{ label: tx('Geri yüklemeler'), to: `/tenants/${tenantId}/restores` }, { label: title }]}

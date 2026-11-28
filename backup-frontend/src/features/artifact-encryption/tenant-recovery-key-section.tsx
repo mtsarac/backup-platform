@@ -39,17 +39,17 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
   }
 
   return <>
-    <Section title={tx("Yedeklerinizin şifreleme koruması")} description={tx("Bu durum şifreli yedeklerin anahtar korumasını gösterir; tüm yedeklerin şifreli olduğu anlamına gelmez.")}>
+    <Section title={platformView ? tx("Çalışma alanı yedeklerinin şifreleme koruması") : tx("Yedeklerinizin şifreleme koruması")} description={tx("Bu durum şifreli yedeklerin anahtar korumasını gösterir; tüm yedeklerin şifreli olduğu anlamına gelmez.")}>
       <div className="space-y-4">
         {platformView ? <>
           <Notice tone={wrapKey?.state === 'Retired' ? 'warning' : wrapKey ? 'success' : 'info'}>
-            {wrapKey?.state === 'Retired' ? tx('Şifreli yedekler için anahtar desteği gerekiyor') : wrapKey ? tx('Şifreli yedekleriniz korunuyor') : tx('Henüz şifreli yedek oluşturulmadı')}
+            {wrapKey?.state === 'Retired' ? tx('Şifreli yedekler için anahtar desteği gerekiyor') : wrapKey ? tx('Çalışma alanının şifreli yedekleri korunuyor') : tx('Henüz şifreli yedek oluşturulmadı')}
           </Notice>
           <Facts>
-            <Fact label={tx("Kendi kurtarma anahtarınız")}>{tenantRecovery ? tx('Kurtarma anahtarınız eklenmiş') : tx('Kurtarma anahtarınız eklenmemiş')}</Fact>
+            <Fact label={tx("Çalışma alanı kurtarma anahtarı")}>{tenantRecovery ? tx('Kurtarma anahtarı eklenmiş') : tx('Kurtarma anahtarı eklenmemiş')}</Fact>
             {platformRecovery.configured && <Fact label={tx("Platform kurtarma anahtarı")}>{tx('Platform kurtarma anahtarı hazır')}</Fact>}
           </Facts>
-          {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa kendi kurtarma anahtarınızla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
+          {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa çalışma alanının kurtarma anahtarıyla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
         </> : tenantRecovery
           ? <Notice tone="success">{tx('Kurtarma anahtarınız eklenmiş.')}</Notice>
           : <Notice tone="warning" action={<Button type="button" size="sm" onClick={() => setAdding(true)}>{tx('Kurtarma anahtarı ekle')}</Button>}>{tx('Kendi kurtarma anahtarınız yok.')}</Notice>}
@@ -64,18 +64,18 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
             { label: tx('Platform kurtarma anahtarı sürümü'), value: String(platformRecovery.keyVersion) },
           ] : []),
           ...(tenantRecovery ? [
-            { label: tx('Kurtarma anahtarınızın kimliği'), value: tenantRecovery.keyId },
-            { label: tx('Kurtarma anahtarınızın sürümü'), value: String(tenantRecovery.keyVersion) },
+            { label: platformView ? tx('Kurtarma anahtarı kimliği') : tx('Kurtarma anahtarınızın kimliği'), value: tenantRecovery.keyId },
+            { label: platformView ? tx('Kurtarma anahtarı sürümü') : tx('Kurtarma anahtarınızın sürümü'), value: String(tenantRecovery.keyVersion) },
             { label: tx('Kurtarma anahtarının eklenme zamanı'), value: formatDateTime(tenantRecovery.createdAt) },
           ] : []),
         ]} />
       </div>
     </Section>
 
-    <Section title={tx("Kendi kurtarma anahtarınız")} description={tx("İsteğe bağlıdır. Genel anahtarınız yalnızca bundan sonra oluşturulan şifreli yedeklere eklenir; eski dosyalar değişmez. Özel anahtarı güvenle saklayın: platform bu anahtarı görmez ve kaybederseniz sizin için geri getiremez.")}
+    <Section title={platformView ? tx("Çalışma alanı kurtarma anahtarı") : tx("Kendi kurtarma anahtarınız")} description={platformView ? tx("İsteğe bağlıdır. Genel anahtar yalnızca bundan sonra oluşturulan şifreli yedeklere eklenir; eski dosyalar değişmez. Özel anahtar güvenle saklanmalıdır: platform bu anahtarı görmez ve kaybolursa geri getiremez.") : tx("İsteğe bağlıdır. Genel anahtarınız yalnızca bundan sonra oluşturulan şifreli yedeklere eklenir; eski dosyalar değişmez. Özel anahtarı güvenle saklayın: platform bu anahtarı görmez ve kaybederseniz sizin için geri getiremez.")}
       actions={tenantRecovery && <Button variant="outline" onClick={() => { remove.reset(); setRemoving(true) }}>{tx("Anahtarı kaldır")}</Button>}>
       <details open={adding} className="group text-sm">
-        <summary onClick={event => { event.preventDefault(); setAdding(open => !open) }} className={cn(disclosureTriggerClass, 'list-none group-open:text-text-heading [&::-webkit-details-marker]:hidden')}><DisclosureChevron className="group-open:rotate-90" />{tx('Kendi anahtarınızı ekleyin veya değiştirin')}</summary>
+        <summary onClick={event => { event.preventDefault(); setAdding(open => !open) }} className={cn(disclosureTriggerClass, 'list-none group-open:text-text-heading [&::-webkit-details-marker]:hidden')}><DisclosureChevron className="group-open:rotate-90" />{platformView ? tx('Kurtarma anahtarını ekleyin veya değiştirin') : tx('Kendi anahtarınızı ekleyin veya değiştirin')}</summary>
       <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (!set.isPending && pem.trim()) submit() }}>
         <Field label={tx('Genel anahtar dosyası')} hint={tx('Yalnızca genel anahtar dosyasını seçin; özel anahtarınızı yüklemeyin.')}>
           {control => <TextInput {...control} type="file" accept=".pem,.pub,text/plain"  disabled={set.isPending} onChange={event => {
@@ -100,16 +100,16 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
           {control => <TextArea {...control} className="font-mono text-sm" rows={6} required disabled={set.isPending} spellCheck={false} autoComplete="off" value={pem} onChange={event => { setSaved(false); setPemError(''); setPem(event.target.value) }} />}
         </Field>
         {set.error && <ErrorNotice error={set.error} />}
-        {saved && <Notice tone="success">{tx("Kurtarma anahtarınız kaydedildi. Sonraki şifreli yedeklere eklenir.")}</Notice>}
+        {saved && <Notice tone="success">{platformView ? tx("Kurtarma anahtarı kaydedildi. Sonraki şifreli yedeklere eklenir.") : tx("Kurtarma anahtarınız kaydedildi. Sonraki şifreli yedeklere eklenir.")}</Notice>}
         <Button type="submit" disabled={set.isPending || !pem.trim()}>{set.isPending ? tx('Kaydediliyor…') : tenantRecovery ? tx('Anahtarı değiştir') : tx('Anahtarı kaydet')}</Button>
       </form>
       </details>
     </Section>
 
-    <ConfirmDialog open={removing} onClose={() => setRemoving(false)} name={tenantName} title={tx("Kurtarma anahtarınız kaldırılsın mı?")}
+    <ConfirmDialog open={removing} onClose={() => setRemoving(false)} name={tenantName} title={platformView ? tx("Kurtarma anahtarı kaldırılsın mı?") : tx("Kurtarma anahtarınız kaldırılsın mı?")}
       consequence={{
-        what: tx("Sonraki şifreli yedeklere bu kurtarma anahtarı eklenmez. Kendi özel anahtarınızla acil kurtarma yolunuz bu yeni yedeklerde kullanılamaz."),
-        who: tx("Yalnızca bundan sonra alınacak yedekler etkilenir; mevcut dosyalardaki kayıt değişmez ve özel anahtarınız onları açmaya devam eder."),
+        what: platformView ? tx("Sonraki şifreli yedeklere bu kurtarma anahtarı eklenmez. Bu yeni yedekler özel anahtarla kurtarılamaz.") : tx("Sonraki şifreli yedeklere bu kurtarma anahtarı eklenmez. Kendi özel anahtarınızla acil kurtarma yolunuz bu yeni yedeklerde kullanılamaz."),
+        who: platformView ? tx("Yalnızca bundan sonra alınacak yedekler etkilenir; mevcut dosyalardaki kayıt değişmez ve özel anahtarla açılabilir.") : tx("Yalnızca bundan sonra alınacak yedekler etkilenir; mevcut dosyalardaki kayıt değişmez ve özel anahtarınız onları açmaya devam eder."),
         reversible: tx("Evet. Aynı genel anahtarı yeniden yükleyerek tekrar ekleyebilirsiniz."),
       }}
       confirmLabel={tx("Kaldır")} pending={remove.isPending} error={remove.error}

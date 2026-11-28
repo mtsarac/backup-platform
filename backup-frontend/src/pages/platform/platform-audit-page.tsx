@@ -26,7 +26,7 @@ export function PlatformAuditPage() {
   const data = query.data
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Denetim kaydı")} description={tx("Kim, ne zaman, hangi çalışma alanında ne yaptı. Ham kodlar ve ayrıntı çiftleri “Teknik ayrıntılar” altındadır.")} />
-    <ListToolbar state={state} label={tx("Audit filtreleri")} search={{ label: tx('Ara') }} total={data?.totalCount}>
+    <ListToolbar state={state} label={tx("Audit filtreleri")} search={{ label: tx('Ara'), placeholder: tx('İşlem, kullanıcı, hedef veya çalışma alanı') }} total={data?.totalCount}>
       <TenantPicker value={state.filters.tenantId} onChange={(value) => state.setFilter('tenantId', value)} />
     </ListToolbar>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>

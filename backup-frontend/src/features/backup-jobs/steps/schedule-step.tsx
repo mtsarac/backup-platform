@@ -38,7 +38,7 @@ export function RetentionQuestion({ form, headingLevel }: Props) {
   const { retention } = values
   const customSaved = saved.retention.enabled && !retentionPresets.some(([seconds]) => seconds === saved.retention.keepForSeconds)
   const setRetention = (next: typeof retention) => set({ retention: next })
-  return <Question compact={Boolean(form.job)} headingLevel={headingLevel} title={tx("Yedekler ne kadar süre saklansın?")} why={tx("Süresi dolan yedekler silinir; böylece depolama alanı gereksiz yere dolmaz.")}>
+  return <Question lead={false} compact={Boolean(form.job)} headingLevel={headingLevel} title={tx("Yedekler ne kadar süre saklansın?")} why={tx("Süresi dolan yedekler silinir; böylece depolama alanı gereksiz yere dolmaz.")}>
     <FormGrid>
       {form.job ? <Field label={tx("Saklama süresi")}>{control => <Select {...control} value={!retention.enabled ? 'off' : customSaved && retention.keepForSeconds === saved.retention.keepForSeconds ? 'custom' : String(retention.keepForSeconds)} onChange={event => {
         const value = event.target.value

@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
+import { ErrorNotice } from '@/components/ui/notice'
 import { linkClass } from '@/components/ui/form-styles'
 import { ListPager } from '@/features/lists/list-pager'
 import { ListToolbar } from '@/features/lists/list-toolbar'
@@ -46,17 +47,20 @@ export function StorageLayout() {
   const quota = useTenantStorageQuota()
   const failedState = useListState(failedListConfig)
   const failed = useArtifacts(tenantId, { ...toServerQuery(failedState), state: 'DeleteFailed' })
+  const failures = [connections, quota, failed].filter(query => query.isError)
   return <div className="space-y-6">
     <PageHeader title={tx('Depolama')} actions={connections.data?.items.length ? <Link to={`${base}/storage/connections/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx('Depolama bağlantısı ekle')}</Link> : undefined} />
-    <QueryState isPending={quota.isPending} error={quota.error} onRetry={() => void quota.refetch()}>
-      {quota.data && <Section title={tx('Depolama kullanımı')}>
-        <p>{tx('Toplam boyut')}: {formatBytes(quota.data.usedBytes)}{quota.data.limitBytes !== null && <> · {tx('Kota')}: {formatBytes(quota.data.limitBytes)}</>}</p>
-        {quota.data.limitBytes !== null && <QuotaMeter usedBytes={quota.data.usedBytes} reservedBytes={quota.data.reservedBytes} limitBytes={quota.data.limitBytes} state={quota.data.state} />}
-      </Section>}
-    </QueryState>
-    <Outlet />
-    {failed.isError && <QueryState isPending={false} error={failed.error} onRetry={() => void failed.refetch()} />}
-    {failed.data && (failed.data.totalCount > 0 || failedState.filtering) && <Section title={tx('Silinemeyen yedek dosyaları')}>
+    {failures.length > 0 && <ErrorNotice title={tx('Depolama bilgileri alınamadı')} error={failures[0].error} onRetry={() => { failures.forEach(query => void query.refetch()) }} />}
+    {failures.length === 0 && <>
+      <QueryState isPending={quota.isPending} error={null}>
+        {quota.data && <Section title={tx('Depolama kullanımı')}>
+          <p>{tx('Toplam boyut')}: {formatBytes(quota.data.usedBytes)}{quota.data.limitBytes !== null && <> · {tx('Kota')}: {formatBytes(quota.data.limitBytes)}</>}</p>
+          {quota.data.limitBytes !== null && <QuotaMeter usedBytes={quota.data.usedBytes} reservedBytes={quota.data.reservedBytes} limitBytes={quota.data.limitBytes} state={quota.data.state} />}
+        </Section>}
+      </QueryState>
+      <Outlet />
+    </>}
+    {failures.length === 0 && failed.data && (failed.data.totalCount > 0 || failedState.filtering) && <Section title={tx('Silinemeyen yedek dosyaları')}>
       <div className="space-y-4">
         <ListToolbar state={failedState} label={tx('Yedek dosyası filtreleri')} total={failed.data.totalCount} search={{ label: tx('Yedek dosyası ara'), placeholder: tx('İş, veritabanı veya dosya adı') }} />
         <DataList caption={tx('Silinemeyen yedek dosyaları')} rows={failed.data.items} columns={failedColumns(base)} keyExtractor={artifact => artifact.id} sort={sortProps(failedState)}
